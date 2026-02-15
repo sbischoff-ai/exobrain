@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: exobrain-message-broker
+  labels:
+    app.kubernetes.io/name: exobrain-message-broker
+    {{- include "exobrain-stack.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.messageBroker.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: exobrain-message-broker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: exobrain-message-broker
+    spec:
+      containers:
+        - name: nats
+          image: "{{ .Values.messageBroker.image.repository }}:{{ .Values.messageBroker.image.tag }}"
+          imagePullPolicy: {{ .Values.messageBroker.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.messageBroker.service.clientPort }}
+              name: client
+            - containerPort: {{ .Values.messageBroker.service.monitoringPort }}
+              name: monitor
+          resources: {{- toYaml .Values.messageBroker.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: exobrain-message-broker
+spec:
+  type: {{ .Values.messageBroker.service.type }}
+  selector:
+    app.kubernetes.io/name: exobrain-message-broker
+  ports:
+    - name: client
+      port: {{ .Values.messageBroker.service.clientPort }}
+      targetPort: {{ .Values.messageBroker.service.clientPort }}
+    - name: monitor
+      port: {{ .Values.messageBroker.service.monitoringPort }}
+      targetPort: {{ .Values.messageBroker.service.monitoringPort }}

@@ -1,0 +1,156 @@
+global:
+  imagePullSecrets: []
+  storageClass: ""
+
+assistantFrontend:
+  replicaCount: 1
+  image:
+    repository: exobrain/assistant-frontend
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 3000
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+assistantBackend:
+  replicaCount: 1
+  image:
+    repository: exobrain/assistant-backend
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8000
+  env:
+    KNOWLEDGE_INTERFACE_ADDR: exobrain-knowledge-interface:50051
+    METASTORE_DSN: postgresql://exobrain:exobrain@exobrain-metastore:5432/exobrain
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1
+      memory: 1Gi
+
+knowledgeInterface:
+  replicaCount: 1
+  image:
+    repository: exobrain/knowledge-interface
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 50051
+  env:
+    MEMGRAPH_BOLT_ADDR: bolt://exobrain-knowledge-graph:7687
+    QDRANT_ADDR: http://exobrain-vector-store:6333
+    METASTORE_DSN: postgresql://exobrain:exobrain@exobrain-metastore:5432/exobrain
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+metastore:
+  replicaCount: 1
+  image:
+    repository: postgres
+    tag: "16"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 5432
+  auth:
+    username: exobrain
+    password: exobrain
+    database: exobrain
+  persistence:
+    enabled: true
+    size: 10Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1
+      memory: 1Gi
+
+knowledgeGraph:
+  replicaCount: 1
+  image:
+    repository: memgraph/memgraph
+    tag: "2.19.0"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    boltPort: 7687
+    httpPort: 7444
+  persistence:
+    enabled: true
+    size: 10Gi
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 2
+      memory: 2Gi
+
+vectorStore:
+  replicaCount: 1
+  image:
+    repository: qdrant/qdrant
+    tag: "v1.9.2"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    httpPort: 6333
+    grpcPort: 6334
+  persistence:
+    enabled: true
+    size: 10Gi
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 2
+      memory: 2Gi
+
+messageBroker:
+  replicaCount: 1
+  image:
+    repository: nats
+    tag: "2.10.14-alpine"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    clientPort: 4222
+    monitoringPort: 8222
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: exobrain.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []

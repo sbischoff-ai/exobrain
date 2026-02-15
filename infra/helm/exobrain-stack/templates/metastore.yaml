@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: exobrain-metastore
+  labels:
+    app.kubernetes.io/name: exobrain-metastore
+    {{- include "exobrain-stack.labels" . | nindent 4 }}
+spec:
+  serviceName: exobrain-metastore
+  replicas: {{ .Values.metastore.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: exobrain-metastore
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: exobrain-metastore
+    spec:
+      containers:
+        - name: postgres
+          image: "{{ .Values.metastore.image.repository }}:{{ .Values.metastore.image.tag }}"
+          imagePullPolicy: {{ .Values.metastore.image.pullPolicy }}
+          env:
+            - name: POSTGRES_USER
+              value: {{ .Values.metastore.auth.username | quote }}
+            - name: POSTGRES_PASSWORD
+              value: {{ .Values.metastore.auth.password | quote }}
+            - name: POSTGRES_DB
+              value: {{ .Values.metastore.auth.database | quote }}
+          ports:
+            - containerPort: {{ .Values.metastore.service.port }}
+          volumeMounts:
+            - name: metastore-data
+              mountPath: /var/lib/postgresql/data
+          resources: {{- toYaml .Values.metastore.resources | nindent 12 }}
+  volumeClaimTemplates:
+    - metadata:
+        name: metastore-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- if .Values.global.storageClass }}
+        storageClassName: {{ .Values.global.storageClass | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.metastore.persistence.size }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: exobrain-metastore
+spec:
+  type: {{ .Values.metastore.service.type }}
+  selector:
+    app.kubernetes.io/name: exobrain-metastore
+  ports:
+    - port: {{ .Values.metastore.service.port }}
+      targetPort: {{ .Values.metastore.service.port }}
+      name: postgres

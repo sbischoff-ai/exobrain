@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: exobrain-knowledge-interface
+  labels:
+    app.kubernetes.io/name: exobrain-knowledge-interface
+    {{- include "exobrain-stack.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.knowledgeInterface.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: exobrain-knowledge-interface
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: exobrain-knowledge-interface
+    spec:
+      containers:
+        - name: knowledge-interface
+          image: "{{ .Values.knowledgeInterface.image.repository }}:{{ .Values.knowledgeInterface.image.tag }}"
+          imagePullPolicy: {{ .Values.knowledgeInterface.image.pullPolicy }}
+          env:
+            - name: MEMGRAPH_BOLT_ADDR
+              value: {{ .Values.knowledgeInterface.env.MEMGRAPH_BOLT_ADDR | quote }}
+            - name: QDRANT_ADDR
+              value: {{ .Values.knowledgeInterface.env.QDRANT_ADDR | quote }}
+            - name: METASTORE_DSN
+              value: {{ .Values.knowledgeInterface.env.METASTORE_DSN | quote }}
+          ports:
+            - containerPort: {{ .Values.knowledgeInterface.service.port }}
+          resources: {{- toYaml .Values.knowledgeInterface.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: exobrain-knowledge-interface
+  labels:
+    app.kubernetes.io/name: exobrain-knowledge-interface
+    {{- include "exobrain-stack.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.knowledgeInterface.service.type }}
+  selector:
+    app.kubernetes.io/name: exobrain-knowledge-interface
+  ports:
+    - name: grpc
+      port: {{ .Values.knowledgeInterface.service.port }}
+      targetPort: {{ .Values.knowledgeInterface.service.port }}

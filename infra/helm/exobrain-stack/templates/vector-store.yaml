@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: exobrain-vector-store
+  labels:
+    app.kubernetes.io/name: exobrain-vector-store
+    {{- include "exobrain-stack.labels" . | nindent 4 }}
+spec:
+  serviceName: exobrain-vector-store
+  replicas: {{ .Values.vectorStore.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: exobrain-vector-store
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: exobrain-vector-store
+    spec:
+      containers:
+        - name: qdrant
+          image: "{{ .Values.vectorStore.image.repository }}:{{ .Values.vectorStore.image.tag }}"
+          imagePullPolicy: {{ .Values.vectorStore.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.vectorStore.service.httpPort }}
+              name: http
+            - containerPort: {{ .Values.vectorStore.service.grpcPort }}
+              name: grpc
+          volumeMounts:
+            - name: vector-store-data
+              mountPath: /qdrant/storage
+          resources: {{- toYaml .Values.vectorStore.resources | nindent 12 }}
+  volumeClaimTemplates:
+    - metadata:
+        name: vector-store-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- if .Values.global.storageClass }}
+        storageClassName: {{ .Values.global.storageClass | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.vectorStore.persistence.size }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: exobrain-vector-store
+spec:
+  type: {{ .Values.vectorStore.service.type }}
+  selector:
+    app.kubernetes.io/name: exobrain-vector-store
+  ports:
+    - name: http
+      port: {{ .Values.vectorStore.service.httpPort }}
+      targetPort: {{ .Values.vectorStore.service.httpPort }}
+    - name: grpc
+      port: {{ .Values.vectorStore.service.grpcPort }}
+      targetPort: {{ .Values.vectorStore.service.grpcPort }}
