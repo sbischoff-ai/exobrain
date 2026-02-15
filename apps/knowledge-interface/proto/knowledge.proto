@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package exobrain.knowledge.v1;
+
+service KnowledgeInterface {
+  rpc Health(HealthRequest) returns (HealthReply);
+}
+
+message HealthRequest {}
+
+message HealthReply {
+  string status = 1;
+}
