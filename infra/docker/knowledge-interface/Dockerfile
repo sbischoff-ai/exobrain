@@ -1,4 +1,4 @@
-FROM rust:1.76 as builder
+FROM rust:1.85 AS builder
 WORKDIR /app
 COPY apps/knowledge-interface .
 RUN cargo build --release
