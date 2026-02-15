@@ -1,3 +1,3 @@
 # Exobrain Assistant Frontend
 
-Minimal SvelteKit + Skeleton scaffold for the Exobrain chatbot UI.
+SvelteKit + Skeleton frontend for the Exobrain chatbot UI.

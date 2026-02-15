@@ -1,10 +1,10 @@
 # Exobrain
 
-Exobrain is a cloud-native scaffold for an AI chat assistant with a GraphRAG knowledge base and living-memory architecture.
+Exobrain is a cloud-native system for an AI chat assistant with a GraphRAG knowledge base and living-memory architecture.
 
 ## Architecture
 
-This repository includes scaffolding for the following components:
+This repository includes the foundational services for the following components:
 
 - **Exobrain Assistant Frontend** (`apps/assistant-frontend`): SvelteKit + Skeleton chatbot UI.
 - **Exobrain Assistant Backend** (`apps/assistant-backend`): FastAPI + LangChain orchestration API.
@@ -28,6 +28,7 @@ infra/
   helm/exobrain-stack/       # Kubernetes Helm chart
 scripts/
   k3d-up.sh                  # local cluster bootstrap helper
+  local/                     # scripts for local service and datastore startup
 ```
 
 ## Prerequisites
@@ -36,6 +37,9 @@ scripts/
 - `kubectl`
 - Helm 3
 - k3d
+
+Optional (for NixOS):
+- Nix with flakes or classic `nix-shell`
 
 ## Local Development (k3d)
 
@@ -81,6 +85,54 @@ kubectl get pods
 kubectl get svc
 ```
 
+## Local App Development (without full Kubernetes rollout)
+
+For iterative debugging, you can run the app services directly in your terminal while keeping only the datastores in Docker Compose.
+
+### 1. Start local datastores
+
+```bash
+./scripts/local/datastores-up.sh
+```
+
+This starts:
+- PostgreSQL on `localhost:15432`
+- Qdrant on `localhost:16333` (HTTP) and `localhost:16334` (gRPC)
+- Memgraph on `localhost:17687` (Bolt) and `localhost:17444` (HTTP)
+
+### 2. Run services directly
+
+In separate terminals:
+
+```bash
+./scripts/local/run-assistant-backend.sh
+./scripts/local/run-assistant-frontend.sh
+./scripts/local/run-knowledge-interface.sh
+```
+
+All scripts expose placeholder connection environment variables for Postgres, Qdrant, and Memgraph so local services can share a consistent default topology.
+
+### 3. Stop local datastores
+
+```bash
+./scripts/local/datastores-down.sh
+```
+
+## NixOS Development Shell
+
+For NixOS users, `shell.nix` provides a ready-to-use environment for:
+- k3d/Helm/kubectl workflows
+- Python + `uv` backend development
+- Node/Svelte frontend development
+- Rust/Cargo knowledge-interface builds
+- datastore CLIs (`psql`, `cypher-shell`, `curl`/`http`)
+
+Enter it with:
+
+```bash
+nix-shell
+```
+
 ## Configuration
 
 The chart is fully parameterized via `infra/helm/exobrain-stack/values.yaml`, including:
@@ -99,7 +151,7 @@ helm upgrade --install exobrain infra/helm/exobrain-stack -f values.local.yaml
 
 ## Notes
 
-- This is intentionally minimal scaffolding with startup-ready services, not full application functionality.
+- The repository currently provides infrastructure and service wiring with minimal application logic; functional features can be implemented incrementally on top.
 - For production, add:
   - Secret management (e.g., external secrets / sealed secrets)
   - Pod security context and network policies

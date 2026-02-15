@@ -1,0 +1,66 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: exobrain-local-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: exobrain
+      POSTGRES_PASSWORD: exobrain
+      POSTGRES_DB: exobrain
+    ports:
+      - "15432:5432"
+    volumes:
+      - exobrain_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U exobrain -d exobrain"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - exobrain-local
+
+  qdrant:
+    image: qdrant/qdrant:v1.9.2
+    container_name: exobrain-local-qdrant
+    restart: unless-stopped
+    ports:
+      - "16333:6333"
+      - "16334:6334"
+    volumes:
+      - exobrain_qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:6333/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - exobrain-local
+
+  memgraph:
+    image: memgraph/memgraph:2.17
+    container_name: exobrain-local-memgraph
+    restart: unless-stopped
+    command:
+      - --also-log-to-stderr
+      - --bolt-server-name-for-init=memgraph
+    ports:
+      - "17687:7687"
+      - "17444:7444"
+    volumes:
+      - exobrain_memgraph_data:/var/lib/memgraph
+    healthcheck:
+      test: ["CMD", "bash", "-lc", "echo 'RETURN 1;' | mgconsole --host 127.0.0.1 --port 7687 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+    networks:
+      - exobrain-local
+
+volumes:
+  exobrain_postgres_data:
+  exobrain_qdrant_data:
+  exobrain_memgraph_data:
+
+networks:
+  exobrain-local:
+    name: exobrain-local
