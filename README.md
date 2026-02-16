@@ -75,7 +75,7 @@ k3d image import \
 ### 3. Deploy Helm chart
 
 ```bash
-helm upgrade --install exobrain infra/helm/exobrain-stack
+helm upgrade --install exobrain infra/helm/exobrain-stack --dependency-update
 ```
 
 ### 4. Inspect deployment
