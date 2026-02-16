@@ -2,6 +2,34 @@
 
 FastAPI service for chat orchestration and GraphRAG context augmentation.
 
+## Architecture overview
+
+The backend now follows a small but extensible layered design:
+
+- **API layer** (`app/api`): request schemas and HTTP routers.
+- **Service layer** (`app/services`): use-case orchestration, independent from FastAPI.
+- **Agent layer** (`app/agents`): chat agent interfaces and implementations.
+- **Core layer** (`app/core`): runtime configuration and app settings.
+
+The current implementation ships one main assistant agent backed by LangChain `ChatOpenAI`
+using model `gpt-5.2` with streaming enabled.
+
+## Environment configuration
+
+Create a local env file from the example:
+
+```bash
+cp .env.example .env
+```
+
+`OPENAI_API_KEY` is intentionally **not** stored in `.env` and must be provided externally,
+for example from environment secrets.
+
+Swagger/OpenAPI is environment-gated:
+
+- `APP_ENV=local` -> Swagger UI is enabled (`/docs`).
+- any non-local value (for example in Kubernetes) -> Swagger/OpenAPI is disabled.
+
 ## Local build and run
 
 From the repository root:
@@ -20,6 +48,9 @@ Notes:
 ### Application endpoint
 
 - Assistant backend API: `http://localhost:8000`
+- Health check: `http://localhost:8000/api/healthz`
+- Chat endpoint: `POST http://localhost:8000/api/chat/message`
+- Swagger UI (local only): `http://localhost:8000/docs`
 
 ### Infrastructure dependencies (default script wiring)
 
