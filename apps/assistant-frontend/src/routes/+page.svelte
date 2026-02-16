@@ -41,11 +41,10 @@
       return;
     }
 
-    const hasOverflow = messagesContainer.scrollHeight > messagesContainer.clientHeight;
-
-    if (hasOverflow) {
-      messagesContainer.scrollTop = messagesContainer.scrollHeight;
-    }
+    messagesContainer.scrollTo({
+      top: messagesContainer.scrollHeight,
+      behavior: 'smooth'
+    });
   }
 </script>
 
