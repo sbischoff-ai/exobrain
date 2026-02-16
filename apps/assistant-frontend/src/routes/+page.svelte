@@ -4,7 +4,7 @@
 
 <main class="container">
   <h1>Exobrain Assistant</h1>
-  <p>Chat UI scaffold powered by SvelteKit + Skeleton.</p>
+  <p>Chat UI powered by SvelteKit + Skeleton.</p>
 </main>
 
 <style>

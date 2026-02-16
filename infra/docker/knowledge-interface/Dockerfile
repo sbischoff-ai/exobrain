@@ -1,7 +1,9 @@
-FROM rust:1.76 as builder
+FROM rust:1.85 AS builder
 WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends protobuf-compiler \
+  && rm -rf /var/lib/apt/lists/*
 COPY apps/knowledge-interface .
-RUN cargo build --release
+RUN cargo build --release --locked
 
 FROM debian:bookworm-slim
 WORKDIR /app

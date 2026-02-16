@@ -2,7 +2,7 @@
 set -euo pipefail
 
 CLUSTER_NAME=${CLUSTER_NAME:-exobrain-dev}
-K3S_IMAGE=${K3S_IMAGE:-rancher/k3s:v1.29.4-k3s1}
+K3S_IMAGE=${K3S_IMAGE:-rancher/k3s:v1.35.1-k3s1}
 AGENTS=${AGENTS:-2}
 
 k3d cluster create "$CLUSTER_NAME" \

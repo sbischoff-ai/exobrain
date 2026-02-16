@@ -1,1 +1,1 @@
-FROM memgraph/memgraph:2.19.0
+FROM memgraph/memgraph:3.8.0

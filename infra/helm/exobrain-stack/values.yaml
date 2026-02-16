@@ -84,26 +84,17 @@ metastore:
       cpu: 1
       memory: 1Gi
 
-knowledgeGraph:
-  replicaCount: 1
-  image:
-    repository: memgraph/memgraph
-    tag: "2.19.0"
-    pullPolicy: IfNotPresent
+memgraph:
+  fullnameOverride: exobrain-knowledge-graph
+  sysctlInitContainer:
+    enabled: true
+  persistentVolumeClaim:
+    createStorageClaim: true
+    storageSize: 10Gi
+    createLogStorage: false
   service:
     type: ClusterIP
-    boltPort: 7687
-    httpPort: 7444
-  persistence:
-    enabled: true
-    size: 10Gi
-  resources:
-    requests:
-      cpu: 200m
-      memory: 512Mi
-    limits:
-      cpu: 2
-      memory: 2Gi
+    enableBolt: true
 
 vectorStore:
   replicaCount: 1
