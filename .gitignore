@@ -2,11 +2,13 @@
 node_modules/
 .build/
 .svelte-kit/
+build/
 
 # Python
 __pycache__/
 *.pyc
 .venv/
+*.egg-info/
 
 # Rust
 target/
