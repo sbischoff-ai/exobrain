@@ -29,8 +29,13 @@ assistantBackend:
     type: ClusterIP
     port: 8000
   env:
+    APP_ENV: cluster
     KNOWLEDGE_INTERFACE_ADDR: exobrain-knowledge-interface:50051
     METASTORE_DSN: postgresql://exobrain:exobrain@exobrain-metastore:5432/exobrain
+  secrets:
+    openaiApiKey:
+      name: exobrain-secrets
+      key: OPENAI_API_KEY
   resources:
     requests:
       cpu: 100m

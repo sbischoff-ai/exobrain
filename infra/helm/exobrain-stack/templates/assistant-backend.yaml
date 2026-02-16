@@ -20,10 +20,17 @@ spec:
           image: "{{ .Values.assistantBackend.image.repository }}:{{ .Values.assistantBackend.image.tag }}"
           imagePullPolicy: {{ .Values.assistantBackend.image.pullPolicy }}
           env:
+            - name: APP_ENV
+              value: {{ .Values.assistantBackend.env.APP_ENV | quote }}
             - name: KNOWLEDGE_INTERFACE_ADDR
               value: {{ .Values.assistantBackend.env.KNOWLEDGE_INTERFACE_ADDR | quote }}
             - name: METASTORE_DSN
               value: {{ .Values.assistantBackend.env.METASTORE_DSN | quote }}
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.assistantBackend.secrets.openaiApiKey.name | quote }}
+                  key: {{ .Values.assistantBackend.secrets.openaiApiKey.key | quote }}
           ports:
             - containerPort: {{ .Values.assistantBackend.service.port }}
           resources: {{- toYaml .Values.assistantBackend.resources | nindent 12 }}
