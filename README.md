@@ -73,7 +73,7 @@ Run `./scripts/local/infra-up.sh` to start these infrastructure services:
 
 Sane local defaults:
 - 1 server + 2 agents
-- Traefik disabled (so ingress choice stays explicit)
+- Traefik enabled (default k3s ingress controller)
 - LoadBalancer ports mapped: `8080 -> 80`, `8443 -> 443`
 - Kubernetes image: `rancher/k3s:v1.35.1-k3s1`
 
@@ -107,6 +107,15 @@ helm upgrade --install exobrain infra/helm/exobrain-stack --dependency-update
 kubectl get pods
 kubectl get svc
 ```
+
+### 5. Access assistant services via ingress
+
+Once the chart is deployed, both assistant services are reachable via the same local port:
+
+- Assistant frontend: `http://localhost:8080/`
+- Assistant backend API: `http://localhost:8080/api`
+
+Ingress routing is path-based (`/api` -> assistant backend, all other paths -> assistant frontend).
 
 ## Local App Development (without full Kubernetes rollout)
 
@@ -180,7 +189,7 @@ The chart is fully parameterized via `infra/helm/exobrain-stack/values.yaml`, in
 - Container image repositories/tags.
 - CPU/memory requests + limits.
 - Persistent volume sizes and optional storage class.
-- Service ports and optional ingress.
+- Service ports and ingress routing (frontend on `/`, backend on `/api`).
 
 For local tuning, create a `values.local.yaml` override file and apply with:
 
