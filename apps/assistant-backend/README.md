@@ -47,8 +47,8 @@ Notes:
 
 ### Application endpoint
 
-- Assistant backend API: `http://localhost:8000`
-- Health check: `http://localhost:8000/api/healthz`
+- Assistant backend API: `http://localhost:8000/api`
+- Health check: `http://localhost:8000/healthz`
 - Chat endpoint: `POST http://localhost:8000/api/chat/message`
 - Swagger UI (local only): `http://localhost:8000/docs`
 

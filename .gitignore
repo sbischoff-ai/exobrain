@@ -18,6 +18,9 @@ target/
 .vscode/
 .idea/
 
-# Infra
+# infra
 **/charts/*.tgz
+
+# env/secrets
+.env
 
