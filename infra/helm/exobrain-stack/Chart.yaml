@@ -4,3 +4,7 @@ description: Helm chart for the Exobrain assistant + GraphRAG platform
 type: application
 version: 0.1.0
 appVersion: "0.1.0"
+dependencies:
+  - name: memgraph
+    version: 0.2.15
+    repository: https://memgraph.github.io/helm-charts
