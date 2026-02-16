@@ -48,7 +48,7 @@ p {
 
 .header {
   border-bottom: 1px solid var(--border);
-  background: linear-gradient(180deg, #504945, #3c3836);
+  background: #373636;
 }
 
 .brand {
@@ -61,8 +61,8 @@ p {
 }
 
 .logo {
-  width: 2.25rem;
-  height: 2.25rem;
+  width: 3.375rem;
+  height: 3.375rem;
   border-radius: 0.45rem;
   object-fit: cover;
 }
@@ -79,11 +79,13 @@ p {
   flex: 1;
   width: 100%;
   min-height: 0;
+  display: flex;
   padding: clamp(1rem, 2.5vw, 2rem) 1rem;
 }
 
 .chat-view {
-  height: 100%;
+  flex: 1;
+  width: 100%;
   max-width: 72rem;
   margin: 0 auto;
   border: 1px solid var(--border);
@@ -169,8 +171,8 @@ p {
 }
 
 .chat-input button svg {
-  width: 1.2rem;
-  height: 1.2rem;
+  width: 2.4rem;
+  height: 2.4rem;
   fill: currentColor;
 }
 
