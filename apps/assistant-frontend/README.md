@@ -39,3 +39,10 @@ The project local cluster helper (`scripts/k3d-up.sh`) defaults to:
 - Kubernetes image: `rancher/k3s:v1.35.1-k3s1`
 - Local LoadBalancer mapping: `localhost:8080 -> :80`, `localhost:8443 -> :443`
 - Ingress routing: `http://localhost:8080/` -> assistant frontend, `http://localhost:8080/api` -> assistant backend
+
+## API routing behavior
+
+The frontend always calls `POST /api/chat/message`.
+
+- **Local development (`npm run dev`)**: Vite proxies `/api/*` to `http://localhost:8000` by default. Override with `ASSISTANT_BACKEND_URL` if needed.
+- **Cluster/nonlocal deployments**: the browser keeps calling relative `/api/*`; ingress routes these requests to the assistant backend service.

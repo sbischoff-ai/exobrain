@@ -203,3 +203,20 @@ p {
     width: min(85%, 26rem);
   }
 }
+
+.chat-notice {
+  margin: 0;
+  padding: 0.5rem 0.9rem 0;
+  color: #fb4934;
+  font-size: 0.9rem;
+}
+
+.chat-input input:disabled,
+.chat-input button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.chat-input button:disabled:hover {
+  background: var(--accent);
+}
