@@ -220,3 +220,30 @@ p {
 .chat-input button:disabled:hover {
   background: var(--accent);
 }
+
+
+.assistant-markdown :global(*) {
+  max-width: 100%;
+}
+
+.assistant-markdown :global(p),
+.assistant-markdown :global(ul),
+.assistant-markdown :global(ol),
+.assistant-markdown :global(pre),
+.assistant-markdown :global(blockquote),
+.assistant-markdown :global(table) {
+  margin: 0.5rem 0;
+}
+
+.assistant-markdown :global(ul),
+.assistant-markdown :global(ol) {
+  padding-left: 1.25rem;
+}
+
+.assistant-markdown :global(code) {
+  font-family: inherit;
+}
+
+.assistant-markdown :global(pre) {
+  overflow-x: auto;
+}

@@ -1,5 +1,6 @@
 <script>
   import { tick } from 'svelte';
+  import { Streamdown } from 'svelte-streamdown';
 
   let messageInput = '';
   let messagesContainer;
@@ -134,7 +135,13 @@
       <div class="messages" bind:this={messagesContainer}>
         {#each messages as message (message.id)}
           <article class="message" class:user={message.role === 'user'}>
-            <p>{message.text}</p>
+            {#if message.role === 'assistant'}
+              <div class="assistant-markdown">
+                <Streamdown content={message.text} />
+              </div>
+            {:else}
+              <p>{message.text}</p>
+            {/if}
           </article>
         {/each}
       </div>
