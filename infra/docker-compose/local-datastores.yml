@@ -37,7 +37,7 @@ services:
       - exobrain-local
 
   memgraph:
-    image: memgraph/memgraph:2.17
+    image: memgraph/memgraph:3.8.0
     container_name: exobrain-local-memgraph
     restart: unless-stopped
     command:
