@@ -14,3 +14,27 @@ From the repository root:
 Notes:
 - Re-run `build-assistant-frontend.sh` after changing frontend source.
 - Dependency installation is skipped unless `node_modules` is missing or `package-lock.json` changed.
+
+## Local environment endpoints
+
+### Application endpoint
+
+- Assistant frontend UI: `http://localhost:5173`
+
+### Upstream dependency endpoint
+
+- Assistant backend API (default local run): `http://localhost:8000`
+
+### Shared infrastructure endpoints
+
+- PostgreSQL: `localhost:15432`
+- Qdrant: `localhost:16333` (HTTP), `localhost:16334` (gRPC)
+- Memgraph: `localhost:17687` (Bolt), `localhost:17444` (HTTP)
+- NATS: `localhost:14222` (client), `localhost:18222` (monitoring)
+
+## Kubernetes baseline
+
+The project local cluster helper (`scripts/k3d-up.sh`) defaults to:
+
+- Kubernetes image: `rancher/k3s:v1.35.1-k3s1`
+- Local LoadBalancer mapping: `localhost:8080 -> :80`, `localhost:8443 -> :443`

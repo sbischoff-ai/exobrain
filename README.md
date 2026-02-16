@@ -28,7 +28,7 @@ infra/
   helm/exobrain-stack/       # Kubernetes Helm chart
 scripts/
   k3d-up.sh                  # local cluster bootstrap helper
-  local/                     # scripts for local service and datastore startup
+  local/                     # scripts for local service and infrastructure startup
 ```
 
 ## Prerequisites
@@ -40,6 +40,28 @@ scripts/
 
 Optional (for NixOS):
 - Nix with flakes or classic `nix-shell`
+
+## Local Environment Overview
+
+### Kubernetes baseline
+
+- k3d cluster script default image: `rancher/k3s:v1.35.1-k3s1`
+- LoadBalancer ports mapped locally: `8080 -> 80`, `8443 -> 443`
+
+### Local infrastructure compose endpoints
+
+Run `./scripts/local/infra-up.sh` to start these infrastructure services:
+
+- PostgreSQL: `localhost:15432` (`postgresql://exobrain:exobrain@localhost:15432/exobrain`)
+- Qdrant: `localhost:16333` (HTTP), `localhost:16334` (gRPC)
+- Memgraph: `localhost:17687` (Bolt), `localhost:17444` (HTTP)
+- NATS: `localhost:14222` (client), `localhost:18222` (monitoring)
+
+### Local app endpoints (when running app scripts)
+
+- Assistant backend API: `http://localhost:8000`
+- Assistant frontend app: `http://localhost:5173`
+- Knowledge interface gRPC: `localhost:50051`
 
 ## Local Development (k3d)
 
@@ -53,6 +75,7 @@ Sane local defaults:
 - 1 server + 2 agents
 - Traefik disabled (so ingress choice stays explicit)
 - LoadBalancer ports mapped: `8080 -> 80`, `8443 -> 443`
+- Kubernetes image: `rancher/k3s:v1.35.1-k3s1`
 
 ### 2. Build local images (optional for custom services)
 
@@ -87,18 +110,19 @@ kubectl get svc
 
 ## Local App Development (without full Kubernetes rollout)
 
-For iterative debugging, you can run the app services directly in your terminal while keeping only the datastores in Docker Compose.
+For iterative debugging, you can run the app services directly in your terminal while keeping only infrastructure services in Docker Compose.
 
-### 1. Start local datastores
+### 1. Start local infrastructure services
 
 ```bash
-./scripts/local/datastores-up.sh
+./scripts/local/infra-up.sh
 ```
 
 This starts:
 - PostgreSQL on `localhost:15432`
 - Qdrant on `localhost:16333` (HTTP) and `localhost:16334` (gRPC)
 - Memgraph on `localhost:17687` (Bolt) and `localhost:17444` (HTTP)
+- NATS on `localhost:14222` (client) and `localhost:18222` (monitoring)
 
 ### 2. Build local apps
 
@@ -125,12 +149,12 @@ In separate terminals:
 ./scripts/local/run-knowledge-interface.sh
 ```
 
-All scripts expose placeholder connection environment variables for Postgres, Qdrant, and Memgraph so local services can share a consistent default topology.
+All scripts expose placeholder connection environment variables for Postgres, Qdrant, Memgraph, and NATS so local services can share a consistent default topology.
 
-### 4. Stop local datastores
+### 4. Stop local infrastructure services
 
 ```bash
-./scripts/local/datastores-down.sh
+./scripts/local/infra-down.sh
 ```
 
 ## NixOS Development Shell

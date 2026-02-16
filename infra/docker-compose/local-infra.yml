@@ -56,6 +56,22 @@ services:
     networks:
       - exobrain-local
 
+  nats:
+    image: nats:2.10-alpine
+    container_name: exobrain-local-nats
+    restart: unless-stopped
+    command: ["-js", "-m", "8222"]
+    ports:
+      - "14222:4222"
+      - "18222:8222"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8222/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - exobrain-local
+
 volumes:
   exobrain_postgres_data:
   exobrain_qdrant_data:
