@@ -100,7 +100,22 @@ This starts:
 - Qdrant on `localhost:16333` (HTTP) and `localhost:16334` (gRPC)
 - Memgraph on `localhost:17687` (Bolt) and `localhost:17444` (HTTP)
 
-### 2. Run services directly
+### 2. Build local apps
+
+Before running services, build each app once from a fresh clone (and re-run when noted below):
+
+```bash
+./scripts/local/build-assistant-backend.sh
+./scripts/local/build-assistant-frontend.sh
+./scripts/local/build-knowledge-interface.sh
+```
+
+Build script behavior:
+- Frontend: installs dependencies with `npm ci` only when needed (missing `node_modules` or lockfile change), then runs `npm run build`.
+- Backend: runs `uv sync` (dependency-aware, no-op when up to date) and compiles Python bytecode for changed files.
+- Knowledge interface: runs `cargo build --locked`; Cargo rebuilds only changed crates/files.
+
+### 3. Run services directly
 
 In separate terminals:
 
@@ -112,7 +127,7 @@ In separate terminals:
 
 All scripts expose placeholder connection environment variables for Postgres, Qdrant, and Memgraph so local services can share a consistent default topology.
 
-### 3. Stop local datastores
+### 4. Stop local datastores
 
 ```bash
 ./scripts/local/datastores-down.sh
