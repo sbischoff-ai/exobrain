@@ -34,3 +34,4 @@ The project local cluster helper (`scripts/k3d-up.sh`) defaults to:
 
 - Kubernetes image: `rancher/k3s:v1.35.1-k3s1`
 - Local LoadBalancer mapping: `localhost:8080 -> :80`, `localhost:8443 -> :443`
+- Ingress routing: `http://localhost:8080/` -> assistant frontend, `http://localhost:8080/api` -> assistant backend

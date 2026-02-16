@@ -136,12 +136,22 @@ messageBroker:
       memory: 256Mi
 
 ingress:
-  enabled: false
-  className: ""
+  enabled: true
+  className: traefik
   annotations: {}
   hosts:
-    - host: exobrain.local
+    - host: localhost
       paths:
+        - path: /api
+          pathType: Prefix
+          backend:
+            service:
+              name: exobrain-assistant-backend
+              port: 8000
         - path: /
           pathType: Prefix
+          backend:
+            service:
+              name: exobrain-assistant-frontend
+              port: 3000
   tls: []

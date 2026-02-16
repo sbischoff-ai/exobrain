@@ -8,7 +8,6 @@ AGENTS=${AGENTS:-2}
 k3d cluster create "$CLUSTER_NAME" \
   --agents "$AGENTS" \
   --servers 1 \
-  --k3s-arg "--disable=traefik@server:0" \
   --image "$K3S_IMAGE" \
   --port "8080:80@loadbalancer" \
   --port "8443:443@loadbalancer"

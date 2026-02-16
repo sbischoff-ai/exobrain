@@ -2,9 +2,11 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: exobrain-assistant-frontend
+  name: exobrain-assistant
+  {{- with .Values.ingress.annotations }}
   annotations:
-    {{- toYaml .Values.ingress.annotations | nindent 4 }}
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   {{- if .Values.ingress.className }}
   ingressClassName: {{ .Values.ingress.className }}
@@ -19,9 +21,9 @@ spec:
             pathType: {{ .pathType }}
             backend:
               service:
-                name: exobrain-assistant-frontend
+                name: {{ .backend.service.name }}
                 port:
-                  number: {{ $.Values.assistantFrontend.service.port }}
+                  number: {{ .backend.service.port }}
           {{- end }}
     {{- end }}
   {{- if .Values.ingress.tls }}
