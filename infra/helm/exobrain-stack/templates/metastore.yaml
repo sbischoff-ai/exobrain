@@ -1,3 +1,28 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: exobrain-metastore-init
+  labels:
+    app.kubernetes.io/name: exobrain-metastore
+    {{- include "exobrain-stack.labels" . | nindent 4 }}
+data:
+  01-assistant-db.sql: |
+    SELECT 'CREATE ROLE {{ .Values.metastore.assistantDb.username }} LOGIN PASSWORD ''{{ .Values.metastore.assistantDb.password }}''' 
+    WHERE NOT EXISTS (
+      SELECT FROM pg_catalog.pg_roles WHERE rolname = '{{ .Values.metastore.assistantDb.username }}'
+    )\gexec
+
+    SELECT 'CREATE DATABASE {{ .Values.metastore.assistantDb.database }} OWNER {{ .Values.metastore.assistantDb.username }}'
+    WHERE NOT EXISTS (
+      SELECT FROM pg_database WHERE datname = '{{ .Values.metastore.assistantDb.database }}'
+    )\gexec
+
+    REVOKE ALL ON DATABASE {{ .Values.metastore.assistantDb.database }} FROM PUBLIC;
+    GRANT CONNECT, TEMPORARY ON DATABASE {{ .Values.metastore.assistantDb.database }} TO {{ .Values.metastore.assistantDb.username }};
+
+    \connect {{ .Values.metastore.assistantDb.database }}
+    CREATE EXTENSION IF NOT EXISTS pgcrypto;
+---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -32,7 +57,14 @@ spec:
           volumeMounts:
             - name: metastore-data
               mountPath: /var/lib/postgresql/data
+            - name: metastore-init
+              mountPath: /docker-entrypoint-initdb.d/01-assistant-db.sql
+              subPath: 01-assistant-db.sql
           resources: {{- toYaml .Values.metastore.resources | nindent 12 }}
+      volumes:
+        - name: metastore-init
+          configMap:
+            name: exobrain-metastore-init
   volumeClaimTemplates:
     - metadata:
         name: metastore-data

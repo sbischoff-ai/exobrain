@@ -1,0 +1,103 @@
+[[actions]]
+type = "create_table"
+name = "users"
+primary_key = ["id"]
+
+    [[actions.columns]]
+    name = "id"
+    type = "UUID"
+    nullable = false
+    default = "gen_random_uuid()"
+
+    [[actions.columns]]
+    name = "name"
+    type = "TEXT"
+    nullable = false
+
+    [[actions.columns]]
+    name = "email"
+    type = "TEXT"
+    nullable = false
+
+    [[actions.columns]]
+    name = "created_at"
+    type = "TIMESTAMPTZ"
+    nullable = false
+    default = "NOW()"
+
+    [[actions.columns]]
+    name = "updated_at"
+    type = "TIMESTAMPTZ"
+    nullable = false
+    default = "NOW()"
+
+[[actions]]
+type = "add_index"
+table = "users"
+
+    [actions.index]
+    name = "users_email_unique"
+    columns = ["email"]
+    unique = true
+
+[[actions]]
+type = "create_table"
+name = "identities"
+primary_key = ["id"]
+
+    [[actions.columns]]
+    name = "id"
+    type = "UUID"
+    nullable = false
+    default = "gen_random_uuid()"
+
+    [[actions.columns]]
+    name = "user_id"
+    type = "UUID"
+    nullable = false
+
+    [[actions.columns]]
+    name = "provider"
+    type = "TEXT"
+    nullable = false
+
+    [[actions.columns]]
+    name = "provider_subject"
+    type = "TEXT"
+    nullable = false
+
+    [[actions.columns]]
+    name = "password_hash"
+    type = "TEXT"
+
+    [[actions.columns]]
+    name = "created_at"
+    type = "TIMESTAMPTZ"
+    nullable = false
+    default = "NOW()"
+
+[[actions]]
+type = "add_foreign_key"
+table = "identities"
+
+    [actions.foreign_key]
+    columns = ["user_id"]
+    referenced_table = "users"
+    referenced_columns = ["id"]
+
+[[actions]]
+type = "add_index"
+table = "identities"
+
+    [actions.index]
+    name = "identities_provider_subject_unique"
+    columns = ["provider", "provider_subject"]
+    unique = true
+
+[[actions]]
+type = "add_index"
+table = "identities"
+
+    [actions.index]
+    name = "idx_identities_user_id"
+    columns = ["user_id"]
