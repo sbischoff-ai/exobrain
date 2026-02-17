@@ -113,6 +113,11 @@ class AuthService:
         self._sessions[session_id] = SessionRecord(session_id=session_id, user_id=principal.user_id, expires_at=expires_at)
         return session_id
 
+    def revoke_session(self, session_id: str | None) -> None:
+        if not session_id:
+            return
+        self._sessions.pop(session_id, None)
+
     async def principal_from_session(self, session_id: str | None) -> UnifiedPrincipal | None:
         if not session_id:
             return None
