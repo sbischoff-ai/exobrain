@@ -1,4 +1,11 @@
-FROM rust:1.85-bookworm AS builder
+FROM rust:1.88-bookworm AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    clang \
+    libclang-dev \
+    gcc \
+    make \
+ && rm -rf /var/lib/apt/lists/*
 
 RUN cargo install --locked reshape
 
