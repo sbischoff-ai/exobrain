@@ -38,11 +38,11 @@ async def login(payload: LoginRequest, request: Request, response: Response) -> 
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-async def logout(request: Request, response: Response) -> Response:
+async def logout(request: Request, response: Response) -> None:
     auth_service: AuthService = request.app.state.auth_service
     session_cookie_name = request.app.state.settings.auth_cookie_name
     session_id = request.cookies.get(session_cookie_name)
 
     auth_service.revoke_session(session_id)
     response.delete_cookie(key=session_cookie_name, httponly=True, samesite="lax", secure=False)
-    return response
+
