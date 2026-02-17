@@ -28,6 +28,7 @@ pkgs.mkShell {
     curl          # Qdrant REST API
     httpie        # Friendly HTTP CLI for Qdrant
     jq
+    reshape       # migrations etc.
   ];
 
   shellHook = ''
