@@ -11,3 +11,7 @@ k3d cluster create "$CLUSTER_NAME" \
   --image "$K3S_IMAGE" \
   --port "8080:80@loadbalancer" \
   --port "8443:443@loadbalancer"
+
+kubectl create secret generic "exobrain-secrets" \
+  --from-literal=OPENAI_API_KEY="$OPENAI_API_KEY"
+

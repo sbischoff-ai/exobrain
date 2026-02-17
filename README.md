@@ -41,6 +41,11 @@ scripts/
 Optional (for NixOS):
 - Nix with flakes or classic `nix-shell`
 
+Environment Variables:
+- `OPENAI_API_KEY` (for Assistant backend)
+
+(Env vars need to be present in the terminal that you execute scripts like `run-assistant-backend.sh` or `k3d-up.sh` in.)
+
 ## Local Environment Overview
 
 ### Kubernetes baseline

@@ -22,8 +22,7 @@ Create a local env file from the example:
 cp .env.example .env
 ```
 
-`OPENAI_API_KEY` is intentionally **not** stored in `.env` and must be provided externally,
-for example from environment secrets.
+`OPENAI_API_KEY` is intentionally **not** stored in `.env` and must be provided externally. (Set it in the terminal session that's running the backend process.)
 
 Swagger/OpenAPI is environment-gated:
 
