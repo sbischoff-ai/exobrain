@@ -58,6 +58,7 @@ Environment Variables:
 Run `./scripts/local/infra-up.sh` to start these infrastructure services:
 
 - PostgreSQL: `localhost:15432` (`postgresql://exobrain:exobrain@localhost:15432/exobrain`)
+- Assistant DB (in metastore): `assistant_db` with app user `assistant_backend`
 - Qdrant: `localhost:16333` (HTTP), `localhost:16334` (gRPC)
 - Memgraph: `localhost:17687` (Bolt), `localhost:17444` (HTTP)
 - NATS: `localhost:14222` (client), `localhost:18222` (monitoring)
@@ -130,6 +131,12 @@ For iterative debugging, you can run the app services directly in your terminal 
 
 ```bash
 ./scripts/local/infra-up.sh
+```
+
+Then initialize the assistant metastore database, schema, and test user:
+
+```bash
+./scripts/local/assistant-db-setup.sh
 ```
 
 This starts:

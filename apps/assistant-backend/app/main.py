@@ -1,10 +1,38 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 
 from app.api.router import api_router
 from app.api.routers.health import router as health_router
 from app.core.settings import get_settings
+from app.services.auth_service import AuthService
+from app.services.database_service import DatabaseService
+from app.services.user_service import UserService
 
 settings = get_settings()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    database_service = DatabaseService(
+        dsn=settings.assistant_db_dsn,
+        reshape_schema_query=settings.reshape_schema_query,
+    )
+    await database_service.connect()
+
+    user_service = UserService(database=database_service)
+    auth_service = AuthService(settings=settings, user_service=user_service)
+
+    app.state.settings = settings
+    app.state.database_service = database_service
+    app.state.user_service = user_service
+    app.state.auth_service = auth_service
+
+    try:
+        yield
+    finally:
+        await database_service.disconnect()
+
 
 app = FastAPI(
     title="Exobrain Assistant Backend",
@@ -12,6 +40,7 @@ app = FastAPI(
     docs_url="/docs" if settings.enable_swagger else None,
     redoc_url="/redoc" if settings.enable_swagger else None,
     openapi_url="/openapi.json" if settings.enable_swagger else None,
+    lifespan=lifespan,
 )
 
 app.include_router(health_router)

@@ -29,6 +29,28 @@ Swagger/OpenAPI is environment-gated:
 - `APP_ENV=local` -> Swagger UI is enabled (`/docs`).
 - any non-local value (for example in Kubernetes) -> Swagger/OpenAPI is disabled.
 
+## Database and auth setup
+
+Assistant backend now uses a dedicated Postgres database (`assistant_db`) and user (`assistant_backend`).
+
+Apply database bootstrap, Reshape migrations, and seed data locally:
+
+```bash
+./scripts/local/assistant-db-setup.sh
+```
+
+This applies TOML-based Reshape migrations from `infra/metastore/assistant-backend/migrations/`, then inserts a test user:
+
+- email: `test.user@exobrain.local`
+- password: `password123`
+
+## Authentication
+
+- `POST /api/auth/login` authenticates a user and can issue:
+  - session cookie mode (`session_mode=web`, `issuance_policy=session`)
+  - token pair mode (`session_mode=api`, `issuance_policy=tokens`)
+- `POST /api/chat/message` accepts optional auth via cookie or bearer token and logs the resolved user name.
+
 ## Local build and run
 
 From the repository root:
@@ -48,6 +70,7 @@ Notes:
 
 - Assistant backend API: `http://localhost:8000/api`
 - Health check: `http://localhost:8000/healthz`
+- Auth login endpoint: `POST http://localhost:8000/api/auth/login`
 - Chat endpoint: `POST http://localhost:8000/api/chat/message`
 - Swagger UI (local only): `http://localhost:8000/docs`
 
