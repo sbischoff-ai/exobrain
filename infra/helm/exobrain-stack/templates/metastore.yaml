@@ -7,21 +7,15 @@ metadata:
     {{- include "exobrain-stack.labels" . | nindent 4 }}
 data:
   01-assistant-db.sql: |
-    DO $$
-    BEGIN
-      IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{{ .Values.metastore.assistantDb.username }}') THEN
-        CREATE ROLE {{ .Values.metastore.assistantDb.username }} LOGIN PASSWORD '{{ .Values.metastore.assistantDb.password }}';
-      END IF;
-    END
-    $$;
+    SELECT 'CREATE ROLE {{ .Values.metastore.assistantDb.username }} LOGIN PASSWORD ''{{ .Values.metastore.assistantDb.password }}''' 
+    WHERE NOT EXISTS (
+      SELECT FROM pg_catalog.pg_roles WHERE rolname = '{{ .Values.metastore.assistantDb.username }}'
+    )\gexec
 
-    DO $$
-    BEGIN
-      IF NOT EXISTS (SELECT FROM pg_database WHERE datname = '{{ .Values.metastore.assistantDb.database }}') THEN
-        CREATE DATABASE {{ .Values.metastore.assistantDb.database }} OWNER {{ .Values.metastore.assistantDb.username }};
-      END IF;
-    END
-    $$;
+    SELECT 'CREATE DATABASE {{ .Values.metastore.assistantDb.database }} OWNER {{ .Values.metastore.assistantDb.username }}'
+    WHERE NOT EXISTS (
+      SELECT FROM pg_database WHERE datname = '{{ .Values.metastore.assistantDb.database }}'
+    )\gexec
 
     REVOKE ALL ON DATABASE {{ .Values.metastore.assistantDb.database }} FROM PUBLIC;
     GRANT CONNECT, TEMPORARY ON DATABASE {{ .Values.metastore.assistantDb.database }} TO {{ .Values.metastore.assistantDb.username }};
