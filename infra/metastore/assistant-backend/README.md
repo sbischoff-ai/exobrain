@@ -3,13 +3,51 @@
 This directory is dedicated to the Python assistant backend schema and seed data.
 
 - `migrations/`: TOML Reshape migrations for `assistant_db`
-- `seeds/`: development seed records
+- `seeds/`: development seed records (idempotent SQL)
 
-Apply locally with:
+## Local (Docker Compose) setup
+
+Apply migrations locally with:
+
+```bash
+./scripts/local/assistant-db-migrate.sh
+```
+
+Apply optional seed data with:
+
+```bash
+./scripts/local/assistant-db-seed.sh
+```
+
+Run both in order with:
 
 ```bash
 ./scripts/local/assistant-db-setup.sh
 ```
+
+## k3d / Kubernetes setup
+
+For a running local k3d cluster with the Helm chart deployed, run migrations with:
+
+```bash
+./scripts/k3d/assistant-db-migrate.sh
+```
+
+Apply optional seed data with:
+
+```bash
+./scripts/k3d/assistant-db-seed.sh
+```
+
+Run both in order with:
+
+```bash
+./scripts/k3d/assistant-db-setup.sh
+```
+
+The Helm chart models migrations and seed data as separate hook jobs (`dbJobs.assistantBackendMigrations` and `dbJobs.assistantBackendSeed`) so they can be triggered independently.
+
+## Migration validation
 
 Validate migrations with:
 

@@ -28,6 +28,7 @@ infra/
   helm/exobrain-stack/       # Kubernetes Helm chart
 scripts/
   k3d-up.sh                  # local cluster bootstrap helper
+  k3d/                       # scripts for in-cluster operational DB jobs
   local/                     # scripts for local service and infrastructure startup
 ```
 
@@ -89,6 +90,7 @@ Sane local defaults:
 docker build -f infra/docker/assistant-frontend/Dockerfile -t exobrain/assistant-frontend:0.1.0 .
 docker build -f infra/docker/assistant-backend/Dockerfile -t exobrain/assistant-backend:0.1.0 .
 docker build -f infra/docker/knowledge-interface/Dockerfile -t exobrain/knowledge-interface:0.1.0 .
+docker build -f infra/docker/metastore/db-tools/Dockerfile -t exobrain/assistant-db-tools:0.1.0 .
 ```
 
 Import images into k3d cluster:
@@ -98,6 +100,7 @@ k3d image import \
   exobrain/assistant-frontend:0.1.0 \
   exobrain/assistant-backend:0.1.0 \
   exobrain/knowledge-interface:0.1.0 \
+  exobrain/assistant-db-tools:0.1.0 \
   -c exobrain-dev
 ```
 
@@ -107,14 +110,30 @@ k3d image import \
 helm upgrade --install exobrain infra/helm/exobrain-stack --dependency-update
 ```
 
-### 4. Inspect deployment
+### 4. Run assistant metastore jobs
+
+After the chart is installed, run the in-cluster migration job to create/upgrade the `assistant_db` schema:
+
+```bash
+./scripts/k3d/assistant-db-migrate.sh
+```
+
+Run seeds only when needed (optional/idempotent):
+
+```bash
+./scripts/k3d/assistant-db-seed.sh
+```
+
+Use `./scripts/k3d/assistant-db-setup.sh` to run both in order. Migrations and seed run as separate Helm hook jobs (`post-install,post-upgrade`) and can be triggered independently.
+
+### 5. Inspect deployment
 
 ```bash
 kubectl get pods
 kubectl get svc
 ```
 
-### 5. Access assistant services via ingress
+### 6. Access assistant services via ingress
 
 Once the chart is deployed, both assistant services are reachable via the same local port:
 
@@ -133,11 +152,19 @@ For iterative debugging, you can run the app services directly in your terminal 
 ./scripts/local/infra-up.sh
 ```
 
-Then initialize the assistant metastore database, schema, and test user:
+Then initialize the assistant metastore database schema:
 
 ```bash
-./scripts/local/assistant-db-setup.sh
+./scripts/local/assistant-db-migrate.sh
 ```
+
+Apply optional/idempotent seed data separately when needed:
+
+```bash
+./scripts/local/assistant-db-seed.sh
+```
+
+Use `./scripts/local/assistant-db-setup.sh` to run both in order.
 
 This starts:
 - PostgreSQL on `localhost:15432`
@@ -202,6 +229,7 @@ The chart is fully parameterized via `infra/helm/exobrain-stack/values.yaml`, in
 - CPU/memory requests + limits.
 - Persistent volume sizes and optional storage class.
 - Service ports and ingress routing (frontend on `/`, backend on `/api`).
+- Optional database job toggles for independent migration and seeding workflows.
 
 For local tuning, create a `values.local.yaml` override file and apply with:
 

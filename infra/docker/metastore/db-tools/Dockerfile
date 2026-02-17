@@ -1,0 +1,16 @@
+FROM rust:1.85-bookworm AS builder
+
+RUN cargo install --locked reshape
+
+FROM debian:bookworm-slim
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends bash ca-certificates postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /usr/local/cargo/bin/reshape /usr/local/bin/reshape
+COPY infra/docker/metastore/init/01-assistant-db.sql /opt/exobrain/sql/init/01-assistant-db.sql
+COPY infra/metastore/assistant-backend/migrations /opt/exobrain/assistant-backend/migrations
+COPY infra/metastore/assistant-backend/seeds /opt/exobrain/assistant-backend/seeds
+
+CMD ["bash"]
