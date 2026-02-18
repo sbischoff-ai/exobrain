@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-import logging
 from typing import Protocol
 
 from redis.asyncio import Redis
-
-logger = logging.getLogger(__name__)
 
 
 class SessionStore(Protocol):
@@ -27,8 +24,13 @@ class SessionStore(Protocol):
 class RedisSessionStore:
     """Redis-backed session store implementation."""
 
-    def __init__(self, redis_url: str, key_prefix: str = "assistant:sessions") -> None:
-        self._redis = Redis.from_url(redis_url, decode_responses=True)
+    def __init__(
+        self,
+        redis_url: str,
+        key_prefix: str = "assistant:sessions",
+        redis_client: Redis | None = None,
+    ) -> None:
+        self._redis = redis_client if redis_client is not None else Redis.from_url(redis_url, decode_responses=True)
         self._key_prefix = key_prefix.strip(":")
 
     async def ping(self) -> bool:

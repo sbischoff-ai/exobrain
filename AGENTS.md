@@ -103,6 +103,7 @@ A skill is a set of local instructions in a `SKILL.md` file.
 
 ## Agent retrospective notes
 
+- Keep assistant-backend unit tests process-free: do not spawn local services (for example `redis-server`) in unit tests; reserve real service execution for integration/system workflows.
 - For assistant-backend auth/session work, remember sessions are Redis-backed via `ASSISTANT_CACHE_REDIS_URL`; keep local infra (`infra/docker-compose/local-infra.yml`), Helm values/templates, and `scripts/agent/native-infra-*` in sync to avoid environment-specific regressions.
 - For logging-related changes, check and update both app-level README files and deployment manifests (Dockerfiles + Helm values/templates) in the same pass to avoid config drift.
 - Frontend production logging defaults should stay conservative (`warn` or higher) unless the task explicitly asks for verbose runtime telemetry.
