@@ -1,44 +1,52 @@
 # AGENTS.md
 
+## Purpose
+
+This file provides **high-signal instructions for coding agents** working in this repository.
+Keep changes focused, minimize context bloat, and prefer concise docs over long narrative.
+
 ## Codex / Cloud Agent Environment Notes
 
-When working in the Codex cloud environment, **Docker and Kubernetes tooling are not available** (including `docker`, `docker-compose`, and `k3d`). This means the instructions in `README.md` that rely on running services via containers or a local k3d cluster will not work here.
+In Codex cloud environments, **Docker and Kubernetes tooling are unavailable** (`docker`, `docker-compose`, `k3d`).
+Do not rely on container workflows from `README.md` unless explicitly available.
 
-Instead, if integration tests or local execution require infrastructure services, the agent should run them **directly as native processes** inside the environment:
+When integration or local execution requires infrastructure services, run native processes if present in the environment:
 
-- **Postgres**: installed via Ubuntu packages (`postgresql`)
-- **NATS**: installed via Ubuntu packages (`nats-server`)
-- **Qdrant**: installed as a standalone binary (`qdrant`)
+- **Postgres** (`postgresql`)
+- **NATS** (`nats-server`)
+- **Qdrant** (`qdrant`)
 
-These services are available in the environment, but they are **not started automatically**. Start them manually as needed for tests.
+These services are not started automatically.
+
+> Assume agents are constrained to pre-provisioned tools/dependencies.
+> Do **not** add instructions that require installing extra tooling from the internet as a normal workflow.
+
+For focused local workflows and checks, see `docs/codex-runbook.md`.
 
 ### Postgres Migrations (Reshape)
 
-This project uses **Reshape** to manage Postgres schema migrations.
+This project uses **Reshape** for Postgres schema migrations.
 
-If you need to write, apply, debug, or review migrations, use:
+If you need migration guidance:
 
 ```sh
 reshape docs
 ```
 
-This prints documentation and guidance for how migrations are structured and managed in this repository.
+## Documentation Hygiene for Agents
+
+- Keep agent-facing docs short and actionable.
+- Prefer checklists/commands over long prose.
+- Remove outdated or duplicate instructions when touching docs.
+- If you add a new context doc, link it from here and from `README.md` only when generally useful.
 
 ## Commit Conventions
 
-This repository uses Conventional Commits. All automated agents must follow these rules.
+Use Conventional Commits.
 
-### Commit message format (required)
+### Format (required)
 
-<type>(<scope>): <subject>
-
-Optional body/footer:
-
-<type>(<scope>): <subject>
-
-<body>
-
-<footer>
+`<type>(<scope>): <subject>`
 
 ### Allowed types
 
@@ -56,50 +64,17 @@ Optional body/footer:
 
 ### Allowed scopes (required)
 
-<scope> is mandatory and must be one of:
-
-- assistant (for the assistant frontend and backend)
-- knowledge (for the knowledge interface and GraphRAG)
-- infra (for databases, k8s, message broker, IaC etc.)
-- tooling (for scripts, dev and test environments, helpers)
+- assistant
+- knowledge
+- infra
+- tooling
 - misc
-
-Do not invent new scopes.
 
 ### Subject rules
 
-- Use imperative mood (e.g. "add", "fix", "remove")
+- Imperative mood (e.g. "add", "fix", "remove")
 - No trailing period
-- Max 72 characters
-
-Examples:
-
-- feat(assistant): add websocket endpoint for chat
-- fix(knowledge): prevent crash on empty query result
-- chore(tooling): bump k3s to 1.35.1-k3s1
-
-### Breaking changes
-
-Use either:
-
-feat(assistant)!: remove legacy auth token format
-
-or:
-
-feat(assistant): remove legacy auth token format
-
-BREAKING CHANGE: legacy auth tokens are no longer accepted.
-
-### Atomic commits
-
-Prefer multiple small commits over one large commit, split by intent:
-
-1. refactor (no behavior change)
-2. feat/fix (behavior change)
-3. tests
-4. docs
-
-Each commit should leave the repo in a working state.
+- Max 72 chars
 
 ### Hygiene
 
@@ -107,3 +82,18 @@ Each commit should leave the repo in a working state.
 - Do not commit secrets
 - Keep diffs focused
 
+## Skills
+
+A skill is a set of local instructions in a `SKILL.md` file.
+
+### Available skills
+
+- `skill-creator`: `/opt/codex/skills/.system/skill-creator/SKILL.md`
+- `skill-installer`: `/opt/codex/skills/.system/skill-installer/SKILL.md`
+
+### How to use skills
+
+- Trigger when user names a skill or request clearly matches a listed skill.
+- Open only the needed parts of `SKILL.md` and related files.
+- Use the minimal set of skills required.
+- If a skill is missing/unreadable, state it briefly and continue with best fallback.
