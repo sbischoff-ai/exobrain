@@ -1,60 +1,57 @@
-"""Unit-ish tests for Redis session store implementation using local redis-server."""
+"""Unit tests for Redis session store behavior using mocked Redis client."""
 
 from __future__ import annotations
-
-import socket
-import subprocess
-import time
 
 import pytest
 
 from app.services.session_store import RedisSessionStore
 
 
-def _free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("127.0.0.1", 0))
-        return int(s.getsockname()[1])
+class FakeRedisClient:
+    """Small async fake matching Redis methods used by RedisSessionStore."""
+
+    def __init__(self) -> None:
+        self.data: dict[str, str] = {}
+        self.set_calls: list[tuple[str, str, int]] = []
+        self.deleted_keys: list[str] = []
+        self.closed = False
+
+    async def ping(self) -> bool:
+        return True
+
+    async def set(self, key: str, value: str, ex: int) -> None:
+        self.data[key] = value
+        self.set_calls.append((key, value, ex))
+
+    async def get(self, key: str) -> str | None:
+        return self.data.get(key)
+
+    async def delete(self, key: str) -> int:
+        self.deleted_keys.append(key)
+        return int(self.data.pop(key, None) is not None)
+
+    async def aclose(self) -> None:
+        self.closed = True
 
 
 @pytest.mark.asyncio
-async def test_redis_session_store_create_get_and_revoke() -> None:
-    port = _free_port()
-    process = subprocess.Popen(
-        [
-            "redis-server",
-            "--port",
-            str(port),
-            "--save",
-            "",
-            "--appendonly",
-            "no",
-        ],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+async def test_redis_session_store_create_get_revoke_and_close() -> None:
+    fake_redis = FakeRedisClient()
+    store = RedisSessionStore(
+        redis_url="redis://unused:6379/0",
+        key_prefix="tests:sessions",
+        redis_client=fake_redis,  # type: ignore[arg-type]
     )
 
-    try:
-        deadline = time.time() + 5
-        while time.time() < deadline:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            try:
-                if sock.connect_ex(("127.0.0.1", port)) == 0:
-                    break
-            finally:
-                sock.close()
-            time.sleep(0.1)
+    assert await store.ping()
 
-        store = RedisSessionStore(redis_url=f"redis://127.0.0.1:{port}/0", key_prefix="tests:sessions")
-        assert await store.ping()
+    await store.create_session("session-a", "user-a", ttl_seconds=30)
+    assert fake_redis.set_calls == [("tests:sessions:session-a", "user-a", 30)]
+    assert await store.get_user_id("session-a") == "user-a"
 
-        await store.create_session("session-a", "user-a", ttl_seconds=30)
-        assert await store.get_user_id("session-a") == "user-a"
+    await store.revoke_session("session-a")
+    assert fake_redis.deleted_keys == ["tests:sessions:session-a"]
+    assert await store.get_user_id("session-a") is None
 
-        await store.revoke_session("session-a")
-        assert await store.get_user_id("session-a") is None
-
-        await store.close()
-    finally:
-        process.terminate()
-        process.wait(timeout=5)
+    await store.close()
+    assert fake_redis.closed is True
