@@ -17,7 +17,9 @@ For agent-focused helpers, use:
 - `scripts/agent/assistant-db-setup-native.sh`
 - `scripts/agent/native-infra-down.sh`
 
-For command walkthroughs and known caveats, see `docs/codex-runbook.md`.
+For command walkthroughs, see `docs/codex-runbook.md`.
+
+For significant incident/fix history useful for debugging, use `docs/major-changes.md`.
 
 ### Infra expectations
 
