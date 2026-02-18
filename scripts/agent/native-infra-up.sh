@@ -13,6 +13,7 @@ PG_SUPERUSER="${PG_SUPERUSER:-exobrain}"
 NATS_PORT="${NATS_PORT:-14222}"
 NATS_MONITOR_PORT="${NATS_MONITOR_PORT:-18222}"
 QDRANT_URL="${QDRANT_URL:-http://localhost:6333}"
+REDIS_PORT="${REDIS_PORT:-16379}"
 
 mkdir -p "${LOG_DIR}" "${PID_DIR}"
 
@@ -116,6 +117,22 @@ start_nats() {
   echo $! >"${PID_DIR}/nats.pid"
 }
 
+
+start_redis() {
+  if ! command -v redis-server >/dev/null 2>&1; then
+    echo "[agent] redis-server not found; skipping"
+    return 0
+  fi
+
+  if is_port_open localhost "${REDIS_PORT}"; then
+    echo "[agent] redis already reachable on ${REDIS_PORT}"
+    return 0
+  fi
+
+  echo "[agent] starting Redis on ${REDIS_PORT}"
+  redis-server --port "${REDIS_PORT}" --save '' --appendonly no --daemonize yes --pidfile "${PID_DIR}/redis.pid" --logfile "${LOG_DIR}/redis.log" >/dev/null 2>&1
+}
+
 start_qdrant() {
   if ! command -v qdrant >/dev/null 2>&1; then
     echo "[agent] qdrant not found; skipping"
@@ -139,6 +156,7 @@ export ASSISTANT_DB_DSN=postgresql://assistant_backend:assistant_backend@localho
 export EXOBRAIN_POSTGRES_URL=postgresql://exobrain:exobrain@localhost:${PG_PORT}/exobrain?sslmode=disable
 export EXOBRAIN_NATS_URL=nats://localhost:${NATS_PORT}
 export EXOBRAIN_QDRANT_URL=${QDRANT_URL}
+export ASSISTANT_CACHE_REDIS_URL=redis://localhost:${REDIS_PORT}/0
 ENV
   echo "[agent] wrote ${ENV_FILE}"
 }
@@ -146,6 +164,7 @@ ENV
 start_postgres
 start_nats
 start_qdrant
+start_redis
 write_env_file
 
 echo "[agent] native infra startup attempted"

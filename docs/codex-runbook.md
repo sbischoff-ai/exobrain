@@ -44,7 +44,7 @@ curl -sS http://localhost:8000/api/users/me -b /tmp/exobrain.cookies
 ./scripts/local/build-assistant-frontend.sh
 ./scripts/local/build-knowledge-interface.sh
 
-cd apps/assistant-backend && uv run --with pytest --with pytest-asyncio pytest
+cd apps/assistant-backend && uv run --with pytest --with pytest-asyncio pytest -m "not integration"
 cd apps/assistant-frontend && npm test
 ```
 
@@ -65,3 +65,19 @@ Format responses in markdown and separate each message with:
 ```
 
 The mock model cycles through these messages and wraps to the first one when it reaches the end.
+
+
+## Assistant-backend integration API tests
+
+Run against any reachable backend URL (native local process or k3d ingress):
+
+```sh
+cd apps/assistant-backend
+cp tests/integration/.env.integration.example tests/integration/.env.integration
+# update ASSISTANT_BACKEND_BASE_URL in the env file as needed
+ASSISTANT_BACKEND_INTEGRATION_ENV_FILE=tests/integration/.env.integration \
+  uv run --with pytest --with pytest-asyncio --with httpx pytest -m integration
+```
+
+The suite expects assistant seed user credentials:
+- `test.user@exobrain.local` / `password123`

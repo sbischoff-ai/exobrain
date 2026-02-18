@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     auth_cookie_name: str = Field(default="exobrain_session", alias="AUTH_COOKIE_NAME")
     reshape_schema_query: str = Field(default="", alias="RESHAPE_SCHEMA_QUERY")
 
+    assistant_cache_redis_url: str = Field(default="redis://localhost:16379/0", alias="ASSISTANT_CACHE_REDIS_URL")
+    assistant_cache_key_prefix: str = Field(default="assistant:sessions", alias="ASSISTANT_CACHE_KEY_PREFIX")
+
     @property
     def enable_swagger(self) -> bool:
         return self.app_env.lower() == "local"

@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: exobrain-assistant-cache
+  labels:
+    app.kubernetes.io/name: exobrain-assistant-cache
+    {{- include "exobrain-stack.labels" . | nindent 4 }}
+spec:
+  serviceName: exobrain-assistant-cache
+  replicas: {{ .Values.assistantCache.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: exobrain-assistant-cache
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: exobrain-assistant-cache
+    spec:
+      containers:
+        - name: redis
+          image: "{{ .Values.assistantCache.image.repository }}:{{ .Values.assistantCache.image.tag }}"
+          imagePullPolicy: {{ .Values.assistantCache.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.assistantCache.service.port }}
+              name: redis
+          volumeMounts:
+            - name: assistant-cache-data
+              mountPath: /data
+          args:
+            - "--appendonly"
+            - "yes"
+          resources: {{- toYaml .Values.assistantCache.resources | nindent 12 }}
+  volumeClaimTemplates:
+    - metadata:
+        name: assistant-cache-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- if .Values.global.storageClass }}
+        storageClassName: {{ .Values.global.storageClass | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.assistantCache.persistence.size }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: exobrain-assistant-cache
+  labels:
+    app.kubernetes.io/name: exobrain-assistant-cache
+    {{- include "exobrain-stack.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.assistantCache.service.type }}
+  selector:
+    app.kubernetes.io/name: exobrain-assistant-cache
+  ports:
+    - name: redis
+      port: {{ .Values.assistantCache.service.port }}
+      targetPort: {{ .Values.assistantCache.service.port }}

@@ -33,6 +33,11 @@ Model selection settings:
 
 The mock model cycles through configured responses and wraps back to the first message after the last one.
 
+Session storage settings:
+
+- `ASSISTANT_CACHE_REDIS_URL=redis://localhost:16379/0`: Redis URL for auth sessions.
+- `ASSISTANT_CACHE_KEY_PREFIX=assistant:sessions`: key namespace used for session records.
+
 Swagger/OpenAPI is environment-gated:
 
 - `APP_ENV=local` -> Swagger UI is enabled (`/docs`).
@@ -86,10 +91,50 @@ Notes:
 From `apps/assistant-backend` run:
 
 ```bash
-uv run --with pytest --with pytest-asyncio pytest
+uv run --with pytest --with pytest-asyncio pytest -m "not integration"
 ```
 
-This runs the backend pytest suite (service/auth/dependency units) without requiring live infrastructure services.
+This runs the backend unit suite (service/auth/dependency behavior) without requiring live infrastructure services.
+
+## Running integration tests
+
+Integration tests are intentionally separate and target a running backend URL configured in an env file.
+
+1. Create integration env config:
+
+```bash
+cp tests/integration/.env.integration.example tests/integration/.env.integration
+```
+
+2. Set `ASSISTANT_BACKEND_BASE_URL` in that file. Examples:
+   - local backend process: `http://localhost:8000`
+   - k3d ingress: `http://localhost:8080`
+
+3. Run integration tests:
+
+```bash
+ASSISTANT_BACKEND_INTEGRATION_ENV_FILE=tests/integration/.env.integration \
+  uv run --with pytest --with pytest-asyncio --with httpx pytest -m integration
+```
+
+The suite expects seeded auth user data to exist on the target backend:
+
+- email: `test.user@exobrain.local`
+- password: `password123`
+
+For coding agents in Codex/cloud environments, use this flow:
+
+```bash
+./scripts/agent/native-infra-up.sh
+./scripts/agent/assistant-db-setup-native.sh
+source .agent/state/native-infra.env
+export MAIN_AGENT_USE_MOCK=true
+./scripts/local/run-assistant-backend.sh
+
+cd apps/assistant-backend
+cp tests/integration/.env.integration.example tests/integration/.env.integration
+uv run --with pytest --with pytest-asyncio --with httpx pytest -m integration
+```
 
 ## Local environment endpoints
 
@@ -107,6 +152,7 @@ This runs the backend pytest suite (service/auth/dependency units) without requi
 - Qdrant: `localhost:16333` (HTTP), `localhost:16334` (gRPC)
 - Memgraph: `localhost:17687` (Bolt), `localhost:17444` (HTTP)
 - NATS: `localhost:14222` (client), `localhost:18222` (monitoring)
+- Redis (assistant-cache): `localhost:16379`
 
 ## Kubernetes baseline
 

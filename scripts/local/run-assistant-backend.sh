@@ -2,6 +2,7 @@
 set -euo pipefail
 
 export ASSISTANT_DB_DSN=${ASSISTANT_DB_DSN:-postgresql://assistant_backend:assistant_backend@localhost:15432/assistant_db}
+export ASSISTANT_CACHE_REDIS_URL=${ASSISTANT_CACHE_REDIS_URL:-redis://localhost:16379/0}
 export EXOBRAIN_QDRANT_URL=${EXOBRAIN_QDRANT_URL:-http://localhost:16333}
 export EXOBRAIN_MEMGRAPH_URL=${EXOBRAIN_MEMGRAPH_URL:-bolt://localhost:17687}
 export EXOBRAIN_NATS_URL=${EXOBRAIN_NATS_URL:-nats://localhost:14222}

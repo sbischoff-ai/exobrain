@@ -36,6 +36,7 @@ assistantBackend:
     KNOWLEDGE_INTERFACE_ADDR: exobrain-knowledge-interface:50051
     METASTORE_DSN: postgresql://exobrain:exobrain@exobrain-metastore:5432/exobrain
     ASSISTANT_DB_DSN: postgresql://assistant_backend:assistant_backend@exobrain-metastore:5432/assistant_db
+    ASSISTANT_CACHE_REDIS_URL: redis://exobrain-assistant-cache:6379/0
   secrets:
     openaiApiKey:
       name: exobrain-secrets
@@ -130,6 +131,26 @@ vectorStore:
     limits:
       cpu: 2
       memory: 2Gi
+
+assistantCache:
+  replicaCount: 1
+  image:
+    repository: redis
+    tag: "7-alpine"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 6379
+  persistence:
+    enabled: true
+    size: 2Gi
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
 
 messageBroker:
   replicaCount: 1

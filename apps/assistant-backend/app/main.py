@@ -9,6 +9,7 @@ from app.core.logging import configure_logging
 from app.core.settings import get_settings
 from app.services.auth_service import AuthService
 from app.services.database_service import DatabaseService
+from app.services.session_store import RedisSessionStore
 from app.services.user_service import UserService
 
 settings = get_settings()
@@ -28,16 +29,24 @@ async def lifespan(app: FastAPI):
     logger.info("database connection pool initialized")
 
     user_service = UserService(database=database_service)
-    auth_service = AuthService(settings=settings, user_service=user_service)
+    session_store = RedisSessionStore(
+        redis_url=settings.assistant_cache_redis_url,
+        key_prefix=settings.assistant_cache_key_prefix,
+    )
+    await session_store.ping()
+    logger.info("assistant cache connection initialized")
+    auth_service = AuthService(settings=settings, user_service=user_service, session_store=session_store)
 
     app.state.settings = settings
     app.state.database_service = database_service
     app.state.user_service = user_service
     app.state.auth_service = auth_service
+    app.state.session_store = session_store
 
     try:
         yield
     finally:
+        await session_store.close()
         await database_service.disconnect()
         logger.info("assistant backend shutdown complete")
 

@@ -10,6 +10,7 @@ import jwt
 
 from app.api.schemas.auth import LoginRequest, UnifiedPrincipal
 from app.core.settings import Settings
+from app.services.session_store import SessionStore
 from app.services.user_service import UserService
 
 logger = logging.getLogger(__name__)
@@ -18,13 +19,6 @@ logger = logging.getLogger(__name__)
 @dataclass
 class RefreshTokenRecord:
     token: str
-    user_id: str
-    expires_at: datetime
-
-
-@dataclass
-class SessionRecord:
-    session_id: str
     user_id: str
     expires_at: datetime
 
@@ -79,14 +73,14 @@ def verify_password(password: str, encoded_hash: str) -> bool:
 
 
 class AuthService:
-    """Authentication orchestration with in-memory session and refresh stores."""
+    """Authentication orchestration with Redis sessions and in-memory refresh store."""
 
-    def __init__(self, settings: Settings, user_service: UserService) -> None:
+    def __init__(self, settings: Settings, user_service: UserService, session_store: SessionStore) -> None:
         self._settings = settings
         self._user_service = user_service
+        self._session_store = session_store
         self._token_validator = JwtTokenValidator(settings)
         self._refresh_tokens: dict[str, RefreshTokenRecord] = {}
-        self._sessions: dict[str, SessionRecord] = {}
 
     async def login(self, payload: LoginRequest) -> UnifiedPrincipal | None:
         user = await self._user_service.get_user_by_email(payload.email)
@@ -116,29 +110,32 @@ class AuthService:
         logger.debug("issued refresh token", extra={"user_id": principal.user_id})
         return token
 
-    def issue_session(self, principal: UnifiedPrincipal) -> str:
+    async def issue_session(self, principal: UnifiedPrincipal) -> str:
         session_id = secrets.token_urlsafe(32)
-        expires_at = datetime.now(UTC) + timedelta(seconds=self._settings.auth_refresh_token_ttl_seconds)
-        self._sessions[session_id] = SessionRecord(session_id=session_id, user_id=principal.user_id, expires_at=expires_at)
+        await self._session_store.create_session(
+            session_id=session_id,
+            user_id=principal.user_id,
+            ttl_seconds=self._settings.auth_refresh_token_ttl_seconds,
+        )
         logger.info("issued session", extra={"user_id": principal.user_id})
         return session_id
 
-    def revoke_session(self, session_id: str | None) -> None:
+    async def revoke_session(self, session_id: str | None) -> None:
         if not session_id:
             return
-        self._sessions.pop(session_id, None)
+        await self._session_store.revoke_session(session_id)
         logger.info("session revoked")
 
     async def principal_from_session(self, session_id: str | None) -> UnifiedPrincipal | None:
         if not session_id:
             return None
-        session = self._sessions.get(session_id)
-        if session is None or session.expires_at <= datetime.now(UTC):
+        user_id = await self._session_store.get_user_id(session_id)
+        if user_id is None:
             logger.debug("session missing or expired")
             return None
-        user = await self._user_service.get_user(session.user_id)
+        user = await self._user_service.get_user(user_id)
         if user is None:
-            logger.warning("session user not found", extra={"user_id": session.user_id})
+            logger.warning("session user not found", extra={"user_id": user_id})
             return None
         return UnifiedPrincipal(user_id=user.id, email=user.email, display_name=user.name)
 

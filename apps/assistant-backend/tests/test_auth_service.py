@@ -4,12 +4,12 @@ These tests focus on the most important auth flows in isolation:
 - password hashing and verification invariants
 - login success and failure paths
 - bearer/session principal resolution
-- in-memory refresh/session token lifecycle semantics
+- refresh/session token lifecycle semantics
 """
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+import asyncio
 
 import pytest
 
@@ -40,6 +40,32 @@ class FakeUserService:
         return type("User", (), {"id": user["id"], "email": user["email"], "name": user["name"]})
 
 
+class FakeSessionStore:
+    """In-memory async session store test double with TTL handling."""
+
+    def __init__(self) -> None:
+        self._sessions: dict[str, tuple[str, float]] = {}
+
+    async def create_session(self, session_id: str, user_id: str, ttl_seconds: int) -> None:
+        self._sessions[session_id] = (user_id, asyncio.get_event_loop().time() + ttl_seconds)
+
+    async def get_user_id(self, session_id: str) -> str | None:
+        record = self._sessions.get(session_id)
+        if record is None:
+            return None
+        user_id, expires_at = record
+        if expires_at <= asyncio.get_event_loop().time():
+            self._sessions.pop(session_id, None)
+            return None
+        return user_id
+
+    async def revoke_session(self, session_id: str) -> None:
+        self._sessions.pop(session_id, None)
+
+    async def close(self) -> None:
+        return None
+
+
 @pytest.fixture
 def settings() -> Settings:
     """Create a settings object with short TTLs to make expiry behavior easy to test."""
@@ -48,7 +74,7 @@ def settings() -> Settings:
         APP_ENV="local",
         AUTH_JWT_SECRET="test-secret-with-safe-length-1234567890",
         AUTH_ACCESS_TOKEN_TTL_SECONDS=60,
-        AUTH_REFRESH_TOKEN_TTL_SECONDS=120,
+        AUTH_REFRESH_TOKEN_TTL_SECONDS=1,
     )
 
 
@@ -65,8 +91,13 @@ def user_service() -> FakeUserService:
 
 
 @pytest.fixture
-def auth_service(settings: Settings, user_service: FakeUserService) -> AuthService:
-    return AuthService(settings=settings, user_service=user_service)
+def session_store() -> FakeSessionStore:
+    return FakeSessionStore()
+
+
+@pytest.fixture
+def auth_service(settings: Settings, user_service: FakeUserService, session_store: FakeSessionStore) -> AuthService:
+    return AuthService(settings=settings, user_service=user_service, session_store=session_store)
 
 
 def test_hash_password_produces_verifiable_hash() -> None:
@@ -137,19 +168,19 @@ async def test_session_resolution_respects_revocation_and_expiry(
         display_name="Alice",
     )
 
-    session_id = auth_service.issue_session(principal)
+    session_id = await auth_service.issue_session(principal)
 
     # Step 1: Fresh session resolves to a principal.
     resolved = await auth_service.principal_from_session(session_id)
     assert resolved == principal
 
     # Step 2: Revoked session should not resolve.
-    auth_service.revoke_session(session_id)
+    await auth_service.revoke_session(session_id)
     revoked = await auth_service.principal_from_session(session_id)
     assert revoked is None
 
     # Step 3: Expired session should not resolve.
-    expired_session_id = auth_service.issue_session(principal)
-    auth_service._sessions[expired_session_id].expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    expired_session_id = await auth_service.issue_session(principal)
+    await asyncio.sleep(1.1)
     expired = await auth_service.principal_from_session(expired_session_id)
     assert expired is None
