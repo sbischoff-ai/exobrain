@@ -1,7 +1,11 @@
+import logging
+
 from fastapi import Request
 
 from app.api.schemas.auth import UnifiedPrincipal
 from app.services.auth_service import AuthService
+
+logger = logging.getLogger(__name__)
 
 
 async def get_optional_auth_context(request: Request) -> UnifiedPrincipal | None:
@@ -14,7 +18,11 @@ async def get_optional_auth_context(request: Request) -> UnifiedPrincipal | None
 
     principal = auth_service.principal_from_bearer(bearer_token)
     if principal is not None:
+        logger.debug("authenticated via bearer token", extra={"user_id": principal.user_id})
         return principal
 
     session_id = request.cookies.get(request.app.state.settings.auth_cookie_name)
-    return await auth_service.principal_from_session(session_id)
+    principal = await auth_service.principal_from_session(session_id)
+    if principal is not None:
+        logger.debug("authenticated via session", extra={"user_id": principal.user_id})
+    return principal

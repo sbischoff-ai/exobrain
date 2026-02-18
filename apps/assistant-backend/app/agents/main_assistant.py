@@ -1,9 +1,12 @@
 from collections.abc import AsyncIterator
+import logging
 
 from langchain_core.messages import HumanMessage
 from langchain_openai import ChatOpenAI
 
 from app.agents.base import ChatAgent
+
+logger = logging.getLogger(__name__)
 
 
 class MainAssistantAgent(ChatAgent):
@@ -17,6 +20,7 @@ class MainAssistantAgent(ChatAgent):
         )
 
     async def stream(self, message: str) -> AsyncIterator[str]:
+        logger.debug("streaming response from main assistant", extra={"message_length": len(message)})
         async for chunk in self._llm.astream([HumanMessage(content=message)]):
             chunk_content = chunk.content
             if isinstance(chunk_content, str):

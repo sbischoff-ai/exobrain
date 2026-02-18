@@ -26,6 +26,15 @@ npm test
 
 This runs the Vitest component suite for chat and authentication UI flows in a JSDOM environment.
 
+
+## Logging
+
+Frontend logging is implemented through a small console logger wrapper (`src/lib/logging.js`) with environment-aware defaults:
+
+- Local dev (`npm run dev`): default level is `debug`.
+- Non-local/prod builds (Docker/Kubernetes): default level is `warn`.
+- Override with `PUBLIC_LOG_LEVEL` (`debug`, `info`, `warn`, `error`).
+
 ## Local environment endpoints
 
 ### Application endpoint

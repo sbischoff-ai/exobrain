@@ -1,24 +1,31 @@
 from contextlib import asynccontextmanager
+import logging
 
 from fastapi import FastAPI
 
 from app.api.router import api_router
 from app.api.routers.health import router as health_router
+from app.core.logging import configure_logging
 from app.core.settings import get_settings
 from app.services.auth_service import AuthService
 from app.services.database_service import DatabaseService
 from app.services.user_service import UserService
 
 settings = get_settings()
+configure_logging(settings.effective_log_level)
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logger.info("starting assistant backend", extra={"app_env": settings.app_env})
+
     database_service = DatabaseService(
         dsn=settings.assistant_db_dsn,
         reshape_schema_query=settings.reshape_schema_query,
     )
     await database_service.connect()
+    logger.info("database connection pool initialized")
 
     user_service = UserService(database=database_service)
     auth_service = AuthService(settings=settings, user_service=user_service)
@@ -32,6 +39,7 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         await database_service.disconnect()
+        logger.info("assistant backend shutdown complete")
 
 
 app = FastAPI(

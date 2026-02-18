@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+import logging
 from pathlib import Path
 
 from app.agents.base import ChatAgent
+
+logger = logging.getLogger(__name__)
 
 
 class MockAssistantAgent(ChatAgent):
@@ -21,9 +24,10 @@ class MockAssistantAgent(ChatAgent):
                 f"No mock messages found in {path}. Use delimiter {self._delimiter!r} between messages."
             )
         self._next_index = 0
+        logger.info("loaded mock assistant messages", extra={"messages_count": len(self._messages)})
 
     async def stream(self, message: str) -> AsyncIterator[str]:
-        del message
+        logger.debug("serving mock assistant response", extra={"message_length": len(message)})
         response = self._messages[self._next_index]
         self._next_index = (self._next_index + 1) % len(self._messages)
         yield response

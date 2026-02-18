@@ -1,6 +1,9 @@
 <script>
   import { tick } from 'svelte';
   import { Streamdown } from 'svelte-streamdown';
+  import { createLogger } from '$lib/logging';
+
+  const logger = createLogger('ChatView');
 
   let messageInput = '';
   let messagesContainer;
@@ -20,6 +23,10 @@
     const trimmedText = text.trim();
 
     if (!trimmedText || isStreamingResponse) {
+      logger.debug('message submit ignored', {
+        hasText: Boolean(trimmedText),
+        isStreamingResponse
+      });
       return;
     }
 
@@ -39,6 +46,7 @@
     scrollToLatestMessage();
 
     try {
+      logger.info('sending chat request', { messageLength: trimmedText.length });
       const response = await fetch('/api/chat/message', {
         method: 'POST',
         headers: {
@@ -48,6 +56,7 @@
       });
 
       if (!response.ok) {
+        logger.warn('chat request failed', { status: response.status });
         throw new Error(`Assistant backend request failed with status ${response.status}`);
       }
 
@@ -84,6 +93,7 @@
         );
       }
     } catch (error) {
+      logger.error('chat request error', { error });
       requestError = 'Could not reach the assistant backend. Please try again.';
       messages = messages.map((message) =>
         message.id === assistantMessageId
@@ -93,8 +103,8 @@
             }
           : message
       );
-      console.error(error);
     } finally {
+      logger.debug('chat request finished');
       isStreamingResponse = false;
       await tick();
       scrollToLatestMessage();

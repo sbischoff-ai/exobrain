@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     app_env: str = Field(default="local", alias="APP_ENV")
+    log_level: str | None = Field(default=None, alias="LOG_LEVEL")
     main_agent_model: str = Field(default="gpt-5.2", alias="MAIN_AGENT_MODEL")
     main_agent_temperature: float = Field(default=0.0, alias="MAIN_AGENT_TEMPERATURE")
     main_agent_use_mock: bool = Field(default=False, alias="MAIN_AGENT_USE_MOCK")
@@ -32,6 +33,12 @@ class Settings(BaseSettings):
     @property
     def enable_swagger(self) -> bool:
         return self.app_env.lower() == "local"
+
+    @property
+    def effective_log_level(self) -> str:
+        if self.log_level:
+            return self.log_level.upper()
+        return "DEBUG" if self.app_env.lower() == "local" else "INFO"
 
 
 @lru_cache

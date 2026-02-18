@@ -1,6 +1,9 @@
 <script>
   import { fade, scale } from 'svelte/transition';
   import { onMount } from 'svelte';
+  import { createLogger } from '$lib/logging';
+
+  const logger = createLogger('UserMenu');
 
   let menuOpen = false;
   let menuRoot;
@@ -17,11 +20,13 @@
   });
 
   async function loadCurrentUser() {
+    logger.debug('loading current user');
     loadingUser = true;
     authError = '';
     try {
       const response = await fetch('/api/users/me');
       if (response.status === 401) {
+        logger.info('no active user session');
         user = null;
         return;
       }
@@ -29,15 +34,17 @@
         throw new Error(`Fetch user failed with status ${response.status}`);
       }
       user = await response.json();
+      logger.info('user loaded', { hasUser: Boolean(user) });
     } catch (error) {
       authError = 'Could not load user details.';
-      console.error(error);
+      logger.error('load user failed', { error });
     } finally {
       loadingUser = false;
     }
   }
 
   async function handleLogin(event) {
+    logger.info('login requested');
     event.preventDefault();
     authError = '';
     submitting = true;
@@ -57,21 +64,24 @@
       });
 
       if (!response.ok) {
+        logger.warn('login failed', { status: response.status });
         throw new Error('Invalid credentials');
       }
 
       email = '';
       password = '';
       await loadCurrentUser();
+      logger.info('login succeeded');
     } catch (error) {
       authError = 'Login failed. Check your credentials and try again.';
-      console.error(error);
+      logger.error('login error', { error });
     } finally {
       submitting = false;
     }
   }
 
   async function handleLogout() {
+    logger.info('logout requested');
     authError = '';
     submitting = true;
 
@@ -81,14 +91,16 @@
       });
 
       if (!response.ok && response.status !== 204) {
+        logger.warn('logout failed', { status: response.status });
         throw new Error(`Logout failed with status ${response.status}`);
       }
 
       user = null;
       menuOpen = false;
+      logger.info('logout succeeded');
     } catch (error) {
       authError = 'Logout failed. Please try again.';
-      console.error(error);
+      logger.error('logout error', { error });
     } finally {
       submitting = false;
     }
@@ -101,12 +113,14 @@
 
     if (!menuRoot.contains(event.target)) {
       menuOpen = false;
+      logger.debug('user menu closed from outside click');
     }
   }
 
   function onWindowKeydown(event) {
     if (event.key === 'Escape') {
       menuOpen = false;
+      logger.debug('user menu closed via escape');
     }
   }
 </script>
