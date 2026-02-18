@@ -30,6 +30,7 @@ scripts/
   k3d-up.sh                  # local cluster bootstrap helper
   k3d/                       # scripts for in-cluster operational DB jobs
   local/                     # scripts for local service and infrastructure startup
+  agent/                     # cloud-agent helpers for native infra workflows
 ```
 
 ## Project Context
@@ -147,6 +148,19 @@ Once the chart is deployed, both assistant services are reachable via the same l
 - Assistant backend API: `http://localhost:8080/api`
 
 Ingress routing is path-based (`/api` -> assistant backend, all other paths -> assistant frontend).
+
+## Cloud-agent native helper scripts
+
+When Docker/k3d are not available, use:
+
+```bash
+./scripts/agent/native-infra-up.sh
+./scripts/agent/native-infra-health.sh
+./scripts/agent/assistant-db-setup-native.sh
+source .agent/state/native-infra.env
+```
+
+This path is documented in `docs/codex-runbook.md`.
 
 ## Local App Development (without full Kubernetes rollout)
 

@@ -2,43 +2,40 @@
 
 ## Purpose
 
-This file provides **high-signal instructions for coding agents** working in this repository.
-Keep changes focused, minimize context bloat, and prefer concise docs over long narrative.
+High-signal instructions for coding agents in this repository.
+Prioritize development workflows and accurate execution over meta-documentation.
 
 ## Codex / Cloud Agent Environment Notes
 
-In Codex cloud environments, **Docker and Kubernetes tooling are unavailable** (`docker`, `docker-compose`, `k3d`).
-Do not rely on container workflows from `README.md` unless explicitly available.
+In Codex cloud environments, Docker/Kubernetes tooling is typically unavailable (`docker`, `docker-compose`, `k3d`).
+Prefer native-process workflows.
 
-When integration or local execution requires infrastructure services, run native processes if present in the environment:
+For agent-focused helpers, use:
 
-- **Postgres** (`postgresql`)
-- **NATS** (`nats-server`)
-- **Qdrant** (`qdrant`)
+- `scripts/agent/native-infra-up.sh`
+- `scripts/agent/native-infra-health.sh`
+- `scripts/agent/assistant-db-setup-native.sh`
+- `scripts/agent/native-infra-down.sh`
 
-These services are not started automatically.
+For command walkthroughs and known caveats, see `docs/codex-runbook.md`.
 
-> Assume agents are constrained to pre-provisioned tools/dependencies.
-> Do **not** add instructions that require installing extra tooling from the internet as a normal workflow.
+### Infra expectations
 
-For focused local workflows and checks, see `docs/codex-runbook.md`.
+Native services are not started automatically. Start only what your task requires:
 
-### Postgres Migrations (Reshape)
+- Postgres (`postgresql`)
+- NATS (`nats-server`)
+- Qdrant (`qdrant`)
 
-This project uses **Reshape** for Postgres schema migrations.
+Assume constrained, pre-provisioned environments. Do not rely on internet installs as default workflow.
 
-If you need migration guidance:
+### Postgres migrations (Reshape)
+
+This repository uses Reshape for Postgres schema migrations:
 
 ```sh
 reshape docs
 ```
-
-## Documentation Hygiene for Agents
-
-- Keep agent-facing docs short and actionable.
-- Prefer checklists/commands over long prose.
-- Remove outdated or duplicate instructions when touching docs.
-- If you add a new context doc, link it from here and from `README.md` only when generally useful.
 
 ## Commit Conventions
 
@@ -93,7 +90,7 @@ A skill is a set of local instructions in a `SKILL.md` file.
 
 ### How to use skills
 
-- Trigger when user names a skill or request clearly matches a listed skill.
-- Open only the needed parts of `SKILL.md` and related files.
+- Trigger when the user names a skill or the request clearly matches one.
+- Open only needed parts of skill docs/references.
 - Use the minimal set of skills required.
-- If a skill is missing/unreadable, state it briefly and continue with best fallback.
+- If a skill is missing/unreadable, state it briefly and proceed with best fallback.
