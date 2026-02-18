@@ -49,9 +49,31 @@ cd apps/assistant-frontend && npm test
 
 ## Known caveats observed in this environment
 
-- The assistant frontend dev server currently returns HTTP 500 with:
+- The assistant frontend dev server can return HTTP 500 with:
   - `TypeError: options.root.render is not a function`
-- Build and Vitest suites pass, but interactive browser smoke in `npm run dev` currently fails until dependency/runtime mismatch is addressed.
+
+### Frontend mismatch details
+
+The current dependency set mixes an older SvelteKit/Vite plugin chain with stable Svelte 5:
+
+- `@sveltejs/kit` `2.5.8`
+- `@sveltejs/vite-plugin-svelte` `3.1.2` (transitive from Kit)
+- `svelte-hmr` `0.16.0` (transitive from plugin `3.1.2`, peer `svelte ^3 || ^4`)
+- `svelte` `5.51.2`
+
+This compiles and passes Vitest in this repo, but breaks SSR rendering in `npm run dev`.
+
+### What to provide in the environment
+
+Either of these consistent stacks will unblock frontend dev smoke tests:
+
+1. **Keep current Kit/Vite generation, downgrade Svelte to 4.x**
+   - good when you want minimal repo change risk
+2. **Upgrade the Kit/plugin toolchain to a Svelte-5-native stack**
+   - Kit version that supports modern `@sveltejs/vite-plugin-svelte` (v5/v6)
+   - plugin/version set aligned with the installed Vite major
+
+Until one of those stacks is applied consistently, treat frontend `npm run dev` smoke tests as unreliable in this environment.
 
 ## Cleanup
 
