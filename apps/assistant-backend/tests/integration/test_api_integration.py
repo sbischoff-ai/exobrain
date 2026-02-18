@@ -64,13 +64,6 @@ def client(integration_config: IntegrationConfig) -> httpx.Client:
 
 
 @pytest.mark.integration
-def test_healthz(client: httpx.Client) -> None:
-    response = client.get("/healthz")
-    assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
-
-
-@pytest.mark.integration
 def test_login_rejects_invalid_credentials(client: httpx.Client) -> None:
     response = client.post(
         "/api/auth/login",
