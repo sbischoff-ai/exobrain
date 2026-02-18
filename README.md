@@ -205,6 +205,20 @@ All scripts expose placeholder connection environment variables for Postgres, Qd
 ./scripts/local/infra-down.sh
 ```
 
+
+## Test execution
+
+Run application unit tests directly from each app directory:
+
+```bash
+cd apps/assistant-backend && uv run --with pytest --with pytest-asyncio pytest
+cd apps/assistant-frontend && npm test
+```
+
+Notes:
+- Backend tests are isolated unit tests and do not require Postgres/NATS/Qdrant to be running.
+- Frontend tests use Vitest + JSDOM and validate component behavior with mocked network calls.
+
 ## NixOS Development Shell
 
 For NixOS users, `shell.nix` provides a ready-to-use environment for:

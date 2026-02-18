@@ -12,5 +12,13 @@ export default defineConfig({
         changeOrigin: true
       }
     }
+  },
+  resolve: {
+    conditions: ['browser']
+  },
+  test: {
+    environment: 'jsdom',
+    setupFiles: ['src/test-setup.js'],
+    include: ['src/**/*.test.js']
   }
 });

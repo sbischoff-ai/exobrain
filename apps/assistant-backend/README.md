@@ -64,6 +64,17 @@ Notes:
 - The build script keeps `.venv` in sync via `uv sync` and only updates dependencies when needed.
 - Python is interpreted at runtime; rebuild is mainly needed when dependencies or packaging metadata change.
 
+
+## Running unit tests
+
+From `apps/assistant-backend` run:
+
+```bash
+uv run --with pytest --with pytest-asyncio pytest
+```
+
+This runs the backend pytest suite (service/auth/dependency units) without requiring live infrastructure services.
+
 ## Local environment endpoints
 
 ### Application endpoint

@@ -15,6 +15,17 @@ Notes:
 - Re-run `build-assistant-frontend.sh` after changing frontend source.
 - Dependency installation is skipped unless `node_modules` is missing or `package-lock.json` changed.
 
+
+## Running unit tests
+
+From `apps/assistant-frontend` run:
+
+```bash
+npm test
+```
+
+This runs the Vitest component suite for chat and authentication UI flows in a JSDOM environment.
+
 ## Local environment endpoints
 
 ### Application endpoint
