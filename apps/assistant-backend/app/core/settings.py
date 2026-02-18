@@ -12,6 +12,11 @@ class Settings(BaseSettings):
     app_env: str = Field(default="local", alias="APP_ENV")
     main_agent_model: str = Field(default="gpt-5.2", alias="MAIN_AGENT_MODEL")
     main_agent_temperature: float = Field(default=0.0, alias="MAIN_AGENT_TEMPERATURE")
+    main_agent_use_mock: bool = Field(default=False, alias="MAIN_AGENT_USE_MOCK")
+    main_agent_mock_messages_file: str = Field(
+        default="mock-data/main-agent-messages.md",
+        alias="MAIN_AGENT_MOCK_MESSAGES_FILE",
+    )
 
     assistant_db_dsn: str = Field(
         default="postgresql://assistant_backend:assistant_backend@localhost:15432/assistant_db",
