@@ -100,3 +100,8 @@ A skill is a set of local instructions in a `SKILL.md` file.
 - Open only needed parts of skill docs/references.
 - Use the minimal set of skills required.
 - If a skill is missing/unreadable, state it briefly and proceed with best fallback.
+
+## Agent retrospective notes
+
+- For logging-related changes, check and update both app-level README files and deployment manifests (Dockerfiles + Helm values/templates) in the same pass to avoid config drift.
+- Frontend production logging defaults should stay conservative (`warn` or higher) unless the task explicitly asks for verbose runtime telemetry.

@@ -1,5 +1,6 @@
 from collections.abc import AsyncIterator
 from functools import lru_cache
+import logging
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
@@ -11,12 +12,14 @@ from app.api.schemas.chat import ChatMessageRequest
 from app.core.settings import get_settings
 from app.services.chat_service import ChatService
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 
 @lru_cache
 def get_chat_service() -> ChatService:
     settings = get_settings()
+    logger.info("initializing chat service", extra={"use_mock_agent": settings.main_agent_use_mock})
     return ChatService(agent=build_main_agent(settings))
 
 
@@ -32,5 +35,5 @@ async def message(
     auth_context: UnifiedPrincipal | None = Depends(get_optional_auth_context),
 ) -> StreamingResponse:
     user_name = auth_context.display_name if auth_context is not None else "anonymous"
-    print(f"assistant chat request by user={user_name}")
+    logger.info("assistant chat request", extra={"user_name": user_name})
     return StreamingResponse(_response_stream(payload.message), media_type="text/plain")

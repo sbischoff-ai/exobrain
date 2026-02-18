@@ -4,6 +4,8 @@ global:
 
 assistantFrontend:
   replicaCount: 1
+  env:
+    PUBLIC_LOG_LEVEL: warn
   image:
     repository: exobrain/assistant-frontend
     tag: "0.1.0"
@@ -30,6 +32,7 @@ assistantBackend:
     port: 8000
   env:
     APP_ENV: cluster
+    LOG_LEVEL: INFO
     KNOWLEDGE_INTERFACE_ADDR: exobrain-knowledge-interface:50051
     METASTORE_DSN: postgresql://exobrain:exobrain@exobrain-metastore:5432/exobrain
     ASSISTANT_DB_DSN: postgresql://assistant_backend:assistant_backend@exobrain-metastore:5432/assistant_db

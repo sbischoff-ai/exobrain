@@ -19,6 +19,9 @@ spec:
         - name: frontend
           image: "{{ .Values.assistantFrontend.image.repository }}:{{ .Values.assistantFrontend.image.tag }}"
           imagePullPolicy: {{ .Values.assistantFrontend.image.pullPolicy }}
+          env:
+            - name: PUBLIC_LOG_LEVEL
+              value: {{ .Values.assistantFrontend.env.PUBLIC_LOG_LEVEL | quote }}
           ports:
             - containerPort: {{ .Values.assistantFrontend.service.port }}
           resources: {{- toYaml .Values.assistantFrontend.resources | nindent 12 }}

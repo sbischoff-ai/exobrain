@@ -1,5 +1,9 @@
+import logging
+
 from app.api.schemas.auth import UserResponse
 from app.services.database_service import DatabaseService
+
+logger = logging.getLogger(__name__)
 
 
 class UserService:
@@ -19,6 +23,7 @@ class UserService:
             email,
         )
         if row is None:
+            logger.debug("user lookup by email returned no rows")
             return None
 
         return {
@@ -35,5 +40,6 @@ class UserService:
             user_id,
         )
         if row is None:
+            logger.debug("user lookup by id returned no rows", extra={"user_id": user_id})
             return None
         return UserResponse(id=row["id"], name=row["name"], email=row["email"])

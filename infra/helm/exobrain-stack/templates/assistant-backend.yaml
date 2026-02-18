@@ -22,6 +22,8 @@ spec:
           env:
             - name: APP_ENV
               value: {{ .Values.assistantBackend.env.APP_ENV | quote }}
+            - name: LOG_LEVEL
+              value: {{ .Values.assistantBackend.env.LOG_LEVEL | quote }}
             - name: KNOWLEDGE_INTERFACE_ADDR
               value: {{ .Values.assistantBackend.env.KNOWLEDGE_INTERFACE_ADDR | quote }}
             - name: METASTORE_DSN

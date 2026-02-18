@@ -38,6 +38,13 @@ Swagger/OpenAPI is environment-gated:
 - `APP_ENV=local` -> Swagger UI is enabled (`/docs`).
 - any non-local value (for example in Kubernetes) -> Swagger/OpenAPI is disabled.
 
+Logging behavior:
+
+- `LOG_LEVEL` can override runtime logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`).
+- If `LOG_LEVEL` is unset, backend defaults to `DEBUG` in `APP_ENV=local` and `INFO` otherwise.
+- Structured, security-conscious logs avoid token/session payload dumps while still emitting auth/chat lifecycle events.
+
+
 ## Database and auth setup
 
 Assistant backend now uses a dedicated Postgres database (`assistant_db`) and user (`assistant_backend`).
