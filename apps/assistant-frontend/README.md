@@ -51,6 +51,21 @@ The project local cluster helper (`scripts/k3d-up.sh`) defaults to:
 - Local LoadBalancer mapping: `localhost:8080 -> :80`, `localhost:8443 -> :443`
 - Ingress routing: `http://localhost:8080/` -> assistant frontend, `http://localhost:8080/api` -> assistant backend
 
+## Known local dev caveat (Codex environment)
+
+In this environment, `npm run dev` currently fails at runtime with:
+
+- `TypeError: options.root.render is not a function`
+
+Observed dependency mismatch behind this behavior:
+
+- `@sveltejs/kit` `2.5.8`
+- transitive `@sveltejs/vite-plugin-svelte` `3.1.2` / `svelte-hmr` `0.16.0`
+- `svelte` `5.51.x`
+
+Build (`npm run build`) and unit tests (`npm test`) still pass.
+See `docs/codex-runbook.md` for remediation paths.
+
 ## API routing behavior
 
 The frontend always calls `POST /api/chat/message`.
