@@ -26,6 +26,8 @@ spec:
               value: {{ .Values.assistantBackend.env.KNOWLEDGE_INTERFACE_ADDR | quote }}
             - name: METASTORE_DSN
               value: {{ .Values.assistantBackend.env.METASTORE_DSN | quote }}
+            - name: ASSISTANT_DB_DSN
+              value: {{ .Values.assistantBackend.env.ASSISTANT_DB_DSN | quote }}
             - name: OPENAI_API_KEY
               valueFrom:
                 secretKeyRef:
