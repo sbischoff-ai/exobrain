@@ -32,6 +32,12 @@ scripts/
   local/                     # scripts for local service and infrastructure startup
 ```
 
+## Project Context
+
+- Codex/cloud-agent workflow notes: `AGENTS.md`
+- Focused cloud-agent runbook: `docs/codex-runbook.md`
+- Long-term architecture direction (non-binding): `docs/architecture-intent.md`
+
 ## Prerequisites
 
 - Docker
@@ -185,7 +191,7 @@ Before running services, build each app once from a fresh clone (and re-run when
 Build script behavior:
 - Frontend: installs dependencies with `npm ci` only when needed (missing `node_modules` or lockfile change), then runs `npm run build`.
 - Backend: runs `uv sync` (dependency-aware, no-op when up to date) and compiles Python bytecode for changed files.
-- Knowledge interface: runs `cargo build --locked`; Cargo rebuilds only changed crates/files.
+- Knowledge interface: runs `cargo build`; Cargo rebuilds only changed crates/files.
 
 ### 3. Run services directly
 
