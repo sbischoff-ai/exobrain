@@ -30,6 +30,8 @@ spec:
               value: {{ .Values.assistantBackend.env.METASTORE_DSN | quote }}
             - name: ASSISTANT_DB_DSN
               value: {{ .Values.assistantBackend.env.ASSISTANT_DB_DSN | quote }}
+            - name: ASSISTANT_CACHE_REDIS_URL
+              value: {{ .Values.assistantBackend.env.ASSISTANT_CACHE_REDIS_URL | quote }}
             - name: OPENAI_API_KEY
               valueFrom:
                 secretKeyRef:

@@ -56,5 +56,6 @@ fi
 
 stop_by_pid_file "nats" "${PID_DIR}/nats.pid"
 stop_by_pid_file "qdrant" "${PID_DIR}/qdrant.pid"
+stop_by_pid_file "redis" "${PID_DIR}/redis.pid"
 
 echo "[agent] native infra stop attempted"

@@ -103,5 +103,6 @@ A skill is a set of local instructions in a `SKILL.md` file.
 
 ## Agent retrospective notes
 
+- For assistant-backend auth/session work, remember sessions are Redis-backed via `ASSISTANT_CACHE_REDIS_URL`; keep local infra (`infra/docker-compose/local-infra.yml`), Helm values/templates, and `scripts/agent/native-infra-*` in sync to avoid environment-specific regressions.
 - For logging-related changes, check and update both app-level README files and deployment manifests (Dockerfiles + Helm values/templates) in the same pass to avoid config drift.
 - Frontend production logging defaults should stay conservative (`warn` or higher) unless the task explicitly asks for verbose runtime telemetry.

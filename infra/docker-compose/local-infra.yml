@@ -73,10 +73,27 @@ services:
     networks:
       - exobrain-local
 
+  assistant-cache:
+    image: redis:7-alpine
+    container_name: exobrain-local-assistant-cache
+    restart: unless-stopped
+    ports:
+      - "16379:6379"
+    volumes:
+      - exobrain_assistant_cache_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - exobrain-local
+
 volumes:
   exobrain_postgres_data:
   exobrain_qdrant_data:
   exobrain_memgraph_data:
+  exobrain_assistant_cache_data:
 
 networks:
   exobrain-local:

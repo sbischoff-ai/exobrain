@@ -21,7 +21,7 @@ async def login(payload: LoginRequest, request: Request, response: Response) -> 
     issue_session = payload.session_mode == "web" and payload.issuance_policy == "session"
 
     if issue_session:
-        session_id = auth_service.issue_session(principal)
+        session_id = await auth_service.issue_session(principal)
         response.set_cookie(
             key=request.app.state.settings.auth_cookie_name,
             value=session_id,
@@ -49,6 +49,6 @@ async def logout(request: Request, response: Response) -> None:
     session_cookie_name = request.app.state.settings.auth_cookie_name
     session_id = request.cookies.get(session_cookie_name)
 
-    auth_service.revoke_session(session_id)
+    await auth_service.revoke_session(session_id)
     response.delete_cookie(key=session_cookie_name, httponly=True, samesite="lax", secure=False)
     logger.info("logout complete")
