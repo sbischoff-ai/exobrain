@@ -50,7 +50,9 @@ Optional (for NixOS):
 - Nix with flakes or classic `nix-shell`
 
 Environment Variables:
-- `OPENAI_API_KEY` (for Assistant backend)
+- `OPENAI_API_KEY` (for Assistant backend when using the real OpenAI model)
+- `MAIN_AGENT_USE_MOCK=true|false` (optional; default false)
+- `MAIN_AGENT_MOCK_MESSAGES_FILE=mock-data/main-agent-messages.md` (optional; file-driven mock responses separated by `\n--- message\n`)
 
 (Env vars need to be present in the terminal that you execute scripts like `run-assistant-backend.sh` or `k3d-up.sh` in.)
 
@@ -161,6 +163,8 @@ source .agent/state/native-infra.env
 ```
 
 This path is documented in `docs/codex-runbook.md`.
+
+In Codex/cloud-agent environments, `scripts/local/run-assistant-backend.sh` defaults `MAIN_AGENT_USE_MOCK=true` so backend chat testing works without OpenAI/network access.
 
 ## Local App Development (without full Kubernetes rollout)
 

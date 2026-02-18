@@ -31,6 +31,10 @@ Native services are not started automatically. Start only what your task require
 
 Assume constrained, pre-provisioned environments. Do not rely on internet installs as default workflow.
 
+### Assistant backend chat testing in agent environments
+
+When running `apps/assistant-backend` in Codex/cloud-agent environments, set `MAIN_AGENT_USE_MOCK=true` (or rely on `scripts/local/run-assistant-backend.sh`, which defaults it when `CODEX_HOME` is set). This avoids OpenAI network/key requirements and uses file-driven responses from `MAIN_AGENT_MOCK_MESSAGES_FILE`.
+
 ### Postgres migrations (Reshape)
 
 This repository uses Reshape for Postgres schema migrations:

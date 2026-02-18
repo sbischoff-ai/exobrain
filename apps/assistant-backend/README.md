@@ -12,7 +12,8 @@ The backend now follows a small but extensible layered design:
 - **Core layer** (`app/core`): runtime configuration and app settings.
 
 The current implementation ships one main assistant agent backed by LangChain `ChatOpenAI`
-using model `gpt-5.2` with streaming enabled.
+using model `gpt-5.2` with streaming enabled. It also supports a file-driven mock model
+for offline development/testing.
 
 ## Environment configuration
 
@@ -22,7 +23,15 @@ Create a local env file from the example:
 cp .env.example .env
 ```
 
-`OPENAI_API_KEY` is intentionally **not** stored in `.env` and must be provided externally. (Set it in the terminal session that's running the backend process.)
+`OPENAI_API_KEY` is intentionally **not** stored in `.env` and must be provided externally when using the real OpenAI-backed model. (Set it in the terminal session that's running the backend process.)
+
+Model selection settings:
+
+- `MAIN_AGENT_USE_MOCK=false` (default): use real OpenAI model (`MAIN_AGENT_MODEL`, `MAIN_AGENT_TEMPERATURE`).
+- `MAIN_AGENT_USE_MOCK=true`: use file-driven mock model and ignore prompt content.
+- `MAIN_AGENT_MOCK_MESSAGES_FILE=mock-data/main-agent-messages.md`: markdown file containing responses separated by the delimiter `\n--- message\n`.
+
+The mock model cycles through configured responses and wraps back to the first message after the last one.
 
 Swagger/OpenAPI is environment-gated:
 

@@ -9,6 +9,7 @@ Use this runbook when Docker/k3d flows are unavailable.
 ./scripts/agent/native-infra-health.sh
 ./scripts/agent/assistant-db-setup-native.sh
 source .agent/state/native-infra.env
+export MAIN_AGENT_USE_MOCK=true
 ./scripts/local/run-assistant-backend.sh
 ```
 
@@ -52,3 +53,15 @@ cd apps/assistant-frontend && npm test
 ```sh
 ./scripts/agent/native-infra-down.sh
 ```
+
+## Mock chat responses for offline/backend testing
+
+When `MAIN_AGENT_USE_MOCK=true`, assistant-backend reads responses from `MAIN_AGENT_MOCK_MESSAGES_FILE` (default: `apps/assistant-backend/mock-data/main-agent-messages.md`).
+
+Format responses in markdown and separate each message with:
+
+```text
+--- message
+```
+
+The mock model cycles through these messages and wraps to the first one when it reaches the end.
