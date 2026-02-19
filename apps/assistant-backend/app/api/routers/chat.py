@@ -31,8 +31,8 @@ async def _response_stream(
     journal_service: JournalService,
 ) -> AsyncIterator[str]:
     reference = journal_service.today_reference()
-    conversation_id = await journal_service.ensure_conversation(principal.user_id, reference)
-    await journal_service.insert_message(
+    conversation_id = await journal_service.ensure_journal(principal.user_id, reference)
+    await journal_service.create_journal_message(
         conversation_id=conversation_id,
         user_id=principal.user_id,
         role="user",
@@ -48,7 +48,7 @@ async def _response_stream(
 
     assistant_message = "".join(chunks).strip()
     if assistant_message:
-        await journal_service.insert_message(
+        await journal_service.create_journal_message(
             conversation_id=conversation_id,
             user_id=principal.user_id,
             role="assistant",

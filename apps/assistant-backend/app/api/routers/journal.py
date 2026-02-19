@@ -20,6 +20,19 @@ def _entry_from_record(record) -> JournalEntryResponse:
     )
 
 
+def _messages_from_records(rows) -> list[JournalMessageResponse]:
+    return [
+        JournalMessageResponse(
+            id=row["id"],
+            role=row["role"],
+            content=row["content"],
+            created_at=row["created_at"],
+            metadata=row["metadata"],
+        )
+        for row in rows
+    ]
+
+
 @router.get("", response_model=list[JournalEntryResponse])
 async def list_journal_entries(
     request: Request,
@@ -28,7 +41,7 @@ async def list_journal_entries(
     cursor: str | None = None,
 ) -> list[JournalEntryResponse]:
     service: JournalService = request.app.state.journal_service
-    rows = await service.list_journals(principal.user_id, limit=limit, before=cursor)
+    rows = await service.list_journals(user_id=principal.user_id, limit=limit, before=cursor)
     return [_entry_from_record(row) for row in rows]
 
 
@@ -39,10 +52,7 @@ async def get_today_journal(
     create: bool = False,
 ) -> JournalEntryResponse:
     service: JournalService = request.app.state.journal_service
-    reference = service.today_reference()
-    if create:
-        await service.ensure_conversation(principal.user_id, reference)
-    row = await service.get_journal(principal.user_id, reference)
+    row = await service.get_today_journal(user_id=principal.user_id, create=create)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="journal entry not found")
     return _entry_from_record(row)
@@ -55,17 +65,8 @@ async def get_today_messages(
     limit: int = Query(default=100, ge=1, le=500),
 ) -> list[JournalMessageResponse]:
     service: JournalService = request.app.state.journal_service
-    rows = await service.list_messages(principal.user_id, service.today_reference(), limit)
-    return [
-        JournalMessageResponse(
-            id=row["id"],
-            role=row["role"],
-            content=row["content"],
-            created_at=row["created_at"],
-            metadata=row["metadata"],
-        )
-        for row in rows
-    ]
+    rows = await service.list_today_messages(user_id=principal.user_id, limit=limit)
+    return _messages_from_records(rows)
 
 
 @router.get("/search", response_model=list[JournalEntryResponse])
@@ -75,30 +76,9 @@ async def search_journal_entries(
     principal: UnifiedPrincipal = Depends(get_required_auth_context),
     limit: int = Query(default=20, ge=1, le=100),
 ) -> list[JournalEntryResponse]:
-    rows = await request.app.state.database_service.fetch(
-        """
-        SELECT DISTINCT
-          c.id::text AS id,
-          c.reference,
-          c.created_at,
-          c.updated_at,
-          MAX(m.created_at) AS last_message_at,
-          COUNT(m.id)::int AS message_count,
-          'open'::text AS status
-        FROM conversations c
-        LEFT JOIN messages m ON m.conversation_id = c.id
-        WHERE c.user_id = $1::uuid
-          AND (m.content ILIKE ('%' || $2 || '%') OR c.reference ILIKE ('%' || $2 || '%'))
-        GROUP BY c.id
-        ORDER BY c.reference DESC
-        LIMIT $3
-        """,
-        principal.user_id,
-        q,
-        limit,
-    )
+    service: JournalService = request.app.state.journal_service
+    rows = await service.search_journals(user_id=principal.user_id, query=q, limit=limit)
     return [_entry_from_record(row) for row in rows]
-
 
 
 @router.get("/{reference:path}/messages", response_model=list[JournalMessageResponse])
@@ -109,17 +89,8 @@ async def get_journal_messages(
     limit: int = Query(default=100, ge=1, le=500),
 ) -> list[JournalMessageResponse]:
     service: JournalService = request.app.state.journal_service
-    rows = await service.list_messages(principal.user_id, reference, limit)
-    return [
-        JournalMessageResponse(
-            id=row["id"],
-            role=row["role"],
-            content=row["content"],
-            created_at=row["created_at"],
-            metadata=row["metadata"],
-        )
-        for row in rows
-    ]
+    rows = await service.list_messages(user_id=principal.user_id, reference=reference, limit=limit)
+    return _messages_from_records(rows)
 
 
 @router.get("/{reference:path}/summary", response_model=JournalEntryResponse)
@@ -130,6 +101,7 @@ async def get_journal_summary(
 ) -> JournalEntryResponse:
     return await get_journal_by_reference(reference, request, principal)
 
+
 @router.get("/{reference:path}", response_model=JournalEntryResponse)
 async def get_journal_by_reference(
     reference: str,
@@ -137,8 +109,7 @@ async def get_journal_by_reference(
     principal: UnifiedPrincipal = Depends(get_required_auth_context),
 ) -> JournalEntryResponse:
     service: JournalService = request.app.state.journal_service
-    row = await service.get_journal(principal.user_id, reference)
+    row = await service.get_journal(user_id=principal.user_id, reference=reference)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="journal entry not found")
     return _entry_from_record(row)
-

@@ -7,7 +7,7 @@ FastAPI service for chat orchestration and GraphRAG context augmentation.
 The backend now follows a small but extensible layered design:
 
 - **API layer** (`app/api`): request schemas and HTTP routers.
-- **Service layer** (`app/services`): use-case orchestration, independent from FastAPI.
+- **Service layer** (`app/services`): use-case orchestration, independent from FastAPI. Journal flows are layered as `journal router -> JournalService -> ConversationService -> DatabaseService`.
 - **Agent layer** (`app/agents`): chat agent interfaces and implementations.
 - **Core layer** (`app/core`): runtime configuration and app settings.
 
