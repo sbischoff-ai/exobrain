@@ -11,7 +11,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.api.dependencies.auth import get_optional_auth_context
+from fastapi import HTTPException
+
+from app.api.dependencies.auth import get_optional_auth_context, get_required_auth_context
 from app.api.schemas.auth import UnifiedPrincipal
 
 
@@ -83,3 +85,14 @@ async def test_dependency_falls_back_to_session_cookie() -> None:
     assert resolved == session
     assert auth_service.bearer_tokens_seen == [None]
     assert auth_service.session_ids_seen == ["session-xyz"]
+
+
+@pytest.mark.asyncio
+async def test_required_dependency_rejects_missing_auth() -> None:
+    auth_service = FakeAuthService(bearer_principal=None, session_principal=None)
+    request = FakeRequest(auth_service=auth_service, headers={}, cookies={})
+
+    with pytest.raises(HTTPException) as exc:
+        await get_required_auth_context(request)
+
+    assert exc.value.status_code == 401

@@ -103,6 +103,13 @@ A skill is a set of local instructions in a `SKILL.md` file.
 
 ## Agent retrospective notes
 
+- Keep chat request orchestration in `ChatService` (not chat router), and wire `chat_service` through `app.state` like other services rather than ad-hoc cached factories.
+- Before running assistant-backend integration tests, always run DB setup/migrations (`assistant-db-setup-native.sh` or local equivalent); missing conversation/message tables can otherwise surface as chat/journal endpoint failures.
+- When adding/changing API endpoints or schemas, include concise FastAPI/Pydantic descriptions so Swagger output remains self-explanatory for debugging and client integration.
+- Prefer shared test fixtures/utilities in `tests/conftest.py` for common fakes (for example DB boundary fakes) to avoid duplicated mock logic across test modules.
+- In assistant-backend unit tests, fake only external dependencies (for example Redis/DB clients); for internal app services, compose the real services together to preserve cross-service coverage.
+- Keep FastAPI routers free of direct `DatabaseService` calls; route handlers should delegate through domain services (for journals: `JournalService -> ConversationService -> DatabaseService`).
+- Journal endpoints use slash-formatted references (`YYYY/MM/DD`); route declarations should use `/{reference:path}` and keep static routes (for example `/search`, `/today/messages`) declared before dynamic reference routes to avoid 404 shadowing.
 - Keep assistant-backend unit tests process-free: do not spawn local services (for example `redis-server`) in unit tests; reserve real service execution for integration/system workflows.
 - For assistant-backend auth/session work, remember sessions are Redis-backed via `ASSISTANT_CACHE_REDIS_URL`; keep local infra (`infra/docker-compose/local-infra.yml`), Helm values/templates, and `scripts/agent/native-infra-*` in sync to avoid environment-specific regressions.
 - For logging-related changes, check and update both app-level README files and deployment manifests (Dockerfiles + Helm values/templates) in the same pass to avoid config drift.

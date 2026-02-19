@@ -7,9 +7,13 @@ from app.api.router import api_router
 from app.api.routers.health import router as health_router
 from app.core.logging import configure_logging
 from app.core.settings import get_settings
+from app.agents.factory import build_main_agent
 from app.services.auth_service import AuthService
 from app.services.database_service import DatabaseService
 from app.services.session_store import RedisSessionStore
+from app.services.conversation_service import ConversationService
+from app.services.journal_service import JournalService
+from app.services.chat_service import ChatService
 from app.services.user_service import UserService
 
 settings = get_settings()
@@ -36,12 +40,18 @@ async def lifespan(app: FastAPI):
     await session_store.ping()
     logger.info("assistant cache connection initialized")
     auth_service = AuthService(settings=settings, user_service=user_service, session_store=session_store)
+    conversation_service = ConversationService(database=database_service)
+    journal_service = JournalService(conversation_service=conversation_service)
+    chat_service = ChatService(agent=build_main_agent(settings), journal_service=journal_service)
 
     app.state.settings = settings
     app.state.database_service = database_service
     app.state.user_service = user_service
     app.state.auth_service = auth_service
     app.state.session_store = session_store
+    app.state.conversation_service = conversation_service
+    app.state.journal_service = journal_service
+    app.state.chat_service = chat_service
 
     try:
         yield

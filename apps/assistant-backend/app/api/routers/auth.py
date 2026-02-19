@@ -2,14 +2,22 @@ import logging
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 
-from app.api.schemas.auth import LoginRequest, SessionResponse, TokenPairResponse
+from app.api.schemas.auth import LoginRequest, SessionResponse, TokenPairResponse, TokenRefreshRequest
 from app.services.auth_service import AuthService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@router.post("/login", response_model=TokenPairResponse | SessionResponse)
+@router.post(
+    "/login",
+    response_model=TokenPairResponse | SessionResponse,
+    summary="Authenticate user and issue session or token credentials",
+    description=(
+        "Validates user credentials and issues either a browser session cookie or an API token pair "
+        "depending on request mode and issuance policy."
+    ),
+)
 async def login(payload: LoginRequest, request: Request, response: Response) -> TokenPairResponse | SessionResponse:
     auth_service: AuthService = request.app.state.auth_service
     principal = await auth_service.login(payload)
@@ -21,6 +29,7 @@ async def login(payload: LoginRequest, request: Request, response: Response) -> 
     issue_session = payload.session_mode == "web" and payload.issuance_policy == "session"
 
     if issue_session:
+        # Browser mode: persist state in cookie + Redis-backed session store.
         session_id = await auth_service.issue_session(principal)
         response.set_cookie(
             key=request.app.state.settings.auth_cookie_name,
@@ -33,8 +42,9 @@ async def login(payload: LoginRequest, request: Request, response: Response) -> 
         logger.debug("issued cookie-backed session", extra={"user_id": principal.user_id})
         return SessionResponse(session_established=True, user_name=principal.display_name)
 
+    # API mode: return access+refresh tokens so stateless clients can authenticate.
     access_token = auth_service.issue_access_token(principal)
-    refresh_token = auth_service.issue_refresh_token(principal)
+    refresh_token = await auth_service.issue_refresh_token(principal)
     logger.debug("issued access and refresh tokens", extra={"user_id": principal.user_id})
     return TokenPairResponse(
         access_token=access_token,
@@ -43,7 +53,34 @@ async def login(payload: LoginRequest, request: Request, response: Response) -> 
     )
 
 
-@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    "/token_refresh",
+    response_model=TokenPairResponse,
+    summary="Rotate refresh token and issue a new token pair",
+    description="Consumes a valid refresh token, revokes it, then issues a fresh access+refresh pair.",
+)
+async def token_refresh(payload: TokenRefreshRequest, request: Request) -> TokenPairResponse:
+    auth_service: AuthService = request.app.state.auth_service
+    principal = await auth_service.principal_from_refresh_token(payload.refresh_token)
+    if principal is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid refresh token")
+
+    await auth_service.revoke_refresh_token(payload.refresh_token)
+    access_token = auth_service.issue_access_token(principal)
+    refresh_token = await auth_service.issue_refresh_token(principal)
+    return TokenPairResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        expires_in=request.app.state.settings.auth_access_token_ttl_seconds,
+    )
+
+
+@router.post(
+    "/logout",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Revoke cookie-backed session",
+    description="Clears the auth session cookie and revokes matching Redis-backed session state.",
+)
 async def logout(request: Request, response: Response) -> None:
     auth_service: AuthService = request.app.state.auth_service
     session_cookie_name = request.app.state.settings.auth_cookie_name

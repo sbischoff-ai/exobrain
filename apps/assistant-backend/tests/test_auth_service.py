@@ -10,6 +10,7 @@ These tests focus on the most important auth flows in isolation:
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
 
 import pytest
 
@@ -45,6 +46,7 @@ class FakeSessionStore:
 
     def __init__(self) -> None:
         self._sessions: dict[str, tuple[str, float]] = {}
+        self._refresh_tokens: dict[str, tuple[str, float]] = {}
 
     async def create_session(self, session_id: str, user_id: str, ttl_seconds: int) -> None:
         self._sessions[session_id] = (user_id, asyncio.get_event_loop().time() + ttl_seconds)
@@ -61,6 +63,29 @@ class FakeSessionStore:
 
     async def revoke_session(self, session_id: str) -> None:
         self._sessions.pop(session_id, None)
+
+    async def store_refresh_token(
+        self,
+        refresh_token: str,
+        user_id: str,
+        expires_at: datetime,
+        ttl_seconds: int,
+    ) -> None:
+        del expires_at
+        self._refresh_tokens[refresh_token] = (user_id, asyncio.get_event_loop().time() + ttl_seconds)
+
+    async def get_refresh_token_user_id(self, refresh_token: str) -> str | None:
+        record = self._refresh_tokens.get(refresh_token)
+        if record is None:
+            return None
+        user_id, expires_at = record
+        if expires_at <= asyncio.get_event_loop().time():
+            self._refresh_tokens.pop(refresh_token, None)
+            return None
+        return user_id
+
+    async def revoke_refresh_token(self, refresh_token: str) -> None:
+        self._refresh_tokens.pop(refresh_token, None)
 
     async def close(self) -> None:
         return None
@@ -150,6 +175,28 @@ def test_issue_access_token_roundtrip_returns_same_principal(auth_service: AuthS
     assert decoded_principal == source_principal
 
 
+@pytest.mark.asyncio
+async def test_refresh_token_resolves_principal_and_rotates(auth_service: AuthService) -> None:
+    """Refresh tokens should resolve principals until explicitly revoked."""
+
+    principal = UnifiedPrincipal(
+        user_id="7d6722a0-905e-4e9a-8c1c-4e4504e194f4",
+        email="alice@example.com",
+        display_name="Alice",
+    )
+
+    # Step 1: Issue a refresh token for the authenticated principal.
+    refresh_token = await auth_service.issue_refresh_token(principal)
+
+    # Step 2: The issued token should resolve back to that same principal.
+    resolved = await auth_service.principal_from_refresh_token(refresh_token)
+    assert resolved == principal
+
+    # Step 3: After revocation, the same token should no longer resolve.
+    await auth_service.revoke_refresh_token(refresh_token)
+    assert await auth_service.principal_from_refresh_token(refresh_token) is None
+
+
 def test_principal_from_bearer_returns_none_for_invalid_token(auth_service: AuthService) -> None:
     """Invalid bearer tokens should not raise errors and must resolve to no principal."""
 
@@ -170,16 +217,16 @@ async def test_session_resolution_respects_revocation_and_expiry(
 
     session_id = await auth_service.issue_session(principal)
 
-    # Step 1: Fresh session resolves to a principal.
+    # Step 1: Fresh session resolves to the owning principal.
     resolved = await auth_service.principal_from_session(session_id)
     assert resolved == principal
 
-    # Step 2: Revoked session should not resolve.
+    # Step 2: Revoked session should immediately fail resolution.
     await auth_service.revoke_session(session_id)
     revoked = await auth_service.principal_from_session(session_id)
     assert revoked is None
 
-    # Step 3: Expired session should not resolve.
+    # Step 3: Session should also stop resolving after TTL expiry.
     expired_session_id = await auth_service.issue_session(principal)
     await asyncio.sleep(1.1)
     expired = await auth_service.principal_from_session(expired_session_id)

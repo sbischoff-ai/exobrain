@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import os
 from pathlib import Path
+import uuid
 
 import httpx
 import pytest
@@ -63,6 +64,20 @@ def client(integration_config: IntegrationConfig) -> httpx.Client:
         yield c
 
 
+def _api_login(client: httpx.Client) -> dict:
+    login = client.post(
+        "/api/auth/login",
+        json={
+            "email": SEED_EMAIL,
+            "password": SEED_PASSWORD,
+            "session_mode": "api",
+            "issuance_policy": "tokens",
+        },
+    )
+    login.raise_for_status()
+    return login.json()
+
+
 @pytest.mark.integration
 def test_login_rejects_invalid_credentials(client: httpx.Client) -> None:
     response = client.post(
@@ -107,27 +122,24 @@ def test_login_web_session_and_users_me_logout(client: httpx.Client) -> None:
 
 
 @pytest.mark.integration
-def test_login_api_tokens_and_users_me_with_bearer(client: httpx.Client) -> None:
-    login = client.post(
-        "/api/auth/login",
-        json={
-            "email": SEED_EMAIL,
-            "password": SEED_PASSWORD,
-            "session_mode": "api",
-            "issuance_policy": "tokens",
-        },
-    )
-    assert login.status_code == 200
-
-    tokens = login.json()
+def test_login_api_tokens_refresh_and_users_me_with_bearer(client: httpx.Client) -> None:
+    tokens = _api_login(client)
     assert tokens["access_token"]
     assert tokens["refresh_token"]
     assert tokens["token_type"] == "bearer"
     assert int(tokens["expires_in"]) > 0
 
+    refresh = client.post("/api/auth/token_refresh", json={"refresh_token": tokens["refresh_token"]})
+    assert refresh.status_code == 200
+    rotated = refresh.json()
+    assert rotated["refresh_token"] != tokens["refresh_token"]
+
+    stale_refresh = client.post("/api/auth/token_refresh", json={"refresh_token": tokens["refresh_token"]})
+    assert stale_refresh.status_code == 401
+
     users_me = client.get(
         "/api/users/me",
-        headers={"Authorization": f"Bearer {tokens['access_token']}"},
+        headers={"Authorization": f"Bearer {rotated['access_token']}"},
     )
     assert users_me.status_code == 200
     assert users_me.json()["email"] == SEED_EMAIL
@@ -140,42 +152,42 @@ def test_users_me_unauthorized_without_auth(client: httpx.Client) -> None:
 
 
 @pytest.mark.integration
-def test_chat_message_all_auth_variants(client: httpx.Client) -> None:
-    anonymous_chat = client.post("/api/chat/message", json={"message": "Hello anonymously"})
-    assert anonymous_chat.status_code == 200
-    assert anonymous_chat.text.strip()
+def test_chat_and_journal_endpoints_persist_activity(client: httpx.Client) -> None:
+    anonymous_chat = client.post("/api/chat/message", json={"message": "Hello anonymously", "client_message_id": str(uuid.uuid4())})
+    assert anonymous_chat.status_code == 401
 
-    token_login = client.post(
-        "/api/auth/login",
-        json={
-            "email": SEED_EMAIL,
-            "password": SEED_PASSWORD,
-            "session_mode": "api",
-            "issuance_policy": "tokens",
-        },
-    )
-    token_login.raise_for_status()
-    access_token = token_login.json()["access_token"]
+    tokens = _api_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
 
-    bearer_chat = client.post(
+    chat = client.post(
         "/api/chat/message",
-        json={"message": "Hello with bearer"},
-        headers={"Authorization": f"Bearer {access_token}"},
+        json={"message": "Hello with bearer", "client_message_id": str(uuid.uuid4())},
+        headers=headers,
     )
-    assert bearer_chat.status_code == 200
-    assert bearer_chat.text.strip()
+    assert chat.status_code == 200
+    assert chat.text.strip()
 
-    session_login = client.post(
-        "/api/auth/login",
-        json={
-            "email": SEED_EMAIL,
-            "password": SEED_PASSWORD,
-            "session_mode": "web",
-            "issuance_policy": "session",
-        },
-    )
-    session_login.raise_for_status()
+    today = client.get("/api/journal/today", headers=headers)
+    assert today.status_code == 200
+    today_payload = today.json()
+    reference = today_payload["reference"]
+    assert today_payload["message_count"] >= 2
 
-    cookie_chat = client.post("/api/chat/message", json={"message": "Hello with session"})
-    assert cookie_chat.status_code == 200
-    assert cookie_chat.text.strip()
+    journal_list = client.get("/api/journal", headers=headers)
+    assert journal_list.status_code == 200
+    assert any(entry["reference"] == reference for entry in journal_list.json())
+
+    by_ref = client.get(f"/api/journal/{reference}", headers=headers)
+    assert by_ref.status_code == 200
+
+    messages = client.get(f"/api/journal/{reference}/messages", headers=headers)
+    assert messages.status_code == 200
+    message_payload = messages.json()
+    assert any(item["role"] == "user" for item in message_payload)
+    assert any(item["role"] == "assistant" for item in message_payload)
+
+    summary = client.get(f"/api/journal/{reference}/summary", headers=headers)
+    assert summary.status_code == 200
+
+    search = client.get("/api/journal/search", params={"q": "Hello"}, headers=headers)
+    assert search.status_code == 200
