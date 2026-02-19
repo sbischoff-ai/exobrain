@@ -3,7 +3,7 @@
   import ChatView from '$lib/components/ChatView.svelte';
   import JournalSidebar from '$lib/components/JournalSidebar.svelte';
   import UserMenu from '$lib/components/UserMenu.svelte';
-  import { loadSessionState, saveSessionState } from '$lib/session/journalSession';
+  import { clearSessionState, loadSessionState, saveSessionState } from '$lib/session/journalSession';
 
   let initializing = true;
   let authenticated = false;
@@ -22,6 +22,16 @@
   let messages = [];
   let requestError = '';
 
+  const makeClientMessageId = () =>
+    globalThis?.crypto?.randomUUID?.() ?? `client-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+
+  const toStoredMessage = (message) => ({
+    role: message.role,
+    content: message.content ?? '',
+    clientMessageId: message.clientMessageId ?? message.client_message_id ?? message.id ?? makeClientMessageId()
+  });
+
+  const toStoredMessages = (rows) => rows.map(toStoredMessage);
 
   onMount(async () => {
     await bootstrap();
@@ -29,15 +39,23 @@
 
   async function bootstrap() {
     initializing = true;
-    const me = await fetchCurrentUser();
-    authenticated = Boolean(me);
-    user = me;
+    authError = '';
 
-    if (authenticated) {
-      await refreshAllState();
+    try {
+      const me = await fetchCurrentUser();
+      authenticated = Boolean(me);
+      user = me;
+
+      if (authenticated) {
+        await refreshAllState();
+      }
+    } catch {
+      authError = 'Could not load session status. Please try again.';
+      authenticated = false;
+      user = null;
+    } finally {
+      initializing = false;
     }
-
-    initializing = false;
   }
 
   async function fetchCurrentUser() {
@@ -55,27 +73,48 @@
     event.preventDefault();
     authError = '';
 
-    const response = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email,
-        password,
-        session_mode: 'web',
-        issuance_policy: 'session'
-      })
-    });
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          password,
+          session_mode: 'web',
+          issuance_policy: 'session'
+        })
+      });
 
-    if (!response.ok) {
+      if (!response.ok) {
+        authError = 'Login failed. Check your credentials and try again.';
+        return;
+      }
+
+      email = '';
+      password = '';
+      authenticated = true;
+      user = await fetchCurrentUser();
+      await refreshAllState();
+    } catch {
       authError = 'Login failed. Check your credentials and try again.';
-      return;
+    }
+  }
+
+  async function logout() {
+    const response = await fetch('/api/auth/logout', { method: 'POST' });
+    if (!response.ok && response.status !== 204) {
+      throw new Error(`logout failed: ${response.status}`);
     }
 
-    email = '';
-    password = '';
-    authenticated = true;
-    user = await fetchCurrentUser();
-    await refreshAllState();
+    clearSessionState();
+    authenticated = false;
+    user = null;
+    sidebarCollapsed = true;
+    journalEntries = [];
+    todayReference = '';
+    currentReference = '';
+    messages = [];
+    requestError = '';
   }
 
   async function refreshAllState() {
@@ -90,43 +129,44 @@
 
   async function syncSessionState() {
     syncingMessages = true;
-    const stored = loadSessionState();
+    try {
+      const stored = loadSessionState();
 
-    if (!stored?.journalReference) {
-      const seededState = await seedTodayState();
-      saveSessionState(seededState);
-      applyState(seededState);
+      if (!stored?.journalReference) {
+        const seededState = await seedTodayState();
+        saveSessionState(seededState);
+        applyState(seededState);
+        return;
+      }
+
+      const summaryResponse = await fetch(`/api/journal/${stored.journalReference}`);
+      if (summaryResponse.status === 404) {
+        const seededState = await seedTodayState();
+        saveSessionState(seededState);
+        applyState(seededState);
+        return;
+      }
+
+      const summary = await summaryResponse.json();
+      let nextMessages = stored.messages || [];
+      if (summary.message_count !== nextMessages.length) {
+        const messagesResponse = await fetch(`/api/journal/${stored.journalReference}/messages`);
+        const payload = await messagesResponse.json();
+        nextMessages = toStoredMessages(payload);
+      }
+
+      const nextState = {
+        user: { name: user.name, email: user.email },
+        journalReference: stored.journalReference,
+        messageCount: nextMessages.length,
+        messages: nextMessages
+      };
+
+      saveSessionState(nextState);
+      applyState(nextState);
+    } finally {
       syncingMessages = false;
-      return;
     }
-
-    const summaryResponse = await fetch(`/api/journal/${stored.journalReference}`);
-    if (summaryResponse.status === 404) {
-      const seededState = await seedTodayState();
-      saveSessionState(seededState);
-      applyState(seededState);
-      syncingMessages = false;
-      return;
-    }
-
-    const summary = await summaryResponse.json();
-    let nextMessages = stored.messages || [];
-    if (summary.message_count !== nextMessages.length) {
-      const messagesResponse = await fetch(`/api/journal/${stored.journalReference}/messages`);
-      const payload = await messagesResponse.json();
-      nextMessages = payload.map((message) => ({ role: message.role, content: message.content }));
-    }
-
-    const nextState = {
-      user: { name: user.name, email: user.email },
-      journalReference: stored.journalReference,
-      messageCount: nextMessages.length,
-      messages: nextMessages
-    };
-
-    saveSessionState(nextState);
-    applyState(nextState);
-    syncingMessages = false;
   }
 
   async function seedTodayState() {
@@ -134,7 +174,7 @@
     const todayJournal = await todayResponse.json();
     const messageResponse = await fetch('/api/journal/today/messages');
     const payload = await messageResponse.json();
-    const journalMessages = payload.map((message) => ({ role: message.role, content: message.content }));
+    const journalMessages = toStoredMessages(payload);
 
     todayReference = todayJournal.reference;
     return {
@@ -147,7 +187,7 @@
 
   function applyState(state) {
     currentReference = state.journalReference;
-    messages = state.messages;
+    messages = (state.messages ?? []).map(toStoredMessage);
   }
 
   async function loadJournalEntries() {
@@ -164,27 +204,34 @@
     }
 
     loadingJournal = true;
-    const response = await fetch(`/api/journal/${reference}/messages`);
-    const payload = await response.json();
-    const nextState = {
-      user: { name: user.name, email: user.email },
-      journalReference: reference,
-      messageCount: payload.length,
-      messages: payload.map((message) => ({ role: message.role, content: message.content }))
-    };
+    try {
+      const response = await fetch(`/api/journal/${reference}/messages`);
+      const payload = await response.json();
+      const storedMessages = toStoredMessages(payload);
+      const nextState = {
+        user: { name: user.name, email: user.email },
+        journalReference: reference,
+        messageCount: storedMessages.length,
+        messages: storedMessages
+      };
 
-    saveSessionState(nextState);
-    applyState(nextState);
-    loadingJournal = false;
+      saveSessionState(nextState);
+      applyState(nextState);
+    } finally {
+      loadingJournal = false;
+    }
   }
 
   async function handleSend(text) {
     requestError = '';
 
+    const userClientMessageId = makeClientMessageId();
+    const assistantClientMessageId = makeClientMessageId();
+
     const optimisticMessages = [
       ...messages,
-      { role: 'user', content: text },
-      { role: 'assistant', content: '' }
+      { role: 'user', content: text, clientMessageId: userClientMessageId },
+      { role: 'assistant', content: '', clientMessageId: assistantClientMessageId }
     ];
     messages = optimisticMessages;
 
@@ -192,7 +239,7 @@
       const response = await fetch('/api/chat/message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text })
+        body: JSON.stringify({ message: text, client_message_id: userClientMessageId })
       });
 
       if (!response.ok || !response.body) {
@@ -209,14 +256,20 @@
         done = part.done;
         if (!done) {
           accumulated += decoder.decode(part.value, { stream: true });
-          messages = [...optimisticMessages.slice(0, -1), { role: 'assistant', content: accumulated }];
+          messages = [
+            ...optimisticMessages.slice(0, -1),
+            { role: 'assistant', content: accumulated, clientMessageId: assistantClientMessageId }
+          ];
         }
       }
 
       const trailing = decoder.decode();
       if (trailing) {
         accumulated += trailing;
-        messages = [...optimisticMessages.slice(0, -1), { role: 'assistant', content: accumulated }];
+        messages = [
+          ...optimisticMessages.slice(0, -1),
+          { role: 'assistant', content: accumulated, clientMessageId: assistantClientMessageId }
+        ];
       }
 
       const nextState = {
@@ -272,7 +325,7 @@
           <img src="/logo.png" alt="Exobrain logo" class="logo" />
           <h1>EXOBRAIN</h1>
         </div>
-        <UserMenu />
+        <UserMenu {user} onLogout={logout} />
       </div>
     </header>
 

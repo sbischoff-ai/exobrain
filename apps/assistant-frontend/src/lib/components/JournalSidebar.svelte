@@ -12,12 +12,16 @@
   const toggleSidebar = () => dispatch('toggle');
 </script>
 
-<aside class="journal-sidebar" class:collapsed>
-  <button class="sidebar-toggle" type="button" on:click={toggleSidebar}>
-    {collapsed ? 'Show journals' : 'Hide journals'}
+{#if collapsed}
+  <button class="sidebar-flag" type="button" on:click={toggleSidebar} aria-label="Open journals">
+    <span aria-hidden="true">&gt;</span>
   </button>
+{:else}
+  <aside class="journal-overlay" aria-label="Journal sidebar">
+    <button class="collapse-arrow" type="button" on:click={toggleSidebar} aria-label="Close journals">
+      <span aria-hidden="true">&lt;</span>
+    </button>
 
-  {#if !collapsed}
     <div class="journal-list" aria-label="Journal list">
       {#if todayReference}
         <button
@@ -43,5 +47,5 @@
         {/if}
       {/each}
     </div>
-  {/if}
-</aside>
+  </aside>
+{/if}
