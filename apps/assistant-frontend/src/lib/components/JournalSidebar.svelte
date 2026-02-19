@@ -14,12 +14,16 @@
 
 {#if collapsed}
   <button class="sidebar-flag" type="button" on:click={toggleSidebar} aria-label="Open journals">
-    <span aria-hidden="true">&gt;</span>
+    <svg viewBox="0 0 20 20" aria-hidden="true" class="arrow-icon right">
+      <path d="M7 4 L13 10 L7 16" />
+    </svg>
   </button>
 {:else}
   <aside class="journal-overlay" aria-label="Journal sidebar">
     <button class="collapse-arrow" type="button" on:click={toggleSidebar} aria-label="Close journals">
-      <span aria-hidden="true">&lt;</span>
+      <svg viewBox="0 0 20 20" aria-hidden="true" class="arrow-icon left">
+        <path d="M13 4 L7 10 L13 16" />
+      </svg>
     </button>
 
     <div class="journal-list" aria-label="Journal list">

@@ -117,3 +117,5 @@ A skill is a set of local instructions in a `SKILL.md` file.
 - Assistant frontend now relies on cookie-authenticated intro gating plus `sessionStorage` journal snapshots (`exobrain.assistant.session`); keep journal UI changes aligned with the startup sync contract (`/api/journal/{reference}` `message_count` check + fallback seed from `/api/journal/today`).
 
 - In assistant-frontend, logout should clear `sessionStorage` journal snapshots and send users back to the intro gate; user-menu dropdowns in the main shell should stay logout-focused (no duplicate login UX there).
+
+- Journal overlay UX should behave as a non-layout-shifting drawer (chat stays centered), with compact chevron controls and an explicitly button-like highlighted today entry for quick orientation.
