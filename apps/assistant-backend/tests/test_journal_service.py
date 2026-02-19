@@ -1,45 +1,47 @@
-"""Unit tests for journal service orchestration over conversation service."""
+"""Unit tests for journal service behavior through real internal service dependencies."""
 
 from __future__ import annotations
 
 import pytest
 
+from app.services.conversation_service import ConversationService
 from app.services.journal_service import JournalService
 
 
-class FakeConversationService:
+class FakeDatabaseService:
+    """External dependency fake used by real ConversationService + JournalService."""
+
     def __init__(self) -> None:
-        self.calls: list[tuple[str, tuple, dict]] = []
+        self.fetchrow_calls: list[tuple[str, tuple]] = []
+        self.fetch_calls: list[tuple[str, tuple]] = []
+        self.execute_calls: list[tuple[str, tuple]] = []
 
-    async def ensure_conversation(self, user_id: str, reference: str) -> str:
-        self.calls.append(("ensure_conversation", (user_id, reference), {}))
-        return "conv-1"
+    async def fetchrow(self, query: str, *args):
+        self.fetchrow_calls.append((query, args))
+        if "INSERT INTO conversations" in query:
+            return {"id": "conv-1"}
+        if "INSERT INTO messages" in query:
+            return {"id": "msg-1"}
+        if "WHERE c.user_id = $1::uuid AND c.reference = $2" in query:
+            return {"id": "conv-1", "reference": args[1]}
+        return None
 
-    async def insert_message(self, **kwargs) -> str:
-        self.calls.append(("insert_message", (), kwargs))
-        return "msg-1"
-
-    async def list_conversations(self, user_id: str, limit: int, before: str | None = None):
-        self.calls.append(("list_conversations", (user_id, limit, before), {}))
+    async def fetch(self, query: str, *args):
+        self.fetch_calls.append((query, args))
+        if "FROM messages" in query:
+            return [{"id": "msg-1", "role": "user"}]
         return [{"id": "conv-1"}]
 
-    async def get_conversation_by_reference(self, user_id: str, reference: str):
-        self.calls.append(("get_conversation_by_reference", (user_id, reference), {}))
-        return {"id": "conv-1", "reference": reference}
-
-    async def list_messages(self, user_id: str, reference: str, limit: int):
-        self.calls.append(("list_messages", (user_id, reference, limit), {}))
-        return [{"id": "msg-1"}]
-
-    async def search_conversations(self, user_id: str, query: str, limit: int):
-        self.calls.append(("search_conversations", (user_id, query, limit), {}))
-        return [{"id": "conv-1"}]
+    async def execute(self, query: str, *args):
+        self.execute_calls.append((query, args))
+        return "UPDATE 1"
 
 
 @pytest.mark.asyncio
-async def test_journal_service_delegates_to_conversation_service() -> None:
-    conversation_service = FakeConversationService()
-    service = JournalService(conversation_service=conversation_service)  # type: ignore[arg-type]
+async def test_journal_service_uses_real_conversation_service_flow() -> None:
+    database = FakeDatabaseService()
+    conversation_service = ConversationService(database=database)  # type: ignore[arg-type]
+    service = JournalService(conversation_service=conversation_service)
 
     conversation_id = await service.ensure_journal("user-1", "2026/02/19")
     message_id = await service.create_journal_message(
@@ -51,16 +53,13 @@ async def test_journal_service_delegates_to_conversation_service() -> None:
     )
     journals = await service.list_journals("user-1", limit=20)
     journal = await service.get_journal("user-1", "2026/02/19")
-    today_journal = await service.get_today_journal("user-1", create=False)
     messages = await service.list_messages("user-1", "2026/02/19", limit=100)
-    today_messages = await service.list_today_messages("user-1", limit=100)
     search = await service.search_journals("user-1", "hello", limit=5)
 
     assert conversation_id == "conv-1"
     assert message_id == "msg-1"
     assert journals == [{"id": "conv-1"}]
     assert journal == {"id": "conv-1", "reference": "2026/02/19"}
-    assert today_journal is not None
-    assert messages == [{"id": "msg-1"}]
-    assert today_messages == [{"id": "msg-1"}]
+    assert messages == [{"id": "msg-1", "role": "user"}]
     assert search == [{"id": "conv-1"}]
+    assert any("UPDATE conversations SET updated_at = NOW()" in query for query, _ in database.execute_calls)

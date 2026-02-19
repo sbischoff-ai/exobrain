@@ -103,6 +103,7 @@ A skill is a set of local instructions in a `SKILL.md` file.
 
 ## Agent retrospective notes
 
+- In assistant-backend unit tests, fake only external dependencies (for example Redis/DB clients); for internal app services, compose the real services together to preserve cross-service coverage.
 - Keep FastAPI routers free of direct `DatabaseService` calls; route handlers should delegate through domain services (for journals: `JournalService -> ConversationService -> DatabaseService`).
 - Journal endpoints use slash-formatted references (`YYYY/MM/DD`); route declarations should use `/{reference:path}` and keep static routes (for example `/search`, `/today/messages`) declared before dynamic reference routes to avoid 404 shadowing.
 - Keep assistant-backend unit tests process-free: do not spawn local services (for example `redis-server`) in unit tests; reserve real service execution for integration/system workflows.
