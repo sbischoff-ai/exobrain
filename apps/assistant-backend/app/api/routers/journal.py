@@ -33,23 +33,31 @@ def _messages_from_records(rows) -> list[JournalMessageResponse]:
     ]
 
 
-@router.get("", response_model=list[JournalEntryResponse])
+@router.get(
+    "",
+    response_model=list[JournalEntryResponse],
+    summary="List journal entries for the authenticated user",
+)
 async def list_journal_entries(
     request: Request,
     principal: UnifiedPrincipal = Depends(get_required_auth_context),
-    limit: int = Query(default=20, ge=1, le=100),
-    cursor: str | None = None,
+    limit: int = Query(default=20, ge=1, le=100, description="Maximum entries to return"),
+    cursor: str | None = Query(default=None, description="Optional reference cursor for pagination"),
 ) -> list[JournalEntryResponse]:
     service: JournalService = request.app.state.journal_service
     rows = await service.list_journals(user_id=principal.user_id, limit=limit, before=cursor)
     return [_entry_from_record(row) for row in rows]
 
 
-@router.get("/today", response_model=JournalEntryResponse)
+@router.get(
+    "/today",
+    response_model=JournalEntryResponse,
+    summary="Get today's journal entry",
+)
 async def get_today_journal(
     request: Request,
     principal: UnifiedPrincipal = Depends(get_required_auth_context),
-    create: bool = False,
+    create: bool = Query(default=False, description="If true, create today's journal when missing"),
 ) -> JournalEntryResponse:
     service: JournalService = request.app.state.journal_service
     row = await service.get_today_journal(user_id=principal.user_id, create=create)
@@ -58,42 +66,58 @@ async def get_today_journal(
     return _entry_from_record(row)
 
 
-@router.get("/today/messages", response_model=list[JournalMessageResponse])
+@router.get(
+    "/today/messages",
+    response_model=list[JournalMessageResponse],
+    summary="List messages for today's journal entry",
+)
 async def get_today_messages(
     request: Request,
     principal: UnifiedPrincipal = Depends(get_required_auth_context),
-    limit: int = Query(default=100, ge=1, le=500),
+    limit: int = Query(default=100, ge=1, le=500, description="Maximum messages to return"),
 ) -> list[JournalMessageResponse]:
     service: JournalService = request.app.state.journal_service
     rows = await service.list_today_messages(user_id=principal.user_id, limit=limit)
     return _messages_from_records(rows)
 
 
-@router.get("/search", response_model=list[JournalEntryResponse])
+@router.get(
+    "/search",
+    response_model=list[JournalEntryResponse],
+    summary="Search journal entries by message content or reference",
+)
 async def search_journal_entries(
-    q: str,
     request: Request,
+    q: str = Query(..., min_length=1, description="Search query string"),
     principal: UnifiedPrincipal = Depends(get_required_auth_context),
-    limit: int = Query(default=20, ge=1, le=100),
+    limit: int = Query(default=20, ge=1, le=100, description="Maximum entries to return"),
 ) -> list[JournalEntryResponse]:
     service: JournalService = request.app.state.journal_service
     rows = await service.search_journals(user_id=principal.user_id, query=q, limit=limit)
     return [_entry_from_record(row) for row in rows]
 
 
-@router.get("/{reference:path}/messages", response_model=list[JournalMessageResponse])
+@router.get(
+    "/{reference:path}/messages",
+    response_model=list[JournalMessageResponse],
+    summary="List messages for a specific journal reference",
+)
 async def get_journal_messages(
     reference: str,
     request: Request,
     principal: UnifiedPrincipal = Depends(get_required_auth_context),
-    limit: int = Query(default=100, ge=1, le=500),
+    limit: int = Query(default=100, ge=1, le=500, description="Maximum messages to return"),
 ) -> list[JournalMessageResponse]:
     service: JournalService = request.app.state.journal_service
     rows = await service.list_messages(user_id=principal.user_id, reference=reference, limit=limit)
     return _messages_from_records(rows)
 
 
-@router.get("/{reference:path}/summary", response_model=JournalEntryResponse)
+@router.get(
+    "/{reference:path}/summary",
+    response_model=JournalEntryResponse,
+    summary="Get summary metadata for a specific journal reference",
+)
 async def get_journal_summary(
     reference: str,
     request: Request,
@@ -102,7 +126,11 @@ async def get_journal_summary(
     return await get_journal_by_reference(reference, request, principal)
 
 
-@router.get("/{reference:path}", response_model=JournalEntryResponse)
+@router.get(
+    "/{reference:path}",
+    response_model=JournalEntryResponse,
+    summary="Get a specific journal entry by reference",
+)
 async def get_journal_by_reference(
     reference: str,
     request: Request,

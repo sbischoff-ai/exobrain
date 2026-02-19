@@ -56,7 +56,11 @@ async def _response_stream(
         )
 
 
-@router.post("/message")
+@router.post(
+    "/message",
+    summary="Stream assistant response and persist journal messages",
+    description="Persists the user message, streams assistant output, then persists the assistant reply in the current journal entry.",
+)
 async def message(
     payload: ChatMessageRequest,
     request: Request,

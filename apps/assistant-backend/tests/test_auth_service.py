@@ -177,16 +177,22 @@ def test_issue_access_token_roundtrip_returns_same_principal(auth_service: AuthS
 
 @pytest.mark.asyncio
 async def test_refresh_token_resolves_principal_and_rotates(auth_service: AuthService) -> None:
+    """Refresh tokens should resolve principals until explicitly revoked."""
+
     principal = UnifiedPrincipal(
         user_id="7d6722a0-905e-4e9a-8c1c-4e4504e194f4",
         email="alice@example.com",
         display_name="Alice",
     )
 
+    # Step 1: Issue a refresh token for the authenticated principal.
     refresh_token = await auth_service.issue_refresh_token(principal)
+
+    # Step 2: The issued token should resolve back to that same principal.
     resolved = await auth_service.principal_from_refresh_token(refresh_token)
     assert resolved == principal
 
+    # Step 3: After revocation, the same token should no longer resolve.
     await auth_service.revoke_refresh_token(refresh_token)
     assert await auth_service.principal_from_refresh_token(refresh_token) is None
 
@@ -211,13 +217,16 @@ async def test_session_resolution_respects_revocation_and_expiry(
 
     session_id = await auth_service.issue_session(principal)
 
+    # Step 1: Fresh session resolves to the owning principal.
     resolved = await auth_service.principal_from_session(session_id)
     assert resolved == principal
 
+    # Step 2: Revoked session should immediately fail resolution.
     await auth_service.revoke_session(session_id)
     revoked = await auth_service.principal_from_session(session_id)
     assert revoked is None
 
+    # Step 3: Session should also stop resolving after TTL expiry.
     expired_session_id = await auth_service.issue_session(principal)
     await asyncio.sleep(1.1)
     expired = await auth_service.principal_from_session(expired_session_id)

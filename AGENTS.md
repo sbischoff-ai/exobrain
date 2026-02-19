@@ -103,6 +103,7 @@ A skill is a set of local instructions in a `SKILL.md` file.
 
 ## Agent retrospective notes
 
+- When adding/changing API endpoints or schemas, include concise FastAPI/Pydantic descriptions so Swagger output remains self-explanatory for debugging and client integration.
 - Prefer shared test fixtures/utilities in `tests/conftest.py` for common fakes (for example DB boundary fakes) to avoid duplicated mock logic across test modules.
 - In assistant-backend unit tests, fake only external dependencies (for example Redis/DB clients); for internal app services, compose the real services together to preserve cross-service coverage.
 - Keep FastAPI routers free of direct `DatabaseService` calls; route handlers should delegate through domain services (for journals: `JournalService -> ConversationService -> DatabaseService`).
