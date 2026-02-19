@@ -70,8 +70,10 @@ The frontend always calls `POST /api/chat/message`.
 ## Authentication + journal session behavior
 
 - The app now opens on an intro/login screen when there is no active backend session.
-- On successful login (cookie-backed web session), the main assistant workspace is shown.
-- The workspace stores user identity, current journal reference, and journal messages in `sessionStorage` under `exobrain.assistant.session`.
+- On successful login (cookie-backed web session), the main assistant workspace is shown. Logging out clears local sessionStorage state and returns to the intro screen.
+- The workspace stores user identity, current journal reference, and journal messages (including per-message client ids) in `sessionStorage` under `exobrain.assistant.session`.
 - On page load, the client re-syncs stored journal state by comparing stored message count with `/api/journal/{reference}` `message_count`; mismatches trigger a message refetch.
 - If no stored state exists, the client initializes state from `/api/journal/today?create=true` and `/api/journal/today/messages`.
 - The journal sidebar is collapsed by default and allows switching between journal references. Only today's journal keeps chat input enabled.
+
+- Chat requests use the backend idempotency contract and send `client_message_id` with each `/api/chat/message` request.
