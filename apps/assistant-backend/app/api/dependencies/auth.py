@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import Request
+from fastapi import HTTPException, Request, status
 
 from app.api.schemas.auth import UnifiedPrincipal
 from app.services.auth_service import AuthService
@@ -25,4 +25,11 @@ async def get_optional_auth_context(request: Request) -> UnifiedPrincipal | None
     principal = await auth_service.principal_from_session(session_id)
     if principal is not None:
         logger.debug("authenticated via session", extra={"user_id": principal.user_id})
+    return principal
+
+
+async def get_required_auth_context(request: Request) -> UnifiedPrincipal:
+    principal = await get_optional_auth_context(request)
+    if principal is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required")
     return principal

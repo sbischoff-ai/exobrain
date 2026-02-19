@@ -1,39 +1,34 @@
-from collections.abc import AsyncIterator
-from functools import lru_cache
 import logging
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 
-from app.agents.factory import build_main_agent
-from app.api.dependencies.auth import get_optional_auth_context
+from app.api.dependencies.auth import get_required_auth_context
 from app.api.schemas.auth import UnifiedPrincipal
 from app.api.schemas.chat import ChatMessageRequest
-from app.core.settings import get_settings
 from app.services.chat_service import ChatService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 
-@lru_cache
-def get_chat_service() -> ChatService:
-    settings = get_settings()
-    logger.info("initializing chat service", extra={"use_mock_agent": settings.main_agent_use_mock})
-    return ChatService(agent=build_main_agent(settings))
-
-
-async def _response_stream(message: str) -> AsyncIterator[str]:
-    chat_service = get_chat_service()
-    async for chunk in chat_service.stream_message(message):
-        yield chunk
-
-
-@router.post("/message")
+@router.post(
+    "/message",
+    summary="Stream assistant response and persist journal messages",
+    description="Persists the user message, streams assistant output, then persists the assistant reply in the current journal entry.",
+)
 async def message(
     payload: ChatMessageRequest,
-    auth_context: UnifiedPrincipal | None = Depends(get_optional_auth_context),
+    request: Request,
+    auth_context: UnifiedPrincipal = Depends(get_required_auth_context),
 ) -> StreamingResponse:
-    user_name = auth_context.display_name if auth_context is not None else "anonymous"
-    logger.info("assistant chat request", extra={"user_name": user_name})
-    return StreamingResponse(_response_stream(payload.message), media_type="text/plain")
+    logger.info("assistant chat request", extra={"user_name": auth_context.display_name})
+    chat_service: ChatService = request.app.state.chat_service
+    return StreamingResponse(
+        chat_service.stream_journal_message(
+            principal=auth_context,
+            message=payload.message,
+            client_message_id=str(payload.client_message_id),
+        ),
+        media_type="text/plain",
+    )
