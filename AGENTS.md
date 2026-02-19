@@ -119,3 +119,5 @@ A skill is a set of local instructions in a `SKILL.md` file.
 - In assistant-frontend, logout should clear `sessionStorage` journal snapshots and send users back to the intro gate; user-menu dropdowns in the main shell should stay logout-focused (no duplicate login UX there).
 
 - Journal overlay UX should behave as a non-layout-shifting drawer (chat stays centered), with compact chevron controls and an explicitly button-like highlighted today entry for quick orientation.
+
+- Journal drawer controls should be viewport-anchored on the left edge (not container-anchored), while the chat panel remains centered independently.
