@@ -124,6 +124,8 @@ The suite expects seeded auth user data to exist on the target backend:
 - email: `test.user@exobrain.local`
 - password: `password123`
 
+If chat/journal integration tests fail with missing-table errors, re-run database setup (`./scripts/agent/assistant-db-setup-native.sh` or `./scripts/local/assistant-db-setup.sh`) so Reshape migrations are fully applied before starting the backend.
+
 For coding agents in Codex/cloud environments, use this flow:
 
 ```bash

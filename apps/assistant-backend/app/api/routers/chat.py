@@ -31,19 +31,9 @@ def get_chat_service() -> ChatService:
 async def _response_stream(
     message: str,
     principal: UnifiedPrincipal,
-    client_message_id: str,
+    conversation_id: str,
     journal_service: JournalService,
 ) -> AsyncIterator[str]:
-    reference = journal_service.today_reference()
-    conversation_id = await journal_service.ensure_journal(principal.user_id, reference)
-    await journal_service.create_journal_message(
-        conversation_id=conversation_id,
-        user_id=principal.user_id,
-        role="user",
-        content=message,
-        client_message_id=client_message_id,
-    )
-
     chat_service = get_chat_service()
     chunks: list[str] = []
 
@@ -79,7 +69,21 @@ async def message(
 ) -> StreamingResponse:
     logger.info("assistant chat request", extra={"user_name": auth_context.display_name})
     journal_service: JournalService = request.app.state.journal_service
+
+    # Persist write-path preconditions before opening a streaming response so schema/config
+    # issues (for example missing migrations/tables) fail as normal request errors, not
+    # incomplete chunked responses.
+    reference = journal_service.today_reference()
+    conversation_id = await journal_service.ensure_journal(auth_context.user_id, reference)
+    await journal_service.create_journal_message(
+        conversation_id=conversation_id,
+        user_id=auth_context.user_id,
+        role="user",
+        content=payload.message,
+        client_message_id=str(payload.client_message_id),
+    )
+
     return StreamingResponse(
-        _response_stream(payload.message, auth_context, str(payload.client_message_id), journal_service),
+        _response_stream(payload.message, auth_context, conversation_id, journal_service),
         media_type="text/plain",
     )
