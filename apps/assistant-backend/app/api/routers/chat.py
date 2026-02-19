@@ -16,6 +16,10 @@ from app.services.journal_service import JournalService
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/chat", tags=["chat"])
 
+ASSISTANT_STREAM_ERROR_FALLBACK = (
+    "I ran into a temporary issue while generating a response. Please try again in a moment."
+)
+
 
 @lru_cache
 def get_chat_service() -> ChatService:
@@ -42,9 +46,16 @@ async def _response_stream(
 
     chat_service = get_chat_service()
     chunks: list[str] = []
-    async for chunk in chat_service.stream_message(message):
-        chunks.append(chunk)
-        yield chunk
+
+    try:
+        async for chunk in chat_service.stream_message(message):
+            chunks.append(chunk)
+            yield chunk
+    except Exception:
+        # Keep the HTTP stream well-formed even if the upstream model call fails mid-stream.
+        logger.exception("assistant stream failed; sending fallback message")
+        chunks = [ASSISTANT_STREAM_ERROR_FALLBACK]
+        yield ASSISTANT_STREAM_ERROR_FALLBACK
 
     assistant_message = "".join(chunks).strip()
     if assistant_message:

@@ -71,7 +71,7 @@ This applies TOML-based Reshape migrations from `infra/metastore/assistant-backe
   - session cookie mode (`session_mode=web`, `issuance_policy=session`)
   - token pair mode (`session_mode=api`, `issuance_policy=tokens`)
 - `POST /api/auth/token_refresh` accepts an API refresh token and returns a rotated access+refresh pair.
-- `POST /api/chat/message` now requires authentication and a `client_message_id` UUID for idempotency. The backend persists both user and assistant messages into Postgres under the current day's journal conversation.
+- `POST /api/chat/message` now requires authentication and a `client_message_id` UUID for idempotency. The backend persists both user and assistant messages into Postgres under the current day's journal conversation and returns a fallback assistant message if upstream model streaming fails unexpectedly (to avoid broken chunked responses).
 - Journal APIs (`/api/journal`, `/api/journal/today`, `/api/journal/{reference}`, `/api/journal/{reference}/messages`, `/api/journal/{reference}/summary`, `/api/journal/search`) provide authenticated access to persisted conversation history.
 
 ## Local build and run
