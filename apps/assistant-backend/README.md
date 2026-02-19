@@ -70,7 +70,9 @@ This applies TOML-based Reshape migrations from `infra/metastore/assistant-backe
 - `POST /api/auth/login` authenticates a user and can issue:
   - session cookie mode (`session_mode=web`, `issuance_policy=session`)
   - token pair mode (`session_mode=api`, `issuance_policy=tokens`)
-- `POST /api/chat/message` accepts optional auth via cookie or bearer token and logs the resolved user name.
+- `POST /api/auth/token_refresh` accepts an API refresh token and returns a rotated access+refresh pair.
+- `POST /api/chat/message` now requires authentication and a `client_message_id` UUID for idempotency. The backend persists both user and assistant messages into Postgres under the current day's journal conversation.
+- Journal APIs (`/api/journal`, `/api/journal/today`, `/api/journal/{reference}`, `/api/journal/{reference}/messages`, `/api/journal/{reference}/summary`, `/api/journal/search`) provide authenticated access to persisted conversation history.
 
 ## Local build and run
 
@@ -143,7 +145,9 @@ uv run --with pytest --with pytest-asyncio --with httpx pytest -m integration
 - Assistant backend API: `http://localhost:8000/api`
 - Health check: `http://localhost:8000/healthz`
 - Auth login endpoint: `POST http://localhost:8000/api/auth/login`
-- Chat endpoint: `POST http://localhost:8000/api/chat/message`
+- Chat endpoint: `POST http://localhost:8000/api/chat/message` (authenticated; include `client_message_id`)
+- Token refresh endpoint: `POST http://localhost:8000/api/auth/token_refresh`
+- Journal endpoints: `GET http://localhost:8000/api/journal*`
 - Swagger UI (local only): `http://localhost:8000/docs`
 
 ### Infrastructure dependencies (default script wiring)

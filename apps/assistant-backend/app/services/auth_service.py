@@ -3,7 +3,6 @@ import hashlib
 import hmac
 import logging
 import secrets
-from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 import jwt
@@ -14,13 +13,6 @@ from app.services.session_store import SessionStore
 from app.services.user_service import UserService
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class RefreshTokenRecord:
-    token: str
-    user_id: str
-    expires_at: datetime
 
 
 class JwtTokenValidator:
@@ -73,14 +65,13 @@ def verify_password(password: str, encoded_hash: str) -> bool:
 
 
 class AuthService:
-    """Authentication orchestration with Redis sessions and in-memory refresh store."""
+    """Authentication orchestration with Redis-backed session and refresh-token state."""
 
     def __init__(self, settings: Settings, user_service: UserService, session_store: SessionStore) -> None:
         self._settings = settings
         self._user_service = user_service
         self._session_store = session_store
         self._token_validator = JwtTokenValidator(settings)
-        self._refresh_tokens: dict[str, RefreshTokenRecord] = {}
 
     async def login(self, payload: LoginRequest) -> UnifiedPrincipal | None:
         user = await self._user_service.get_user_by_email(payload.email)
@@ -103,12 +94,35 @@ class AuthService:
         logger.debug("issuing access token", extra={"user_id": principal.user_id})
         return self._token_validator.issue_access_token(principal)
 
-    def issue_refresh_token(self, principal: UnifiedPrincipal) -> str:
+    async def issue_refresh_token(self, principal: UnifiedPrincipal) -> str:
         token = secrets.token_urlsafe(32)
-        expires_at = datetime.now(UTC) + timedelta(seconds=self._settings.auth_refresh_token_ttl_seconds)
-        self._refresh_tokens[token] = RefreshTokenRecord(token=token, user_id=principal.user_id, expires_at=expires_at)
+        ttl_seconds = self._settings.auth_refresh_token_ttl_seconds
+        expires_at = datetime.now(UTC) + timedelta(seconds=ttl_seconds)
+        await self._session_store.store_refresh_token(
+            refresh_token=token,
+            user_id=principal.user_id,
+            expires_at=expires_at,
+            ttl_seconds=ttl_seconds,
+        )
         logger.debug("issued refresh token", extra={"user_id": principal.user_id})
         return token
+
+    async def principal_from_refresh_token(self, refresh_token: str | None) -> UnifiedPrincipal | None:
+        if not refresh_token:
+            return None
+        user_id = await self._session_store.get_refresh_token_user_id(refresh_token)
+        if user_id is None:
+            return None
+        user = await self._user_service.get_user(user_id)
+        if user is None:
+            logger.warning("refresh token user not found", extra={"user_id": user_id})
+            return None
+        return UnifiedPrincipal(user_id=user.id, email=user.email, display_name=user.name)
+
+    async def revoke_refresh_token(self, refresh_token: str | None) -> None:
+        if not refresh_token:
+            return
+        await self._session_store.revoke_refresh_token(refresh_token)
 
     async def issue_session(self, principal: UnifiedPrincipal) -> str:
         session_id = secrets.token_urlsafe(32)

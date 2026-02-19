@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+import json
+
 import pytest
 
 from app.services.session_store import RedisSessionStore
@@ -46,12 +49,34 @@ async def test_redis_session_store_create_get_revoke_and_close() -> None:
     assert await store.ping()
 
     await store.create_session("session-a", "user-a", ttl_seconds=30)
-    assert fake_redis.set_calls == [("tests:sessions:session-a", "user-a", 30)]
+    assert fake_redis.set_calls == [("tests:sessions:session:session-a", "user-a", 30)]
     assert await store.get_user_id("session-a") == "user-a"
 
     await store.revoke_session("session-a")
-    assert fake_redis.deleted_keys == ["tests:sessions:session-a"]
+    assert fake_redis.deleted_keys == ["tests:sessions:session:session-a"]
     assert await store.get_user_id("session-a") is None
 
     await store.close()
     assert fake_redis.closed is True
+
+
+@pytest.mark.asyncio
+async def test_redis_session_store_refresh_token_lifecycle() -> None:
+    fake_redis = FakeRedisClient()
+    store = RedisSessionStore(
+        redis_url="redis://unused:6379/0",
+        key_prefix="tests:sessions",
+        redis_client=fake_redis,  # type: ignore[arg-type]
+    )
+
+    expires_at = datetime.now(UTC) + timedelta(minutes=10)
+    await store.store_refresh_token("refresh-token", "user-a", expires_at, ttl_seconds=600)
+
+    key = "tests:sessions:refresh:refresh-token"
+    assert key in fake_redis.data
+    payload = json.loads(fake_redis.data[key])
+    assert payload["user_id"] == "user-a"
+    assert await store.get_refresh_token_user_id("refresh-token") == "user-a"
+
+    await store.revoke_refresh_token("refresh-token")
+    assert await store.get_refresh_token_user_id("refresh-token") is None

@@ -2,7 +2,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 
-from app.api.schemas.auth import LoginRequest, SessionResponse, TokenPairResponse
+from app.api.schemas.auth import LoginRequest, SessionResponse, TokenPairResponse, TokenRefreshRequest
 from app.services.auth_service import AuthService
 
 logger = logging.getLogger(__name__)
@@ -34,8 +34,25 @@ async def login(payload: LoginRequest, request: Request, response: Response) -> 
         return SessionResponse(session_established=True, user_name=principal.display_name)
 
     access_token = auth_service.issue_access_token(principal)
-    refresh_token = auth_service.issue_refresh_token(principal)
+    refresh_token = await auth_service.issue_refresh_token(principal)
     logger.debug("issued access and refresh tokens", extra={"user_id": principal.user_id})
+    return TokenPairResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        expires_in=request.app.state.settings.auth_access_token_ttl_seconds,
+    )
+
+
+@router.post("/token_refresh", response_model=TokenPairResponse)
+async def token_refresh(payload: TokenRefreshRequest, request: Request) -> TokenPairResponse:
+    auth_service: AuthService = request.app.state.auth_service
+    principal = await auth_service.principal_from_refresh_token(payload.refresh_token)
+    if principal is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid refresh token")
+
+    await auth_service.revoke_refresh_token(payload.refresh_token)
+    access_token = auth_service.issue_access_token(principal)
+    refresh_token = await auth_service.issue_refresh_token(principal)
     return TokenPairResponse(
         access_token=access_token,
         refresh_token=refresh_token,

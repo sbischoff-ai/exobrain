@@ -1,0 +1,132 @@
+[[actions]]
+type = "create_table"
+name = "conversations"
+primary_key = ["id"]
+
+    [[actions.columns]]
+    name = "id"
+    type = "UUID"
+    nullable = false
+    default = "gen_random_uuid()"
+
+    [[actions.columns]]
+    name = "user_id"
+    type = "UUID"
+    nullable = false
+
+    [[actions.columns]]
+    name = "reference"
+    type = "TEXT"
+    nullable = false
+
+    [[actions.columns]]
+    name = "created_at"
+    type = "TIMESTAMPTZ"
+    nullable = false
+    default = "NOW()"
+
+    [[actions.columns]]
+    name = "updated_at"
+    type = "TIMESTAMPTZ"
+    nullable = false
+    default = "NOW()"
+
+[[actions]]
+type = "add_foreign_key"
+table = "conversations"
+
+    [actions.foreign_key]
+    columns = ["user_id"]
+    referenced_table = "users"
+    referenced_columns = ["id"]
+
+[[actions]]
+type = "add_index"
+table = "conversations"
+
+    [actions.index]
+    name = "conversations_user_reference_unique"
+    columns = ["user_id", "reference"]
+    unique = true
+
+[[actions]]
+type = "create_table"
+name = "messages"
+primary_key = ["id"]
+
+    [[actions.columns]]
+    name = "id"
+    type = "UUID"
+    nullable = false
+    default = "gen_random_uuid()"
+
+    [[actions.columns]]
+    name = "conversation_id"
+    type = "UUID"
+    nullable = false
+
+    [[actions.columns]]
+    name = "user_id"
+    type = "UUID"
+
+    [[actions.columns]]
+    name = "role"
+    type = "TEXT"
+    nullable = false
+
+    [[actions.columns]]
+    name = "content"
+    type = "TEXT"
+
+    [[actions.columns]]
+    name = "content_json"
+    type = "JSONB"
+
+    [[actions.columns]]
+    name = "created_at"
+    type = "TIMESTAMPTZ"
+    nullable = false
+    default = "NOW()"
+
+    [[actions.columns]]
+    name = "client_message_id"
+    type = "UUID"
+
+    [[actions.columns]]
+    name = "metadata"
+    type = "JSONB"
+
+[[actions]]
+type = "add_foreign_key"
+table = "messages"
+
+    [actions.foreign_key]
+    columns = ["conversation_id"]
+    referenced_table = "conversations"
+    referenced_columns = ["id"]
+
+[[actions]]
+type = "add_foreign_key"
+table = "messages"
+
+    [actions.foreign_key]
+    columns = ["user_id"]
+    referenced_table = "users"
+    referenced_columns = ["id"]
+
+[[actions]]
+type = "add_index"
+table = "messages"
+
+    [actions.index]
+    name = "idx_messages_conversation_created"
+    columns = ["conversation_id", "created_at"]
+
+[[actions]]
+type = "add_index"
+table = "messages"
+
+    [actions.index]
+    name = "messages_conversation_client_message_id_unique"
+    columns = ["conversation_id", "client_message_id"]
+    unique = true

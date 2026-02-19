@@ -17,6 +17,10 @@ class TokenPairResponse(BaseModel):
     expires_in: int
 
 
+class TokenRefreshRequest(BaseModel):
+    refresh_token: str = Field(..., min_length=16)
+
+
 class SessionResponse(BaseModel):
     session_established: bool
     user_name: str
