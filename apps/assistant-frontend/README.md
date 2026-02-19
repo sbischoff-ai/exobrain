@@ -66,3 +66,12 @@ The frontend always calls `POST /api/chat/message`.
 
 - **Local development (`npm run dev`)**: Vite proxies `/api/*` to `http://localhost:8000` by default. Override with `ASSISTANT_BACKEND_URL` if needed.
 - **Cluster/nonlocal deployments**: the browser keeps calling relative `/api/*`; ingress routes these requests to the assistant backend service.
+
+## Authentication + journal session behavior
+
+- The app now opens on an intro/login screen when there is no active backend session.
+- On successful login (cookie-backed web session), the main assistant workspace is shown.
+- The workspace stores user identity, current journal reference, and journal messages in `sessionStorage` under `exobrain.assistant.session`.
+- On page load, the client re-syncs stored journal state by comparing stored message count with `/api/journal/{reference}` `message_count`; mismatches trigger a message refetch.
+- If no stored state exists, the client initializes state from `/api/journal/today?create=true` and `/api/journal/today/messages`.
+- The journal sidebar is collapsed by default and allows switching between journal references. Only today's journal keeps chat input enabled.
