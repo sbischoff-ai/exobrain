@@ -103,6 +103,7 @@ A skill is a set of local instructions in a `SKILL.md` file.
 
 ## Agent retrospective notes
 
+- Prefer shared test fixtures/utilities in `tests/conftest.py` for common fakes (for example DB boundary fakes) to avoid duplicated mock logic across test modules.
 - In assistant-backend unit tests, fake only external dependencies (for example Redis/DB clients); for internal app services, compose the real services together to preserve cross-service coverage.
 - Keep FastAPI routers free of direct `DatabaseService` calls; route handlers should delegate through domain services (for journals: `JournalService -> ConversationService -> DatabaseService`).
 - Journal endpoints use slash-formatted references (`YYYY/MM/DD`); route declarations should use `/{reference:path}` and keep static routes (for example `/search`, `/today/messages`) declared before dynamic reference routes to avoid 404 shadowing.
