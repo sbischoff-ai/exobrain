@@ -18,6 +18,7 @@ import pytest
 
 SEED_EMAIL = "test.user@exobrain.local"
 SEED_PASSWORD = "password123"
+SEED_JOURNAL_REFERENCE = "2025/01/14"
 
 
 @dataclass
@@ -175,7 +176,15 @@ def test_chat_and_journal_endpoints_persist_activity(client: httpx.Client) -> No
 
     journal_list = client.get("/api/journal", headers=headers)
     assert journal_list.status_code == 200
-    assert any(entry["reference"] == reference for entry in journal_list.json())
+    journal_entries = journal_list.json()
+    assert any(entry["reference"] == reference for entry in journal_entries)
+    assert any(entry["reference"] == SEED_JOURNAL_REFERENCE for entry in journal_entries)
+
+    seed_messages = client.get(f"/api/journal/{SEED_JOURNAL_REFERENCE}/messages", headers=headers)
+    assert seed_messages.status_code == 200
+    seed_payload = seed_messages.json()
+    assert any(item["role"] == "user" for item in seed_payload)
+    assert any(item["role"] == "assistant" for item in seed_payload)
 
     by_ref = client.get(f"/api/journal/{reference}", headers=headers)
     assert by_ref.status_code == 200

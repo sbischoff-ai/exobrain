@@ -114,3 +114,4 @@ A skill is a set of local instructions in a `SKILL.md` file.
 - For assistant-backend auth/session work, remember sessions are Redis-backed via `ASSISTANT_CACHE_REDIS_URL`; keep local infra (`infra/docker-compose/local-infra.yml`), Helm values/templates, and `scripts/agent/native-infra-*` in sync to avoid environment-specific regressions.
 - For logging-related changes, check and update both app-level README files and deployment manifests (Dockerfiles + Helm values/templates) in the same pass to avoid config drift.
 - Frontend production logging defaults should stay conservative (`warn` or higher) unless the task explicitly asks for verbose runtime telemetry.
+- Assistant frontend now relies on cookie-authenticated intro gating plus `sessionStorage` journal snapshots (`exobrain.assistant.session`); keep journal UI changes aligned with the startup sync contract (`/api/journal/{reference}` `message_count` check + fallback seed from `/api/journal/today`).
