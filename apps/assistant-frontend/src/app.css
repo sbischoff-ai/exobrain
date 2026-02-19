@@ -8,6 +8,7 @@
   --accent: #d79921;
   --accent-soft: #fabd2f;
   --border: #7c6f64;
+  --header-height: 5.4rem;
 }
 
 * { box-sizing: border-box; }
@@ -143,9 +144,9 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
 }
 
 .sidebar-flag {
-  position: absolute;
+  position: fixed;
   left: 0;
-  top: 34%;
+  top: 34vh;
   transform: translateY(-34%);
   width: 2.2rem;
   height: 4rem;
@@ -161,9 +162,9 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
 }
 
 .journal-overlay {
-  position: absolute;
+  position: fixed;
   left: 0;
-  top: 0;
+  top: var(--header-height);
   bottom: 0;
   width: min(22rem, 86vw);
   background: #32302f;
@@ -293,6 +294,7 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
 .assistant-markdown :global(pre) { overflow-x: auto; }
 
 @media (max-width: 900px) {
+  :root { --header-height: 5rem; }
   .main-content { padding: 0.75rem; }
   .message.user { width: min(85%, 26rem); }
 }
