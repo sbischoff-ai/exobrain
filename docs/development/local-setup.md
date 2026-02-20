@@ -48,6 +48,12 @@ Optional seed data:
 ./scripts/local/assistant-db-seed.sh
 ```
 
+Reset and reseed test data:
+
+```bash
+./scripts/local/assistant-db-reset-and-seed.sh
+```
+
 Or run both in order:
 
 ```bash

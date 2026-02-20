@@ -4,4 +4,4 @@ set -euo pipefail
 ./scripts/local/assistant-db-migrate.sh
 ./scripts/local/assistant-db-seed.sh
 
-echo "assistant_db initialized, reshaped, and seeded with test user"
+echo "assistant_db initialized, reshaped, and seeded with test data"
