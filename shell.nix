@@ -1,5 +1,10 @@
 { pkgs ? import <nixpkgs> {} }:
 
+let
+  libPath = pkgs.lib.makeLibraryPath [
+    pkgs.postgresql_16
+  ];
+in
 pkgs.mkShell {
   packages = with pkgs; [
     # Core tooling
@@ -29,10 +34,12 @@ pkgs.mkShell {
     httpie        # Friendly HTTP CLI for Qdrant
     jq
     reshape       # migrations etc.
+    rainfrog      # DB TUI client
   ];
 
   shellHook = ''
     export UV_PYTHON="${pkgs.python312}/bin/python3"
+    export LD_LIBRARY_PATH=${libPath}:$LD_LIBRARY_PATH
 
     echo "Exobrain development shell ready"
     echo "- Kubernetes: kubectl, helm, k3d"

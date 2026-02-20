@@ -1,0 +1,101 @@
+# =========================
+# VCS / repo metadata
+# =========================
+.git/
+.gitignore
+.gitattributes
+
+# =========================
+# OS / editor
+# =========================
+.DS_Store
+.vscode/
+.idea/
+
+# =========================
+# Env / secrets (never copy)
+# =========================
+.env
+.env.*
+*.env
+*.env.*
+
+# =========================
+# Node / Svelte / Vite
+# =========================
+**/node_modules/
+**/.npm/
+**/.pnpm-store/
+**/.yarn/
+**/.cache/
+**/.vite/
+**/.svelte-kit/
+**/.turbo/
+**/.build/
+**/build/
+**/dist/
+**/.next/
+**/.output/
+**/coverage/
+**/*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Tests (frontend)
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+**/__tests__/
+**/playwright-report/
+**/test-results/
+
+# =========================
+# Python / uv
+# =========================
+**/__pycache__/
+**/*.py[cod]
+**/*.pyo
+**/*.pyd
+**/*.so
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.coverage
+**/coverage.xml
+**/htmlcov/
+**/.nox/
+**/.tox/
+
+# Virtual envs (critical in monorepos)
+**/.venv/
+**/venv/
+**/.envrc
+
+# Packaging artifacts
+**/*.egg-info/
+**/dist/
+**/build/
+**/*.whl
+
+# uv caches (optional but recommended)
+**/.uv/
+**/.cache/uv/
+
+# Tests (backend)
+**/tests/
+**/test/
+
+# =========================
+# Rust / Cargo
+# =========================
+**/target/
+**/*.rlib
+**/*.rmeta
+
+# =========================
+# Infra / Helm / misc
+# =========================
+**/charts/*.tgz

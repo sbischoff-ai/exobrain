@@ -60,6 +60,12 @@ k3d image import \
 helm upgrade --install exobrain infra/helm/exobrain-stack --dependency-update
 ```
 
+To force a full rollout (to recreate pods with newly pulled Docker images):
+
+```bash
+kubectl rollout restart deployment
+```
+
 ### 4) Run assistant database jobs
 
 Run migrations:
