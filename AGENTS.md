@@ -8,6 +8,7 @@ Prioritize development workflows and accurate execution over meta-documentation.
 ## Documentation standards
 
 - Repository-wide documentation policy: `docs/standards/documentation-standards.md`
+- Cross-service engineering standards: `docs/standards/engineering-standards.md`
 - Documentation hub/index: `docs/README.md`
 - Root README is index-first; keep procedural setup details in `docs/development/local-setup.md` and `docs/development/k3d-workflow.md`.
 
@@ -23,7 +24,7 @@ For agent-focused helpers, use:
 - `scripts/agent/assistant-db-setup-native.sh`
 - `scripts/agent/native-infra-down.sh`
 
-For command walkthroughs, see `docs/agents/codex-runbook.md`.
+For command walkthroughs, see `docs/agents/codex-runbook.agent.md`.
 
 For significant incident/fix history useful for debugging, use `docs/operations/major-changes.md`.
 

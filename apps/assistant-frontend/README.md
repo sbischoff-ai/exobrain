@@ -29,12 +29,14 @@ This runs the Vitest component suite for chat and authentication UI flows in a J
 
 ## Frontend architecture conventions
 
-The frontend uses TypeScript-first layering for maintainability:
+For repository-wide layering standards, use [`docs/standards/engineering-standards.md`](../../docs/standards/engineering-standards.md).
+
+Frontend-specific structure in this app:
 
 - `src/lib/models/`: shared domain and API data contracts.
-- `src/lib/services/`: API adapters and business workflows (`apiClient.ts`, `authService.ts`, `journalService.ts`).
-- `src/lib/stores/`: local state persistence helpers (session storage contract).
-- `src/lib/utils/`: reusable helper functions such as logging and message normalization.
+- `src/lib/services/`: API adapters and business workflows.
+- `src/lib/stores/`: local state persistence helpers.
+- `src/lib/utils/`: reusable helper utilities.
 
 ## Logging
 
@@ -88,3 +90,10 @@ The frontend always calls `POST /api/chat/message`.
 - The journal sidebar is collapsed by default and allows switching between journal references. Only today's journal keeps chat input enabled.
 
 - Chat requests use the backend idempotency contract and send `client_message_id` with each `/api/chat/message` request.
+
+
+## Related docs
+
+- Repository docs hub: [`../../docs/README.md`](../../docs/README.md)
+- Local setup workflow: [`../../docs/development/local-setup.md`](../../docs/development/local-setup.md)
+- Engineering standards: [`../../docs/standards/engineering-standards.md`](../../docs/standards/engineering-standards.md)
