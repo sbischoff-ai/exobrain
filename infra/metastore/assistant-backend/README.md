@@ -3,7 +3,9 @@
 This directory is dedicated to the Python assistant backend schema and seed data.
 
 - `migrations/`: TOML Reshape migrations for `assistant_db`
-- `seeds/`: development seed records (idempotent SQL)
+- `seeds/`: ordered development seed records (idempotent SQL):
+  - `001_test_users.sql`
+  - `002_test_conversations.sql`
 
 ## Local (Docker Compose) setup
 
@@ -19,7 +21,13 @@ Apply optional seed data with:
 ./scripts/local/assistant-db-seed.sh
 ```
 
-Run both in order with:
+Reset data and reseed with the full test dataset:
+
+```bash
+./scripts/local/assistant-db-reset-and-seed.sh
+```
+
+Run migrations and seed in order with:
 
 ```bash
 ./scripts/local/assistant-db-setup.sh
@@ -47,6 +55,11 @@ Run both in order with:
 
 The Helm chart models migrations and seed data as separate hook jobs (`dbJobs.assistantBackendMigrations` and `dbJobs.assistantBackendSeed`) so they can be triggered independently.
 
+For native agent workflows, you can fully reset and reseed with:
+
+```bash
+./scripts/agent/assistant-db-reset-and-seed-native.sh
+```
 
 Recent migration note:
 - `004_fix_message_sequence_backfill.toml` backfills `messages.sequence` using per-conversation chronological ranking and removes the legacy `0` default to prevent new rows from inheriting invalid cursor values.

@@ -95,12 +95,20 @@ spec:
                 fi
                 sleep 2
               done
-              psql "$ASSISTANT_DB_DSN" -v ON_ERROR_STOP=1 -f "$SEED_SQL_PATH"
+              mapfile -t seed_files < <(find "$SEED_SQL_DIR" -maxdepth 1 -type f -name "*.sql" | sort)
+              if [[ ${#seed_files[@]} -eq 0 ]]; then
+                echo "No seed SQL files found in $SEED_SQL_DIR" >&2
+                exit 1
+              fi
+              for seed_file in "${seed_files[@]}"; do
+                echo "Applying seed file: ${seed_file}"
+                psql "$ASSISTANT_DB_DSN" -v ON_ERROR_STOP=1 -f "$seed_file"
+              done
           env:
             - name: ASSISTANT_DB_DSN
               value: {{ .Values.dbJobs.assistantBackendSeed.env.ASSISTANT_DB_DSN | quote }}
-            - name: SEED_SQL_PATH
-              value: {{ .Values.dbJobs.assistantBackendSeed.env.SEED_SQL_PATH | quote }}
+            - name: SEED_SQL_DIR
+              value: {{ .Values.dbJobs.assistantBackendSeed.env.SEED_SQL_DIR | quote }}
             - name: WAIT_TIMEOUT_SECONDS
               value: {{ .Values.dbJobs.assistantBackendSeed.env.WAIT_TIMEOUT_SECONDS | quote }}
           resources: {{- toYaml .Values.dbJobs.assistantBackendSeed.resources | nindent 12 }}
