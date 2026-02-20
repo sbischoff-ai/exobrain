@@ -4,12 +4,14 @@ FastAPI service for chat orchestration and GraphRAG context augmentation.
 
 ## Architecture overview
 
-The backend now follows a small but extensible layered design:
+The backend follows a layered design:
 
 - **API layer** (`app/api`): request schemas and HTTP routers.
-- **Service layer** (`app/services`): use-case orchestration, independent from FastAPI. Journal flows are layered as `journal router -> JournalService -> ConversationService -> DatabaseService`.
+- **Service layer** (`app/services`): use-case orchestration, independent from FastAPI.
 - **Agent layer** (`app/agents`): chat agent interfaces and implementations.
 - **Core layer** (`app/core`): runtime configuration and app settings.
+
+Cross-service standards for router/service boundaries are documented in [`docs/standards/engineering-standards.md`](../../docs/standards/engineering-standards.md).
 
 The current implementation ships one main assistant agent backed by LangChain `ChatOpenAI`
 using model `gpt-5.2` with streaming enabled. It also supports a file-driven mock model
@@ -171,3 +173,11 @@ The project local cluster helper (`scripts/k3d-up.sh`) defaults to:
 - Kubernetes image: `rancher/k3s:v1.35.1-k3s1`
 - Local LoadBalancer mapping: `localhost:8080 -> :80`, `localhost:8443 -> :443`
 - Ingress routing: `http://localhost:8080/` -> assistant frontend, `http://localhost:8080/api` -> assistant backend
+
+
+## Related docs
+
+- Repository docs hub: [`../../docs/README.md`](../../docs/README.md)
+- Local setup workflow: [`../../docs/development/local-setup.md`](../../docs/development/local-setup.md)
+- Engineering standards: [`../../docs/standards/engineering-standards.md`](../../docs/standards/engineering-standards.md)
+- Architecture overview: [`../../docs/architecture/architecture-overview.md`](../../docs/architecture/architecture-overview.md)

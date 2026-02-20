@@ -54,3 +54,11 @@ Validate migrations with:
 ```bash
 reshape check --dirs infra/metastore/assistant-backend/migrations
 ```
+
+
+## Related docs
+
+- Assistant backend README: [`../../../apps/assistant-backend/README.md`](../../../apps/assistant-backend/README.md)
+- Local setup workflow: [`../../../docs/development/local-setup.md`](../../../docs/development/local-setup.md)
+- k3d workflow: [`../../../docs/development/k3d-workflow.md`](../../../docs/development/k3d-workflow.md)
+- Engineering standards: [`../../../docs/standards/engineering-standards.md`](../../../docs/standards/engineering-standards.md)

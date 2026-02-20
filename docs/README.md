@@ -1,9 +1,10 @@
 # Documentation Hub
 
-Use this page as the index for Exobrain documentation. It is organized into a small set of topic folders to keep navigation predictable.
+Use this page as the index for Exobrain documentation.
 
 ## Architecture
 
+- [Architecture overview](architecture/architecture-overview.md)
 - [Architecture intent](architecture/architecture-intent.md)
 
 ## Development workflows
@@ -14,7 +15,7 @@ Use this page as the index for Exobrain documentation. It is organized into a sm
 ## Standards and conventions
 
 - [Documentation standards](standards/documentation-standards.md)
-- [Assistant API + frontend architecture standards](standards/assistant-api-frontend-standards.md)
+- [Engineering standards](standards/engineering-standards.md)
 
 ## Operations and troubleshooting
 
@@ -22,5 +23,5 @@ Use this page as the index for Exobrain documentation. It is organized into a sm
 
 ## Agent-focused materials
 
-- [Codex runbook](agents/codex-runbook.md)
+- [Codex runbook](agents/codex-runbook.agent.md)
 - [Repository agent instructions](../AGENTS.md)

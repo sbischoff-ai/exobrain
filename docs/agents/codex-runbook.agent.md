@@ -1,3 +1,8 @@
+---
+audience: agent
+status: active
+---
+
 # Codex Runbook (Cloud Agent)
 
 Use this runbook when Docker/k3d flows are unavailable.

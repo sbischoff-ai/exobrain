@@ -1,7 +1,14 @@
 # Architecture Intent (Working Context)
 
-This document provides **non-binding context** for contributors and coding agents.
-It helps task-level decisions stay aligned with long-term direction without over-scoping work.
+## Why this exists
+
+This document provides non-binding architecture direction so contributors can make local decisions that still align with long-term goals.
+
+## Scope
+
+- Long-term intent and conceptual guardrails.
+- Not a replacement for code-level source of truth.
+- Not a procedural setup guide.
 
 ## Long-term direction
 
@@ -13,8 +20,8 @@ Exobrain is evolving toward a self-improving assistant backed by a GraphRAG know
 
 ## Current-state guardrail
 
-Treat implementation in repository code as authoritative over aspirational ideas.
-When in conflict, prefer current code/contracts and leave intent docs updated as needed.
+Treat repository code/contracts as authoritative over aspirational ideas.
+When in conflict, prefer current implementation and update intent docs separately as needed.
 
 ## Domain concepts to preserve
 
@@ -25,11 +32,12 @@ When in conflict, prefer current code/contracts and leave intent docs updated as
 
 ## Near-term non-goals
 
-- Do not introduce broad platform redesigns in feature-level PRs.
-- Do not over-generalize schemas/interfaces before concrete requirements.
-- Do not assume always-on external infra in local/cloud-agent workflows.
+- Broad platform redesigns in feature-level PRs.
+- Premature over-generalization of schemas/interfaces.
+- Assumptions of always-on external infra in local/cloud-agent workflows.
 
-## How to use this doc in PRs
+## References
 
-Use this context to justify small, incremental decisions (naming, data shape, boundaries).
-If a change materially affects the concepts above, add a brief note in PR description.
+- Architecture overview: [`architecture-overview.md`](architecture-overview.md)
+- Engineering standards: [`../standards/engineering-standards.md`](../standards/engineering-standards.md)
+- Docs hub: [`../README.md`](../README.md)
