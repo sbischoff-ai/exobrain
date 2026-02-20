@@ -12,7 +12,8 @@ export const toStoredMessage = (message: Partial<JournalMessage> & { clientMessa
     (message.clientMessageId as string | undefined) ??
     (message.client_message_id as string | undefined) ??
     (message.id as string | undefined) ??
-    makeClientMessageId()
+    makeClientMessageId(),
+  sequence: typeof message.sequence === 'number' ? message.sequence : undefined
 });
 
 /**

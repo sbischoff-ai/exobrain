@@ -23,4 +23,5 @@ export interface StoredMessage {
   role: MessageRole;
   content: string;
   clientMessageId: string;
+  sequence?: number;
 }

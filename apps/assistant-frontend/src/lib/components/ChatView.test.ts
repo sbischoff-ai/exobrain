@@ -32,6 +32,22 @@ describe('ChatView', () => {
     expect(sent).toEqual(['Test prompt']);
   });
 
+  it('calls onLoadOlder when user clicks load older messages', async () => {
+    const onLoadOlder = vi.fn();
+
+    render(ChatView, {
+      props: {
+        messages: [{ role: 'assistant', content: 'hello', clientMessageId: 'a-1' }],
+        canLoadOlder: true,
+        onLoadOlder
+      }
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Load older messages' }));
+
+    expect(onLoadOlder).toHaveBeenCalledTimes(1);
+  });
+
   it('scrolls to bottom when new messages are rendered', async () => {
     const scrollSpy = vi.spyOn(HTMLElement.prototype, 'scrollTo');
 
@@ -51,6 +67,34 @@ describe('ChatView', () => {
 
     await waitFor(() => {
       expect(scrollSpy).toHaveBeenCalled();
+    });
+  });
+
+  it('does not auto-scroll to bottom when older messages are prepended', async () => {
+    const scrollSpy = vi.spyOn(HTMLElement.prototype, 'scrollTo');
+
+    const { rerender } = render(ChatView, {
+      props: {
+        reference: '2026/02/19',
+        messages: [{ role: 'assistant', content: 'newest', clientMessageId: 'a-2' }]
+      }
+    });
+
+    await waitFor(() => {
+      expect(scrollSpy).toHaveBeenCalled();
+    });
+
+    const callCountAfterInitialRender = scrollSpy.mock.calls.length;
+
+    await rerender({
+      messages: [
+        { role: 'assistant', content: 'older', clientMessageId: 'a-1' },
+        { role: 'assistant', content: 'newest', clientMessageId: 'a-2' }
+      ]
+    });
+
+    await waitFor(() => {
+      expect(scrollSpy.mock.calls.length).toBe(callCountAfterInitialRender);
     });
   });
 

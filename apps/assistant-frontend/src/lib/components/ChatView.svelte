@@ -6,17 +6,30 @@
 
   export let messages: StoredMessage[] = [];
   export let loading = false;
+  export let loadingOlder = false;
+  export let canLoadOlder = false;
   export let reference = '';
   export let inputDisabled = false;
   export let requestError = '';
   export let onSend: (text: string) => void = () => {};
+  export let onLoadOlder: () => void = () => {};
 
   let messageInput = '';
   let messagesContainer: HTMLDivElement | undefined;
+  let lastFirstMessageId: string | null = null;
+  let currentFirstMessageId: string | null = null;
+
+  $: currentFirstMessageId = messages[0]?.clientMessageId ?? null;
 
   $: if (!loading && messagesContainer) {
     messages;
-    tick().then(scrollToLatestMessage);
+    const prependedOlderMessages =
+      lastFirstMessageId !== null && currentFirstMessageId !== null && lastFirstMessageId !== currentFirstMessageId;
+    lastFirstMessageId = currentFirstMessageId;
+
+    if (!prependedOlderMessages) {
+      tick().then(scrollToLatestMessage);
+    }
   }
 
   function handleSubmit(event: SubmitEvent): void {
@@ -54,6 +67,14 @@
     </div>
   {:else}
     <div class="messages" bind:this={messagesContainer}>
+      {#if canLoadOlder}
+        <div class="load-older-wrap">
+          <button class="load-older" type="button" on:click={onLoadOlder} disabled={loadingOlder}>
+            {#if loadingOlder}Loading older messages...{:else}Load older messages{/if}
+          </button>
+        </div>
+      {/if}
+
       {#each messages as message, index (`${message.role}-${index}-${message.content}`)}
         <article class="message" class:user={message.role === 'user'}>
           {#if message.role === 'assistant'}
