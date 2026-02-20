@@ -145,7 +145,7 @@ upserted_messages AS (
     m.user_id,
     m.role,
     m.content,
-    ROW_NUMBER() OVER (PARTITION BY m.user_id, m.reference ORDER BY m.ord) AS sequence,
+    ROW_NUMBER() OVER (PARTITION BY m.user_id, m.reference ORDER BY m.ord)::int AS sequence,
     (
       substr(md5(format('%s:%s:%s:client', m.user_id::text, m.reference, m.ord)), 1, 8) || '-' ||
       substr(md5(format('%s:%s:%s:client', m.user_id::text, m.reference, m.ord)), 9, 4) || '-' ||
@@ -153,7 +153,7 @@ upserted_messages AS (
       substr(md5(format('%s:%s:%s:client', m.user_id::text, m.reference, m.ord)), 17, 4) || '-' ||
       substr(md5(format('%s:%s:%s:client', m.user_id::text, m.reference, m.ord)), 21, 12)
     )::uuid AS client_message_id,
-    c.reference::date::timestamptz + make_interval(mins => ROW_NUMBER() OVER (PARTITION BY m.user_id, m.reference ORDER BY m.ord))
+    c.reference::date::timestamptz + make_interval(mins => (ROW_NUMBER() OVER (PARTITION BY m.user_id, m.reference ORDER BY m.ord))::int)
   FROM message_rows m
   INNER JOIN upserted_conversations c
     ON c.user_id = m.user_id
