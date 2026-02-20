@@ -1,287 +1,203 @@
 # Exobrain
 
-Exobrain is a cloud-native system for an AI chat assistant with a GraphRAG knowledge base and living-memory architecture.
+Exobrain is a cloud-native AI assistant platform with a GraphRAG knowledge subsystem and living-memory architecture.
 
-## Architecture
+## High-level architecture
 
-This repository includes the foundational services for the following components:
+### Runtime components
 
-- **Exobrain Assistant Frontend** (`apps/assistant-frontend`): SvelteKit + Skeleton chatbot UI.
-- **Exobrain Assistant Backend** (`apps/assistant-backend`): FastAPI + LangChain orchestration API.
-- **Exobrain Metastore**: PostgreSQL for assistant state + graph schema metadata.
-- **Exobrain Knowledge Interface** (`apps/knowledge-interface`): Rust gRPC service for GraphRAG retrieval + updates.
-- **Exobrain Knowledge Graph**: Memgraph for graph storage.
-- **Exobrain Vector Store**: Qdrant for chunks/embeddings.
-- **Exobrain Message Broker**: NATS for async coordination.
+- **Assistant frontend** (`apps/assistant-frontend`)
+  - SvelteKit + Skeleton UI
+  - Session/journal UX and client-side interaction flows
+- **Assistant backend** (`apps/assistant-backend`)
+  - FastAPI API + assistant domain orchestration
+  - Chat, journal, auth/session, and persistence-facing services
+- **Knowledge interface** (`apps/knowledge-interface`)
+  - Rust tonic gRPC service
+  - Retrieval/update operations for knowledge workflows
+- **Metastore** (PostgreSQL)
+  - Assistant state and graph metadata
+- **Knowledge graph** (Memgraph)
+  - Graph relationships and traversal-oriented memory state
+- **Vector store** (Qdrant)
+  - Embeddings/chunk indexing and semantic retrieval
+- **Message broker** (NATS)
+  - Async coordination across runtime services
 
-Helm chart path: `infra/helm/exobrain-stack`.
+### Deployment shape
 
-## Repository Layout
+- Kubernetes chart: `infra/helm/exobrain-stack`
+- Supported development modes:
+  - app-native local development
+  - k3d + Helm local Kubernetes
+  - Codex/cloud-agent native-process workflows
+
+### Service/infra edit map
+
+### Request/data flow snapshot
+
+1. User interacts with assistant UI in `assistant-frontend`.
+2. Frontend calls backend HTTP APIs in `assistant-backend`.
+3. Backend coordinates domain services for chat/journal/session logic.
+4. Retrieval/enrichment flows query `knowledge-interface` over gRPC.
+5. Persistent state is stored in PostgreSQL, Memgraph, and Qdrant.
+6. NATS supports asynchronous coordination where event-driven workflows apply.
+
+
+| Change area | Primary location | Supporting locations |
+| --- | --- | --- |
+| Assistant API/routes/services | `apps/assistant-backend/src` | `apps/assistant-backend/tests` |
+| Assistant UI/routes/stores/services | `apps/assistant-frontend/src` | `apps/assistant-frontend/tests` |
+| Knowledge gRPC retrieval/update | `apps/knowledge-interface/src` | `apps/knowledge-interface/tests` |
+| Kubernetes deploy wiring | `infra/helm/exobrain-stack` | `infra/docker`, `scripts/k3d` |
+| Local native workflows | `scripts/local` | `docs/development/local-setup.md` |
+| k3d workflows | `scripts/k3d-up.sh`, `scripts/k3d` | `docs/development/k3d-workflow.md` |
+| Agent native workflows | `scripts/agent` | `docs/codex-runbook.md`, `AGENTS.md` |
+
+## Repository map
 
 ```text
 apps/
-  assistant-frontend/        # SvelteKit app
-  assistant-backend/         # FastAPI app
+  assistant-frontend/        # SvelteKit application
+  assistant-backend/         # FastAPI application
   knowledge-interface/       # Rust tonic gRPC service
+
+docs/
+  architecture-intent.md     # Long-term architecture direction
+  codex-runbook.md           # Agent/cloud-environment workflow guide
+  major-changes.md           # Historical incident/fix notes
+  documentation-standards.md # Documentation policy and templates
+  development/
+    local-setup.md           # Local app-native procedural setup
+    k3d-workflow.md          # k3d + Helm procedural setup
+
 infra/
-  docker/                    # Dockerfiles for all components
-  helm/exobrain-stack/       # Kubernetes Helm chart
+  docker/                    # Dockerfiles and build contexts
+  helm/exobrain-stack/       # Kubernetes chart and values
+
 scripts/
-  k3d-up.sh                  # local cluster bootstrap helper
-  k3d/                       # scripts for in-cluster operational DB jobs
-  local/                     # scripts for local service and infrastructure startup
-  agent/                     # cloud-agent helpers for native infra workflows
+  local/                     # Local app + infra helper scripts
+  k3d/                       # In-cluster assistant DB ops scripts
+  agent/                     # Native infra scripts for agent envs
+  k3d-up.sh                  # k3d bootstrap helper
 ```
 
-## Project Context
+### Directory purpose quick map
 
-- Codex/cloud-agent workflow notes: `AGENTS.md`
-- Focused cloud-agent runbook: `docs/codex-runbook.md`
-- Long-term architecture direction (non-binding): `docs/architecture-intent.md`
-- Documentation standards: `docs/documentation-standards.md`
+### Key subdirectory landmarks
 
-## Prerequisites
+```text
+apps/assistant-backend/
+  src/                       # API routers + domain services
+  tests/                     # Unit/integration tests
 
-- Docker
-- `kubectl`
-- Helm 3
-- k3d
+apps/assistant-frontend/
+  src/lib/components/        # Shared UI components
+  src/lib/services/          # API/business orchestration
+  src/lib/stores/            # Persistence/session state stores
 
-Optional (for NixOS):
-- Nix with flakes or classic `nix-shell`
-
-Environment Variables:
-- `OPENAI_API_KEY` (for Assistant backend when using the real OpenAI model)
-- `MAIN_AGENT_USE_MOCK=true|false` (optional; default false)
-- `MAIN_AGENT_MOCK_MESSAGES_FILE=mock-data/main-agent-messages.md` (optional; file-driven mock responses separated by `\n--- message\n`)
-
-(Env vars need to be present in the terminal that you execute scripts like `run-assistant-backend.sh` or `k3d-up.sh` in.)
-
-## Local Environment Overview
-
-### Kubernetes baseline
-
-- k3d cluster script default image: `rancher/k3s:v1.35.1-k3s1`
-- LoadBalancer ports mapped locally: `8080 -> 80`, `8443 -> 443`
-
-### Local infrastructure compose endpoints
-
-Run `./scripts/local/infra-up.sh` to start these infrastructure services:
-
-- PostgreSQL: `localhost:15432` (`postgresql://exobrain:exobrain@localhost:15432/exobrain`)
-- Assistant DB (in metastore): `assistant_db` with app user `assistant_backend`
-- Qdrant: `localhost:16333` (HTTP), `localhost:16334` (gRPC)
-- Memgraph: `localhost:17687` (Bolt), `localhost:17444` (HTTP)
-- NATS: `localhost:14222` (client), `localhost:18222` (monitoring)
-
-### Local app endpoints (when running app scripts)
-
-- Assistant backend API: `http://localhost:8000`
-- Assistant frontend app: `http://localhost:5173`
-- Knowledge interface gRPC: `localhost:50051`
-
-## Local Development (k3d)
-
-### 1. Create a local cluster
-
-```bash
-./scripts/k3d-up.sh
-```
-
-Sane local defaults:
-- 1 server + 2 agents
-- Traefik enabled (default k3s ingress controller)
-- LoadBalancer ports mapped: `8080 -> 80`, `8443 -> 443`
-- Kubernetes image: `rancher/k3s:v1.35.1-k3s1`
-
-### 2. Build local images (optional for custom services)
-
-```bash
-docker build -f infra/docker/assistant-frontend/Dockerfile -t exobrain/assistant-frontend:0.1.0 .
-docker build -f infra/docker/assistant-backend/Dockerfile -t exobrain/assistant-backend:0.1.0 .
-docker build -f infra/docker/knowledge-interface/Dockerfile -t exobrain/knowledge-interface:0.1.0 .
-docker build -f infra/docker/metastore/db-tools/Dockerfile -t exobrain/assistant-db-tools:0.1.0 .
-```
-
-Import images into k3d cluster:
-
-```bash
-k3d image import \
-  exobrain/assistant-frontend:0.1.0 \
-  exobrain/assistant-backend:0.1.0 \
-  exobrain/knowledge-interface:0.1.0 \
-  exobrain/assistant-db-tools:0.1.0 \
-  -c exobrain-dev
-```
-
-### 3. Deploy Helm chart
-
-```bash
-helm upgrade --install exobrain infra/helm/exobrain-stack --dependency-update
-```
-
-### 4. Run assistant metastore jobs
-
-After the chart is installed, run the in-cluster migration job to create/upgrade the `assistant_db` schema:
-
-```bash
-./scripts/k3d/assistant-db-migrate.sh
-```
-
-Run seeds only when needed (optional/idempotent):
-
-```bash
-./scripts/k3d/assistant-db-seed.sh
-```
-
-Use `./scripts/k3d/assistant-db-setup.sh` to run both in order. Migrations and seed run as separate Helm hook jobs (`post-install,post-upgrade`) and can be triggered independently.
-
-### 5. Inspect deployment
-
-```bash
-kubectl get pods
-kubectl get svc
-```
-
-### 6. Access assistant services via ingress
-
-Once the chart is deployed, both assistant services are reachable via the same local port:
-
-- Assistant frontend: `http://localhost:8080/`
-- Assistant backend API: `http://localhost:8080/api`
-
-Ingress routing is path-based (`/api` -> assistant backend, all other paths -> assistant frontend).
-
-## Cloud-agent native helper scripts
-
-When Docker/k3d are not available, use:
-
-```bash
-./scripts/agent/native-infra-up.sh
-./scripts/agent/native-infra-health.sh
-./scripts/agent/assistant-db-setup-native.sh
-source .agent/state/native-infra.env
-```
-
-This path is documented in `docs/codex-runbook.md`.
-
-In Codex/cloud-agent environments, `scripts/local/run-assistant-backend.sh` defaults `MAIN_AGENT_USE_MOCK=true` so backend chat testing works without OpenAI/network access.
-
-## Local App Development (without full Kubernetes rollout)
-
-For iterative debugging, you can run the app services directly in your terminal while keeping only infrastructure services in Docker Compose.
-
-### 1. Start local infrastructure services
-
-```bash
-./scripts/local/infra-up.sh
-```
-
-Then initialize the assistant metastore database schema:
-
-```bash
-./scripts/local/assistant-db-migrate.sh
-```
-
-Apply optional/idempotent seed data separately when needed:
-
-```bash
-./scripts/local/assistant-db-seed.sh
-```
-
-Use `./scripts/local/assistant-db-setup.sh` to run both in order.
-
-This starts:
-- PostgreSQL on `localhost:15432`
-- Qdrant on `localhost:16333` (HTTP) and `localhost:16334` (gRPC)
-- Memgraph on `localhost:17687` (Bolt) and `localhost:17444` (HTTP)
-- NATS on `localhost:14222` (client) and `localhost:18222` (monitoring)
-
-### 2. Build local apps
-
-Before running services, build each app once from a fresh clone (and re-run when noted below):
-
-```bash
-./scripts/local/build-assistant-backend.sh
-./scripts/local/build-assistant-frontend.sh
-./scripts/local/build-knowledge-interface.sh
-```
-
-Build script behavior:
-- Frontend: installs dependencies with `npm ci` only when needed (missing `node_modules` or lockfile change), then runs `npm run build`.
-- Backend: runs `uv sync` (dependency-aware, no-op when up to date) and compiles Python bytecode for changed files.
-- Knowledge interface: runs `cargo build`; Cargo rebuilds only changed crates/files.
-
-### 3. Run services directly
-
-In separate terminals:
-
-```bash
-./scripts/local/run-assistant-backend.sh
-./scripts/local/run-assistant-frontend.sh
-./scripts/local/run-knowledge-interface.sh
-```
-
-All scripts expose placeholder connection environment variables for Postgres, Qdrant, Memgraph, and NATS so local services can share a consistent default topology.
-
-### 4. Stop local infrastructure services
-
-```bash
-./scripts/local/infra-down.sh
+apps/knowledge-interface/
+  src/                       # gRPC server and retrieval logic
+  tests/                     # Rust tests
 ```
 
 
-## Test execution
+- `apps/`: deployable services and their tests
+- `docs/`: project-wide standards, runbooks, and workflows
+- `infra/`: container + Kubernetes deployment definitions
+- `scripts/`: operational helpers for local/k3d/agent workflows
 
-Run application unit tests directly from each app directory:
+## Minimal quick-start paths
+
+Pick **one** workflow and follow the linked guide.
+
+### Path A — Local app development (fastest iteration)
+
+For feature implementation/debugging while infra runs locally.
+
+- Guide: [`docs/development/local-setup.md`](docs/development/local-setup.md)
+- Core scripts:
+  - `./scripts/local/infra-up.sh`
+  - `./scripts/local/assistant-db-setup.sh`
+  - `./scripts/local/run-assistant-backend.sh`
+  - `./scripts/local/run-assistant-frontend.sh`
+  - `./scripts/local/run-knowledge-interface.sh`
+- Typical endpoints:
+  - backend: `http://localhost:8000`
+  - frontend: `http://localhost:5173`
+  - knowledge gRPC: `localhost:50051`
+
+### Path B — Local Kubernetes (k3d + Helm)
+
+For chart validation, ingress behavior, and cluster-parity checks.
+
+- Guide: [`docs/development/k3d-workflow.md`](docs/development/k3d-workflow.md)
+- Core scripts/commands:
+  - `./scripts/k3d-up.sh`
+  - `helm upgrade --install exobrain infra/helm/exobrain-stack --dependency-update`
+  - `./scripts/k3d/assistant-db-setup.sh`
+- Typical ingress endpoints:
+  - frontend: `http://localhost:8080/`
+  - backend: `http://localhost:8080/api`
+
+### Path C — Codex/cloud-agent constrained environments
+
+For environments without Docker/k3d where native services are required.
+
+- Guide: [`docs/codex-runbook.md`](docs/codex-runbook.md)
+- Core scripts:
+  - `./scripts/agent/native-infra-up.sh`
+  - `./scripts/agent/native-infra-health.sh`
+  - `./scripts/agent/assistant-db-setup-native.sh`
+  - `source .agent/state/native-infra.env`
+
+### Minimal verification commands
+
+### Workflow selection hints
+
+- Choose **Path A** when changing frontend/backend business logic.
+- Choose **Path B** when changing Helm values/templates, ingress, or cluster jobs.
+- Choose **Path C** when working in Codex/cloud-agent containers without Docker/k3d.
+
+### Shared prerequisites snapshot
+
+- Docker is required for Path A infra compose and Path B k3d cluster/image flows.
+- `kubectl`, Helm, and k3d are required for Path B.
+- Path C relies on pre-provisioned native services and `scripts/agent/*` helpers.
+
+
+Use the commands below after local setup when validating app-level changes:
 
 ```bash
 cd apps/assistant-backend && uv run --with pytest --with pytest-asyncio pytest
 cd apps/assistant-frontend && npm test
 ```
 
-Notes:
-- Backend tests are isolated unit tests and do not require Postgres/NATS/Qdrant to be running.
-- Frontend tests use Vitest + JSDOM and validate component behavior with mocked network calls.
+## Pointers to deeper docs
 
-## NixOS Development Shell
+### Development and operations
 
-For NixOS users, `shell.nix` provides a ready-to-use environment for:
-- k3d/Helm/kubectl workflows
-- Python + `uv` backend development
-- Node/Svelte frontend development
-- Rust/Cargo knowledge-interface builds
-- datastore CLIs (`psql`, `cypher-shell`, `curl`/`http`)
+- Local app-native procedures: [`docs/development/local-setup.md`](docs/development/local-setup.md)
+- k3d + Helm procedures: [`docs/development/k3d-workflow.md`](docs/development/k3d-workflow.md)
+- Codex/cloud-agent workflow guide: [`docs/codex-runbook.md`](docs/codex-runbook.md)
 
-Enter it with:
+### Architecture, policy, and history
 
-```bash
-nix-shell
-```
+- Documentation standards and templates: [`docs/documentation-standards.md`](docs/documentation-standards.md)
+- Long-term architecture direction: [`docs/architecture-intent.md`](docs/architecture-intent.md)
+- Significant incident/fix history: [`docs/major-changes.md`](docs/major-changes.md)
+- Agent operating constraints and conventions: [`AGENTS.md`](AGENTS.md)
 
-## Configuration
+### App-level reference docs
 
-The chart is fully parameterized via `infra/helm/exobrain-stack/values.yaml`, including:
+### How to choose the right doc quickly
 
-- Replica counts for each service.
-- Container image repositories/tags.
-- CPU/memory requests + limits.
-- Persistent volume sizes and optional storage class.
-- Service ports and ingress routing (frontend on `/`, backend on `/api`).
-- Optional database job toggles for independent migration and seeding workflows.
+- Need exact startup/build/run commands: use development workflow docs.
+- Need policy about doc structure/content: use documentation standards.
+- Need historical regression context: use major-changes timeline.
+- Need constraints for automated agents: use `AGENTS.md`.
 
-For local tuning, create a `values.local.yaml` override file and apply with:
 
-```bash
-helm upgrade --install exobrain infra/helm/exobrain-stack -f values.local.yaml
-```
-
-## Notes
-
-- The repository currently provides infrastructure and service wiring with minimal application logic; functional features can be implemented incrementally on top.
-- For production, add:
-  - Secret management (e.g., external secrets / sealed secrets)
-  - Pod security context and network policies
-  - TLS and ingress controller
-  - Observability stack (metrics, logs, tracing)
-  - HorizontalPodAutoscaler and disruption budgets
+- Backend details: [`apps/assistant-backend/README.md`](apps/assistant-backend/README.md)
+- Frontend details: [`apps/assistant-frontend/README.md`](apps/assistant-frontend/README.md)
+- Knowledge interface details: [`apps/knowledge-interface/README.md`](apps/knowledge-interface/README.md)

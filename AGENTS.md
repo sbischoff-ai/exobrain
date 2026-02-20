@@ -8,6 +8,7 @@ Prioritize development workflows and accurate execution over meta-documentation.
 ## Documentation standards
 
 - Repository-wide documentation policy: `docs/documentation-standards.md`
+- Root README is index-first; keep procedural setup details in `docs/development/local-setup.md` and `docs/development/k3d-workflow.md`.
 
 ## Codex / Cloud Agent Environment Notes
 
