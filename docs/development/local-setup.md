@@ -104,4 +104,4 @@ Notes:
 
 - Root index: [`README.md`](../../README.md)
 - k3d/Helm workflow: [`k3d-workflow.md`](k3d-workflow.md)
-- Codex/cloud-agent runbook: [`../codex-runbook.md`](../codex-runbook.md)
+- Codex/cloud-agent runbook: [`../agents/codex-runbook.md`](../agents/codex-runbook.md)
