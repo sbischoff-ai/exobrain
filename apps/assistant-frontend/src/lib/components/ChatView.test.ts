@@ -59,6 +59,7 @@ describe('ChatView', () => {
     });
 
     await rerender({
+      reference: '2026/02/19',
       messages: [
         { role: 'assistant', content: 'First', clientMessageId: 'a-1' },
         { role: 'user', content: 'Second', clientMessageId: 'u-1' }
@@ -70,31 +71,107 @@ describe('ChatView', () => {
     });
   });
 
-  it('does not auto-scroll to bottom when older messages are prepended', async () => {
+  it('preserves scroll position when older messages are prepended', async () => {
+    const scrollSpy = vi.spyOn(HTMLElement.prototype, 'scrollTo');
+
+    const originalScrollTop = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollTop');
+    const originalScrollHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight');
+
+    const scrollState = {
+      scrollTop: 120,
+      scrollHeight: 500
+    };
+    let prependPhase = false;
+    let prependPhaseScrollHeightReads = 0;
+
+    try {
+      Object.defineProperty(HTMLElement.prototype, 'scrollTop', {
+        configurable: true,
+        get() {
+          return scrollState.scrollTop;
+        },
+        set(value: number) {
+          scrollState.scrollTop = value;
+        }
+      });
+
+      Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+        configurable: true,
+        get() {
+          if (!prependPhase) {
+            return scrollState.scrollHeight;
+          }
+
+          prependPhaseScrollHeightReads += 1;
+          return prependPhaseScrollHeightReads === 1 ? 800 : 900;
+        }
+      });
+
+      const { rerender } = render(ChatView, {
+        props: {
+          reference: '2026/02/19',
+          messages: [{ role: 'assistant', content: 'newest', clientMessageId: 'a-2' }]
+        }
+      });
+
+      await waitFor(() => {
+        expect(scrollSpy).toHaveBeenCalled();
+      });
+
+      const initialScrollCalls = scrollSpy.mock.calls.length;
+
+      scrollState.scrollTop = 80;
+      prependPhase = true;
+
+      await rerender({
+        reference: '2026/02/19',
+        messages: [
+          { role: 'assistant', content: 'older', clientMessageId: 'a-1' },
+          { role: 'assistant', content: 'newest', clientMessageId: 'a-2' }
+        ]
+      });
+
+      await waitFor(() => {
+        expect(scrollSpy.mock.calls.length).toBe(initialScrollCalls);
+        expect(scrollState.scrollTop).toBe(180);
+      });
+    } finally {
+      if (originalScrollTop) {
+        Object.defineProperty(HTMLElement.prototype, 'scrollTop', originalScrollTop);
+      }
+      if (originalScrollHeight) {
+        Object.defineProperty(HTMLElement.prototype, 'scrollHeight', originalScrollHeight);
+      }
+    }
+  });
+
+  it('auto-scrolls to bottom when journal reference changes', async () => {
     const scrollSpy = vi.spyOn(HTMLElement.prototype, 'scrollTo');
 
     const { rerender } = render(ChatView, {
       props: {
-        reference: '2026/02/19',
-        messages: [{ role: 'assistant', content: 'newest', clientMessageId: 'a-2' }]
+        reference: '2025/01/14',
+        canLoadOlder: false,
+        messages: [
+          { role: 'assistant', content: 'old journal msg', clientMessageId: 'old-1' },
+          { role: 'user', content: 'old journal reply', clientMessageId: 'old-2' }
+        ]
       }
     });
 
-    await waitFor(() => {
-      expect(scrollSpy).toHaveBeenCalled();
-    });
-
-    const callCountAfterInitialRender = scrollSpy.mock.calls.length;
+    const baselineCalls = scrollSpy.mock.calls.length;
 
     await rerender({
+      reference: '2026/02/19',
+      canLoadOlder: true,
       messages: [
-        { role: 'assistant', content: 'older', clientMessageId: 'a-1' },
-        { role: 'assistant', content: 'newest', clientMessageId: 'a-2' }
+        { role: 'assistant', content: 'today earliest', clientMessageId: 'today-1' },
+        { role: 'assistant', content: 'today latest', clientMessageId: 'today-2' }
       ]
     });
 
     await waitFor(() => {
-      expect(scrollSpy.mock.calls.length).toBe(callCountAfterInitialRender);
+      expect(scrollSpy.mock.calls.length).toBeGreaterThan(baselineCalls);
     });
   });
 
@@ -114,6 +191,7 @@ describe('ChatView', () => {
     const callsAfterInitialRender = scrollSpy.mock.calls.length;
 
     await rerender({
+      reference: '2026/02/19',
       messages: [
         { role: 'user', content: 'Prompt', clientMessageId: 'u-1' },
         { role: 'assistant', content: 'ab', clientMessageId: 'a-1' }
@@ -121,6 +199,7 @@ describe('ChatView', () => {
     });
 
     await rerender({
+      reference: '2026/02/19',
       messages: [
         { role: 'user', content: 'Prompt', clientMessageId: 'u-1' },
         { role: 'assistant', content: 'abc', clientMessageId: 'a-1' }

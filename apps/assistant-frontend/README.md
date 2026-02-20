@@ -86,6 +86,7 @@ The frontend always calls `POST /api/chat/message`.
 - On page load, the client re-syncs stored journal state by comparing stored message count with `/api/journal/{reference}` `message_count`; mismatches trigger a refetch of only the latest 50 messages.
 - The frontend stores backend `message_count` in session state and increments it client-side as chat messages are added, so pagination controls remain consistent between syncs.
 - Message APIs return newest-first (`sequence` descending) for cursor paging; the frontend reorders each page to chronological display and prepends older pages via a "Load older messages" control when total count exceeds 50.
+- Loading older messages keeps the current viewport anchored so the user remains at the same visible position and can continue scrolling upward into newly prepended history.
 - Chat view preserves bottom-oriented reading by auto-scrolling on every message update, including each streamed assistant chunk update.
 - If no stored state exists, the client initializes state from `/api/journal/today?create=true` and `/api/journal/today/messages`.
 - The journal sidebar is collapsed by default and allows switching between journal references. Only today's journal keeps chat input enabled.
