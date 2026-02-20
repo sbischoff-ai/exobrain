@@ -1,15 +1,21 @@
-<script>
+<script lang="ts">
   import { createEventDispatcher } from 'svelte';
 
-  export let entries = [];
+  import type { JournalEntry } from '$lib/models/journal';
+
+  export let entries: JournalEntry[] = [];
   export let currentReference = '';
   export let todayReference = '';
   export let collapsed = true;
 
-  const dispatch = createEventDispatcher();
+  const dispatch = createEventDispatcher<{ select: { reference: string }; toggle: null }>();
 
-  const selectJournal = (reference) => dispatch('select', { reference });
-  const toggleSidebar = () => dispatch('toggle');
+  const selectJournal = (reference: string): void => {
+    dispatch('select', { reference });
+  };
+  const toggleSidebar = (): void => {
+    dispatch('toggle', null);
+  };
 </script>
 
 {#if collapsed}

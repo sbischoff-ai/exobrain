@@ -85,6 +85,8 @@ Use Conventional Commits.
 - Do not commit secrets
 - Keep diffs focused
 
+- Keep assistant-frontend route components thin by moving API calls/business flows into `src/lib/services` and persistence mechanics into `src/lib/stores`; reserve `src/lib/models` for shared typed payload contracts.
+
 ## Skills
 
 A skill is a set of local instructions in a `SKILL.md` file.

@@ -31,7 +31,7 @@ async def test_query_endpoints_delegate_to_database(fake_database_service) -> No
 
     await service.list_conversations("user-1", limit=10, before=None)
     await service.get_conversation_by_reference("user-1", "2026/02/19")
-    await service.list_messages("user-1", "2026/02/19", limit=50)
+    await service.list_messages("user-1", "2026/02/19", limit=50, before_sequence=10)
     await service.search_conversations("user-1", query="hello", limit=5)
 
     assert len(fake_database_service.fetch_calls) == 3

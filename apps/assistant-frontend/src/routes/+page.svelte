@@ -1,9 +1,19 @@
-<script>
+<script lang="ts">
   import { onMount } from 'svelte';
   import ChatView from '$lib/components/ChatView.svelte';
   import JournalSidebar from '$lib/components/JournalSidebar.svelte';
   import UserMenu from '$lib/components/UserMenu.svelte';
-  import { clearSessionState, loadSessionState, saveSessionState } from '$lib/session/journalSession';
+  import type { CurrentUser } from '$lib/models/auth';
+  import type { JournalEntry, StoredMessage } from '$lib/models/journal';
+  import { authService } from '$lib/services/authService';
+  import { journalService } from '$lib/services/journalService';
+  import {
+    clearSessionState,
+    loadSessionState,
+    saveSessionState,
+    type SessionState
+  } from '$lib/stores/journalSessionStore';
+  import { makeClientMessageId, toStoredMessages } from '$lib/utils/message';
 
   let initializing = true;
   let authenticated = false;
@@ -14,35 +24,24 @@
   let authError = '';
   let email = '';
   let password = '';
-  let user = null;
+  let user: CurrentUser | null = null;
 
-  let journalEntries = [];
+  let journalEntries: JournalEntry[] = [];
   let todayReference = '';
   let currentReference = '';
-  let messages = [];
+  let messages: StoredMessage[] = [];
   let requestError = '';
-
-  const makeClientMessageId = () =>
-    globalThis?.crypto?.randomUUID?.() ?? `client-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
-
-  const toStoredMessage = (message) => ({
-    role: message.role,
-    content: message.content ?? '',
-    clientMessageId: message.clientMessageId ?? message.client_message_id ?? message.id ?? makeClientMessageId()
-  });
-
-  const toStoredMessages = (rows) => rows.map(toStoredMessage);
 
   onMount(async () => {
     await bootstrap();
   });
 
-  async function bootstrap() {
+  async function bootstrap(): Promise<void> {
     initializing = true;
     authError = '';
 
     try {
-      const me = await fetchCurrentUser();
+      const me = await authService.getCurrentUser();
       authenticated = Boolean(me);
       user = me;
 
@@ -58,53 +57,24 @@
     }
   }
 
-  async function fetchCurrentUser() {
-    const response = await fetch('/api/users/me');
-    if (response.status === 401) {
-      return null;
-    }
-    if (!response.ok) {
-      throw new Error(`users/me failed: ${response.status}`);
-    }
-    return response.json();
-  }
-
-  async function login(event) {
+  async function login(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     authError = '';
 
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email,
-          password,
-          session_mode: 'web',
-          issuance_policy: 'session'
-        })
-      });
-
-      if (!response.ok) {
-        authError = 'Login failed. Check your credentials and try again.';
-        return;
-      }
-
+      await authService.login(email, password);
       email = '';
       password = '';
       authenticated = true;
-      user = await fetchCurrentUser();
+      user = await authService.getCurrentUser();
       await refreshAllState();
     } catch {
       authError = 'Login failed. Check your credentials and try again.';
     }
   }
 
-  async function logout() {
-    const response = await fetch('/api/auth/logout', { method: 'POST' });
-    if (!response.ok && response.status !== 204) {
-      throw new Error(`logout failed: ${response.status}`);
-    }
+  async function logout(): Promise<void> {
+    await authService.logout();
 
     clearSessionState();
     authenticated = false;
@@ -117,7 +87,7 @@
     requestError = '';
   }
 
-  async function refreshAllState() {
+  async function refreshAllState(): Promise<void> {
     loadingJournal = true;
     try {
       await syncSessionState();
@@ -127,7 +97,7 @@
     }
   }
 
-  async function syncSessionState() {
+  async function syncSessionState(): Promise<void> {
     syncingMessages = true;
     try {
       const stored = loadSessionState();
@@ -139,65 +109,57 @@
         return;
       }
 
-      const summaryResponse = await fetch(`/api/journal/${stored.journalReference}`);
-      if (summaryResponse.status === 404) {
-        const seededState = await seedTodayState();
-        saveSessionState(seededState);
-        applyState(seededState);
-        return;
-      }
-
-      const summary = await summaryResponse.json();
+      const summary = await journalService.getSummary(stored.journalReference);
       let nextMessages = stored.messages || [];
       if (summary.message_count !== nextMessages.length) {
-        const messagesResponse = await fetch(`/api/journal/${stored.journalReference}/messages`);
-        const payload = await messagesResponse.json();
-        nextMessages = toStoredMessages(payload);
+        nextMessages = await journalService.listStoredMessages(stored.journalReference);
       }
 
-      const nextState = {
-        user: { name: user.name, email: user.email },
-        journalReference: stored.journalReference,
-        messageCount: nextMessages.length,
-        messages: nextMessages
-      };
-
+      const nextState = buildSessionState(stored.journalReference, nextMessages);
       saveSessionState(nextState);
       applyState(nextState);
+    } catch {
+      const seededState = await seedTodayState();
+      saveSessionState(seededState);
+      applyState(seededState);
     } finally {
       syncingMessages = false;
     }
   }
 
-  async function seedTodayState() {
-    const todayResponse = await fetch('/api/journal/today?create=true');
-    const todayJournal = await todayResponse.json();
-    const messageResponse = await fetch('/api/journal/today/messages');
-    const payload = await messageResponse.json();
-    const journalMessages = toStoredMessages(payload);
+  async function seedTodayState(): Promise<SessionState> {
+    const todayJournal = await journalService.getToday(true);
+    const journalMessages = toStoredMessages(await journalService.listTodayMessages());
 
     todayReference = todayJournal.reference;
+    return buildSessionState(todayJournal.reference, journalMessages);
+  }
+
+  function buildSessionState(journalReference: string, storedMessages: StoredMessage[]): SessionState {
+    if (!user) {
+      throw new Error('expected authenticated user for session state');
+    }
+
     return {
       user: { name: user.name, email: user.email },
-      journalReference: todayJournal.reference,
-      messageCount: journalMessages.length,
-      messages: journalMessages
+      journalReference,
+      messageCount: storedMessages.length,
+      messages: storedMessages
     };
   }
 
-  function applyState(state) {
+  function applyState(state: SessionState): void {
     currentReference = state.journalReference;
-    messages = (state.messages ?? []).map(toStoredMessage);
+    messages = state.messages ?? [];
   }
 
-  async function loadJournalEntries() {
-    const todayPayload = await fetch('/api/journal/today').then((response) => response.json());
+  async function loadJournalEntries(): Promise<void> {
+    const todayPayload = await journalService.getToday();
     todayReference = todayPayload.reference;
-    const listPayload = await fetch('/api/journal').then((response) => response.json());
-    journalEntries = listPayload;
+    journalEntries = await journalService.listEntries();
   }
 
-  async function selectJournal(event) {
+  async function selectJournal(event: CustomEvent<{ reference: string }>): Promise<void> {
     const { reference } = event.detail;
     if (!reference || reference === currentReference) {
       return;
@@ -205,15 +167,8 @@
 
     loadingJournal = true;
     try {
-      const response = await fetch(`/api/journal/${reference}/messages`);
-      const payload = await response.json();
-      const storedMessages = toStoredMessages(payload);
-      const nextState = {
-        user: { name: user.name, email: user.email },
-        journalReference: reference,
-        messageCount: storedMessages.length,
-        messages: storedMessages
-      };
+      const storedMessages = await journalService.listStoredMessages(reference);
+      const nextState = buildSessionState(reference, storedMessages);
 
       saveSessionState(nextState);
       applyState(nextState);
@@ -222,13 +177,13 @@
     }
   }
 
-  async function handleSend(text) {
+  async function handleSend(text: string): Promise<void> {
     requestError = '';
 
     const userClientMessageId = makeClientMessageId();
     const assistantClientMessageId = makeClientMessageId();
 
-    const optimisticMessages = [
+    const optimisticMessages: StoredMessage[] = [
       ...messages,
       { role: 'user', content: text, clientMessageId: userClientMessageId },
       { role: 'assistant', content: '', clientMessageId: assistantClientMessageId }
@@ -272,20 +227,14 @@
         ];
       }
 
-      const nextState = {
-        user: { name: user.name, email: user.email },
-        journalReference: currentReference,
-        messageCount: messages.length,
-        messages
-      };
-      saveSessionState(nextState);
+      saveSessionState(buildSessionState(currentReference, messages));
       await loadJournalEntries();
     } catch {
       requestError = 'Could not reach the assistant backend. Please try again.';
     }
   }
 
-  function isInputDisabled() {
+  function isInputDisabled(): boolean {
     return loadingJournal || syncingMessages || currentReference !== todayReference;
   }
 </script>

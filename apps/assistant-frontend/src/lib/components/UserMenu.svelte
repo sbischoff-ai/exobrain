@@ -1,11 +1,13 @@
-<script>
+<script lang="ts">
   import { fade, scale } from 'svelte/transition';
 
-  export let user = null;
-  export let onLogout = async () => {};
+  import type { CurrentUser } from '$lib/models/auth';
+
+  export let user: CurrentUser | null = null;
+  export let onLogout: () => Promise<void> = async () => {};
 
   let menuOpen = false;
-  let menuRoot;
+  let menuRoot: HTMLDivElement | undefined;
   let authError = '';
   let submitting = false;
 
@@ -23,17 +25,17 @@
     }
   }
 
-  function onWindowClick(event) {
+  function onWindowClick(event: MouseEvent): void {
     if (!menuOpen || !menuRoot) {
       return;
     }
 
-    if (!menuRoot.contains(event.target)) {
+    if (!menuRoot.contains(event.target as Node | null)) {
       menuOpen = false;
     }
   }
 
-  function onWindowKeydown(event) {
+  function onWindowKeydown(event: KeyboardEvent): void {
     if (event.key === 'Escape') {
       menuOpen = false;
     }

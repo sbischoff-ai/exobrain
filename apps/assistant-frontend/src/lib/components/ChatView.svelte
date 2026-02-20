@@ -1,22 +1,24 @@
-<script>
+<script lang="ts">
   import { tick } from 'svelte';
   import { Streamdown } from 'svelte-streamdown';
 
-  export let messages = [];
+  import type { StoredMessage } from '$lib/models/journal';
+
+  export let messages: StoredMessage[] = [];
   export let loading = false;
   export let reference = '';
   export let inputDisabled = false;
   export let requestError = '';
-  export let onSend = () => {};
+  export let onSend: (text: string) => void = () => {};
 
   let messageInput = '';
-  let messagesContainer;
+  let messagesContainer: HTMLDivElement | undefined;
 
   $: if (!loading) {
     tick().then(scrollToLatestMessage);
   }
 
-  function handleSubmit(event) {
+  function handleSubmit(event: SubmitEvent): void {
     event.preventDefault();
     const trimmed = messageInput.trim();
     if (!trimmed || inputDisabled) {
@@ -27,7 +29,7 @@
     messageInput = '';
   }
 
-  function scrollToLatestMessage() {
+  function scrollToLatestMessage(): void {
     if (!messagesContainer) {
       return;
     }

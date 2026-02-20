@@ -23,7 +23,7 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
-    setupFiles: ['src/test-setup.js'],
-    include: ['src/**/*.test.js']
+    setupFiles: ['src/test-setup.ts'],
+    include: ['src/**/*.test.{js,ts}']
   }
 });

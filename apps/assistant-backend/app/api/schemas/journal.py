@@ -17,5 +17,6 @@ class JournalMessageResponse(BaseModel):
     id: str = Field(..., description="Message identifier")
     role: str = Field(..., description="Message speaker role, e.g. user/assistant")
     content: str | None = Field(default=None, description="Textual message content")
+    sequence: int = Field(..., description="Per-conversation sequence cursor (higher is newer)")
     created_at: datetime = Field(..., description="Message creation timestamp")
     metadata: dict | None = Field(default=None, description="Optional model/runtime metadata")

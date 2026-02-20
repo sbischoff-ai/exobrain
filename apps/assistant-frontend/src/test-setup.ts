@@ -9,14 +9,14 @@ afterEach(() => {
 
 // JSDOM does not implement scroll behavior, so we neutralize it globally for tests.
 if (!HTMLElement.prototype.scrollTo) {
-  HTMLElement.prototype.scrollTo = () => {};
+  HTMLElement.prototype.scrollTo = (() => {}) as typeof HTMLElement.prototype.scrollTo;
 }
 
 // Svelte transitions rely on Web Animations API; provide a minimal test-safe stub.
 if (!Element.prototype.animate) {
-  Element.prototype.animate = () => ({
+  Element.prototype.animate = ((() => ({
     finished: Promise.resolve(),
     cancel: () => {},
     play: () => {}
-  });
+  })) as unknown) as typeof Element.prototype.animate;
 }
