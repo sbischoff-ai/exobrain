@@ -15,4 +15,24 @@ export const toStoredMessage = (message: Partial<JournalMessage> & { clientMessa
     makeClientMessageId()
 });
 
-export const toStoredMessages = (rows: JournalMessage[]): StoredMessage[] => rows.map(toStoredMessage);
+/**
+ * Convert API messages into chronological (oldest -> newest) UI order.
+ * Backend returns newest-first for cursor pagination efficiency.
+ */
+export const toChronologicalStoredMessages = (rows: JournalMessage[]): StoredMessage[] =>
+  [...rows]
+    .sort((left, right) => {
+      if (left.sequence == null && right.sequence == null) {
+        return 0;
+      }
+      if (left.sequence == null) {
+        return -1;
+      }
+      if (right.sequence == null) {
+        return 1;
+      }
+      return left.sequence - right.sequence;
+    })
+    .map(toStoredMessage);
+
+export const toStoredMessages = toChronologicalStoredMessages;
