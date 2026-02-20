@@ -89,7 +89,7 @@ The frontend always calls `POST /api/chat/message`.
 - Loading older messages keeps the current viewport anchored so the user remains at the same visible position and can continue scrolling upward into newly prepended history.
 - Chat view preserves bottom-oriented reading by auto-scrolling on every message update, including each streamed assistant chunk update.
 - If no stored state exists, the client initializes state from `/api/journal/today?create=true` and `/api/journal/today/messages`.
-- The journal sidebar is collapsed by default and allows switching between journal references. Only today's journal keeps chat input enabled.
+- The journal sidebar is collapsed by default and allows switching between journal references. Only today's journal keeps chat input enabled; past journals disable input/send and show a tooltip explaining that chat is unavailable for historical entries.
 
 - Chat requests use the backend idempotency contract and send `client_message_id` with each `/api/chat/message` request.
 

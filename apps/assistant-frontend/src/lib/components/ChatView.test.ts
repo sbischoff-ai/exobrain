@@ -32,6 +32,19 @@ describe('ChatView', () => {
     expect(sent).toEqual(['Test prompt']);
   });
 
+
+  it('shows tooltip when chat controls are disabled for a past journal', () => {
+    render(ChatView, {
+      props: {
+        inputDisabled: true,
+        disabledReason: 'You can not chat with past journals.'
+      }
+    });
+
+    expect(screen.getByLabelText('Type your message')).toHaveAttribute('title', 'You can not chat with past journals.');
+    expect(screen.getByRole('button', { name: 'Send message' })).toHaveAttribute('title', 'You can not chat with past journals.');
+  });
+
   it('calls onLoadOlder when user clicks load older messages', async () => {
     const onLoadOlder = vi.fn();
 
