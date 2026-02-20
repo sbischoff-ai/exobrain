@@ -53,4 +53,38 @@ describe('ChatView', () => {
       expect(scrollSpy).toHaveBeenCalled();
     });
   });
+
+  it('keeps auto-scrolling while streamed assistant content grows', async () => {
+    const scrollSpy = vi.spyOn(HTMLElement.prototype, 'scrollTo');
+
+    const { rerender } = render(ChatView, {
+      props: {
+        reference: '2026/02/19',
+        messages: [
+          { role: 'user', content: 'Prompt', clientMessageId: 'u-1' },
+          { role: 'assistant', content: 'a', clientMessageId: 'a-1' }
+        ]
+      }
+    });
+
+    const callsAfterInitialRender = scrollSpy.mock.calls.length;
+
+    await rerender({
+      messages: [
+        { role: 'user', content: 'Prompt', clientMessageId: 'u-1' },
+        { role: 'assistant', content: 'ab', clientMessageId: 'a-1' }
+      ]
+    });
+
+    await rerender({
+      messages: [
+        { role: 'user', content: 'Prompt', clientMessageId: 'u-1' },
+        { role: 'assistant', content: 'abc', clientMessageId: 'a-1' }
+      ]
+    });
+
+    await waitFor(() => {
+      expect(scrollSpy.mock.calls.length).toBeGreaterThan(callsAfterInitialRender + 1);
+    });
+  });
 });
