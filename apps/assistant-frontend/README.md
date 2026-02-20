@@ -27,9 +27,18 @@ npm test
 This runs the Vitest component suite for chat and authentication UI flows in a JSDOM environment.
 
 
+## Frontend architecture conventions
+
+The frontend uses TypeScript-first layering for maintainability:
+
+- `src/lib/models/`: shared domain and API data contracts.
+- `src/lib/services/`: API adapters and business workflows (`apiClient.ts`, `authService.ts`, `journalService.ts`).
+- `src/lib/stores/`: local state persistence helpers (session storage contract).
+- `src/lib/utils/`: reusable helper functions such as logging and message normalization.
+
 ## Logging
 
-Frontend logging is implemented through a small console logger wrapper (`src/lib/logging.js`) with environment-aware defaults:
+Frontend logging is implemented through a small console logger wrapper (`src/lib/utils/logging.ts`) with environment-aware defaults:
 
 - Local dev (`npm run dev`): default level is `debug`.
 - Non-local/prod builds (Docker/Kubernetes): default level is `warn`.

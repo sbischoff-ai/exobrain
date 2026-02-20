@@ -1,0 +1,20 @@
+[[actions]]
+type = "add_column"
+table = "messages"
+
+    [actions.column]
+    name = "sequence"
+    type = "INTEGER"
+    nullable = false
+    default = "0"
+
+    [actions.column.up]
+    expression = "(SELECT ranked.rn::int FROM (SELECT m2.id, ROW_NUMBER() OVER (PARTITION BY m2.conversation_id ORDER BY m2.created_at ASC, m2.id ASC) AS rn FROM messages m2 WHERE m2.conversation_id = messages.conversation_id) AS ranked WHERE ranked.id = messages.id)"
+
+[[actions]]
+type = "add_index"
+table = "messages"
+
+    [actions.index]
+    name = "idx_messages_conversation_sequence_desc"
+    columns = ["conversation_id", "sequence"]

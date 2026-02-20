@@ -26,6 +26,7 @@ def _messages_from_records(rows) -> list[JournalMessageResponse]:
             id=row["id"],
             role=row["role"],
             content=row["content"],
+            sequence=row["sequence"],
             created_at=row["created_at"],
             metadata=row["metadata"],
         )
@@ -75,9 +76,10 @@ async def get_today_messages(
     request: Request,
     principal: UnifiedPrincipal = Depends(get_required_auth_context),
     limit: int = Query(default=100, ge=1, le=500, description="Maximum messages to return"),
+    cursor: int | None = Query(default=None, description="Optional sequence cursor for message pagination"),
 ) -> list[JournalMessageResponse]:
     service: JournalService = request.app.state.journal_service
-    rows = await service.list_today_messages(user_id=principal.user_id, limit=limit)
+    rows = await service.list_today_messages(user_id=principal.user_id, limit=limit, before_sequence=cursor)
     return _messages_from_records(rows)
 
 
@@ -107,23 +109,16 @@ async def get_journal_messages(
     request: Request,
     principal: UnifiedPrincipal = Depends(get_required_auth_context),
     limit: int = Query(default=100, ge=1, le=500, description="Maximum messages to return"),
+    cursor: int | None = Query(default=None, description="Optional sequence cursor for message pagination"),
 ) -> list[JournalMessageResponse]:
     service: JournalService = request.app.state.journal_service
-    rows = await service.list_messages(user_id=principal.user_id, reference=reference, limit=limit)
+    rows = await service.list_messages(
+        user_id=principal.user_id,
+        journal_reference=reference,
+        limit=limit,
+        before_sequence=cursor,
+    )
     return _messages_from_records(rows)
-
-
-@router.get(
-    "/{reference:path}/summary",
-    response_model=JournalEntryResponse,
-    summary="Get summary metadata for a specific journal reference",
-)
-async def get_journal_summary(
-    reference: str,
-    request: Request,
-    principal: UnifiedPrincipal = Depends(get_required_auth_context),
-) -> JournalEntryResponse:
-    return await get_journal_by_reference(reference, request, principal)
 
 
 @router.get(
@@ -137,7 +132,7 @@ async def get_journal_by_reference(
     principal: UnifiedPrincipal = Depends(get_required_auth_context),
 ) -> JournalEntryResponse:
     service: JournalService = request.app.state.journal_service
-    row = await service.get_journal(user_id=principal.user_id, reference=reference)
+    row = await service.get_journal(user_id=principal.user_id, journal_reference=reference)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="journal entry not found")
     return _entry_from_record(row)

@@ -72,7 +72,8 @@ This applies TOML-based Reshape migrations from `infra/metastore/assistant-backe
   - token pair mode (`session_mode=api`, `issuance_policy=tokens`)
 - `POST /api/auth/token_refresh` accepts an API refresh token and returns a rotated access+refresh pair.
 - `POST /api/chat/message` now requires authentication and a `client_message_id` UUID for idempotency. The backend persists both user and assistant messages into Postgres under the current day's journal conversation
-- Journal APIs (`/api/journal`, `/api/journal/today`, `/api/journal/{reference}`, `/api/journal/{reference}/messages`, `/api/journal/{reference}/summary`, `/api/journal/search`) provide authenticated access to persisted conversation history.
+- Journal APIs (`/api/journal`, `/api/journal/today`, `/api/journal/{reference}`, `/api/journal/{reference}/messages`, `/api/journal/search`) provide authenticated access to persisted conversation history.
+- Message endpoints paginate with a `sequence` cursor and return newest-first results by default.
 
 ## Local build and run
 

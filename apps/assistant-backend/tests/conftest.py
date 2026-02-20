@@ -26,7 +26,7 @@ class FakeDatabaseService:
     async def fetch(self, query: str, *args):
         self.fetch_calls.append((query, args))
         if "FROM messages" in query:
-            return [{"id": "msg-1", "role": "user"}]
+            return [{"id": "msg-2", "role": "assistant", "sequence": 2}, {"id": "msg-1", "role": "user", "sequence": 1}]
         return [{"id": "conv-1"}]
 
     async def execute(self, query: str, *args):

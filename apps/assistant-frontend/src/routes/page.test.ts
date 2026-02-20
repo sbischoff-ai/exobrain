@@ -3,12 +3,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import Page from './+page.svelte';
 
-function jsonResponse(payload, status = 200) {
+function jsonResponse<T>(payload: T, status = 200): Response {
   return {
     ok: status >= 200 && status < 300,
     status,
     json: async () => payload
-  };
+  } as Response;
 }
 
 describe('root page', () => {
@@ -75,7 +75,7 @@ describe('root page', () => {
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/01/01', message_count: 0 }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
       .mockResolvedValueOnce(jsonResponse([{ reference: '2026/02/19' }, { reference: '2026/01/01' }]))
-      .mockResolvedValueOnce({ ok: true, status: 204 });
+      .mockResolvedValueOnce({ ok: true, status: 204 } as Response);
 
     render(Page);
 

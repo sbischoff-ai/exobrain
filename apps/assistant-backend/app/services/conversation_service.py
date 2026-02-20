@@ -1,17 +1,21 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 import uuid
+
+import asyncpg
 
 from app.services.database_service import DatabaseService
 
 
 class ConversationService:
-    """Application service for conversation/message persistence and retrieval."""
+    """Application service for conversation and message persistence."""
 
     def __init__(self, database: DatabaseService) -> None:
         self._database = database
 
     async def ensure_conversation(self, user_id: str, reference: str) -> str:
+        """Create or refresh a conversation for a journal-style reference."""
         row = await self._database.fetchrow(
             """
             INSERT INTO conversations (user_id, reference)
@@ -35,11 +39,26 @@ class ConversationService:
         content: str,
         client_message_id: str | None = None,
     ) -> str:
+        """Persist a message with per-conversation sequence and idempotency."""
         idempotency_key = client_message_id or str(uuid.uuid4())
         row = await self._database.fetchrow(
             """
-            INSERT INTO messages (conversation_id, user_id, role, content, client_message_id)
-            VALUES ($1::uuid, $2::uuid, $3, $4, $5::uuid)
+            INSERT INTO messages (conversation_id, user_id, role, content, client_message_id, sequence)
+            VALUES (
+              $1::uuid,
+              $2::uuid,
+              $3,
+              $4,
+              $5::uuid,
+              COALESCE(
+                (
+                  SELECT MAX(m.sequence)
+                  FROM messages m
+                  WHERE m.conversation_id = $1::uuid
+                ),
+                0
+              ) + 1
+            )
             ON CONFLICT (conversation_id, client_message_id)
             DO UPDATE SET content = EXCLUDED.content
             RETURNING id::text AS id
@@ -57,7 +76,8 @@ class ConversationService:
         assert row is not None
         return row["id"]
 
-    async def list_conversations(self, user_id: str, limit: int, before: str | None = None):
+    async def list_conversations(self, user_id: str, limit: int, before: str | None = None) -> Sequence[asyncpg.Record]:
+        """List conversations ordered by descending reference with cursor pagination."""
         return await self._database.fetch(
             """
             SELECT
@@ -81,7 +101,8 @@ class ConversationService:
             limit,
         )
 
-    async def get_conversation_by_reference(self, user_id: str, reference: str):
+    async def get_conversation_by_reference(self, user_id: str, reference: str) -> asyncpg.Record | None:
+        """Fetch one conversation summary for a reference."""
         return await self._database.fetchrow(
             """
             SELECT
@@ -101,27 +122,39 @@ class ConversationService:
             reference,
         )
 
-    async def list_messages(self, user_id: str, reference: str, limit: int):
+    async def list_messages(
+        self,
+        user_id: str,
+        conversation_reference: str,
+        limit: int,
+        before_sequence: int | None = None,
+    ) -> Sequence[asyncpg.Record]:
+        """List conversation messages ordered from newest to oldest."""
         return await self._database.fetch(
             """
             SELECT
               m.id::text AS id,
               m.role,
               m.content,
+              m.sequence,
               m.created_at,
               m.metadata
             FROM messages m
             JOIN conversations c ON c.id = m.conversation_id
-            WHERE c.user_id = $1::uuid AND c.reference = $2
-            ORDER BY m.created_at ASC
-            LIMIT $3
+            WHERE c.user_id = $1::uuid
+              AND c.reference = $2
+              AND ($3::int IS NULL OR m.sequence < $3)
+            ORDER BY m.sequence DESC
+            LIMIT $4
             """,
             user_id,
-            reference,
+            conversation_reference,
+            before_sequence,
             limit,
         )
 
-    async def search_conversations(self, user_id: str, query: str, limit: int):
+    async def search_conversations(self, user_id: str, query: str, limit: int) -> Sequence[asyncpg.Record]:
+        """Search conversations by reference or message content."""
         return await self._database.fetch(
             """
             SELECT

@@ -9,8 +9,8 @@ describe('ChatView', () => {
       props: {
         reference: '2026/02/19',
         messages: [
-          { role: 'assistant', content: 'Hello there' },
-          { role: 'user', content: 'Hi' }
+          { role: 'assistant', content: 'Hello there', clientMessageId: 'a-1' },
+          { role: 'user', content: 'Hi', clientMessageId: 'u-1' }
         ]
       }
     });
@@ -22,12 +22,12 @@ describe('ChatView', () => {
   });
 
   it('calls onSend on submit', async () => {
-    const sent = [];
-    render(ChatView, { props: { messages: [], onSend: (text) => sent.push(text) } });
+    const sent: string[] = [];
+    render(ChatView, { props: { messages: [], onSend: (text: string) => sent.push(text) } });
 
     const input = screen.getByLabelText('Type your message');
     await fireEvent.input(input, { target: { value: 'Test prompt' } });
-    await fireEvent.submit(input.closest('form'));
+    await fireEvent.submit(input.closest('form')!);
 
     expect(sent).toEqual(['Test prompt']);
   });
