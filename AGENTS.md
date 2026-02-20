@@ -120,6 +120,7 @@ A skill is a set of local instructions in a `SKILL.md` file.
 - For logging-related changes, check and update both app-level README files and deployment manifests (Dockerfiles + Helm values/templates) in the same pass to avoid config drift.
 - Frontend production logging defaults should stay conservative (`warn` or higher) unless the task explicitly asks for verbose runtime telemetry.
 - Assistant frontend now relies on cookie-authenticated intro gating plus `sessionStorage` journal snapshots (`exobrain.assistant.session`); keep journal UI changes aligned with the startup sync contract (`/api/journal/{reference}` `message_count` check + fallback seed from `/api/journal/today`).
+- Assistant frontend message APIs are newest-first for pagination; normalize fetched message lists to chronological order before rendering so chat always grows downward.
 
 - In assistant-frontend, logout should clear `sessionStorage` journal snapshots and send users back to the intro gate; user-menu dropdowns in the main shell should stay logout-focused (no duplicate login UX there).
 
