@@ -14,7 +14,11 @@
   let messageInput = '';
   let messagesContainer: HTMLDivElement | undefined;
 
-  $: if (!loading) {
+  let messageCount = 0;
+  $: messageCount = messages.length;
+
+  $: if (!loading && messagesContainer) {
+    messageCount;
     tick().then(scrollToLatestMessage);
   }
 

@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/svelte';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { describe, expect, it, vi } from 'vitest';
 
 import ChatView from './ChatView.svelte';
 
@@ -30,5 +30,27 @@ describe('ChatView', () => {
     await fireEvent.submit(input.closest('form')!);
 
     expect(sent).toEqual(['Test prompt']);
+  });
+
+  it('scrolls to bottom when new messages are rendered', async () => {
+    const scrollSpy = vi.spyOn(HTMLElement.prototype, 'scrollTo');
+
+    const { rerender } = render(ChatView, {
+      props: {
+        reference: '2026/02/19',
+        messages: [{ role: 'assistant', content: 'First', clientMessageId: 'a-1' }]
+      }
+    });
+
+    await rerender({
+      messages: [
+        { role: 'assistant', content: 'First', clientMessageId: 'a-1' },
+        { role: 'user', content: 'Second', clientMessageId: 'u-1' }
+      ]
+    });
+
+    await waitFor(() => {
+      expect(scrollSpy).toHaveBeenCalled();
+    });
   });
 });

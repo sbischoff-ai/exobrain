@@ -83,6 +83,7 @@ The frontend always calls `POST /api/chat/message`.
 - The workspace stores user identity, current journal reference, and journal messages (including per-message client ids) in `sessionStorage` under `exobrain.assistant.session`.
 - On page load, the client re-syncs stored journal state by comparing stored message count with `/api/journal/{reference}` `message_count`; mismatches trigger a message refetch.
 - Message APIs return newest-first (`sequence` descending) for cursor paging; the frontend reorders them to chronological display (oldest at top, newest at bottom).
+- Chat view preserves bottom-oriented reading by auto-scrolling when message lists grow (including streamed assistant updates).
 - If no stored state exists, the client initializes state from `/api/journal/today?create=true` and `/api/journal/today/messages`.
 - The journal sidebar is collapsed by default and allows switching between journal references. Only today's journal keeps chat input enabled.
 
