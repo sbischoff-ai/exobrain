@@ -6,8 +6,7 @@ import logging
 from typing import Any
 
 from langchain.agents import create_agent
-from langchain_core.language_models.fake_chat_models import FakeListChatModel
-from langchain_openai import ChatOpenAI
+from langchain_core.language_models.chat_models import BaseChatModel
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
 from app.agents.base import ChatAgent
@@ -31,18 +30,10 @@ class MainAssistantAgent(ChatAgent):
     async def create(
         cls,
         *,
-        model_name: str,
-        temperature: float,
+        model: BaseChatModel,
         system_prompt: str,
         assistant_db_dsn: str,
-        fake_responses: list[str] | None = None,
     ) -> MainAssistantAgent:
-        model = (
-            FakeListChatModel(responses=fake_responses)
-            if fake_responses is not None
-            else ChatOpenAI(model=model_name, temperature=temperature, streaming=True)
-        )
-
         checkpointer_cm = AsyncPostgresSaver.from_conn_string(assistant_db_dsn)
         checkpointer = await checkpointer_cm.__aenter__()
         await checkpointer.setup()
