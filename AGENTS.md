@@ -37,6 +37,9 @@ When running `apps/assistant-backend` in Codex/cloud-agent environments, set `MA
 
 ### Postgres migrations (Reshape)
 
+- In Codex containers with pyenv shims, `python3` may resolve to 3.10 even when `/usr/bin/python3.12` exists; run backend tests from `apps/assistant-backend` after `uv sync --extra dev` so `uv run` uses the project `.venv` (3.12) and prefer `uv run python -m pytest` if command resolution is ambiguous.
+
+
 This repository uses Reshape for Postgres schema migrations:
 
 ```sh
