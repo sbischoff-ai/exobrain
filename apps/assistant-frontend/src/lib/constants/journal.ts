@@ -1,0 +1,1 @@
+export const JOURNAL_MESSAGES_PAGE_SIZE = 50;

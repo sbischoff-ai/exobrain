@@ -19,6 +19,7 @@
   let authenticated = false;
   let loadingJournal = false;
   let syncingMessages = false;
+  let loadingOlderMessages = false;
   let sidebarCollapsed = true;
 
   let authError = '';
@@ -31,6 +32,9 @@
   let currentReference = '';
   let messages: StoredMessage[] = [];
   let requestError = '';
+  let currentMessageCount = 0;
+
+  $: canLoadOlderMessages = currentMessageCount > messages.length;
 
   onMount(async () => {
     await bootstrap();
@@ -84,6 +88,7 @@
     todayReference = '';
     currentReference = '';
     messages = [];
+    currentMessageCount = 0;
     requestError = '';
   }
 
@@ -111,11 +116,11 @@
 
       const summary = await journalService.getSummary(stored.journalReference);
       let nextMessages = stored.messages || [];
-      if (summary.message_count !== nextMessages.length) {
+      if (summary.message_count !== stored.messageCount) {
         nextMessages = await journalService.listStoredMessages(stored.journalReference);
       }
 
-      const nextState = buildSessionState(stored.journalReference, nextMessages);
+      const nextState = buildSessionState(stored.journalReference, nextMessages, summary.message_count);
       saveSessionState(nextState);
       applyState(nextState);
     } catch {
@@ -132,10 +137,14 @@
     const journalMessages = toStoredMessages(await journalService.listTodayMessages());
 
     todayReference = todayJournal.reference;
-    return buildSessionState(todayJournal.reference, journalMessages);
+    return buildSessionState(todayJournal.reference, journalMessages, todayJournal.message_count);
   }
 
-  function buildSessionState(journalReference: string, storedMessages: StoredMessage[]): SessionState {
+  function buildSessionState(
+    journalReference: string,
+    storedMessages: StoredMessage[],
+    messageCount: number
+  ): SessionState {
     if (!user) {
       throw new Error('expected authenticated user for session state');
     }
@@ -143,13 +152,14 @@
     return {
       user: { name: user.name, email: user.email },
       journalReference,
-      messageCount: storedMessages.length,
+      messageCount,
       messages: storedMessages
     };
   }
 
   function applyState(state: SessionState): void {
     currentReference = state.journalReference;
+    currentMessageCount = state.messageCount;
     messages = state.messages ?? [];
   }
 
@@ -167,13 +177,39 @@
 
     loadingJournal = true;
     try {
+      const summary = await journalService.getSummary(reference);
       const storedMessages = await journalService.listStoredMessages(reference);
-      const nextState = buildSessionState(reference, storedMessages);
+      const nextState = buildSessionState(reference, storedMessages, summary.message_count);
 
       saveSessionState(nextState);
       applyState(nextState);
     } finally {
       loadingJournal = false;
+    }
+  }
+
+  async function loadOlderMessages(): Promise<void> {
+    if (!currentReference || loadingOlderMessages || !messages.length || !canLoadOlderMessages) {
+      return;
+    }
+
+    const oldestSequence = messages[0]?.sequence;
+    if (oldestSequence == null) {
+      return;
+    }
+
+    loadingOlderMessages = true;
+    try {
+      const olderMessages = await journalService.listStoredMessages(currentReference, oldestSequence);
+      if (!olderMessages.length) {
+        return;
+      }
+
+      messages = [...olderMessages, ...messages];
+      const nextState = buildSessionState(currentReference, messages, currentMessageCount);
+      saveSessionState(nextState);
+    } finally {
+      loadingOlderMessages = false;
     }
   }
 
@@ -227,7 +263,8 @@
         ];
       }
 
-      saveSessionState(buildSessionState(currentReference, messages));
+      currentMessageCount += 2;
+      saveSessionState(buildSessionState(currentReference, messages, currentMessageCount));
       await loadJournalEntries();
     } catch {
       requestError = 'Could not reach the assistant backend. Please try again.';
@@ -291,10 +328,13 @@
       <ChatView
         messages={messages}
         loading={loadingJournal || syncingMessages}
+        loadingOlder={loadingOlderMessages}
+        canLoadOlder={canLoadOlderMessages}
         reference={currentReference}
         inputDisabled={isInputDisabled()}
         requestError={requestError}
         onSend={handleSend}
+        onLoadOlder={loadOlderMessages}
       />
     </main>
   </div>
