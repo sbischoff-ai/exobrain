@@ -38,6 +38,7 @@ scripts/
 - Codex/cloud-agent workflow notes: `AGENTS.md`
 - Focused cloud-agent runbook: `docs/codex-runbook.md`
 - Long-term architecture direction (non-binding): `docs/architecture-intent.md`
+- Documentation standards: `docs/documentation-standards.md`
 
 ## Prerequisites
 

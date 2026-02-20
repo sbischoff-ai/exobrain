@@ -5,6 +5,10 @@
 High-signal instructions for coding agents in this repository.
 Prioritize development workflows and accurate execution over meta-documentation.
 
+## Documentation standards
+
+- Repository-wide documentation policy: `docs/documentation-standards.md`
+
 ## Codex / Cloud Agent Environment Notes
 
 In Codex cloud environments, Docker/Kubernetes tooling is typically unavailable (`docker`, `docker-compose`, `k3d`).
