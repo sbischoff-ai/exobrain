@@ -15,9 +15,12 @@ class ChatService:
         self._agent = agent
         self._journal_service = journal_service
 
-    async def stream_message(self, message: str) -> AsyncIterator[str]:
-        logger.debug("streaming chat message", extra={"message_length": len(message)})
-        async for chunk in self._agent.stream(message):
+    async def stream_message(self, message: str, conversation_id: str) -> AsyncIterator[str]:
+        logger.debug(
+            "streaming chat message",
+            extra={"message_length": len(message), "conversation_id": conversation_id},
+        )
+        async for chunk in self._agent.astream(message=message, conversation_id=conversation_id):
             yield chunk
 
     async def stream_journal_message(
@@ -40,7 +43,7 @@ class ChatService:
         )
 
         chunks: list[str] = []
-        async for chunk in self.stream_message(message):
+        async for chunk in self.stream_message(message, conversation_id):
             chunks.append(chunk)
             yield chunk
 
