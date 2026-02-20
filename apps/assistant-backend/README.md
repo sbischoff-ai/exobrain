@@ -94,10 +94,13 @@ Notes:
 From `apps/assistant-backend` run:
 
 ```bash
-uv run --with pytest --with pytest-asyncio pytest -m "not integration"
+uv sync --extra dev
+uv run python -m pytest -m "not integration"
 ```
 
 This runs the backend unit suite (service/auth/dependency behavior) without requiring live infrastructure services.
+
+> Why this exact flow? In some Codex environments, `python3`/`pytest` on `PATH` can resolve to a pyenv-managed Python 3.10 shim. Syncing dev dependencies and invoking `pytest` via `uv run python -m pytest` ensures the project `.venv` interpreter (Python 3.12 here) is used consistently.
 
 ## Running integration tests
 

@@ -44,7 +44,7 @@ curl -sS http://localhost:8000/api/users/me -b /tmp/exobrain.cookies
 ./scripts/local/build-assistant-frontend.sh
 ./scripts/local/build-knowledge-interface.sh
 
-cd apps/assistant-backend && uv run --with pytest --with pytest-asyncio pytest -m "not integration"
+cd apps/assistant-backend && uv sync --extra dev && uv run python -m pytest -m "not integration"
 cd apps/assistant-frontend && npm test
 ```
 
@@ -81,3 +81,9 @@ ASSISTANT_BACKEND_INTEGRATION_ENV_FILE=tests/integration/.env.integration \
 
 The suite expects assistant seed user credentials:
 - `test.user@exobrain.local` / `password123`
+
+
+### Python interpreter note for Codex containers
+
+Some containers expose `python3` from a pyenv shim (for example 3.10) even when `/usr/bin/python3.12` is installed.
+Use `uv sync --extra dev` and run tests via `uv run python -m pytest` from `apps/assistant-backend` to force the project `.venv` interpreter and avoid version mismatch errors (for example `datetime.UTC` import failures).
