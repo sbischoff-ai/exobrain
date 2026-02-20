@@ -47,6 +47,10 @@ Run both in order with:
 
 The Helm chart models migrations and seed data as separate hook jobs (`dbJobs.assistantBackendMigrations` and `dbJobs.assistantBackendSeed`) so they can be triggered independently.
 
+
+Recent migration note:
+- `004_fix_message_sequence_backfill.toml` backfills `messages.sequence` using per-conversation chronological ranking and removes the legacy `0` default to prevent new rows from inheriting invalid cursor values.
+
 ## Migration validation
 
 Validate migrations with:

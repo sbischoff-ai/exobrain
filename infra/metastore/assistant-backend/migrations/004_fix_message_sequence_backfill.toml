@@ -1,0 +1,21 @@
+[[actions]]
+type = "custom"
+complete = """
+WITH ranked AS (
+  SELECT
+    m.id,
+    ROW_NUMBER() OVER (
+      PARTITION BY m.conversation_id
+      ORDER BY m.created_at ASC, m.id ASC
+    )::int AS expected_sequence
+  FROM messages m
+)
+UPDATE messages m
+SET sequence = ranked.expected_sequence
+FROM ranked
+WHERE m.id = ranked.id
+  AND m.sequence IS DISTINCT FROM ranked.expected_sequence;
+
+ALTER TABLE messages
+ALTER COLUMN sequence DROP DEFAULT;
+"""

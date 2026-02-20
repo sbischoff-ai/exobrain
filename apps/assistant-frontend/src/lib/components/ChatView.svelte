@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick } from 'svelte';
+  import { afterUpdate, beforeUpdate, tick } from 'svelte';
   import { Streamdown } from 'svelte-streamdown';
 
   import type { StoredMessage } from '$lib/models/journal';
@@ -16,21 +16,59 @@
 
   let messageInput = '';
   let messagesContainer: HTMLDivElement | undefined;
-  let lastFirstMessageId: string | null = null;
-  let currentFirstMessageId: string | null = null;
 
-  $: currentFirstMessageId = messages[0]?.clientMessageId ?? null;
+  let previousReference = '';
+  let previousFirstMessageId: string | null = null;
 
-  $: if (!loading && messagesContainer) {
-    messages;
+  let preserveScrollPosition = false;
+  let previousScrollTop = 0;
+  let previousScrollHeight = 0;
+
+  beforeUpdate(() => {
+    if (!messagesContainer || loading) {
+      preserveScrollPosition = false;
+      return;
+    }
+
+    const currentFirstMessageId = messages[0]?.clientMessageId ?? null;
+    const sameReference = reference === previousReference;
+
     const prependedOlderMessages =
-      lastFirstMessageId !== null && currentFirstMessageId !== null && lastFirstMessageId !== currentFirstMessageId;
-    lastFirstMessageId = currentFirstMessageId;
+      sameReference &&
+      previousFirstMessageId !== null &&
+      currentFirstMessageId !== null &&
+      previousFirstMessageId !== currentFirstMessageId &&
+      messages.some((message) => message.clientMessageId === previousFirstMessageId);
 
     if (!prependedOlderMessages) {
-      tick().then(scrollToLatestMessage);
+      preserveScrollPosition = false;
+      return;
     }
-  }
+
+    preserveScrollPosition = true;
+    previousScrollTop = messagesContainer.scrollTop;
+    previousScrollHeight = messagesContainer.scrollHeight;
+  });
+
+  afterUpdate(async () => {
+    if (!messagesContainer || loading) {
+      return;
+    }
+
+    const currentFirstMessageId = messages[0]?.clientMessageId ?? null;
+
+    if (preserveScrollPosition) {
+      const heightDelta = messagesContainer.scrollHeight - previousScrollHeight;
+      messagesContainer.scrollTop = previousScrollTop + Math.max(heightDelta, 0);
+      preserveScrollPosition = false;
+    } else {
+      await tick();
+      scrollToLatestMessage();
+    }
+
+    previousReference = reference;
+    previousFirstMessageId = currentFirstMessageId;
+  });
 
   function handleSubmit(event: SubmitEvent): void {
     event.preventDefault();
