@@ -52,7 +52,7 @@ Exobrain is a cloud-native AI assistant platform with a GraphRAG knowledge subsy
 | Kubernetes deploy wiring | `infra/helm/exobrain-stack` | `infra/docker`, `scripts/k3d` |
 | Local native workflows | `scripts/local` | `docs/development/local-setup.md` |
 | k3d workflows | `scripts/k3d-up.sh`, `scripts/k3d` | `docs/development/k3d-workflow.md` |
-| Agent native workflows | `scripts/agent` | `docs/codex-runbook.md`, `AGENTS.md` |
+| Agent native workflows | `scripts/agent` | `docs/agents/codex-runbook.md`, `AGENTS.md` |
 
 ## Repository map
 
@@ -63,13 +63,19 @@ apps/
   knowledge-interface/       # Rust tonic gRPC service
 
 docs/
-  architecture-intent.md     # Long-term architecture direction
-  codex-runbook.md           # Agent/cloud-environment workflow guide
-  major-changes.md           # Historical incident/fix notes
-  documentation-standards.md # Documentation policy and templates
+  README.md                  # Documentation hub/index
+  architecture/
+    architecture-intent.md   # Long-term architecture direction
   development/
     local-setup.md           # Local app-native procedural setup
     k3d-workflow.md          # k3d + Helm procedural setup
+  standards/
+    documentation-standards.md           # Documentation policy and templates
+    assistant-api-frontend-standards.md  # Assistant API/frontend layering standards
+  operations/
+    major-changes.md         # Historical incident/fix notes
+  agents/
+    codex-runbook.md         # Agent/cloud-environment workflow guide
 
 infra/
   docker/                    # Dockerfiles and build contexts
@@ -103,7 +109,7 @@ apps/knowledge-interface/
 
 
 - `apps/`: deployable services and their tests
-- `docs/`: project-wide standards, runbooks, and workflows
+- `docs/`: documentation hub plus architecture, workflow, standards, and operations references
 - `infra/`: container + Kubernetes deployment definitions
 - `scripts/`: operational helpers for local/k3d/agent workflows
 
@@ -144,7 +150,7 @@ For chart validation, ingress behavior, and cluster-parity checks.
 
 For environments without Docker/k3d where native services are required.
 
-- Guide: [`docs/codex-runbook.md`](docs/codex-runbook.md)
+- Guide: [`docs/agents/codex-runbook.md`](docs/agents/codex-runbook.md)
 - Core scripts:
   - `./scripts/agent/native-infra-up.sh`
   - `./scripts/agent/native-infra-health.sh`
@@ -175,17 +181,19 @@ cd apps/assistant-frontend && npm test
 
 ## Pointers to deeper docs
 
+- Documentation hub: [`docs/README.md`](docs/README.md)
+
 ### Development and operations
 
 - Local app-native procedures: [`docs/development/local-setup.md`](docs/development/local-setup.md)
 - k3d + Helm procedures: [`docs/development/k3d-workflow.md`](docs/development/k3d-workflow.md)
-- Codex/cloud-agent workflow guide: [`docs/codex-runbook.md`](docs/codex-runbook.md)
+- Codex/cloud-agent workflow guide: [`docs/agents/codex-runbook.md`](docs/agents/codex-runbook.md)
 
 ### Architecture, policy, and history
 
-- Documentation standards and templates: [`docs/documentation-standards.md`](docs/documentation-standards.md)
-- Long-term architecture direction: [`docs/architecture-intent.md`](docs/architecture-intent.md)
-- Significant incident/fix history: [`docs/major-changes.md`](docs/major-changes.md)
+- Documentation standards and templates: [`docs/standards/documentation-standards.md`](docs/standards/documentation-standards.md)
+- Long-term architecture direction: [`docs/architecture/architecture-intent.md`](docs/architecture/architecture-intent.md)
+- Significant incident/fix history: [`docs/operations/major-changes.md`](docs/operations/major-changes.md)
 - Agent operating constraints and conventions: [`AGENTS.md`](AGENTS.md)
 
 ### App-level reference docs
