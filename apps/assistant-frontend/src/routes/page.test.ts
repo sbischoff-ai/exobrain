@@ -108,6 +108,50 @@ describe('root page', () => {
     expect(fetchSpy).toHaveBeenCalledWith('/api/journal/2026/01/01/messages?limit=50&cursor=55', undefined);
   });
 
+
+  it('disables chat with tooltip for past journals selected from sidebar', async () => {
+    window.sessionStorage.setItem(
+      'exobrain.assistant.session',
+      JSON.stringify({
+        user: { name: 'Test User', email: 'test.user@exobrain.local' },
+        journalReference: '2026/02/19',
+        messageCount: 0,
+        messages: []
+      })
+    );
+
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(jsonResponse({ name: 'Test User', email: 'test.user@exobrain.local' }))
+      .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19', message_count: 0 }))
+      .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
+      .mockResolvedValueOnce(jsonResponse([{ reference: '2026/02/19' }, { reference: '2025/01/14' }]))
+      .mockResolvedValueOnce(jsonResponse({ reference: '2025/01/14', message_count: 2 }))
+      .mockResolvedValueOnce(
+        jsonResponse([
+          { id: 'm1', role: 'assistant', content: 'older context', sequence: 2 },
+          { id: 'm2', role: 'user', content: 'question', sequence: 1 }
+        ])
+      );
+
+    render(Page);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Type your message')).not.toBeDisabled();
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Open journals' }));
+    await fireEvent.click(screen.getByRole('button', { name: '2025/01/14' }));
+
+    await waitFor(() => {
+      const input = screen.getByLabelText('Type your message');
+      const send = screen.getByRole('button', { name: 'Send message' });
+      expect(input).toBeDisabled();
+      expect(send).toBeDisabled();
+      expect(input).toHaveAttribute('title', 'You can not chat with past journals.');
+      expect(send).toHaveAttribute('title', 'You can not chat with past journals.');
+    });
+  });
+
   it('clears session storage and returns to intro page after logout', async () => {
     window.sessionStorage.setItem(
       'exobrain.assistant.session',

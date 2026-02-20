@@ -35,6 +35,8 @@
   let currentMessageCount = 0;
 
   $: canLoadOlderMessages = currentMessageCount > messages.length;
+  $: isPastJournalSelected = Boolean(currentReference) && Boolean(todayReference) && currentReference !== todayReference;
+  $: chatInputDisabled = loadingJournal || syncingMessages || isPastJournalSelected;
 
   onMount(async () => {
     await bootstrap();
@@ -216,6 +218,11 @@
   async function handleSend(text: string): Promise<void> {
     requestError = '';
 
+    if (isPastJournalSelected) {
+      requestError = 'You can not chat with past journals.';
+      return;
+    }
+
     const userClientMessageId = makeClientMessageId();
     const assistantClientMessageId = makeClientMessageId();
 
@@ -269,10 +276,6 @@
     } catch {
       requestError = 'Could not reach the assistant backend. Please try again.';
     }
-  }
-
-  function isInputDisabled(): boolean {
-    return loadingJournal || syncingMessages || currentReference !== todayReference;
   }
 </script>
 
@@ -331,7 +334,8 @@
         loadingOlder={loadingOlderMessages}
         canLoadOlder={canLoadOlderMessages}
         reference={currentReference}
-        inputDisabled={isInputDisabled()}
+        inputDisabled={chatInputDisabled}
+        disabledReason={isPastJournalSelected ? 'You can not chat with past journals.' : ''}
         requestError={requestError}
         onSend={handleSend}
         onLoadOlder={loadOlderMessages}
