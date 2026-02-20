@@ -42,7 +42,8 @@ async def lifespan(app: FastAPI):
     auth_service = AuthService(settings=settings, user_service=user_service, session_store=session_store)
     conversation_service = ConversationService(database=database_service)
     journal_service = JournalService(conversation_service=conversation_service)
-    chat_service = ChatService(agent=build_main_agent(settings), journal_service=journal_service)
+    main_agent = await build_main_agent(settings)
+    chat_service = ChatService(agent=main_agent, journal_service=journal_service)
 
     app.state.settings = settings
     app.state.database_service = database_service
@@ -56,6 +57,8 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        if hasattr(main_agent, "aclose"):
+            await main_agent.aclose()
         await session_store.close()
         await database_service.disconnect()
         logger.info("assistant backend shutdown complete")

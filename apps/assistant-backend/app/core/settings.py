@@ -4,6 +4,16 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+_DEFAULT_MAIN_AGENT_SYSTEM_PROMPT = (
+    "You are Exobrain Assistant, a thoughtful general assistant that helps the user through "
+    "their day. Maintain continuity across conversation turns, gather notes and ideas, ask "
+    "clear follow-up questions when details are missing, and proactively structure information "
+    "for later recall. When useful, fact-check claims, suggest lightweight research steps, and "
+    "offer practical options to move tasks and projects forward. Keep responses accurate, "
+    "concise, and action-oriented while matching the user's tone."
+)
+
+
 class Settings(BaseSettings):
     """Runtime configuration loaded from env vars and local env file."""
 
@@ -13,6 +23,10 @@ class Settings(BaseSettings):
     log_level: str | None = Field(default=None, alias="LOG_LEVEL")
     main_agent_model: str = Field(default="gpt-5.2", alias="MAIN_AGENT_MODEL")
     main_agent_temperature: float = Field(default=0.0, alias="MAIN_AGENT_TEMPERATURE")
+    main_agent_system_prompt: str = Field(
+        default=_DEFAULT_MAIN_AGENT_SYSTEM_PROMPT,
+        alias="MAIN_AGENT_SYSTEM_PROMPT",
+    )
     main_agent_use_mock: bool = Field(default=False, alias="MAIN_AGENT_USE_MOCK")
     main_agent_mock_messages_file: str = Field(
         default="mock-data/main-agent-messages.md",

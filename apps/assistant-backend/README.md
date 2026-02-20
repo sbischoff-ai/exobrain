@@ -13,9 +13,9 @@ The backend follows a layered design:
 
 Cross-service standards for router/service boundaries are documented in [`docs/standards/engineering-standards.md`](../../docs/standards/engineering-standards.md).
 
-The current implementation ships one main assistant agent backed by LangChain `ChatOpenAI`
-using model `gpt-5.2` with streaming enabled. It also supports a file-driven mock model
-for offline development/testing.
+The current implementation uses LangChain `create_agent()` with LangGraph streaming and a
+Postgres-backed checkpointer so each journal conversation has isolated memory by conversation id.
+It supports either `ChatOpenAI` (default) or `FakeListChatModel` for offline development/testing.
 
 ## Environment configuration
 
@@ -30,10 +30,11 @@ cp .env.example .env
 Model selection settings:
 
 - `MAIN_AGENT_USE_MOCK=false` (default): use real OpenAI model (`MAIN_AGENT_MODEL`, `MAIN_AGENT_TEMPERATURE`).
-- `MAIN_AGENT_USE_MOCK=true`: use file-driven mock model and ignore prompt content.
-- `MAIN_AGENT_MOCK_MESSAGES_FILE=mock-data/main-agent-messages.md`: markdown file containing responses separated by the delimiter `\n--- message\n`.
+- `MAIN_AGENT_USE_MOCK=true`: use `FakeListChatModel` responses loaded from markdown.
+- `MAIN_AGENT_MOCK_MESSAGES_FILE=mock-data/main-agent-messages.md`: markdown file containing responses separated by `\n\n--- message ---\n\n`.
+- `MAIN_AGENT_SYSTEM_PROMPT=...`: optional system prompt override for assistant behavior.
 
-The mock model cycles through configured responses and wraps back to the first message after the last one.
+The fake model cycles through configured responses and wraps back to the first message after the last one.
 
 Session storage settings:
 
