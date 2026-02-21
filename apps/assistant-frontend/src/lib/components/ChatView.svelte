@@ -2,6 +2,7 @@
   import { afterUpdate, beforeUpdate, tick } from 'svelte';
   import { Streamdown } from 'svelte-streamdown';
   import StreamdownCode from 'svelte-streamdown/code';
+  import gruvboxDarkMedium from '@shikijs/themes/gruvbox-dark-medium';
 
   import type { StoredMessage } from '$lib/models/journal';
 
@@ -290,6 +291,7 @@
               content={message.content}
               theme={streamdownTheme}
               shikiTheme="gruvbox-dark-medium"
+              shikiThemes={{ 'gruvbox-dark-medium': gruvboxDarkMedium }}
               components={{ code: StreamdownCode }}
             />
           </div>
