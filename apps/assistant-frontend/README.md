@@ -16,6 +16,21 @@ Notes:
 - Dependency installation is skipped unless `node_modules` is missing or `package-lock.json` changed.
 
 
+## Frontend-only mock mode (no backend required)
+
+For lightweight UI/UX iteration in coding-agent runtimes, run the frontend with an in-memory mock API:
+
+```bash
+./scripts/agent/run-assistant-frontend-mock.sh
+```
+
+This enables `ASSISTANT_FRONTEND_MOCK_API=true`, which serves `/api/*` endpoints directly from Vite middleware so you can:
+- login with `test.user@exobrain.local` / `password123`
+- open the main workspace after intro/login
+- switch journals, send chat messages, and exercise stream/loading UX without backend infra
+
+When mock mode is enabled, backend proxying is disabled automatically.
+
 ## Running unit tests
 
 From `apps/assistant-frontend` run:

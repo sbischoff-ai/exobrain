@@ -39,6 +39,8 @@ Model selection settings:
 - `MAIN_AGENT_MOCK_MESSAGES_FILE=mock-data/main-agent-messages.md`: markdown file containing responses separated by `\n\n--- message ---\n\n`.
 - `MAIN_AGENT_SYSTEM_PROMPT=...`: optional system prompt override for assistant behavior.
 - `TAVILY_API_KEY=...`: optional key for web tools (`web_search`, `web_fetch`) when real model mode is active.
+- `WEB_TOOLS_USE_MOCK=false` (default): set to `true` to avoid Tavily network calls and return offline mock tool payloads.
+- `WEB_TOOLS_MOCK_DATA_FILE=mock-data/web-tools.mock.json`: optional JSON file overriding mock `web_search` and `web_fetch` payloads.
 
 The fake model cycles through configured responses and wraps back to the first message after the last one.
 
@@ -142,16 +144,15 @@ If chat/journal integration tests fail with missing-table errors, re-run databas
 For coding agents in Codex/cloud environments, use this flow:
 
 ```bash
-./scripts/agent/native-infra-up.sh
-./scripts/agent/assistant-db-setup-native.sh
-source .agent/state/native-infra.env
-export MAIN_AGENT_USE_MOCK=true
-./scripts/local/run-assistant-backend.sh
+./scripts/agent/assistant-offline-up.sh
+./scripts/agent/run-assistant-backend-offline.sh
 
 cd apps/assistant-backend
 cp tests/integration/.env.integration.example tests/integration/.env.integration
 uv run --with pytest --with pytest-asyncio --with httpx pytest -m integration
 ```
+
+`run-assistant-backend-offline.sh` defaults both `MAIN_AGENT_USE_MOCK=true` and `WEB_TOOLS_USE_MOCK=true`, so chat works without OpenAI or Tavily access.
 
 ## Local environment endpoints
 

@@ -10,12 +10,8 @@ Use this runbook when Docker/k3d flows are unavailable.
 ## Quick start (tested)
 
 ```sh
-./scripts/agent/native-infra-up.sh
-./scripts/agent/native-infra-health.sh
-./scripts/agent/assistant-db-setup-native.sh
-source .agent/state/native-infra.env
-export MAIN_AGENT_USE_MOCK=true
-./scripts/local/run-assistant-backend.sh
+./scripts/agent/assistant-offline-up.sh
+./scripts/agent/run-assistant-backend-offline.sh
 ```
 
 Then verify login with seeded user:
@@ -92,3 +88,33 @@ The suite expects assistant seed user credentials:
 
 Some containers expose `python3` from a pyenv shim (for example 3.10) even when `/usr/bin/python3.12` is installed.
 Use `uv sync --extra dev` and run tests via `uv run python -m pytest` from `apps/assistant-backend` to force the project `.venv` interpreter and avoid version mismatch errors (for example `datetime.UTC` import failures).
+
+
+## Frontend-only exploration (no backend)
+
+Run the frontend in mock API mode to bypass backend startup entirely:
+
+```sh
+./scripts/agent/run-assistant-frontend-mock.sh
+```
+
+Then open `http://localhost:5173` and login with:
+- email: `test.user@exobrain.local`
+- password: `password123`
+
+This mode supports intro/login, journal sidebar interactions, streaming chat UX states, and logout/session flows using in-memory fixture data.
+
+## Full offline integration (frontend + backend + local infra)
+
+Use two terminals:
+
+```sh
+# terminal A
+./scripts/agent/assistant-offline-up.sh
+./scripts/agent/run-assistant-backend-offline.sh
+
+# terminal B
+./scripts/local/run-assistant-frontend.sh
+```
+
+This keeps backend auth/journal/chat APIs real while replacing OpenAI/Tavily calls with local mocks (`MAIN_AGENT_USE_MOCK=true`, `WEB_TOOLS_USE_MOCK=true`).
