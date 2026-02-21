@@ -75,6 +75,41 @@ describe('ChatView', () => {
     expect(normalizedMiddleLine).toBe('');
   });
 
+
+  it('renders paragraph breaks inside list items', async () => {
+    const markdown = `- list item 1\n\n  extra paragraph\n- list item 2`;
+
+    const { container } = render(ChatView, {
+      props: {
+        reference: '2026/02/19',
+        messages: [{ role: 'assistant', content: markdown, clientMessageId: 'a-list-1' }]
+      }
+    });
+
+    const firstListItem = container.querySelector('li');
+    expect(firstListItem).toBeTruthy();
+    const normalized = (firstListItem?.textContent || '').replace(/\s+/g, ' ').trim();
+    expect(normalized).toContain('list item 1');
+    expect(normalized).toContain('extra paragraph');
+    expect(normalized).toContain('list item 1 extra paragraph');
+  });
+
+
+  it('adds spacing between markdown paragraphs', async () => {
+    const markdown = 'First paragraph.\n\nSecond paragraph.';
+
+    const { container } = render(ChatView, {
+      props: {
+        reference: '2026/02/19',
+        messages: [{ role: 'assistant', content: markdown, clientMessageId: 'a-para-1' }]
+      }
+    });
+
+    const paragraphs = container.querySelectorAll('.assistant-markdown p');
+    expect(paragraphs.length).toBeGreaterThanOrEqual(2);
+    expect(paragraphs[1]?.textContent).toContain('Second paragraph.');
+  });
+
   it('does not auto-scroll while user types in input', async () => {
     const scrollSpy = vi.spyOn(HTMLElement.prototype, 'scrollTo');
 

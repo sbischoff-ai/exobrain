@@ -321,13 +321,25 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
   clip: rect(0, 0, 0, 0);
   border: 0;
 }
-.assistant-markdown :global(*) { max-width: 100%; }
-.assistant-markdown :global(p),
-.assistant-markdown :global(ul),
-.assistant-markdown :global(ol),
-.assistant-markdown :global(pre),
-.assistant-markdown :global(blockquote),
-.assistant-markdown :global(table) { margin: 0.55rem 0; }
+.assistant-markdown * { max-width: 100%; }
+.assistant-markdown p,
+.assistant-markdown ul,
+.assistant-markdown ol,
+.assistant-markdown pre,
+.assistant-markdown blockquote,
+.assistant-markdown table { margin: 0.55rem 0; }
+
+.assistant-markdown p + p {
+  margin-top: 0.5rem;
+}
+
+.assistant-markdown li {
+  white-space: pre-wrap;
+}
+
+.assistant-markdown li > * + * {
+  margin-top: 0.5rem;
+}
 
 .exo-md-heading {
   margin: 0.9rem 0 0.65rem !important;
