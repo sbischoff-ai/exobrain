@@ -19,6 +19,8 @@ pkgs.mkShell {
 
     # Assistant frontend (Svelte/Vite)
     nodejs_22
+    playwright-driver
+    playwright-driver.browsers
 
     # Knowledge interface (Rust)
     rustc
@@ -39,6 +41,8 @@ pkgs.mkShell {
 
   shellHook = ''
     export UV_PYTHON="${pkgs.python312}/bin/python3"
+    export PLAYWRIGHT_BROWSERS_PATH="${pkgs.playwright-driver.browsers}"
+    export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
     export LD_LIBRARY_PATH=${libPath}:$LD_LIBRARY_PATH
     if [ -f .env.secrets ]; then
       echo "Loading environment from .env.secrets"
@@ -51,6 +55,7 @@ pkgs.mkShell {
     echo "- Kubernetes: kubectl, helm, k3d"
     echo "- Backend: python, uv"
     echo "- Frontend: node"
+    echo "- E2E: playwright (nix-provided browsers)"
     echo "- Rust: cargo"
     echo "- Databases: psql, cypher-shell, curl/http"
   '';

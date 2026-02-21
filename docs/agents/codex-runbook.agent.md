@@ -118,3 +118,19 @@ Use two terminals:
 ```
 
 This keeps backend auth/journal/chat APIs real while replacing OpenAI/Tavily calls with local mocks (`MAIN_AGENT_USE_MOCK=true`, `WEB_TOOLS_USE_MOCK=true`).
+
+
+## Frontend E2E suite (Playwright)
+
+Run end-to-end coverage against mock API mode (recommended for agent workflows):
+
+```sh
+./scripts/agent/run-assistant-frontend-e2e.sh
+```
+
+Manual flow (if you already have frontend running):
+
+```sh
+cd e2e
+E2E_USE_EXISTING_SERVER=true npm test
+```

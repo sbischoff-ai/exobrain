@@ -403,6 +403,7 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
 
 .exo-md-code {
   background: transparent !important;
+  white-space: pre !important;
 }
 
 .exo-md-code-language {

@@ -35,6 +35,23 @@ describe('ChatView', () => {
   });
 
 
+
+  it('preserves line breaks in fenced code blocks', async () => {
+    const codeBlockMessage = '```ts\nconst status = "ready";\nconsole.log(status);\n```';
+
+    const { container } = render(ChatView, {
+      props: {
+        reference: '2026/02/19',
+        messages: [{ role: 'assistant', content: codeBlockMessage, clientMessageId: 'a-code-1' }]
+      }
+    });
+
+    const codeBlock = container.querySelector('.exo-md-code');
+    expect(codeBlock).toBeTruthy();
+    expect(codeBlock?.textContent).toContain('const status = "ready";');
+    expect(codeBlock?.textContent).toContain('console.log(status);');
+  });
+
   it('does not auto-scroll while user types in input', async () => {
     const scrollSpy = vi.spyOn(HTMLElement.prototype, 'scrollTo');
 
