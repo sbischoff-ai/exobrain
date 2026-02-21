@@ -1,3 +1,3 @@
-from app.agents.tools.web import build_web_tools, web_fetch, web_search
+from app.agents.tools.web import TavilyWebTools, WebTools, build_web_tools
 
-__all__ = ["build_web_tools", "web_fetch", "web_search"]
+__all__ = ["WebTools", "TavilyWebTools", "build_web_tools"]
