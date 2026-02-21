@@ -11,6 +11,28 @@ function jsonResponse<T>(payload: T, status = 200): Response {
   } as Response;
 }
 
+
+
+function streamResponse(chunks: string[], status = 200, delayMs = 0): Response {
+  const encoder = new TextEncoder();
+  const body = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      for (const chunk of chunks) {
+        if (delayMs > 0) {
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+        }
+        controller.enqueue(encoder.encode(chunk));
+      }
+      controller.close();
+    }
+  });
+
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    body
+  } as Response;
+}
 describe('root page', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -187,6 +209,46 @@ describe('root page', () => {
 
     await waitFor(() => {
       expect(overlay).not.toHaveClass('open');
+    });
+  });
+
+
+
+  it('shows Thinking placeholder until the first stream chunk arrives', async () => {
+    window.sessionStorage.setItem(
+      'exobrain.assistant.session',
+      JSON.stringify({
+        user: { name: 'Test User', email: 'test.user@exobrain.local' },
+        journalReference: '2026/02/19',
+        messageCount: 0,
+        messages: []
+      })
+    );
+
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(jsonResponse({ name: 'Test User', email: 'test.user@exobrain.local' }))
+      .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19', message_count: 0 }))
+      .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
+      .mockResolvedValueOnce(jsonResponse([{ reference: '2026/02/19' }]))
+      .mockResolvedValueOnce(streamResponse(['assistant reply'], 200, 50))
+      .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
+      .mockResolvedValueOnce(jsonResponse([{ reference: '2026/02/19' }]));
+
+    render(Page);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Type your message')).not.toBeDisabled();
+    });
+
+    const input = screen.getByLabelText('Type your message');
+    await fireEvent.input(input, { target: { value: 'Need research' } });
+    await fireEvent.submit(input.closest('form')!);
+
+    expect(screen.getByText('Thinking ...')).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.queryByText('Thinking ...')).not.toBeInTheDocument();
+      expect(screen.getByText('assistant reply')).toBeInTheDocument();
     });
   });
 

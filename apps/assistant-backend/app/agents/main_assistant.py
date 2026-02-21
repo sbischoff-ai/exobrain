@@ -7,6 +7,7 @@ from typing import Any
 
 from langchain.agents import create_agent
 from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.tools import BaseTool
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
 from app.agents.base import ChatAgent
@@ -33,6 +34,7 @@ class MainAssistantAgent(ChatAgent):
         model: BaseChatModel,
         system_prompt: str,
         assistant_db_dsn: str,
+        tools: list[BaseTool] | None = None,
     ) -> MainAssistantAgent:
         checkpointer_cm = AsyncPostgresSaver.from_conn_string(assistant_db_dsn)
         checkpointer = await checkpointer_cm.__aenter__()
@@ -40,6 +42,7 @@ class MainAssistantAgent(ChatAgent):
 
         compiled_agent = create_agent(
             model=model,
+            tools=tools or [],
             system_prompt=system_prompt,
             checkpointer=checkpointer,
         )
@@ -55,6 +58,10 @@ class MainAssistantAgent(ChatAgent):
             stream_mode="messages",
             config={"configurable": {"thread_id": conversation_id}},
         ):
+            metadata = event[1] if len(event) > 1 else {}
+            if metadata.get("langgraph_node") != "model":
+                continue
+
             chunk = event[0]
             chunk_content = chunk.content
             if isinstance(chunk_content, str):
@@ -62,10 +69,10 @@ class MainAssistantAgent(ChatAgent):
                     yield chunk_content
             elif isinstance(chunk_content, list):
                 for item in chunk_content:
-                    if isinstance(item, dict):
-                        text = item.get("text", "")
-                    else:
-                        text = getattr(item, "text", "")
+                    item_type = item.get("type") if isinstance(item, dict) else getattr(item, "type", None)
+                    if item_type != "text":
+                        continue
+                    text = item.get("text", "") if isinstance(item, dict) else getattr(item, "text", "")
                     if text:
                         yield text
 

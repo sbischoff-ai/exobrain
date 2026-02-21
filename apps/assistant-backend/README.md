@@ -17,6 +17,10 @@ The current implementation uses LangChain `create_agent()` with LangGraph stream
 Postgres-backed checkpointer so each journal conversation has isolated memory by conversation id.
 It supports either `ChatOpenAI` (default) or `FakeListChatModel` for offline development/testing.
 
+Agent tools are defined under `app/agents/tools` and wrapped behind stable tool contracts. The
+main assistant now includes `web_search` (source discovery) and `web_fetch` (plaintext fetch)
+implemented via `langchain-tavily`.
+
 ## Environment configuration
 
 Create a local env file from the example:
@@ -26,6 +30,7 @@ cp .env.example .env
 ```
 
 `OPENAI_API_KEY` is intentionally **not** stored in `.env` and must be provided externally when using the real OpenAI-backed model. (Set it in the terminal session that's running the backend process.)
+`TAVILY_API_KEY` follows the same pattern for web-search/web-fetch tools.
 
 Model selection settings:
 
@@ -33,6 +38,7 @@ Model selection settings:
 - `MAIN_AGENT_USE_MOCK=true`: use `FakeListChatModel` responses loaded from markdown.
 - `MAIN_AGENT_MOCK_MESSAGES_FILE=mock-data/main-agent-messages.md`: markdown file containing responses separated by `\n\n--- message ---\n\n`.
 - `MAIN_AGENT_SYSTEM_PROMPT=...`: optional system prompt override for assistant behavior.
+- `TAVILY_API_KEY=...`: optional key for web tools (`web_search`, `web_fetch`) when real model mode is active.
 
 The fake model cycles through configured responses and wraps back to the first message after the last one.
 

@@ -60,6 +60,20 @@ describe('ChatView', () => {
     });
   });
 
+
+  it('shows Thinking placeholder while waiting for first assistant chunk', () => {
+    render(ChatView, {
+      props: {
+        waitingForFirstChunk: true,
+        messages: [
+          { role: 'user', content: 'Question', clientMessageId: 'u-1' },
+          { role: 'assistant', content: '', clientMessageId: 'a-1' }
+        ]
+      }
+    });
+
+    expect(screen.getByText('Thinking ...')).toBeInTheDocument();
+  });
   it('calls onSend on submit', async () => {
     const sent: string[] = [];
     render(ChatView, { props: { messages: [], onSend: (text: string) => sent.push(text) } });

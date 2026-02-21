@@ -14,6 +14,7 @@
   export let inputDisabled = false;
   export let disabledReason = '';
   export let requestError = '';
+  export let waitingForFirstChunk = false;
   export let onSend: (text: string) => void = () => {};
   export let onLoadOlder: () => void = () => {};
 
@@ -287,13 +288,20 @@
           data-message-role={message.role}
         >
           <div class="assistant-markdown" class:user-markdown={message.role === 'user'}>
-            <Streamdown
-              content={message.content}
-              theme={streamdownTheme}
-              shikiTheme="gruvbox-dark-medium"
-              shikiThemes={{ 'gruvbox-dark-medium': gruvboxDarkMedium }}
-              components={{ code: StreamdownCode }}
-            />
+            {#if waitingForFirstChunk && message.role === 'assistant' && !message.content && index === messages.length - 1}
+              <div class="chat-loading" role="status" aria-live="polite">
+                <span class="spinner"></span>
+                <p>Thinking ...</p>
+              </div>
+            {:else}
+              <Streamdown
+                content={message.content}
+                theme={streamdownTheme}
+                shikiTheme="gruvbox-dark-medium"
+                shikiThemes={{ 'gruvbox-dark-medium': gruvboxDarkMedium }}
+                components={{ code: StreamdownCode }}
+              />
+            {/if}
           </div>
         </article>
       {/each}

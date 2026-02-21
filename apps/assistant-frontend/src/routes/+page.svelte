@@ -32,6 +32,7 @@
   let currentReference = '';
   let messages: StoredMessage[] = [];
   let requestError = '';
+  let waitingForFirstChunk = false;
   let currentMessageCount = 0;
 
   $: canLoadOlderMessages = currentMessageCount > messages.length;
@@ -92,6 +93,7 @@
     messages = [];
     currentMessageCount = 0;
     requestError = '';
+    waitingForFirstChunk = false;
   }
 
   async function refreshAllState(): Promise<void> {
@@ -232,6 +234,7 @@
       { role: 'assistant', content: '', clientMessageId: assistantClientMessageId }
     ];
     messages = optimisticMessages;
+    waitingForFirstChunk = true;
 
     try {
       const response = await fetch('/api/chat/message', {
@@ -254,6 +257,9 @@
         done = part.done;
         if (!done) {
           accumulated += decoder.decode(part.value, { stream: true });
+          if (accumulated.length > 0) {
+            waitingForFirstChunk = false;
+          }
           messages = [
             ...optimisticMessages.slice(0, -1),
             { role: 'assistant', content: accumulated, clientMessageId: assistantClientMessageId }
@@ -264,16 +270,19 @@
       const trailing = decoder.decode();
       if (trailing) {
         accumulated += trailing;
+        waitingForFirstChunk = false;
         messages = [
           ...optimisticMessages.slice(0, -1),
           { role: 'assistant', content: accumulated, clientMessageId: assistantClientMessageId }
         ];
       }
 
+      waitingForFirstChunk = false;
       currentMessageCount += 2;
       saveSessionState(buildSessionState(currentReference, messages, currentMessageCount));
       await loadJournalEntries();
     } catch {
+      waitingForFirstChunk = false;
       requestError = 'Could not reach the assistant backend. Please try again.';
     }
   }
@@ -338,6 +347,7 @@
         inputDisabled={chatInputDisabled}
         disabledReason={isPastJournalSelected ? 'You can not chat with past journals.' : ''}
         requestError={requestError}
+        {waitingForFirstChunk}
         onSend={handleSend}
         onLoadOlder={loadOlderMessages}
       />
