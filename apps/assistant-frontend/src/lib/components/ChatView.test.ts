@@ -233,6 +233,99 @@ describe('ChatView', () => {
     });
   });
 
+
+  it('resumes auto-scroll during the same stream after user returns to bottom', async () => {
+    const scrollSpy = vi.spyOn(HTMLElement.prototype, 'scrollTo');
+
+    const originalScrollTop = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollTop');
+    const originalScrollHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight');
+    const originalClientHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientHeight');
+
+    const scrollState = {
+      scrollTop: 100,
+      scrollHeight: 1000,
+      clientHeight: 500
+    };
+
+    try {
+      Object.defineProperty(HTMLElement.prototype, 'scrollTop', {
+        configurable: true,
+        get() {
+          return scrollState.scrollTop;
+        },
+        set(value: number) {
+          scrollState.scrollTop = value;
+        }
+      });
+
+      Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+        configurable: true,
+        get() {
+          return scrollState.scrollHeight;
+        }
+      });
+
+      Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
+        configurable: true,
+        get() {
+          return scrollState.clientHeight;
+        }
+      });
+
+      const { rerender, container } = render(ChatView, {
+        props: {
+          reference: '2026/02/19',
+          messages: [
+            { role: 'user', content: 'Prompt', clientMessageId: 'u-1' },
+            { role: 'assistant', content: 'first', clientMessageId: 'a-1' }
+          ]
+        }
+      });
+
+      const messagesContainer = container.querySelector('.messages') as HTMLDivElement;
+      await fireEvent.wheel(messagesContainer, { deltaY: -20 });
+
+      const callsAfterPause = scrollSpy.mock.calls.length;
+
+      await rerender({
+        reference: '2026/02/19',
+        messages: [
+          { role: 'user', content: 'Prompt', clientMessageId: 'u-1' },
+          { role: 'assistant', content: 'first second', clientMessageId: 'a-1' }
+        ]
+      });
+
+      await waitFor(() => {
+        expect(scrollSpy.mock.calls.length).toBe(callsAfterPause);
+      });
+
+      scrollState.scrollTop = 500;
+      await fireEvent.scroll(messagesContainer);
+
+      await rerender({
+        reference: '2026/02/19',
+        messages: [
+          { role: 'user', content: 'Prompt', clientMessageId: 'u-1' },
+          { role: 'assistant', content: 'first second third', clientMessageId: 'a-1' }
+        ]
+      });
+
+      await waitFor(() => {
+        expect(scrollSpy.mock.calls.length).toBeGreaterThan(callsAfterPause);
+      });
+    } finally {
+      if (originalScrollTop) {
+        Object.defineProperty(HTMLElement.prototype, 'scrollTop', originalScrollTop);
+      }
+      if (originalScrollHeight) {
+        Object.defineProperty(HTMLElement.prototype, 'scrollHeight', originalScrollHeight);
+      }
+      if (originalClientHeight) {
+        Object.defineProperty(HTMLElement.prototype, 'clientHeight', originalClientHeight);
+      }
+    }
+  });
+
   it('keeps auto-scrolling while streamed assistant content grows', async () => {
     const scrollSpy = vi.spyOn(HTMLElement.prototype, 'scrollTo');
 
