@@ -55,3 +55,30 @@ def test_build_web_tools_exposes_search_and_fetch_contracts() -> None:
     tools = build_web_tools(tavily_api_key="test-key")
 
     assert [tool.name for tool in tools] == ["web_search", "web_fetch"]
+
+
+def test_web_search_uses_mock_payload(tmp_path) -> None:
+    payload = tmp_path / "web-tools.json"
+    payload.write_text(
+        '{"search":{"results":[{"title":"Mock","url":"https://Example.com/path#frag","content":"hello"}]}}',
+        encoding="utf-8",
+    )
+
+    results = build_web_tools(use_mock=True, mock_data_file=str(payload))[0].invoke({"query": "test"})
+
+    assert results == [
+        {
+            "title": "Mock",
+            "url": "https://example.com/path",
+            "snippet": "hello",
+            "score": None,
+            "published_at": None,
+        }
+    ]
+
+
+def test_web_fetch_uses_default_mock_payload() -> None:
+    fetched = build_web_tools(use_mock=True)[1].invoke({"url": "https://unused.local"})
+
+    assert fetched["url"] == "https://example.com/offline-mock"
+    assert "Offline mock" in (fetched["title"] or "")

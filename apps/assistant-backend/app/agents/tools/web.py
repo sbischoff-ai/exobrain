@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 import logging
+import json
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
@@ -14,6 +16,28 @@ _MAX_RESULTS_LIMIT = 10
 _DEFAULT_FETCH_CHARS = 8_000
 _MAX_FETCH_CHARS = 20_000
 _MAX_SNIPPET_CHARS = 320
+_DEFAULT_MOCK_DATA = {
+    "search": {
+        "results": [
+            {
+                "title": "Offline mock result",
+                "url": "https://example.com/offline-mock",
+                "content": "Offline mock web_search result used for coding-agent environments.",
+                "score": 1.0,
+                "published_date": "2026-01-01",
+            }
+        ]
+    },
+    "extract": {
+        "results": [
+            {
+                "url": "https://example.com/offline-mock",
+                "title": "Offline mock fetch",
+                "raw_content": "Offline mock content body for web_fetch in agent environments.",
+            }
+        ]
+    },
+}
 
 
 class WebToolError(RuntimeError):
@@ -53,6 +77,16 @@ def _load_tavily_clients() -> tuple[Any, Any]:
     except ImportError as exc:  # pragma: no cover
         raise WebToolError("web tools unavailable: install langchain-tavily") from exc
     return TavilySearch, TavilyExtract
+
+
+def _load_mock_payload(mock_data_file: str | None) -> dict[str, Any]:
+    if not mock_data_file:
+        return _DEFAULT_MOCK_DATA
+
+    payload = json.loads(Path(mock_data_file).read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise WebToolError("mock web tool payload must be a JSON object")
+    return payload
 
 
 def _parse_search_results(raw: Any) -> list[dict[str, Any]]:
@@ -101,8 +135,14 @@ def web_search(
     include_domains: list[str] | None = None,
     exclude_domains: list[str] | None = None,
     tavily_api_key: str | None = None,
+    use_mock: bool = False,
+    mock_data_file: str | None = None,
 ) -> list[dict[str, Any]]:
     """Find candidate web sources for a query."""
+
+    if use_mock:
+        payload = _load_mock_payload(mock_data_file)
+        return _parse_search_results(payload.get("search", {}))
 
     TavilySearch, _ = _load_tavily_clients()
     client = TavilySearch(
@@ -127,11 +167,21 @@ def web_search(
     return _parse_search_results(raw)
 
 
-def web_fetch(url: str, max_chars: int = _DEFAULT_FETCH_CHARS, tavily_api_key: str | None = None) -> dict[str, Any]:
+def web_fetch(
+    url: str,
+    max_chars: int = _DEFAULT_FETCH_CHARS,
+    tavily_api_key: str | None = None,
+    use_mock: bool = False,
+    mock_data_file: str | None = None,
+) -> dict[str, Any]:
     """Fetch plain text content for a single URL."""
 
     _, TavilyExtract = _load_tavily_clients()
     bounded_chars = _parse_max_chars(max_chars)
+    if use_mock:
+        payload = _load_mock_payload(mock_data_file)
+        return _parse_extract_result(payload.get("extract", {}), max_chars=bounded_chars, source_url=url)
+
     client = TavilyExtract(
         include_images=False,
         extract_depth="advanced",
@@ -147,7 +197,9 @@ def web_fetch(url: str, max_chars: int = _DEFAULT_FETCH_CHARS, tavily_api_key: s
     return _parse_extract_result(raw, max_chars=bounded_chars, source_url=url)
 
 
-def build_web_tools(*, tavily_api_key: str | None = None) -> list[StructuredTool]:
+def build_web_tools(
+    *, tavily_api_key: str | None = None, use_mock: bool = False, mock_data_file: str | None = None
+) -> list[StructuredTool]:
     """Build wrapped Tavily-backed tools with stable contracts."""
 
     def _web_search_tool(
@@ -164,10 +216,18 @@ def build_web_tools(*, tavily_api_key: str | None = None) -> list[StructuredTool
             include_domains=include_domains,
             exclude_domains=exclude_domains,
             tavily_api_key=tavily_api_key,
+            use_mock=use_mock,
+            mock_data_file=mock_data_file,
         )
 
     def _web_fetch_tool(url: str, max_chars: int = _DEFAULT_FETCH_CHARS) -> dict[str, Any]:
-        return web_fetch(url=url, max_chars=max_chars, tavily_api_key=tavily_api_key)
+        return web_fetch(
+            url=url,
+            max_chars=max_chars,
+            tavily_api_key=tavily_api_key,
+            use_mock=use_mock,
+            mock_data_file=mock_data_file,
+        )
 
     return [
         StructuredTool.from_function(

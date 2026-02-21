@@ -1,0 +1,29 @@
+{
+  "search": {
+    "results": [
+      {
+        "title": "Exobrain offline runbook",
+        "url": "https://example.com/exobrain/offline-runbook",
+        "content": "Use native infra scripts, enable MAIN_AGENT_USE_MOCK and WEB_TOOLS_USE_MOCK for offline integration tests.",
+        "score": 0.98,
+        "published_date": "2026-02-01"
+      },
+      {
+        "title": "Assistant frontend mock mode",
+        "url": "https://example.com/exobrain/frontend-mock-mode",
+        "content": "Set ASSISTANT_FRONTEND_MOCK_API=true to run the UI without assistant-backend.",
+        "score": 0.95,
+        "published_date": "2026-02-02"
+      }
+    ]
+  },
+  "extract": {
+    "results": [
+      {
+        "url": "https://example.com/exobrain/offline-runbook",
+        "title": "Exobrain Offline Agent Runbook",
+        "raw_content": "Offline mode keeps the full app runnable in restricted environments. Start native infra, seed assistant DB, run assistant-backend with MAIN_AGENT_USE_MOCK=true and WEB_TOOLS_USE_MOCK=true, then run assistant-frontend and log in with seeded credentials."
+      }
+    ]
+  }
+}

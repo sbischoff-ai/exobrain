@@ -73,3 +73,40 @@ async def test_build_main_agent_passes_tools_and_web_instructions(monkeypatch, t
     assert "web_search" in str(captured["system_prompt"])
     assert "Never fabricate quotes" in str(captured["system_prompt"])
     assert len(captured["tools"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_build_main_agent_forwards_web_tool_mock_settings(monkeypatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    captured_create: dict[str, object] = {}
+    captured_tools: dict[str, object] = {}
+
+    async def fake_create(**kwargs):
+        captured_create.update(kwargs)
+        return object()
+
+    fake_tools = [object()]
+
+    def fake_build_web_tools(**kwargs):
+        captured_tools.update(kwargs)
+        return fake_tools
+
+    monkeypatch.setattr("app.agents.factory.MainAssistantAgent.create", fake_create)
+    monkeypatch.setattr("app.agents.factory.build_web_tools", fake_build_web_tools)
+
+    settings = Settings(
+        MAIN_AGENT_USE_MOCK=False,
+        ASSISTANT_DB_DSN="postgresql://unit-test",
+        WEB_TOOLS_USE_MOCK=True,
+        WEB_TOOLS_MOCK_DATA_FILE="mock-data/web-tools.mock.json",
+    )
+
+    await build_main_agent(settings)
+
+    assert captured_tools == {
+        "tavily_api_key": None,
+        "use_mock": True,
+        "mock_data_file": "mock-data/web-tools.mock.json",
+    }
+    assert captured_create["tools"] is fake_tools

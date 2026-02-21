@@ -60,5 +60,9 @@ async def build_main_agent(settings: Settings) -> ChatAgent:
         model=model,
         system_prompt=system_prompt,
         assistant_db_dsn=settings.assistant_db_dsn,
-        tools=build_web_tools(tavily_api_key=settings.tavily_api_key),
+        tools=build_web_tools(
+            tavily_api_key=settings.tavily_api_key,
+            use_mock=settings.web_tools_use_mock,
+            mock_data_file=settings.web_tools_mock_data_file,
+        ),
     )
