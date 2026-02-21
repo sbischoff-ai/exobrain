@@ -2,7 +2,14 @@ from __future__ import annotations
 
 import pytest
 
-from app.agents.factory import _build_agent_model, _load_mock_messages, build_main_agent
+from app.agents.factory import (
+    MockTavilyWebTools,
+    _build_agent_model,
+    _build_web_tools_dependency,
+    _load_mock_messages,
+    build_main_agent,
+)
+from app.agents.tools.web import TavilyWebTools
 from app.core.settings import Settings
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from langchain_openai import ChatOpenAI
@@ -48,6 +55,27 @@ def test_build_agent_model_uses_openai_model_when_mock_disabled(monkeypatch) -> 
     assert isinstance(model, ChatOpenAI)
 
 
+def test_build_web_tools_dependency_uses_tavily_by_default() -> None:
+    dependency = _build_web_tools_dependency(Settings(WEB_TOOLS_USE_MOCK=False))
+
+    assert isinstance(dependency, TavilyWebTools)
+    assert not isinstance(dependency, MockTavilyWebTools)
+
+
+def test_build_web_tools_dependency_uses_mock_variant_when_enabled(tmp_path) -> None:
+    payload = tmp_path / "web-tools.json"
+    payload.write_text('{"search":{"results":[]},"extract":{"results":[]}}', encoding="utf-8")
+
+    dependency = _build_web_tools_dependency(
+        Settings(
+            WEB_TOOLS_USE_MOCK=True,
+            WEB_TOOLS_MOCK_DATA_FILE=str(payload),
+        )
+    )
+
+    assert isinstance(dependency, MockTavilyWebTools)
+
+
 @pytest.mark.asyncio
 async def test_build_main_agent_passes_tools_and_web_instructions(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
@@ -76,37 +104,23 @@ async def test_build_main_agent_passes_tools_and_web_instructions(monkeypatch, t
 
 
 @pytest.mark.asyncio
-async def test_build_main_agent_forwards_web_tool_mock_settings(monkeypatch) -> None:
+async def test_build_main_agent_uses_mock_web_tools_dependency(monkeypatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 
-    captured_create: dict[str, object] = {}
-    captured_tools: dict[str, object] = {}
+    captured: dict[str, object] = {}
 
     async def fake_create(**kwargs):
-        captured_create.update(kwargs)
+        captured.update(kwargs)
         return object()
 
-    fake_tools = [object()]
-
-    def fake_build_web_tools(**kwargs):
-        captured_tools.update(kwargs)
-        return fake_tools
-
     monkeypatch.setattr("app.agents.factory.MainAssistantAgent.create", fake_create)
-    monkeypatch.setattr("app.agents.factory.build_web_tools", fake_build_web_tools)
 
     settings = Settings(
         MAIN_AGENT_USE_MOCK=False,
         ASSISTANT_DB_DSN="postgresql://unit-test",
         WEB_TOOLS_USE_MOCK=True,
-        WEB_TOOLS_MOCK_DATA_FILE="mock-data/web-tools.mock.json",
     )
 
     await build_main_agent(settings)
 
-    assert captured_tools == {
-        "tavily_api_key": None,
-        "use_mock": True,
-        "mock_data_file": "mock-data/web-tools.mock.json",
-    }
-    assert captured_create["tools"] is fake_tools
+    assert len(captured["tools"]) == 2
