@@ -428,6 +428,7 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
 
 .exo-md-code-pre code > span {
   display: block !important;
+  min-height: 1em;
 }
 
 .assistant-markdown [data-streamdown-code] > div:first-child {

@@ -56,6 +56,25 @@ describe('ChatView', () => {
     expect(codeLines.length).toBeGreaterThan(1);
   });
 
+
+  it('preserves empty lines inside fenced code blocks', async () => {
+    const codeBlockMessage = '```ts\nconst alpha = 1;\n\nconst beta = 2;\n```';
+
+    const { container } = render(ChatView, {
+      props: {
+        reference: '2026/02/19',
+        messages: [{ role: 'assistant', content: codeBlockMessage, clientMessageId: 'a-code-2' }]
+      }
+    });
+
+    const codePre = container.querySelector('.exo-md-code-pre');
+    const codeLines = Array.from(container.querySelectorAll('.exo-md-code-pre code > span'));
+    expect(codePre).toBeTruthy();
+    expect(codeLines.length).toBeGreaterThanOrEqual(3);
+    const normalizedMiddleLine = (codeLines[1]?.textContent || '').replace(/\u200b/g, '').trim();
+    expect(normalizedMiddleLine).toBe('');
+  });
+
   it('does not auto-scroll while user types in input', async () => {
     const scrollSpy = vi.spyOn(HTMLElement.prototype, 'scrollTo');
 
