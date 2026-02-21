@@ -46,10 +46,14 @@ describe('ChatView', () => {
       }
     });
 
-    const codeBlock = container.querySelector('.exo-md-code');
-    expect(codeBlock).toBeTruthy();
-    expect(codeBlock?.textContent).toContain('const status = "ready";');
-    expect(codeBlock?.textContent).toContain('console.log(status);');
+    const codeRoot = container.querySelector('.exo-md-code');
+    const codePre = container.querySelector('.exo-md-code-pre');
+    const codeLines = container.querySelectorAll('.exo-md-code-pre code > span');
+    expect(codeRoot).toBeTruthy();
+    expect(codePre).toBeTruthy();
+    expect(codePre?.textContent).toContain('const status = "ready";');
+    expect(codePre?.textContent).toContain('console.log(status);');
+    expect(codeLines.length).toBeGreaterThan(1);
   });
 
   it('does not auto-scroll while user types in input', async () => {
