@@ -403,11 +403,21 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
 
 .exo-md-code {
   background: transparent !important;
+  white-space: normal !important;
+}
+
+.exo-md-code-pre,
+.exo-md-code-pre code {
   white-space: pre !important;
 }
 
 .exo-md-code-language {
-  display: none;
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.72rem;
+  line-height: 1;
+  color: var(--muted) !important;
+  text-transform: lowercase;
 }
 
 .exo-md-control-group {
@@ -443,12 +453,13 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
   padding: 0.25rem !important;
 }
 
-.assistant-markdown :global([data-streamdown-table-download]) {
-  width: 100%;
+.assistant-markdown [data-streamdown-table-download] {
+  width: fit-content;
   display: flex !important;
   justify-content: flex-end !important;
   align-items: center;
-  margin-left: auto;
+  margin: 0 0 0 auto;
+  padding: 0.15rem 0.15rem 0;
   gap: 0.3rem !important;
   column-gap: 0.3rem !important;
   row-gap: 0.3rem !important;
