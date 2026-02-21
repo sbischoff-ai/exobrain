@@ -15,14 +15,42 @@
   export let onSend: (text: string) => void = () => {};
   export let onLoadOlder: () => void = () => {};
 
+  const streamdownTheme = {
+    h1: { base: 'exo-md-heading' },
+    h2: { base: 'exo-md-heading' },
+    h3: { base: 'exo-md-heading' },
+    h4: { base: 'exo-md-heading' },
+    h5: { base: 'exo-md-heading' },
+    h6: { base: 'exo-md-heading' },
+    table: { base: 'exo-md-table-wrap', table: 'exo-md-table' },
+    th: { base: 'exo-md-th' },
+    td: { base: 'exo-md-td' },
+    codespan: { base: 'exo-md-inline-code' },
+    code: {
+      container: 'exo-md-code-wrap',
+      pre: 'exo-md-code-pre',
+      base: 'exo-md-code',
+      buttons: 'exo-md-control-group',
+      language: 'exo-md-code-language'
+    },
+    components: {
+      button: 'exo-md-control-button',
+      popover: 'exo-md-control-popover'
+    }
+  };
+
   let messageInput = '';
   let messagesContainer: HTMLDivElement | undefined;
 
   let previousReference = '';
   let previousFirstMessageId: string | null = null;
+  let previousMessageSignature = '';
+  let previousLoading = false;
+
   let preserveScrollPosition = false;
   let previousScrollTop = 0;
   let previousScrollHeight = 0;
+  let shouldReactToMessageUpdate = false;
 
   let activeStreamingMessageId: string | null = null;
   let streamScrollMode: 'normal' | 'slow' | 'paused' = 'normal';
@@ -40,12 +68,20 @@
   }
 
   beforeUpdate(() => {
+    const currentFirstMessageId = messages[0]?.clientMessageId ?? null;
+    const currentLastMessage = messages.at(-1);
+    const nextMessageSignature = `${messages.length}|${currentFirstMessageId ?? ''}|${currentLastMessage?.clientMessageId ?? ''}|${currentLastMessage?.content ?? ''}`;
+
+    shouldReactToMessageUpdate =
+      previousReference !== reference ||
+      previousMessageSignature !== nextMessageSignature ||
+      (previousLoading && !loading);
+
     if (!messagesContainer || loading) {
       preserveScrollPosition = false;
       return;
     }
 
-    const currentFirstMessageId = messages[0]?.clientMessageId ?? null;
     const sameReference = reference === previousReference;
 
     const prependedOlderMessages =
@@ -66,24 +102,25 @@
   });
 
   afterUpdate(async () => {
-    if (!messagesContainer || loading) {
-      return;
-    }
-
     const currentFirstMessageId = messages[0]?.clientMessageId ?? null;
+    const currentLastMessage = messages.at(-1);
 
-    if (preserveScrollPosition) {
-      const heightDelta = messagesContainer.scrollHeight - previousScrollHeight;
-      messagesContainer.scrollTop = previousScrollTop + Math.max(heightDelta, 0);
-      preserveScrollPosition = false;
-      lastObservedScrollTop = messagesContainer.scrollTop;
-    } else {
-      await tick();
-      scrollToLatestMessage();
+    if (messagesContainer && !loading && shouldReactToMessageUpdate) {
+      if (preserveScrollPosition) {
+        const heightDelta = messagesContainer.scrollHeight - previousScrollHeight;
+        messagesContainer.scrollTop = previousScrollTop + Math.max(heightDelta, 0);
+        preserveScrollPosition = false;
+        lastObservedScrollTop = messagesContainer.scrollTop;
+      } else {
+        await tick();
+        scrollToLatestMessage();
+      }
     }
 
     previousReference = reference;
     previousFirstMessageId = currentFirstMessageId;
+    previousMessageSignature = `${messages.length}|${currentFirstMessageId ?? ''}|${currentLastMessage?.clientMessageId ?? ''}|${currentLastMessage?.content ?? ''}`;
+    previousLoading = loading;
   });
 
   function handleSubmit(event: SubmitEvent): void {
@@ -168,7 +205,7 @@
 
     const containerRect = messagesContainer.getBoundingClientRect();
     const streamRect = streamElement.getBoundingClientRect();
-    return streamRect.top <= containerRect.top + 4;
+    return streamRect.top <= containerRect.top + 8;
   }
 
   function scrollToLatestMessage(): void {
@@ -187,7 +224,7 @@
 
       if (streamScrollMode === 'slow') {
         const maxScrollTop = Math.max(messagesContainer.scrollHeight - messagesContainer.clientHeight, 0);
-        const nextTop = Math.min(messagesContainer.scrollTop + 8, maxScrollTop);
+        const nextTop = Math.min(messagesContainer.scrollTop + 3, maxScrollTop);
         applyScroll(nextTop, 'auto');
         return;
       }
@@ -228,7 +265,7 @@
           data-message-role={message.role}
         >
           <div class="assistant-markdown" class:user-markdown={message.role === 'user'}>
-            <Streamdown content={message.content} />
+            <Streamdown content={message.content} theme={streamdownTheme} />
           </div>
         </article>
       {/each}

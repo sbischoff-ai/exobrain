@@ -326,79 +326,81 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
 .assistant-markdown :global(ol),
 .assistant-markdown :global(pre),
 .assistant-markdown :global(blockquote),
-.assistant-markdown :global(table) { margin: 0.5rem 0; }
-.assistant-markdown :global(h1),
-.assistant-markdown :global(h2),
-.assistant-markdown :global(h3),
-.assistant-markdown :global(h4),
-.assistant-markdown :global(h5),
-.assistant-markdown :global(h6) { margin: 0.85rem 0 0.6rem !important; }
-.assistant-markdown :global(ul),
-.assistant-markdown :global(ol) { padding-left: 1.25rem; }
-.assistant-markdown :global(table) {
+.assistant-markdown :global(table) { margin: 0.55rem 0; }
+
+.exo-md-heading {
+  margin: 0.9rem 0 0.65rem !important;
+}
+
+.exo-md-table-wrap {
+  margin: 0.8rem 0 !important;
+}
+
+.exo-md-table {
   width: 100%;
   border-collapse: collapse;
   border: 1px solid var(--border);
-  margin: 0.8rem 0 !important;
 }
-.assistant-markdown :global(th),
-.assistant-markdown :global(td) {
+
+.exo-md-th,
+.exo-md-td {
   border: 1px solid var(--border);
   padding: 0.45rem 0.65rem;
 }
-.assistant-markdown :global(th) {
+
+.exo-md-th {
   background: rgb(80 73 69 / 75%);
   color: var(--text);
 }
-.assistant-markdown :global(code) {
-  font-family: inherit;
-  background: var(--code-bg);
+
+.exo-md-inline-code {
+  background: var(--code-bg) !important;
   border-radius: 0.3rem;
   padding: 0.1rem 0.3rem;
 }
-.assistant-markdown :global(pre) {
-  overflow-x: auto;
+
+.exo-md-code-wrap,
+.exo-md-code-pre {
   background: var(--code-bg) !important;
   border: 1px solid var(--border);
   border-radius: 0.55rem;
-  padding: 0.55rem 0.65rem;
-}
-.assistant-markdown :global(pre code) {
-  background: transparent;
-  padding: 0;
-}
-.assistant-markdown :global([data-streamdown-table-download]) {
-  margin-bottom: 0.35rem;
-}
-.assistant-markdown :global([data-streamdown-table-download] button) {
-  background: var(--surface);
-  color: var(--accent-soft);
-  border: 1px solid var(--border);
-  border-radius: 0.45rem;
-  padding: 0.2rem;
-  min-width: 1.8rem;
-  min-height: 1.8rem;
 }
 
-.assistant-markdown :global([data-streamdown-table-download] button svg) {
+.exo-md-code-pre {
+  overflow-x: auto;
+  padding: 0.55rem 0.65rem;
+}
+
+.exo-md-code {
+  background: transparent !important;
+}
+
+.exo-md-control-group {
+  gap: 0.3rem;
+}
+
+.exo-md-control-button {
+  background: var(--surface) !important;
+  color: var(--accent-soft) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 0.45rem !important;
+  padding: 0.2rem !important;
+  min-width: 1.8rem !important;
+  min-height: 1.8rem !important;
+}
+
+.exo-md-control-button svg {
   width: 0.95rem !important;
   height: 0.95rem !important;
   max-width: 0.95rem !important;
   max-height: 0.95rem !important;
 }
-.assistant-markdown :global(#table-download-popover) {
-  background: #32302f;
-  border: 1px solid var(--border);
-  border-radius: 0.5rem;
-  padding: 0.25rem;
-}
-.assistant-markdown :global(#table-download-popover button) {
-  padding: 0.35rem 0.55rem !important;
-  margin: 0.1rem 0 !important;
-  border: 1px solid var(--border);
-  border-radius: 0.4rem;
-  background: var(--surface);
-  color: var(--text);
+
+.exo-md-control-popover {
+  background: #32302f !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 0.5rem !important;
+  padding: 0.25rem !important;
 }
 @media (max-width: 900px) {
   :root { --header-height: 5rem; }
