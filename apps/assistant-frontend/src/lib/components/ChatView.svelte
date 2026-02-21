@@ -225,6 +225,12 @@
     return streamRect.top <= containerRect.top + 8;
   }
 
+
+
+  function normalizeMarkdownForStreamdown(content: string): string {
+    return content.replace(/^(\s*[-*+]\s[^\n]+)\n\n {2,}(?=\S)/gm, '$1\n\n    ');
+  }
+
   function scrollToLatestMessage(forceToLatest = false): void {
     if (!messagesContainer) {
       return;
@@ -295,7 +301,7 @@
               </div>
             {:else}
               <Streamdown
-                content={message.content}
+                content={normalizeMarkdownForStreamdown(message.content)}
                 theme={streamdownTheme}
                 shikiTheme="gruvbox-dark-medium"
                 shikiThemes={{ 'gruvbox-dark-medium': gruvboxDarkMedium }}
