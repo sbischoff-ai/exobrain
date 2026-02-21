@@ -9,11 +9,20 @@ from langchain_openai import ChatOpenAI
 
 from app.agents.base import ChatAgent
 from app.agents.main_assistant import MainAssistantAgent
+from app.agents.tools import build_web_tools
 from app.core.settings import Settings
 
 logger = logging.getLogger(__name__)
 
 _MOCK_MESSAGE_DELIMITER = "\n\n--- message ---\n\n"
+_WEB_TOOL_INSTRUCTIONS = """
+
+Web research tool policy:
+- Use web_search when the user asks for sources, current events, niche facts, or claims likely to be wrong without citation.
+- Use web_fetch only on URLs returned by web_search or URLs explicitly provided by the user.
+- Prefer fetching only the top 1-3 sources to control latency and context size.
+- Never fabricate quotes. Only quote text that appears in web_fetch output.
+"""
 
 
 def _load_mock_messages(messages_file: str) -> list[str]:
@@ -46,8 +55,10 @@ async def build_main_agent(settings: Settings) -> ChatAgent:
     """Create the main assistant agent with real or fake model backends."""
 
     model = _build_agent_model(settings)
+    system_prompt = f"{settings.main_agent_system_prompt.strip()}\n{_WEB_TOOL_INSTRUCTIONS.strip()}"
     return await MainAssistantAgent.create(
         model=model,
-        system_prompt=settings.main_agent_system_prompt,
+        system_prompt=system_prompt,
         assistant_db_dsn=settings.assistant_db_dsn,
+        tools=build_web_tools(tavily_api_key=settings.tavily_api_key),
     )

@@ -46,6 +46,7 @@ class Settings(BaseSettings):
 
     assistant_cache_redis_url: str = Field(default="redis://localhost:16379/0", alias="ASSISTANT_CACHE_REDIS_URL")
     assistant_cache_key_prefix: str = Field(default="assistant:sessions", alias="ASSISTANT_CACHE_KEY_PREFIX")
+    tavily_api_key: str | None = Field(default=None, alias="TAVILY_API_KEY")
 
     @property
     def enable_swagger(self) -> bool:

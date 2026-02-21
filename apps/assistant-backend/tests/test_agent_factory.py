@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.agents.factory import _build_agent_model, _load_mock_messages
+from app.agents.factory import _build_agent_model, _load_mock_messages, build_main_agent
 from app.core.settings import Settings
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from langchain_openai import ChatOpenAI
@@ -46,3 +46,30 @@ def test_build_agent_model_uses_openai_model_when_mock_disabled(monkeypatch) -> 
     model = _build_agent_model(settings)
 
     assert isinstance(model, ChatOpenAI)
+
+
+@pytest.mark.asyncio
+async def test_build_main_agent_passes_tools_and_web_instructions(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    captured: dict[str, object] = {}
+
+    async def fake_create(**kwargs):
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr("app.agents.factory.MainAssistantAgent.create", fake_create)
+
+    settings = Settings(
+        MAIN_AGENT_USE_MOCK=False,
+        MAIN_AGENT_MODEL="gpt-5.2",
+        ASSISTANT_DB_DSN="postgresql://unit-test",
+        MAIN_AGENT_SYSTEM_PROMPT="Base prompt",
+        TAVILY_API_KEY="tavily-test",
+    )
+
+    await build_main_agent(settings)
+
+    assert "web_search" in str(captured["system_prompt"])
+    assert "Never fabricate quotes" in str(captured["system_prompt"])
+    assert len(captured["tools"]) == 2

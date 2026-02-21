@@ -17,6 +17,7 @@ This document gives a stable, high-level map of Exobrain runtime components and 
 - **assistant-backend** (`apps/assistant-backend`)
   - HTTP APIs for auth, chat, journals, and message history.
   - Coordinates domain services and persistence boundaries.
+  - Runs a LangGraph-based assistant agent with pluggable tools (`app/agents/tools`), including web research wrappers (`web_search`, `web_fetch`).
 - **knowledge-interface** (`apps/knowledge-interface`)
   - gRPC boundary for retrieval and knowledge update workflows.
 - **PostgreSQL metastore**
