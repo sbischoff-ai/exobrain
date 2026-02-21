@@ -413,6 +413,8 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
   justify-content: flex-end;
   margin-left: auto;
   gap: 0.3rem;
+  column-gap: 0.3rem;
+  row-gap: 0.3rem;
 }
 
 .exo-md-control-button {
@@ -443,7 +445,11 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
   width: 100%;
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  margin-left: auto;
   gap: 0.3rem;
+  column-gap: 0.3rem;
+  row-gap: 0.3rem;
 }
 
 .message.user .exo-md-inline-code,
