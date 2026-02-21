@@ -40,6 +40,12 @@ pkgs.mkShell {
   shellHook = ''
     export UV_PYTHON="${pkgs.python312}/bin/python3"
     export LD_LIBRARY_PATH=${libPath}:$LD_LIBRARY_PATH
+    if [ -f .env.secrets ]; then
+      echo "Loading environment from .env.secrets"
+      set -a
+      source .env.secrets
+      set +a
+    fi
 
     echo "Exobrain development shell ready"
     echo "- Kubernetes: kubectl, helm, k3d"

@@ -24,4 +24,5 @@ target/
 # env/secrets
 .env
 .env.integration
+.env.secrets
 
