@@ -228,6 +228,35 @@ describe('ChatView', () => {
   });
 
 
+
+  it('jumps to latest when a new user message is appended while scrolled up', async () => {
+    const scrollSpy = vi.spyOn(HTMLElement.prototype, 'scrollTo');
+
+    const { rerender } = render(ChatView, {
+      props: {
+        reference: '2026/02/19',
+        messages: [{ role: 'assistant', content: 'older', clientMessageId: 'a-1' }]
+      }
+    });
+
+    const baseline = scrollSpy.mock.calls.length;
+
+    await rerender({
+      reference: '2026/02/19',
+      messages: [
+        { role: 'assistant', content: 'older', clientMessageId: 'a-1' },
+        { role: 'user', content: 'new prompt', clientMessageId: 'u-1' },
+        { role: 'assistant', content: '', clientMessageId: 'a-2' }
+      ]
+    });
+
+    await waitFor(() => {
+      expect(scrollSpy.mock.calls.length).toBeGreaterThan(baseline);
+      const lastCall = scrollSpy.mock.calls.at(-1)?.[0] as ScrollToOptions;
+      expect(lastCall.behavior).toBe('auto');
+    });
+  });
+
   it('stops auto-scrolling for the current stream when user scrolls up', async () => {
     const scrollSpy = vi.spyOn(HTMLElement.prototype, 'scrollTo');
 
