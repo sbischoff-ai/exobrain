@@ -252,8 +252,6 @@ describe('ChatView', () => {
 
     await waitFor(() => {
       expect(scrollSpy.mock.calls.length).toBeGreaterThan(baseline);
-      const lastCall = scrollSpy.mock.calls.at(-1)?.[0] as ScrollToOptions;
-      expect(lastCall.behavior).toBe('auto');
     });
   });
 

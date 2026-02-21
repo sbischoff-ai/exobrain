@@ -24,8 +24,12 @@
     h5: { base: 'exo-md-heading' },
     h6: { base: 'exo-md-heading' },
     table: { base: 'exo-md-table-wrap', table: 'exo-md-table' },
+    link: { base: 'exo-md-link' },
+    blockquote: { base: 'exo-md-blockquote' },
+    hr: { base: 'exo-md-hr' },
     th: { base: 'exo-md-th' },
     td: { base: 'exo-md-td' },
+    li: { checkbox: 'exo-md-task-checkbox' },
     codespan: { base: 'exo-md-inline-code' },
     code: {
       container: 'exo-md-code-wrap',
@@ -226,7 +230,7 @@
 
     if (forceToLatest) {
       streamScrollMode = 'normal';
-      applyScroll(messagesContainer.scrollHeight, 'auto');
+      applyScroll(messagesContainer.scrollHeight, 'smooth');
       return;
     }
 
@@ -246,7 +250,7 @@
         return;
       }
 
-      applyScroll(messagesContainer.scrollHeight, 'auto');
+      applyScroll(messagesContainer.scrollHeight, 'smooth');
       return;
     }
 
@@ -285,6 +289,7 @@
             <Streamdown
               content={message.content}
               theme={streamdownTheme}
+              shikiTheme="gruvbox-dark-hard"
               components={{ code: StreamdownCode }}
             />
           </div>
