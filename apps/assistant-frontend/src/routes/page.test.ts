@@ -152,6 +152,45 @@ describe('root page', () => {
     });
   });
 
+
+  it('collapses the journal sidebar when clicking outside it', async () => {
+    window.sessionStorage.setItem(
+      'exobrain.assistant.session',
+      JSON.stringify({
+        user: { name: 'Test User', email: 'test.user@exobrain.local' },
+        journalReference: '2026/02/19',
+        messageCount: 0,
+        messages: []
+      })
+    );
+
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(jsonResponse({ name: 'Test User', email: 'test.user@exobrain.local' }))
+      .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19', message_count: 0 }))
+      .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
+      .mockResolvedValueOnce(jsonResponse([{ reference: '2026/02/19' }, { reference: '2025/01/14' }]));
+
+    const { container } = render(Page);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Open journals' })).toBeInTheDocument();
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Open journals' }));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Journal sidebar')).toBeInTheDocument();
+    });
+
+    const backdrop = container.querySelector('.journal-backdrop') as HTMLButtonElement;
+    await fireEvent.click(backdrop);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Open journals' })).toBeInTheDocument();
+      expect(screen.queryByLabelText('Journal sidebar')).not.toBeInTheDocument();
+    });
+  });
+
   it('clears session storage and returns to intro page after logout', async () => {
     window.sessionStorage.setItem(
       'exobrain.assistant.session',

@@ -34,14 +34,16 @@
 
     <div class="journal-list" aria-label="Journal list">
       {#if todayReference}
-        <button
-          type="button"
-          class="journal-item today"
-          class:active={todayReference === currentReference}
-          on:click={() => selectJournal(todayReference)}
-        >
-          Today · {todayReference}
-        </button>
+        <div class="journal-today-wrap">
+          <button
+            type="button"
+            class="journal-item today"
+            class:active={todayReference === currentReference}
+            on:click={() => selectJournal(todayReference)}
+          >
+            Today · {todayReference}
+          </button>
+        </div>
       {/if}
 
       {#each entries as entry (entry.reference)}
