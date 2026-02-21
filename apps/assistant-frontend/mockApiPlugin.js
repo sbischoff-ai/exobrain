@@ -119,6 +119,15 @@ function requireSession(req, res, state) {
   return sessionId;
 }
 
+function parseOptionalNumber(value) {
+  if (value == null || value === "") {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 function listMessagesDescending(messages, cursor, limit) {
   let filtered = [...messages];
   if (typeof cursor === 'number' && !Number.isNaN(cursor)) {
@@ -226,8 +235,8 @@ export function createMockApiPlugin({ enabled }) {
         if (pathname === '/api/journal/today/messages' && req.method === 'GET') {
           const reference = state.entries[0];
           ensureReference(state, reference);
-          const cursor = Number(searchParams.get('cursor'));
-          const limit = Number(searchParams.get('limit') || '50');
+          const cursor = parseOptionalNumber(searchParams.get('cursor'));
+          const limit = parseOptionalNumber(searchParams.get('limit')) ?? 50;
           json(res, 200, listMessagesDescending(state.messagesByReference[reference], cursor, limit));
           return;
         }
@@ -241,8 +250,8 @@ export function createMockApiPlugin({ enabled }) {
           ensureReference(state, reference);
 
           if (pathname.endsWith('/messages')) {
-            const cursor = Number(searchParams.get('cursor'));
-            const limit = Number(searchParams.get('limit') || '50');
+            const cursor = parseOptionalNumber(searchParams.get('cursor'));
+            const limit = parseOptionalNumber(searchParams.get('limit')) ?? 50;
             json(res, 200, listMessagesDescending(state.messagesByReference[reference], cursor, limit));
             return;
           }

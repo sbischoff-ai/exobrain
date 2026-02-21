@@ -49,12 +49,14 @@ test.describe('assistant frontend workspace (mock API)', () => {
     await login(page);
 
     const codeBlock = page.locator('.exo-md-code').first();
+    const codePre = page.locator('.exo-md-code-pre').first();
     await expect(codeBlock).toContainText('const status = "ready";');
     await expect(codeBlock).toContainText('console.log(status);');
 
     const codeText = await codeBlock.innerText();
     expect(codeText).toContain('const status = "ready";\nconsole.log(status);');
 
-    await expect(codeBlock).toHaveCSS('white-space', 'pre');
+    await expect(codePre).toHaveCSS('white-space', 'pre');
+    await expect(page.locator('.exo-md-code-language').first()).toBeVisible();
   });
 });
