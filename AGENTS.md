@@ -138,3 +138,4 @@ A skill is a set of local instructions in a `SKILL.md` file.
 - Assistant metastore seeds are ordered and multi-file (`infra/metastore/assistant-backend/seeds/*.sql`); use `scripts/local/assistant-db-reset-and-seed.sh` (or native equivalent) when refreshing test datasets.
 
 - In coding-agent environments, prefer `scripts/agent/run-assistant-frontend-mock.sh` for frontend-only UI exploration and `scripts/agent/run-assistant-backend-offline.sh` for backend runs that must avoid OpenAI/Tavily network dependencies.
+- For assistant-frontend E2E validation in agent environments, use `scripts/agent/run-assistant-frontend-e2e.sh` (Playwright against mock API mode) before finalizing UI/UX changes.

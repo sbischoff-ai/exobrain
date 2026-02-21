@@ -31,6 +31,20 @@ This enables `ASSISTANT_FRONTEND_MOCK_API=true`, which serves `/api/*` endpoints
 
 When mock mode is enabled, backend proxying is disabled automatically.
 
+## E2E tests (Playwright)
+
+From repository root:
+
+```bash
+cd e2e
+npm install
+npm test
+```
+
+Notes:
+- The Playwright config starts `./scripts/agent/run-assistant-frontend-mock.sh` automatically unless `E2E_USE_EXISTING_SERVER=true` is set.
+- These E2E specs validate login/logout, journal switching, chat auto-scroll behavior, and Streamdown code-block rendering.
+
 ## Running unit tests
 
 From `apps/assistant-frontend` run:

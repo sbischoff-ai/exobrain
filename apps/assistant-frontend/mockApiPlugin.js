@@ -21,7 +21,13 @@ function buildSeedState() {
 
   const messagesByReference = {
     [entries[0]]: [
-      { id: randomUUID(), role: 'assistant', content: 'Welcome to mock mode. Ask me anything.', sequence: 1 },
+      {
+        id: randomUUID(),
+        role: 'assistant',
+        content:
+          'Welcome to mock mode.\n\n```ts\nconst status = "ready";\nconsole.log(status);\n```',
+        sequence: 1
+      },
       { id: randomUUID(), role: 'user', content: 'Show me around this UI.', sequence: 2 },
       {
         id: randomUUID(),
