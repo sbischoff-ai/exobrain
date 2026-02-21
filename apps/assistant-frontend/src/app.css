@@ -337,7 +337,23 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
   white-space: pre-wrap;
 }
 
+.assistant-markdown li [data-streamdown-paragraph] {
+  display: block;
+}
+
+.assistant-markdown li [data-streamdown-paragraph] + [data-streamdown-paragraph] {
+  margin-top: 0.5rem;
+}
+
 .assistant-markdown li > * + * {
+  margin-top: 0.5rem;
+}
+
+.assistant-markdown li > span {
+  display: block;
+}
+
+.assistant-markdown li > span + span {
   margin-top: 0.5rem;
 }
 

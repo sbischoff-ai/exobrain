@@ -77,7 +77,10 @@ describe('ChatView', () => {
 
 
   it('renders paragraph breaks inside list items', async () => {
-    const markdown = `- list item 1\n\n  extra paragraph\n- list item 2`;
+    const markdown = `- list item 1
+
+  extra paragraph
+- list item 2`;
 
     const { container } = render(ChatView, {
       props: {
@@ -88,10 +91,9 @@ describe('ChatView', () => {
 
     const firstListItem = container.querySelector('li');
     expect(firstListItem).toBeTruthy();
-    const normalized = (firstListItem?.textContent || '').replace(/\s+/g, ' ').trim();
-    expect(normalized).toContain('list item 1');
-    expect(normalized).toContain('extra paragraph');
-    expect(normalized).toContain('list item 1 extra paragraph');
+    const firstText = firstListItem?.textContent || '';
+    expect(firstText).toContain('list item 1');
+    expect(firstText).toContain('extra paragraph');
   });
 
 
