@@ -34,6 +34,32 @@ describe('ChatView', () => {
     expect(screen.getByText('Bold user text').tagName).toBe('STRONG');
   });
 
+
+  it('does not auto-scroll while user types in input', async () => {
+    const scrollSpy = vi.spyOn(HTMLElement.prototype, 'scrollTo');
+
+    render(ChatView, {
+      props: {
+        reference: '2026/02/19',
+        messages: [{ role: 'assistant', content: 'Hello there', clientMessageId: 'a-1' }]
+      }
+    });
+
+    await waitFor(() => {
+      expect(scrollSpy.mock.calls.length).toBeGreaterThan(0);
+    });
+
+    const baselineCalls = scrollSpy.mock.calls.length;
+    const input = screen.getByLabelText('Type your message');
+
+    await fireEvent.input(input, { target: { value: 'H' } });
+    await fireEvent.input(input, { target: { value: 'He' } });
+
+    await waitFor(() => {
+      expect(scrollSpy.mock.calls.length).toBe(baselineCalls);
+    });
+  });
+
   it('calls onSend on submit', async () => {
     const sent: string[] = [];
     render(ChatView, { props: { messages: [], onSend: (text: string) => sent.push(text) } });
