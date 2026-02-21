@@ -319,21 +319,13 @@
     </header>
 
     <main class="main-content workspace">
-      {#if !sidebarCollapsed}
-        <button
-          type="button"
-          class="journal-backdrop"
-          aria-label="Close journals"
-          on:click={() => (sidebarCollapsed = true)}
-        ></button>
-      {/if}
-
       <JournalSidebar
         entries={journalEntries}
         currentReference={currentReference}
         todayReference={todayReference}
         collapsed={sidebarCollapsed}
         on:toggle={() => (sidebarCollapsed = !sidebarCollapsed)}
+        on:close={() => (sidebarCollapsed = true)}
         on:select={selectJournal}
       />
 

@@ -165,14 +165,6 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
   stroke-linejoin: round;
 }
 
-.journal-backdrop {
-  position: fixed;
-  inset: var(--header-height) 0 0 0;
-  border: 0;
-  background: transparent;
-  z-index: 25;
-}
-
 .sidebar-flag {
   position: fixed;
   left: 0;
@@ -189,6 +181,14 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
   font-size: 1.2rem;
   cursor: pointer;
   z-index: 20;
+  opacity: 1;
+  transition: opacity 150ms ease, transform 150ms ease;
+}
+
+.sidebar-flag.hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-0.4rem, -34%);
 }
 
 .journal-overlay {
@@ -205,12 +205,16 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
   flex-direction: column;
   gap: 0.7rem;
   z-index: 30;
-  animation: slide-in 170ms ease-out;
+  transform: translateX(-100%);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 180ms ease, opacity 180ms ease;
 }
 
-@keyframes slide-in {
-  from { transform: translateX(-100%); }
-  to { transform: translateX(0); }
+.journal-overlay.open {
+  transform: translateX(0);
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .collapse-arrow {
@@ -328,14 +332,14 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
 .assistant-markdown :global(h3),
 .assistant-markdown :global(h4),
 .assistant-markdown :global(h5),
-.assistant-markdown :global(h6) { margin: 0.8rem 0 0.55rem; }
+.assistant-markdown :global(h6) { margin: 0.85rem 0 0.6rem !important; }
 .assistant-markdown :global(ul),
 .assistant-markdown :global(ol) { padding-left: 1.25rem; }
 .assistant-markdown :global(table) {
   width: 100%;
   border-collapse: collapse;
   border: 1px solid var(--border);
-  margin: 0.75rem 0;
+  margin: 0.8rem 0 !important;
 }
 .assistant-markdown :global(th),
 .assistant-markdown :global(td) {
@@ -354,7 +358,7 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
 }
 .assistant-markdown :global(pre) {
   overflow-x: auto;
-  background: var(--code-bg);
+  background: var(--code-bg) !important;
   border: 1px solid var(--border);
   border-radius: 0.55rem;
   padding: 0.55rem 0.65rem;
@@ -374,6 +378,13 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
   padding: 0.2rem;
   min-width: 1.8rem;
   min-height: 1.8rem;
+}
+
+.assistant-markdown :global([data-streamdown-table-download] button svg) {
+  width: 0.95rem !important;
+  height: 0.95rem !important;
+  max-width: 0.95rem !important;
+  max-height: 0.95rem !important;
 }
 .assistant-markdown :global(#table-download-popover) {
   background: #32302f;

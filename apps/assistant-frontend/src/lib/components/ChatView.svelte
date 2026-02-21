@@ -17,20 +17,27 @@
 
   let messageInput = '';
   let messagesContainer: HTMLDivElement | undefined;
-  let autoScrollDisabledForCurrentStream = false;
-  let streamScrollPace: 'normal' | 'slow' = 'normal';
-  let trackedStreamingMessageId: string | null = null;
-  let lastObservedScrollTop = 0;
-  let isProgrammaticScroll = false;
 
   let previousReference = '';
   let previousFirstMessageId: string | null = null;
-
-
-  $: disabledTooltip = inputDisabled && disabledReason ? disabledReason : undefined;
   let preserveScrollPosition = false;
   let previousScrollTop = 0;
   let previousScrollHeight = 0;
+
+  let activeStreamingMessageId: string | null = null;
+  let streamScrollMode: 'normal' | 'slow' | 'paused' = 'normal';
+  let lastObservedScrollTop = 0;
+  let isProgrammaticScroll = false;
+
+  $: disabledTooltip = inputDisabled && disabledReason ? disabledReason : undefined;
+
+  $: {
+    const nextStreamingMessageId = getCurrentStreamingMessageId();
+    if (nextStreamingMessageId !== activeStreamingMessageId) {
+      activeStreamingMessageId = nextStreamingMessageId;
+      streamScrollMode = 'normal';
+    }
+  }
 
   beforeUpdate(() => {
     if (!messagesContainer || loading) {
@@ -69,6 +76,7 @@
       const heightDelta = messagesContainer.scrollHeight - previousScrollHeight;
       messagesContainer.scrollTop = previousScrollTop + Math.max(heightDelta, 0);
       preserveScrollPosition = false;
+      lastObservedScrollTop = messagesContainer.scrollTop;
     } else {
       await tick();
       scrollToLatestMessage();
@@ -91,21 +99,20 @@
 
   function getCurrentStreamingMessageId(): string | null {
     const lastMessage = messages.at(-1);
-    if (!lastMessage || lastMessage.role !== 'assistant' || !lastMessage.content) {
+    if (!lastMessage || lastMessage.role !== 'assistant') {
       return null;
     }
 
     return lastMessage.clientMessageId;
   }
 
-  $: {
-    const currentStreamingId = getCurrentStreamingMessageId();
-
-    if (currentStreamingId !== trackedStreamingMessageId) {
-      trackedStreamingMessageId = currentStreamingId;
-      autoScrollDisabledForCurrentStream = false;
-      streamScrollPace = 'normal';
+  function isNearBottom(): boolean {
+    if (!messagesContainer) {
+      return false;
     }
+
+    const distanceFromBottom = messagesContainer.scrollHeight - (messagesContainer.scrollTop + messagesContainer.clientHeight);
+    return distanceFromBottom <= 20;
   }
 
   function handleMessagesScroll(): void {
@@ -114,16 +121,21 @@
     }
 
     const currentTop = messagesContainer.scrollTop;
-    if (!isProgrammaticScroll && currentTop < lastObservedScrollTop) {
-      autoScrollDisabledForCurrentStream = true;
+
+    if (!isProgrammaticScroll && activeStreamingMessageId) {
+      if (currentTop < lastObservedScrollTop - 1) {
+        streamScrollMode = 'paused';
+      } else if (isNearBottom()) {
+        streamScrollMode = 'normal';
+      }
     }
 
     lastObservedScrollTop = currentTop;
   }
 
   function handleMessagesWheel(event: WheelEvent): void {
-    if (event.deltaY < 0) {
-      autoScrollDisabledForCurrentStream = true;
+    if (activeStreamingMessageId && event.deltaY < 0) {
+      streamScrollMode = 'paused';
     }
   }
 
@@ -134,9 +146,12 @@
 
     isProgrammaticScroll = true;
     messagesContainer.scrollTo({ top, behavior });
-    lastObservedScrollTop = messagesContainer.scrollTop;
 
     requestAnimationFrame(() => {
+      if (!messagesContainer) {
+        return;
+      }
+      lastObservedScrollTop = messagesContainer.scrollTop;
       isProgrammaticScroll = false;
     });
   }
@@ -153,7 +168,7 @@
 
     const containerRect = messagesContainer.getBoundingClientRect();
     const streamRect = streamElement.getBoundingClientRect();
-    return streamRect.top <= containerRect.top + 12;
+    return streamRect.top <= containerRect.top + 4;
   }
 
   function scrollToLatestMessage(): void {
@@ -161,19 +176,23 @@
       return;
     }
 
-    const currentStreamingId = getCurrentStreamingMessageId();
+    if (activeStreamingMessageId) {
+      if (streamScrollMode === 'paused') {
+        return;
+      }
 
-    if (currentStreamingId && autoScrollDisabledForCurrentStream) {
-      return;
-    }
+      if (streamScrollMode === 'normal' && shouldUseSlowStreamingPace(activeStreamingMessageId)) {
+        streamScrollMode = 'slow';
+      }
 
-    if (currentStreamingId && shouldUseSlowStreamingPace(currentStreamingId)) {
-      streamScrollPace = 'slow';
-    }
+      if (streamScrollMode === 'slow') {
+        const maxScrollTop = Math.max(messagesContainer.scrollHeight - messagesContainer.clientHeight, 0);
+        const nextTop = Math.min(messagesContainer.scrollTop + 8, maxScrollTop);
+        applyScroll(nextTop, 'auto');
+        return;
+      }
 
-    if (currentStreamingId && streamScrollPace === 'slow') {
-      const nextTop = Math.min(messagesContainer.scrollTop + 20, messagesContainer.scrollHeight);
-      applyScroll(nextTop, 'auto');
+      applyScroll(messagesContainer.scrollHeight, 'auto');
       return;
     }
 
@@ -201,7 +220,7 @@
         </div>
       {/if}
 
-      {#each messages as message, index (`${message.role}-${index}-${message.content}`)}
+      {#each messages as message, index (message.clientMessageId ?? `${message.role}-${index}`)}
         <article
           class="message"
           class:user={message.role === 'user'}

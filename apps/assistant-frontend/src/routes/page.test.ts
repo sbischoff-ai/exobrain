@@ -55,7 +55,6 @@ describe('root page', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Journal:')).toBeInTheDocument();
-      expect(screen.getByText('2026/01/01')).toBeInTheDocument();
       expect(screen.getByText('server hello')).toBeInTheDocument();
     });
 
@@ -178,16 +177,16 @@ describe('root page', () => {
 
     await fireEvent.click(screen.getByRole('button', { name: 'Open journals' }));
 
+    const overlay = container.querySelector('.journal-overlay') as HTMLElement;
+
     await waitFor(() => {
-      expect(screen.getByLabelText('Journal sidebar')).toBeInTheDocument();
+      expect(overlay).toHaveClass('open');
     });
 
-    const backdrop = container.querySelector('.journal-backdrop') as HTMLButtonElement;
-    await fireEvent.click(backdrop);
+    await fireEvent.mouseDown(document.body);
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Open journals' })).toBeInTheDocument();
-      expect(screen.queryByLabelText('Journal sidebar')).not.toBeInTheDocument();
+      expect(overlay).not.toHaveClass('open');
     });
   });
 
