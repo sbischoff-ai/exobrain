@@ -289,7 +289,7 @@
             <Streamdown
               content={message.content}
               theme={streamdownTheme}
-              shikiTheme="gruvbox-dark-hard"
+              shikiTheme="gruvbox-dark-medium"
               components={{ code: StreamdownCode }}
             />
           </div>
