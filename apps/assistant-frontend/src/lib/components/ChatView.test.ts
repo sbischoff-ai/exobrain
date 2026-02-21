@@ -21,6 +21,19 @@ describe('ChatView', () => {
     expect(screen.getByText('Hi')).toBeInTheDocument();
   });
 
+
+  it('renders markdown for user messages', () => {
+    render(ChatView, {
+      props: {
+        reference: '2026/02/19',
+        messages: [{ role: 'user', content: '**Bold user text**', clientMessageId: 'u-1' }]
+      }
+    });
+
+    expect(screen.getByText('Bold user text')).toBeInTheDocument();
+    expect(screen.getByText('Bold user text').tagName).toBe('STRONG');
+  });
+
   it('calls onSend on submit', async () => {
     const sent: string[] = [];
     render(ChatView, { props: { messages: [], onSend: (text: string) => sent.push(text) } });
@@ -185,6 +198,38 @@ describe('ChatView', () => {
 
     await waitFor(() => {
       expect(scrollSpy.mock.calls.length).toBeGreaterThan(baselineCalls);
+    });
+  });
+
+
+  it('stops auto-scrolling for the current stream when user scrolls up', async () => {
+    const scrollSpy = vi.spyOn(HTMLElement.prototype, 'scrollTo');
+
+    const { rerender, container } = render(ChatView, {
+      props: {
+        reference: '2026/02/19',
+        messages: [
+          { role: 'user', content: 'Prompt', clientMessageId: 'u-1' },
+          { role: 'assistant', content: 'first', clientMessageId: 'a-1' }
+        ]
+      }
+    });
+
+    const messagesContainer = container.querySelector('.messages') as HTMLDivElement;
+    await fireEvent.wheel(messagesContainer, { deltaY: -15 });
+
+    const baselineCalls = scrollSpy.mock.calls.length;
+
+    await rerender({
+      reference: '2026/02/19',
+      messages: [
+        { role: 'user', content: 'Prompt', clientMessageId: 'u-1' },
+        { role: 'assistant', content: 'first second', clientMessageId: 'a-1' }
+      ]
+    });
+
+    await waitFor(() => {
+      expect(scrollSpy.mock.calls.length).toBe(baselineCalls);
     });
   });
 

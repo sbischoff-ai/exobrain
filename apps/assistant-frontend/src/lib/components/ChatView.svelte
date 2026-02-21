@@ -17,6 +17,11 @@
 
   let messageInput = '';
   let messagesContainer: HTMLDivElement | undefined;
+  let autoScrollDisabledForCurrentStream = false;
+  let streamScrollPace: 'normal' | 'slow' = 'normal';
+  let trackedStreamingMessageId: string | null = null;
+  let lastObservedScrollTop = 0;
+  let isProgrammaticScroll = false;
 
   let previousReference = '';
   let previousFirstMessageId: string | null = null;
@@ -84,15 +89,95 @@
     messageInput = '';
   }
 
+  function getCurrentStreamingMessageId(): string | null {
+    const lastMessage = messages.at(-1);
+    if (!lastMessage || lastMessage.role !== 'assistant' || !lastMessage.content) {
+      return null;
+    }
+
+    return lastMessage.clientMessageId;
+  }
+
+  $: {
+    const currentStreamingId = getCurrentStreamingMessageId();
+
+    if (currentStreamingId !== trackedStreamingMessageId) {
+      trackedStreamingMessageId = currentStreamingId;
+      autoScrollDisabledForCurrentStream = false;
+      streamScrollPace = 'normal';
+    }
+  }
+
+  function handleMessagesScroll(): void {
+    if (!messagesContainer) {
+      return;
+    }
+
+    const currentTop = messagesContainer.scrollTop;
+    if (!isProgrammaticScroll && currentTop < lastObservedScrollTop) {
+      autoScrollDisabledForCurrentStream = true;
+    }
+
+    lastObservedScrollTop = currentTop;
+  }
+
+  function handleMessagesWheel(event: WheelEvent): void {
+    if (event.deltaY < 0) {
+      autoScrollDisabledForCurrentStream = true;
+    }
+  }
+
+  function applyScroll(top: number, behavior: ScrollBehavior): void {
+    if (!messagesContainer) {
+      return;
+    }
+
+    isProgrammaticScroll = true;
+    messagesContainer.scrollTo({ top, behavior });
+    lastObservedScrollTop = messagesContainer.scrollTop;
+
+    requestAnimationFrame(() => {
+      isProgrammaticScroll = false;
+    });
+  }
+
+  function shouldUseSlowStreamingPace(streamingMessageId: string): boolean {
+    if (!messagesContainer) {
+      return false;
+    }
+
+    const streamElement = messagesContainer.querySelector<HTMLElement>(`[data-message-id="${streamingMessageId}"]`);
+    if (!streamElement) {
+      return false;
+    }
+
+    const containerRect = messagesContainer.getBoundingClientRect();
+    const streamRect = streamElement.getBoundingClientRect();
+    return streamRect.top <= containerRect.top + 12;
+  }
+
   function scrollToLatestMessage(): void {
     if (!messagesContainer) {
       return;
     }
 
-    messagesContainer.scrollTo({
-      top: messagesContainer.scrollHeight,
-      behavior: 'smooth'
-    });
+    const currentStreamingId = getCurrentStreamingMessageId();
+
+    if (currentStreamingId && autoScrollDisabledForCurrentStream) {
+      return;
+    }
+
+    if (currentStreamingId && shouldUseSlowStreamingPace(currentStreamingId)) {
+      streamScrollPace = 'slow';
+    }
+
+    if (currentStreamingId && streamScrollPace === 'slow') {
+      const nextTop = Math.min(messagesContainer.scrollTop + 20, messagesContainer.scrollHeight);
+      applyScroll(nextTop, 'auto');
+      return;
+    }
+
+    applyScroll(messagesContainer.scrollHeight, 'smooth');
   }
 </script>
 
@@ -107,7 +192,7 @@
       <p>Loading journal...</p>
     </div>
   {:else}
-    <div class="messages" bind:this={messagesContainer}>
+    <div class="messages" bind:this={messagesContainer} on:scroll={handleMessagesScroll} on:wheel={handleMessagesWheel}>
       {#if canLoadOlder}
         <div class="load-older-wrap">
           <button class="load-older" type="button" on:click={onLoadOlder} disabled={loadingOlder}>
@@ -117,14 +202,15 @@
       {/if}
 
       {#each messages as message, index (`${message.role}-${index}-${message.content}`)}
-        <article class="message" class:user={message.role === 'user'}>
-          {#if message.role === 'assistant'}
-            <div class="assistant-markdown">
-              <Streamdown content={message.content} />
-            </div>
-          {:else}
-            <p>{message.content}</p>
-          {/if}
+        <article
+          class="message"
+          class:user={message.role === 'user'}
+          data-message-id={message.clientMessageId}
+          data-message-role={message.role}
+        >
+          <div class="assistant-markdown" class:user-markdown={message.role === 'user'}>
+            <Streamdown content={message.content} />
+          </div>
         </article>
       {/each}
     </div>

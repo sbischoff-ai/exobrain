@@ -8,6 +8,7 @@
   --accent: #d79921;
   --accent-soft: #fabd2f;
   --border: #7c6f64;
+  --code-bg: #282828;
   --header-height: 5.4rem;
 }
 
@@ -72,7 +73,7 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
   padding: 1rem;
   display: flex;
   flex-direction: column;
-  gap: 0.85rem;
+  gap: 1rem;
 }
 .message { width: 100%; color: var(--muted); line-height: 1.45; }
 .load-older-wrap {
@@ -83,8 +84,8 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
 .load-older {
   border: 1px solid var(--border);
   border-radius: 0.6rem;
-  background: var(--surface);
-  color: var(--text);
+  background: transparent;
+  color: var(--muted);
   font: inherit;
   font-size: 0.85rem;
   padding: 0.45rem 0.75rem;
@@ -164,6 +165,14 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
   stroke-linejoin: round;
 }
 
+.journal-backdrop {
+  position: fixed;
+  inset: var(--header-height) 0 0 0;
+  border: 0;
+  background: transparent;
+  z-index: 25;
+}
+
 .sidebar-flag {
   position: fixed;
   left: 0;
@@ -239,10 +248,15 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
   font: inherit;
   cursor: pointer;
 }
-.journal-item.today {
+.journal-today-wrap {
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: 2;
+  padding: 0 0 0.4rem;
+  background: #32302f;
+}
+
+.journal-item.today {
   background: linear-gradient(180deg, #d79921 0%, #b57614 100%);
   border-color: #fabd2f;
   color: #282828;
@@ -309,11 +323,72 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
 .assistant-markdown :global(pre),
 .assistant-markdown :global(blockquote),
 .assistant-markdown :global(table) { margin: 0.5rem 0; }
+.assistant-markdown :global(h1),
+.assistant-markdown :global(h2),
+.assistant-markdown :global(h3),
+.assistant-markdown :global(h4),
+.assistant-markdown :global(h5),
+.assistant-markdown :global(h6) { margin: 0.8rem 0 0.55rem; }
 .assistant-markdown :global(ul),
 .assistant-markdown :global(ol) { padding-left: 1.25rem; }
-.assistant-markdown :global(code) { font-family: inherit; }
-.assistant-markdown :global(pre) { overflow-x: auto; }
-
+.assistant-markdown :global(table) {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid var(--border);
+  margin: 0.75rem 0;
+}
+.assistant-markdown :global(th),
+.assistant-markdown :global(td) {
+  border: 1px solid var(--border);
+  padding: 0.45rem 0.65rem;
+}
+.assistant-markdown :global(th) {
+  background: rgb(80 73 69 / 75%);
+  color: var(--text);
+}
+.assistant-markdown :global(code) {
+  font-family: inherit;
+  background: var(--code-bg);
+  border-radius: 0.3rem;
+  padding: 0.1rem 0.3rem;
+}
+.assistant-markdown :global(pre) {
+  overflow-x: auto;
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 0.55rem;
+  padding: 0.55rem 0.65rem;
+}
+.assistant-markdown :global(pre code) {
+  background: transparent;
+  padding: 0;
+}
+.assistant-markdown :global([data-streamdown-table-download]) {
+  margin-bottom: 0.35rem;
+}
+.assistant-markdown :global([data-streamdown-table-download] button) {
+  background: var(--surface);
+  color: var(--accent-soft);
+  border: 1px solid var(--border);
+  border-radius: 0.45rem;
+  padding: 0.2rem;
+  min-width: 1.8rem;
+  min-height: 1.8rem;
+}
+.assistant-markdown :global(#table-download-popover) {
+  background: #32302f;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.25rem;
+}
+.assistant-markdown :global(#table-download-popover button) {
+  padding: 0.35rem 0.55rem !important;
+  margin: 0.1rem 0 !important;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: var(--surface);
+  color: var(--text);
+}
 @media (max-width: 900px) {
   :root { --header-height: 5rem; }
   .main-content { padding: 0.75rem; }
