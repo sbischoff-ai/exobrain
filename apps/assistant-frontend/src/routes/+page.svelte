@@ -280,7 +280,7 @@
 </script>
 
 <svelte:head>
-  <title>Exobrain Assistant</title>
+  <title>DRVID Assistant</title>
 </svelte:head>
 
 {#if initializing}
@@ -288,8 +288,8 @@
 {:else if !authenticated}
   <main class="intro-page">
     <div class="intro-content">
-      <img src="/logo.png" alt="Exobrain logo" class="intro-logo" />
-      <h1>EXOBRAIN</h1>
+      <img src="/logo.png" alt="DRVID logo" class="intro-logo" />
+      <h1>DRVID</h1>
       <form class="intro-login" on:submit={login}>
         <label>
           Email
@@ -311,8 +311,8 @@
     <header class="header">
       <div class="header-inner">
         <div class="brand">
-          <img src="/logo.png" alt="Exobrain logo" class="logo" />
-          <h1>EXOBRAIN</h1>
+          <img src="/logo.png" alt="DRVID logo" class="logo" />
+          <h1>DRVID</h1>
         </div>
         <UserMenu {user} onLogout={logout} />
       </div>

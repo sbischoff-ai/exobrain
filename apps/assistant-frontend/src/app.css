@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Space+Mono:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Space+Mono:wght@400;700&display=swap');
 
 :root {
   --bg: #3c3836;
@@ -35,9 +35,9 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
 .brand { display: flex; align-items: center; gap: 0.8rem; }
 .logo { width: 3.375rem; height: 3.375rem; border-radius: 0.45rem; object-fit: cover; }
 .brand h1 {
-  font-family: 'Orbitron', 'Eurostile', 'Trebuchet MS', sans-serif;
-  letter-spacing: 0.16em;
-  font-size: clamp(1.05rem, 2vw, 1.35rem);
+  font-family: 'Cinzel', 'Eurostile', 'Trebuchet MS', sans-serif;
+  letter-spacing: 0.085em;
+  font-size: clamp(2rem, 2vw, 1.35rem);
   color: var(--accent-soft);
   text-shadow: 0 0 10px rgb(250 189 47 / 22%);
 }
@@ -286,9 +286,10 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
   object-fit: contain;
 }
 .intro-content h1 {
-  font-family: 'Orbitron', 'Eurostile', 'Trebuchet MS', sans-serif;
-  letter-spacing: 0.16em;
-  color: var(--accent-soft);
+  font-family: 'Cinzel', 'Eurostile', 'Trebuchet MS', sans-serif;
+  letter-spacing: 0.085em;
+  font-size: 3em;
+  color: var(--text);
 }
 .intro-login { width: min(20rem, 90vw); display: flex; flex-direction: column; gap: 0.6rem; }
 .intro-login label { display: flex; flex-direction: column; gap: 0.25rem; color: var(--muted); font-size: 0.9rem; }
