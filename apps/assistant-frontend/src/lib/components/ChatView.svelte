@@ -1,6 +1,7 @@
 <script lang="ts">
   import { afterUpdate, beforeUpdate, tick } from 'svelte';
   import { Streamdown } from 'svelte-streamdown';
+  import StreamdownCode from 'svelte-streamdown/code';
 
   import type { StoredMessage } from '$lib/models/journal';
 
@@ -44,6 +45,7 @@
 
   let previousReference = '';
   let previousFirstMessageId: string | null = null;
+  let previousLastMessageId: string | null = null;
   let previousMessageSignature = '';
   let previousLoading = false;
 
@@ -51,6 +53,7 @@
   let previousScrollTop = 0;
   let previousScrollHeight = 0;
   let shouldReactToMessageUpdate = false;
+  let shouldForceJumpToLatest = false;
 
   let activeStreamingMessageId: string | null = null;
   let streamScrollMode: 'normal' | 'slow' | 'paused' = 'normal';
@@ -76,6 +79,13 @@
       previousReference !== reference ||
       previousMessageSignature !== nextMessageSignature ||
       (previousLoading && !loading);
+
+    const currentLastMessageId = currentLastMessage?.clientMessageId ?? null;
+    shouldForceJumpToLatest =
+      previousLastMessageId !== null &&
+      currentLastMessageId !== null &&
+      currentLastMessageId !== previousLastMessageId &&
+      !preserveScrollPosition;
 
     if (!messagesContainer || loading) {
       preserveScrollPosition = false;
@@ -113,12 +123,13 @@
         lastObservedScrollTop = messagesContainer.scrollTop;
       } else {
         await tick();
-        scrollToLatestMessage();
+        scrollToLatestMessage(shouldForceJumpToLatest);
       }
     }
 
     previousReference = reference;
     previousFirstMessageId = currentFirstMessageId;
+    previousLastMessageId = currentLastMessage?.clientMessageId ?? null;
     previousMessageSignature = `${messages.length}|${currentFirstMessageId ?? ''}|${currentLastMessage?.clientMessageId ?? ''}|${currentLastMessage?.content ?? ''}`;
     previousLoading = loading;
   });
@@ -208,8 +219,14 @@
     return streamRect.top <= containerRect.top + 8;
   }
 
-  function scrollToLatestMessage(): void {
+  function scrollToLatestMessage(forceToLatest = false): void {
     if (!messagesContainer) {
+      return;
+    }
+
+    if (forceToLatest) {
+      streamScrollMode = 'normal';
+      applyScroll(messagesContainer.scrollHeight, 'auto');
       return;
     }
 
@@ -224,7 +241,7 @@
 
       if (streamScrollMode === 'slow') {
         const maxScrollTop = Math.max(messagesContainer.scrollHeight - messagesContainer.clientHeight, 0);
-        const nextTop = Math.min(messagesContainer.scrollTop + 3, maxScrollTop);
+        const nextTop = Math.min(messagesContainer.scrollTop + 2, maxScrollTop);
         applyScroll(nextTop, 'auto');
         return;
       }
@@ -265,7 +282,11 @@
           data-message-role={message.role}
         >
           <div class="assistant-markdown" class:user-markdown={message.role === 'user'}>
-            <Streamdown content={message.content} theme={streamdownTheme} />
+            <Streamdown
+              content={message.content}
+              theme={streamdownTheme}
+              components={{ code: StreamdownCode }}
+            />
           </div>
         </article>
       {/each}
