@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.agents.tools.web import TavilyWebTools, build_web_tools, parse_extract_result, parse_search_results
+from app.agents.tools.web import TavilyWebTools, WebSearchStreamMapper, build_web_tools, parse_extract_result, parse_search_results
 
 
 class _StubWebTools(TavilyWebTools):
@@ -101,3 +101,23 @@ def test_build_web_tools_uses_provider_for_search_and_fetch() -> None:
     ]
     assert fetched["url"] == "https://example.com/offline-mock"
     assert "Offline mock" in (fetched["title"] or "")
+
+
+def test_web_search_stream_mapper_counts_list_results() -> None:
+    mapper = WebSearchStreamMapper()
+
+    event = mapper.map_tool_response(args={"query": "x"}, result=[{"url": "https://example.com"}])
+
+    assert event["type"] == "tool_response"
+    assert event["data"]["message"] == "Found 1 candidate source"
+
+
+def test_web_search_stream_mapper_counts_json_string_results() -> None:
+    mapper = WebSearchStreamMapper()
+
+    event = mapper.map_tool_response(
+        args={"query": "x"},
+        result='{"results": [{"url": "https://a"}, {"url": "https://b"}]}'
+    )
+
+    assert event["data"]["message"] == "Found 2 candidate sources"
