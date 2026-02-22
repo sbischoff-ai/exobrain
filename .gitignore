@@ -26,3 +26,5 @@ target/
 .env.integration
 .env.secrets
 
+# E2E test
+e2e/test-results/

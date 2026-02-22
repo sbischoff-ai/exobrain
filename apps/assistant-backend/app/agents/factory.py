@@ -123,5 +123,5 @@ async def build_main_agent(settings: Settings) -> ChatAgent:
         model=model,
         system_prompt=system_prompt,
         assistant_db_dsn=settings.assistant_db_dsn,
-        tools=build_web_tools(web_tools=web_tools_dependency),
+        tools=build_web_tools(web_tools=web_tools_dependency) if not settings.main_agent_use_mock else None,
     )
