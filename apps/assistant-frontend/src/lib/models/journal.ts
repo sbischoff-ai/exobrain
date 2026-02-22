@@ -19,9 +19,17 @@ export interface JournalMessage {
   metadata?: Record<string, unknown> | null;
 }
 
+export interface ProcessInfo {
+  id: string;
+  title: string;
+  description: string;
+  state: 'pending' | 'resolved' | 'error' | 'interrupted';
+}
+
 export interface StoredMessage {
   role: MessageRole;
   content: string;
   clientMessageId: string;
   sequence?: number;
+  processInfos?: ProcessInfo[];
 }

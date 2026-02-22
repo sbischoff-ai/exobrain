@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.agents.tools.web import _parse_extract_result, _parse_search_results, TavilyWebTools, build_web_tools
+from app.agents.tools.web import TavilyWebTools, build_web_tools, parse_extract_result, parse_search_results
 
 
 class _StubWebTools(TavilyWebTools):
@@ -30,8 +30,8 @@ class _StubWebTools(TavilyWebTools):
         }
 
 
-def test_parse_search_results_normalizes_url_and_bounds_snippet() -> None:
-    results = _parse_search_results(
+def testparse_search_results_normalizes_url_and_bounds_snippet() -> None:
+    results = parse_search_results(
         {
             "results": [
                 {
@@ -57,8 +57,8 @@ def test_parse_search_results_normalizes_url_and_bounds_snippet() -> None:
     assert len(results[0]["snippet"]) <= 320
 
 
-def test_parse_extract_result_returns_plain_payload() -> None:
-    parsed = _parse_extract_result(
+def testparse_extract_result_returns_plain_payload() -> None:
+    parsed = parse_extract_result(
         {
             "results": [
                 {

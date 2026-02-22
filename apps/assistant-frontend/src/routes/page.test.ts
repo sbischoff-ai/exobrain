@@ -11,31 +11,35 @@ function jsonResponse<T>(payload: T, status = 200): Response {
   } as Response;
 }
 
+class MockEventSource {
+  static latest: MockEventSource | null = null;
+  readyState = 1;
+  onerror: ((event: Event) => void) | null = null;
+  private listeners = new Map<string, Array<(event: MessageEvent) => void>>();
 
+  constructor(_url: string) {
+    MockEventSource.latest = this;
+  }
 
-function streamResponse(chunks: string[], status = 200, delayMs = 0): Response {
-  const encoder = new TextEncoder();
-  const body = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      for (const chunk of chunks) {
-        if (delayMs > 0) {
-          await new Promise((resolve) => setTimeout(resolve, delayMs));
-        }
-        controller.enqueue(encoder.encode(chunk));
-      }
-      controller.close();
+  addEventListener(type: string, handler: (event: MessageEvent) => void): void {
+    this.listeners.set(type, [...(this.listeners.get(type) ?? []), handler]);
+  }
+
+  emit(type: string, data: unknown): void {
+    for (const handler of this.listeners.get(type) ?? []) {
+      handler({ data: JSON.stringify(data), currentTarget: this } as MessageEvent);
     }
-  });
+  }
 
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    body
-  } as Response;
+  close(): void {
+    this.readyState = 2;
+  }
 }
+
 describe('root page', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
     window.sessionStorage.clear();
   });
 
@@ -214,7 +218,8 @@ describe('root page', () => {
 
 
 
-  it('shows Thinking placeholder until the first stream chunk arrives', async () => {
+
+  it('streams chat chunks and tool status via EventSource', async () => {
     window.sessionStorage.setItem(
       'exobrain.assistant.session',
       JSON.stringify({
@@ -225,12 +230,14 @@ describe('root page', () => {
       })
     );
 
+    vi.stubGlobal('EventSource', MockEventSource as unknown as typeof EventSource);
+
     vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(jsonResponse({ name: 'Test User', email: 'test.user@exobrain.local' }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19', message_count: 0 }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
       .mockResolvedValueOnce(jsonResponse([{ reference: '2026/02/19' }]))
-      .mockResolvedValueOnce(streamResponse(['assistant reply'], 200, 50))
+      .mockResolvedValueOnce(jsonResponse({ stream_id: 'stream-1' }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
       .mockResolvedValueOnce(jsonResponse([{ reference: '2026/02/19' }]));
 
@@ -244,11 +251,17 @@ describe('root page', () => {
     await fireEvent.input(input, { target: { value: 'Need research' } });
     await fireEvent.submit(input.closest('form')!);
 
-    expect(screen.getByText('Thinking ...')).toBeInTheDocument();
+    const source = MockEventSource.latest!;
+    source.emit('tool_call', { title: 'Web search', description: 'Searching the web' });
+    source.emit('message_chunk', { text: 'assistant reply' });
+    source.emit('tool_response', { message: 'Found 1 source' });
+    source.close();
+    source.onerror?.(new Event('error'));
 
     await waitFor(() => {
-      expect(screen.queryByText('Thinking ...')).not.toBeInTheDocument();
       expect(screen.getByText('assistant reply')).toBeInTheDocument();
+      expect(screen.getByText('Web search')).toBeInTheDocument();
+      expect(screen.getByText('Found 1 source')).toBeInTheDocument();
     });
   });
 
