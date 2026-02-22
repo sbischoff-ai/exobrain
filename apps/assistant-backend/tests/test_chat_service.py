@@ -44,7 +44,10 @@ async def test_chat_service_stream_events_forwards_conversation_context(fake_dat
 
     events = [event async for event in service.stream_events(stream_id)]
 
-    assert events == [{"type": "message_chunk", "data": {"text": "first"}}]
+    assert events == [
+        {"type": "message_chunk", "data": {"text": "first"}},
+        {"type": "done", "data": {"reason": "complete"}},
+    ]
     assert agent.calls == [("Prompt A", "conv-1")]
 
 

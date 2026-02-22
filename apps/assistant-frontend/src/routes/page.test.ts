@@ -255,8 +255,7 @@ describe('root page', () => {
     source.emit('tool_call', { title: 'Web search', description: 'Searching the web' });
     source.emit('message_chunk', { text: 'assistant reply' });
     source.emit('tool_response', { message: 'Found 1 source' });
-    source.close();
-    source.onerror?.(new Event('error'));
+    source.emit('done', { reason: 'complete' });
 
     await waitFor(() => {
       expect(screen.getByText('assistant reply')).toBeInTheDocument();
