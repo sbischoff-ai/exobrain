@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from app.agents.tools.contracts import StreamEventMapper
@@ -20,13 +21,30 @@ class WebSearchStreamMapper(StreamEventMapper):
         }
 
     def map_tool_response(self, *, args: dict[str, Any], result: Any) -> ChatStreamEvent:
-        count = len(result) if isinstance(result, list) else 0
+        count = self._count_sources(result)
         return {
             "type": "tool_response",
             "data": {
                 "message": f"Found {count} candidate source{'s' if count != 1 else ''}",
             },
         }
+
+    def _count_sources(self, result: Any) -> int:
+        if isinstance(result, list):
+            return len(result)
+
+        if isinstance(result, dict):
+            nested = result.get("results")
+            return len(nested) if isinstance(nested, list) else 0
+
+        if isinstance(result, str):
+            try:
+                parsed = json.loads(result)
+            except json.JSONDecodeError:
+                return 0
+            return self._count_sources(parsed)
+
+        return 0
 
     def map_tool_error(self, *, args: dict[str, Any], error: str) -> ChatStreamEvent:
         query = str(args.get("query") or "requested query")
