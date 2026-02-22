@@ -33,9 +33,13 @@ class ErrorEventPayload(BaseModel):
     message: str = Field(..., description="Stream error detail")
 
 
+class DoneEventPayload(BaseModel):
+    reason: str = Field(..., description="Terminal stream status")
+
+
 class ChatStreamEvent(BaseModel):
-    type: Literal["tool_call", "tool_response", "error", "message_chunk"] = Field(
+    type: Literal["tool_call", "tool_response", "error", "message_chunk", "done"] = Field(
         ...,
         description="SSE event type. Additional event types may be introduced in future versions.",
     )
-    data: ToolCallEventPayload | ToolResponseEventPayload | MessageChunkEventPayload | ErrorEventPayload
+    data: ToolCallEventPayload | ToolResponseEventPayload | MessageChunkEventPayload | ErrorEventPayload | DoneEventPayload

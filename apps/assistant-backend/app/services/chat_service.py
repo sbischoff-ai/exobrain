@@ -97,4 +97,5 @@ class ChatService:
             logger.exception("chat stream failed", extra={"stream_id": stream_id})
             await queue.put({"type": "error", "data": {"message": "Assistant stream failed"}})
         finally:
+            await queue.put({"type": "done", "data": {"reason": "complete"}})
             await queue.put(_SENTINEL)

@@ -21,12 +21,16 @@ class MessageChunkEventData(TypedDict):
     text: str
 
 
-ChatStreamEventType = Literal["tool_call", "tool_response", "error", "message_chunk"]
+class DoneEventData(TypedDict):
+    reason: str
+
+
+ChatStreamEventType = Literal["tool_call", "tool_response", "error", "message_chunk", "done"]
 
 
 class ChatStreamEvent(TypedDict):
     type: ChatStreamEventType
-    data: ToolCallEventData | ToolResponseEventData | ErrorEventData | MessageChunkEventData
+    data: ToolCallEventData | ToolResponseEventData | ErrorEventData | MessageChunkEventData | DoneEventData
 
 
 def encode_sse_event(event: ChatStreamEvent) -> str:

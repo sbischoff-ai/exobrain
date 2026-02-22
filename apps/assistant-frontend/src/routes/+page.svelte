@@ -36,6 +36,10 @@
     text: string;
   }
 
+  interface DonePayload {
+    reason: string;
+  }
+
   let initializing = true;
   let authenticated = false;
   let loadingJournal = false;
@@ -308,11 +312,12 @@
       const { stream_id: streamId } = (await response.json()) as ChatStartResponse;
       await new Promise<void>((resolve, reject) => {
         const eventSource = new EventSource(`/api/chat/stream/${streamId}`);
+        let doneReceived = false;
 
         eventSource.addEventListener('message_chunk', (event) => {
           const payload = JSON.parse((event as MessageEvent).data) as MessageChunkPayload;
           accumulated += payload.text;
-                updateStreamingMessage(assistantClientMessageId, accumulated, processInfos);
+          updateStreamingMessage(assistantClientMessageId, accumulated, processInfos);
         });
 
         eventSource.addEventListener('tool_call', (event) => {
@@ -336,16 +341,11 @@
         });
 
         eventSource.addEventListener('error', (event) => {
-          const source = event.currentTarget as EventSource;
-          if (source.readyState === EventSource.CLOSED) {
-            eventSource.close();
-            resolve();
+          const data = (event as MessageEvent).data;
+          if (!data) {
             return;
           }
-
-          const payload = (event as MessageEvent).data
-            ? (JSON.parse((event as MessageEvent).data) as ErrorEventPayload)
-            : { message: 'Assistant stream failed.' };
+          const payload = JSON.parse(data) as ErrorEventPayload;
           processInfos = [
             ...processInfos,
             {
@@ -358,11 +358,17 @@
           updateStreamingMessage(assistantClientMessageId, accumulated, processInfos);
         });
 
+        eventSource.addEventListener('done', (_event) => {
+          doneReceived = true;
+          eventSource.close();
+          resolve();
+        });
+
         eventSource.onerror = () => {
-          if (eventSource.readyState === EventSource.CLOSED) {
-            resolve();
+          if (doneReceived || eventSource.readyState === EventSource.CLOSED) {
             return;
           }
+          eventSource.close();
           reject(new Error('assistant stream disconnected'));
         };
       });

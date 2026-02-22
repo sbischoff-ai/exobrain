@@ -42,7 +42,7 @@ async def message(
     summary="Consume assistant SSE stream",
     description=(
         "Server-sent event stream for a previously started chat response. "
-        "Event types currently include tool_call, tool_response, error, and message_chunk."
+        "Event types currently include tool_call, tool_response, error, message_chunk, and done."
     ),
 )
 async def stream(
