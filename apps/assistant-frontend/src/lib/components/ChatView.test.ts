@@ -4,6 +4,29 @@ import { describe, expect, it, vi } from 'vitest';
 import ChatView from './ChatView.svelte';
 
 describe('ChatView', () => {
+
+  it('renders assistant process info labels', () => {
+    render(ChatView, {
+      props: {
+        messages: [
+          {
+            role: 'assistant',
+            content: 'Hello',
+            clientMessageId: 'a-1',
+            processInfos: [
+              { id: 'p-1', title: 'Web search', description: 'Searching', state: 'pending' },
+              { id: 'p-2', title: 'Error', description: 'Failed', state: 'error' }
+            ]
+          }
+        ]
+      }
+    });
+
+    expect(screen.getByText('Web search')).toBeInTheDocument();
+    expect(screen.getByText('Searching...')).toBeInTheDocument();
+    expect(screen.getByText('Failed')).toBeInTheDocument();
+  });
+
   it('renders journal reference and messages', () => {
     render(ChatView, {
       props: {
@@ -138,19 +161,6 @@ describe('ChatView', () => {
   });
 
 
-  it('shows Thinking placeholder while waiting for first assistant chunk', () => {
-    render(ChatView, {
-      props: {
-        waitingForFirstChunk: true,
-        messages: [
-          { role: 'user', content: 'Question', clientMessageId: 'u-1' },
-          { role: 'assistant', content: '', clientMessageId: 'a-1' }
-        ]
-      }
-    });
-
-    expect(screen.getByText('Thinking ...')).toBeInTheDocument();
-  });
   it('calls onSend on submit', async () => {
     const sent: string[] = [];
     render(ChatView, { props: { messages: [], onSend: (text: string) => sent.push(text) } });

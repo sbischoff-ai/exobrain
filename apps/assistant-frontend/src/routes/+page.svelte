@@ -4,7 +4,7 @@
   import JournalSidebar from '$lib/components/JournalSidebar.svelte';
   import UserMenu from '$lib/components/UserMenu.svelte';
   import type { CurrentUser } from '$lib/models/auth';
-  import type { JournalEntry, StoredMessage } from '$lib/models/journal';
+  import type { JournalEntry, ProcessInfo, StoredMessage } from '$lib/models/journal';
   import { authService } from '$lib/services/authService';
   import { journalService } from '$lib/services/journalService';
   import {
@@ -15,12 +15,34 @@
   } from '$lib/stores/journalSessionStore';
   import { makeClientMessageId, toStoredMessages } from '$lib/utils/message';
 
+  interface ChatStartResponse {
+    stream_id: string;
+  }
+
+  interface ToolCallEventPayload {
+    title: string;
+    description: string;
+  }
+
+  interface ToolResponseEventPayload {
+    message: string;
+  }
+
+  interface ErrorEventPayload {
+    message: string;
+  }
+
+  interface MessageChunkPayload {
+    text: string;
+  }
+
   let initializing = true;
   let authenticated = false;
   let loadingJournal = false;
   let syncingMessages = false;
   let loadingOlderMessages = false;
   let sidebarCollapsed = true;
+  let awaitingAssistant = false;
 
   let authError = '';
   let email = '';
@@ -32,12 +54,11 @@
   let currentReference = '';
   let messages: StoredMessage[] = [];
   let requestError = '';
-  let waitingForFirstChunk = false;
   let currentMessageCount = 0;
 
   $: canLoadOlderMessages = currentMessageCount > messages.length;
   $: isPastJournalSelected = Boolean(currentReference) && Boolean(todayReference) && currentReference !== todayReference;
-  $: chatInputDisabled = loadingJournal || syncingMessages || isPastJournalSelected;
+  $: chatInputDisabled = loadingJournal || syncingMessages || isPastJournalSelected || awaitingAssistant;
 
   onMount(async () => {
     await bootstrap();
@@ -93,7 +114,7 @@
     messages = [];
     currentMessageCount = 0;
     requestError = '';
-    waitingForFirstChunk = false;
+    awaitingAssistant = false;
   }
 
   async function refreshAllState(): Promise<void> {
@@ -217,6 +238,41 @@
     }
   }
 
+  function updateStreamingMessage(
+    assistantClientMessageId: string,
+    accumulatedContent: string,
+    processInfos: ProcessInfo[]
+  ): void {
+    messages = [
+      ...messages.slice(0, -1),
+      {
+        role: 'assistant',
+        content: accumulatedContent,
+        clientMessageId: assistantClientMessageId,
+        processInfos
+      }
+    ];
+  }
+
+  function resolvePendingProcessInfo(processInfos: ProcessInfo[], message: string): ProcessInfo[] {
+    for (let index = processInfos.length - 1; index >= 0; index -= 1) {
+      const item = processInfos[index];
+      if (item.state === 'pending') {
+        return processInfos.map((entry, entryIndex) =>
+          entryIndex === index ? { ...entry, state: 'resolved', description: message } : entry
+        );
+      }
+    }
+
+    return [...processInfos, { id: makeClientMessageId(), title: 'Tool result', description: message, state: 'resolved' }];
+  }
+
+  function interruptPendingProcessInfos(processInfos: ProcessInfo[]): ProcessInfo[] {
+    return processInfos.map((item) =>
+      item.state === 'pending' ? { ...item, state: 'interrupted', description: 'Interrupted' } : item
+    );
+  }
+
   async function handleSend(text: string): Promise<void> {
     requestError = '';
 
@@ -228,13 +284,15 @@
     const userClientMessageId = makeClientMessageId();
     const assistantClientMessageId = makeClientMessageId();
 
-    const optimisticMessages: StoredMessage[] = [
+    let accumulated = '';
+    let processInfos: ProcessInfo[] = [];
+
+    messages = [
       ...messages,
       { role: 'user', content: text, clientMessageId: userClientMessageId },
-      { role: 'assistant', content: '', clientMessageId: assistantClientMessageId }
+      { role: 'assistant', content: '', clientMessageId: assistantClientMessageId, processInfos }
     ];
-    messages = optimisticMessages;
-    waitingForFirstChunk = true;
+    awaitingAssistant = true;
 
     try {
       const response = await fetch('/api/chat/message', {
@@ -243,47 +301,82 @@
         body: JSON.stringify({ message: text, client_message_id: userClientMessageId })
       });
 
-      if (!response.ok || !response.body) {
+      if (!response.ok) {
         throw new Error(`chat failed: ${response.status}`);
       }
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let done = false;
-      let accumulated = '';
+      const { stream_id: streamId } = (await response.json()) as ChatStartResponse;
+      await new Promise<void>((resolve, reject) => {
+        const eventSource = new EventSource(`/api/chat/stream/${streamId}`);
 
-      while (!done) {
-        const part = await reader.read();
-        done = part.done;
-        if (!done) {
-          accumulated += decoder.decode(part.value, { stream: true });
-          if (accumulated.length > 0) {
-            waitingForFirstChunk = false;
-          }
-          messages = [
-            ...optimisticMessages.slice(0, -1),
-            { role: 'assistant', content: accumulated, clientMessageId: assistantClientMessageId }
+        eventSource.addEventListener('message_chunk', (event) => {
+          const payload = JSON.parse((event as MessageEvent).data) as MessageChunkPayload;
+          accumulated += payload.text;
+                updateStreamingMessage(assistantClientMessageId, accumulated, processInfos);
+        });
+
+        eventSource.addEventListener('tool_call', (event) => {
+          const payload = JSON.parse((event as MessageEvent).data) as ToolCallEventPayload;
+          processInfos = [
+            ...processInfos,
+            {
+              id: makeClientMessageId(),
+              title: payload.title,
+              description: payload.description,
+              state: 'pending'
+            }
           ];
-        }
-      }
+          updateStreamingMessage(assistantClientMessageId, accumulated, processInfos);
+        });
 
-      const trailing = decoder.decode();
-      if (trailing) {
-        accumulated += trailing;
-        waitingForFirstChunk = false;
-        messages = [
-          ...optimisticMessages.slice(0, -1),
-          { role: 'assistant', content: accumulated, clientMessageId: assistantClientMessageId }
-        ];
-      }
+        eventSource.addEventListener('tool_response', (event) => {
+          const payload = JSON.parse((event as MessageEvent).data) as ToolResponseEventPayload;
+          processInfos = resolvePendingProcessInfo(processInfos, payload.message);
+          updateStreamingMessage(assistantClientMessageId, accumulated, processInfos);
+        });
 
-      waitingForFirstChunk = false;
-      currentMessageCount += 2;
+        eventSource.addEventListener('error', (event) => {
+          const source = event.currentTarget as EventSource;
+          if (source.readyState === EventSource.CLOSED) {
+            eventSource.close();
+            resolve();
+            return;
+          }
+
+          const payload = (event as MessageEvent).data
+            ? (JSON.parse((event as MessageEvent).data) as ErrorEventPayload)
+            : { message: 'Assistant stream failed.' };
+          processInfos = [
+            ...processInfos,
+            {
+              id: makeClientMessageId(),
+              title: 'Error',
+              description: payload.message,
+              state: 'error'
+            }
+          ];
+          updateStreamingMessage(assistantClientMessageId, accumulated, processInfos);
+        });
+
+        eventSource.onerror = () => {
+          if (eventSource.readyState === EventSource.CLOSED) {
+            resolve();
+            return;
+          }
+          reject(new Error('assistant stream disconnected'));
+        };
+      });
+
+      processInfos = interruptPendingProcessInfos(processInfos);
+      updateStreamingMessage(assistantClientMessageId, accumulated, processInfos);
+
+        currentMessageCount += 2;
       saveSessionState(buildSessionState(currentReference, messages, currentMessageCount));
       await loadJournalEntries();
     } catch {
-      waitingForFirstChunk = false;
-      requestError = 'Could not reach the assistant backend. Please try again.';
+        requestError = 'Could not reach the assistant backend. Please try again.';
+    } finally {
+      awaitingAssistant = false;
     }
   }
 </script>
@@ -347,7 +440,6 @@
         inputDisabled={chatInputDisabled}
         disabledReason={isPastJournalSelected ? 'You can not chat with past journals.' : ''}
         requestError={requestError}
-        {waitingForFirstChunk}
         onSend={handleSend}
         onLoadOlder={loadOlderMessages}
       />

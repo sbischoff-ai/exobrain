@@ -14,7 +14,6 @@
   export let inputDisabled = false;
   export let disabledReason = '';
   export let requestError = '';
-  export let waitingForFirstChunk = false;
   export let onSend: (text: string) => void = () => {};
   export let onLoadOlder: () => void = () => {};
 
@@ -291,20 +290,23 @@
           data-message-role={message.role}
         >
           <div class="assistant-markdown" class:user-markdown={message.role === 'user'}>
-            {#if waitingForFirstChunk && message.role === 'assistant' && !message.content && index === messages.length - 1}
-              <div class="chat-loading" role="status" aria-live="polite">
-                <span class="spinner"></span>
-                <p>Thinking ...</p>
+            {#if message.role === 'assistant' && message.processInfos?.length}
+              <div class="process-info-list">
+                {#each message.processInfos as info (info.id)}
+                  <div class="process-info" class:animated={info.state === 'pending'} class:error={info.state === 'error'}>
+                    <p class="process-title">{info.title}</p>
+                    <p class="process-description">{info.description}{info.state === 'pending' ? '...' : ''}</p>
+                  </div>
+                {/each}
               </div>
-            {:else}
-              <Streamdown
-                content={message.content}
-                theme={streamdownTheme}
-                shikiTheme="gruvbox-dark-medium"
-                shikiThemes={{ 'gruvbox-dark-medium': gruvboxDarkMedium }}
-                components={{ code: StreamdownCode }}
-              />
             {/if}
+            <Streamdown
+              content={message.content}
+              theme={streamdownTheme}
+              shikiTheme="gruvbox-dark-medium"
+              shikiThemes={{ 'gruvbox-dark-medium': gruvboxDarkMedium }}
+              components={{ code: StreamdownCode }}
+            />
           </div>
         </article>
       {/each}

@@ -322,6 +322,44 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
   border: 0;
 }
 .assistant-markdown * { max-width: 100%; }
+
+.process-info-list {
+  display: grid;
+  gap: 0.4rem;
+  margin-bottom: 0.45rem;
+}
+
+.process-info {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.process-title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.process-description {
+  margin: 0.1rem 0 0;
+}
+
+.process-info.animated .process-description {
+  background: linear-gradient(90deg, #a89984 20%, #d5c4a1 50%, #a89984 80%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: process-shimmer 1.4s linear infinite;
+}
+
+.process-info.error {
+  color: #fb4934;
+}
+
+@keyframes process-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -20% 0; }
+}
 .assistant-markdown p,
 .assistant-markdown ul,
 .assistant-markdown ol,

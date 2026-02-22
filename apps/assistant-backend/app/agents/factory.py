@@ -11,7 +11,7 @@ from langchain_openai import ChatOpenAI
 
 from app.agents.base import ChatAgent
 from app.agents.main_assistant import MainAssistantAgent
-from app.agents.tools import TavilyWebTools, build_web_tools
+from app.agents.tools import TavilyWebTools, build_web_tools, default_stream_event_mappers
 from app.core.settings import Settings
 
 logger = logging.getLogger(__name__)
@@ -124,4 +124,5 @@ async def build_main_agent(settings: Settings) -> ChatAgent:
         system_prompt=system_prompt,
         assistant_db_dsn=settings.assistant_db_dsn,
         tools=build_web_tools(web_tools=web_tools_dependency) if not settings.main_agent_use_mock else None,
+        tool_event_mappers=default_stream_event_mappers(),
     )

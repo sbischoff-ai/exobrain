@@ -102,7 +102,7 @@ The project local cluster helper (`scripts/k3d-up.sh`) defaults to:
 
 ## API routing behavior
 
-The frontend always calls `POST /api/chat/message`.
+The frontend calls `POST /api/chat/message` to start a reply and then opens `GET /api/chat/stream/{stream_id}` via `EventSource` for SSE events.
 
 - **Local development (`npm run dev`)**: Vite proxies `/api/*` to `http://localhost:8000` by default. Override with `ASSISTANT_BACKEND_URL` if needed.
 - **Cluster/nonlocal deployments**: the browser keeps calling relative `/api/*`; ingress routes these requests to the assistant backend service.
@@ -120,7 +120,7 @@ The frontend always calls `POST /api/chat/message`.
 - If no stored state exists, the client initializes state from `/api/journal/today?create=true` and `/api/journal/today/messages`.
 - The journal sidebar is collapsed by default and allows switching between journal references. Only today's journal keeps chat input enabled; past journals disable input/send and show a tooltip explaining that chat is unavailable for historical entries.
 
-- Chat requests use the backend idempotency contract and send `client_message_id` with each `/api/chat/message` request.
+- Chat requests use the backend idempotency contract and send `client_message_id` with each `/api/chat/message` request, then consume SSE event types (`message_chunk`, `tool_call`, `tool_response`, `error`) from `/api/chat/stream/{stream_id}`.
 
 
 ## Related docs

@@ -5,6 +5,7 @@ from collections.abc import AsyncIterator
 import pytest
 
 from app.agents.main_assistant import MainAssistantAgent
+from app.agents.tools.web import WebSearchStreamMapper
 
 
 class _Chunk:
@@ -12,18 +13,62 @@ class _Chunk:
         self.content = content
 
 
+class _ToolMessage:
+    type = "tool"
+
+    def __init__(self, *, tool_call_id: str, content: str, artifact: object = None, status: str = "success") -> None:
+        self.tool_call_id = tool_call_id
+        self.content = content
+        self.artifact = artifact
+        self.status = status
+
+
 class FakeCompiledAgent:
-    async def astream(self, *_args, **_kwargs) -> AsyncIterator[tuple[_Chunk, dict[str, str]]]:
-        yield _Chunk([{"type": "tool_call", "name": "web_search"}]), {"langgraph_node": "model"}
-        yield _Chunk([{"type": "text", "text": "hello"}]), {"langgraph_node": "model"}
-        yield _Chunk("ignored"), {"langgraph_node": "tools"}
-        yield _Chunk([{"type": "text", "text": " world"}]), {"langgraph_node": "model"}
+    async def astream(self, *_args, **_kwargs) -> AsyncIterator[tuple[str, object]]:
+        yield "updates", {
+            "model": {
+                "messages": [
+                    type(
+                        "ModelMsg",
+                        (),
+                        {
+                            "tool_calls": [
+                                {
+                                    "id": "tc-1",
+                                    "name": "web_search",
+                                    "args": {"query": "news"},
+                                }
+                            ]
+                        },
+                    )()
+                ]
+            }
+        }
+        yield "messages", (_Chunk([{"type": "text", "text": "hello"}]), {"langgraph_node": "model"})
+        yield "updates", {
+            "tools": {
+                "messages": [
+                    _ToolMessage(
+                        tool_call_id="tc-1",
+                        content="ok",
+                        artifact=[{"title": "x"}],
+                    )
+                ]
+            }
+        }
+        yield "messages", (_Chunk([{"type": "text", "text": " world"}]), {"langgraph_node": "model"})
 
 
 @pytest.mark.asyncio
-async def test_astream_only_yields_model_text_content() -> None:
-    agent = MainAssistantAgent(compiled_agent=FakeCompiledAgent())
+async def test_astream_yields_message_and_tool_events() -> None:
+    agent = MainAssistantAgent(
+        compiled_agent=FakeCompiledAgent(),
+        tool_event_mappers={"web_search": WebSearchStreamMapper()},
+    )
 
-    chunks = [chunk async for chunk in agent.astream(message="hi", conversation_id="conv-1")]
+    events = [chunk async for chunk in agent.astream(message="hi", conversation_id="conv-1")]
 
-    assert chunks == ["hello", " world"]
+    assert events[0]["type"] == "tool_call"
+    assert events[1] == {"type": "message_chunk", "data": {"text": "hello"}}
+    assert events[2]["type"] == "tool_response"
+    assert events[3] == {"type": "message_chunk", "data": {"text": " world"}}
