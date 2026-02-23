@@ -35,6 +35,12 @@
     text: string;
   }
 
+  const PENDING_STREAM_STORAGE_KEY = 'exobrain.assistant.pendingStreamId';
+
+  let activeEventSource: EventSource | null = null;
+  let activeStreamId = '';
+  let activeStreamJournalReference = '';
+
   let initializing = true;
   let authenticated = false;
   let loadingJournal = false;
@@ -97,6 +103,9 @@
 
   async function logout(): Promise<void> {
     await authService.logout();
+
+    stopActiveStream(false);
+    clearPendingStreamId();
 
     clearSessionState();
     authenticated = false;
@@ -194,6 +203,11 @@
       return;
     }
 
+    if (awaitingAssistant && activeStreamId) {
+      savePendingStreamId(activeStreamId);
+      stopActiveStream(true);
+    }
+
     loadingJournal = true;
     try {
       const summary = await journalService.getSummary(reference);
@@ -204,6 +218,179 @@
       applyState(nextState);
     } finally {
       loadingJournal = false;
+
+      if (reference === todayReference) {
+        await resumePendingTodayStreamIfNeeded();
+      }
+    }
+  }
+
+  function loadPendingStreamId(): string {
+    if (typeof window === 'undefined') {
+      return '';
+    }
+    return window.sessionStorage.getItem(PENDING_STREAM_STORAGE_KEY) ?? '';
+  }
+
+  function savePendingStreamId(streamId: string): void {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    window.sessionStorage.setItem(PENDING_STREAM_STORAGE_KEY, streamId);
+  }
+
+  function clearPendingStreamId(): void {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    window.sessionStorage.removeItem(PENDING_STREAM_STORAGE_KEY);
+  }
+
+  function stopActiveStream(markInterrupted: boolean): void {
+    if (activeEventSource) {
+      activeEventSource.close();
+      activeEventSource = null;
+    }
+
+    activeStreamId = '';
+    activeStreamJournalReference = '';
+    awaitingAssistant = false;
+
+    if (markInterrupted) {
+      const lastMessage = messages.at(-1);
+      if (lastMessage?.role === 'assistant') {
+        messages = [
+          ...messages.slice(0, -1),
+          {
+            ...lastMessage,
+            processInfos: interruptPendingProcessInfos(lastMessage.processInfos ?? [])
+          }
+        ];
+      }
+    }
+  }
+
+  async function consumeStream(streamId: string, assistantClientMessageId: string): Promise<void> {
+    activeStreamId = streamId;
+    activeStreamJournalReference = currentReference;
+
+    let accumulated = messages.find((message) => message.clientMessageId === assistantClientMessageId)?.content ?? '';
+    let processInfos =
+      messages.find((message) => message.clientMessageId === assistantClientMessageId)?.processInfos?.slice() ?? [];
+
+    await new Promise<void>((resolve, reject) => {
+      const eventSource = new EventSource(`/api/chat/stream/${streamId}`);
+      activeEventSource = eventSource;
+      let doneReceived = false;
+
+      eventSource.addEventListener('message_chunk', (event) => {
+        if (currentReference !== activeStreamJournalReference) {
+          return;
+        }
+        const payload = JSON.parse((event as MessageEvent).data) as MessageChunkPayload;
+        accumulated += payload.text;
+        updateStreamingMessage(assistantClientMessageId, accumulated, processInfos);
+      });
+
+      eventSource.addEventListener('tool_call', (event) => {
+        if (currentReference !== activeStreamJournalReference) {
+          return;
+        }
+        const payload = JSON.parse((event as MessageEvent).data) as ToolCallEventPayload;
+        processInfos = [
+          ...processInfos,
+          {
+            id: makeClientMessageId(),
+            title: payload.title,
+            description: payload.description,
+            state: 'pending'
+          }
+        ];
+        updateStreamingMessage(assistantClientMessageId, accumulated, processInfos);
+      });
+
+      eventSource.addEventListener('tool_response', (event) => {
+        if (currentReference !== activeStreamJournalReference) {
+          return;
+        }
+        const payload = JSON.parse((event as MessageEvent).data) as ToolResponseEventPayload;
+        processInfos = resolvePendingProcessInfo(processInfos, payload.message);
+        updateStreamingMessage(assistantClientMessageId, accumulated, processInfos);
+      });
+
+      eventSource.addEventListener('error', (event) => {
+        const data = (event as MessageEvent).data;
+        if (!data || currentReference !== activeStreamJournalReference) {
+          return;
+        }
+        const payload = JSON.parse(data) as ErrorEventPayload;
+        processInfos = [
+          ...processInfos,
+          {
+            id: makeClientMessageId(),
+            title: 'Error',
+            description: payload.message,
+            state: 'error'
+          }
+        ];
+        updateStreamingMessage(assistantClientMessageId, accumulated, processInfos);
+      });
+
+      eventSource.addEventListener('done', () => {
+        doneReceived = true;
+        eventSource.close();
+        if (activeEventSource === eventSource) {
+          activeEventSource = null;
+        }
+        resolve();
+      });
+
+      eventSource.onerror = () => {
+        if (doneReceived || eventSource.readyState === EventSource.CLOSED) {
+          return;
+        }
+        eventSource.close();
+        if (activeEventSource === eventSource) {
+          activeEventSource = null;
+        }
+        reject(new Error('assistant stream disconnected'));
+      };
+    });
+
+    if (currentReference === activeStreamJournalReference) {
+      processInfos = interruptPendingProcessInfos(processInfos);
+      updateStreamingMessage(assistantClientMessageId, accumulated, processInfos);
+    }
+
+    clearPendingStreamId();
+    activeStreamId = '';
+    activeStreamJournalReference = '';
+  }
+
+  async function resumePendingTodayStreamIfNeeded(): Promise<void> {
+    if (!todayReference || currentReference !== todayReference || awaitingAssistant) {
+      return;
+    }
+
+    const pendingStreamId = loadPendingStreamId();
+    if (!pendingStreamId) {
+      return;
+    }
+
+    const resumeAssistantMessageId = makeClientMessageId();
+    messages = [...messages, { role: 'assistant', content: '', clientMessageId: resumeAssistantMessageId, processInfos: [] }];
+    awaitingAssistant = true;
+
+    try {
+      await consumeStream(pendingStreamId, resumeAssistantMessageId);
+      currentMessageCount += 1;
+      saveSessionState(buildSessionState(currentReference, messages, currentMessageCount));
+      await loadJournalEntries();
+    } catch {
+      clearPendingStreamId();
+      messages = messages.filter((message) => message.clientMessageId !== resumeAssistantMessageId || message.content);
+    } finally {
+      awaitingAssistant = false;
     }
   }
 
@@ -279,13 +466,10 @@
     const userClientMessageId = makeClientMessageId();
     const assistantClientMessageId = makeClientMessageId();
 
-    let accumulated = '';
-    let processInfos: ProcessInfo[] = [];
-
     messages = [
       ...messages,
       { role: 'user', content: text, clientMessageId: userClientMessageId },
-      { role: 'assistant', content: '', clientMessageId: assistantClientMessageId, processInfos }
+      { role: 'assistant', content: '', clientMessageId: assistantClientMessageId, processInfos: [] }
     ];
     awaitingAssistant = true;
 
@@ -301,71 +485,7 @@
       }
 
       const { stream_id: streamId } = (await response.json()) as ChatStartResponse;
-      await new Promise<void>((resolve, reject) => {
-        const eventSource = new EventSource(`/api/chat/stream/${streamId}`);
-        let doneReceived = false;
-
-        eventSource.addEventListener('message_chunk', (event) => {
-          const payload = JSON.parse((event as MessageEvent).data) as MessageChunkPayload;
-          accumulated += payload.text;
-          updateStreamingMessage(assistantClientMessageId, accumulated, processInfos);
-        });
-
-        eventSource.addEventListener('tool_call', (event) => {
-          const payload = JSON.parse((event as MessageEvent).data) as ToolCallEventPayload;
-          processInfos = [
-            ...processInfos,
-            {
-              id: makeClientMessageId(),
-              title: payload.title,
-              description: payload.description,
-              state: 'pending'
-            }
-          ];
-          updateStreamingMessage(assistantClientMessageId, accumulated, processInfos);
-        });
-
-        eventSource.addEventListener('tool_response', (event) => {
-          const payload = JSON.parse((event as MessageEvent).data) as ToolResponseEventPayload;
-          processInfos = resolvePendingProcessInfo(processInfos, payload.message);
-          updateStreamingMessage(assistantClientMessageId, accumulated, processInfos);
-        });
-
-        eventSource.addEventListener('error', (event) => {
-          const data = (event as MessageEvent).data;
-          if (!data) {
-            return;
-          }
-          const payload = JSON.parse(data) as ErrorEventPayload;
-          processInfos = [
-            ...processInfos,
-            {
-              id: makeClientMessageId(),
-              title: 'Error',
-              description: payload.message,
-              state: 'error'
-            }
-          ];
-          updateStreamingMessage(assistantClientMessageId, accumulated, processInfos);
-        });
-
-        eventSource.addEventListener('done', () => {
-          doneReceived = true;
-          eventSource.close();
-          resolve();
-        });
-
-        eventSource.onerror = () => {
-          if (doneReceived || eventSource.readyState === EventSource.CLOSED) {
-            return;
-          }
-          eventSource.close();
-          reject(new Error('assistant stream disconnected'));
-        };
-      });
-
-      processInfos = interruptPendingProcessInfos(processInfos);
-      updateStreamingMessage(assistantClientMessageId, accumulated, processInfos);
+      await consumeStream(streamId, assistantClientMessageId);
 
       currentMessageCount += 2;
       saveSessionState(buildSessionState(currentReference, messages, currentMessageCount));

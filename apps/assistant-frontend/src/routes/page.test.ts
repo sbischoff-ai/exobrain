@@ -264,6 +264,77 @@ describe('root page', () => {
     });
   });
 
+
+
+  it('stops live stream updates when switching journals and resumes when returning to today', async () => {
+    window.sessionStorage.setItem(
+      'exobrain.assistant.session',
+      JSON.stringify({
+        user: { name: 'Test User', email: 'test.user@exobrain.local' },
+        journalReference: '2026/02/19',
+        messageCount: 0,
+        messages: []
+      })
+    );
+
+    vi.stubGlobal('EventSource', MockEventSource as unknown as typeof EventSource);
+
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(jsonResponse({ name: 'Test User', email: 'test.user@exobrain.local' }))
+      .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19', message_count: 0 }))
+      .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
+      .mockResolvedValueOnce(jsonResponse([{ reference: '2026/02/19' }, { reference: '2025/01/14' }]))
+      .mockResolvedValueOnce(jsonResponse({ stream_id: 'stream-1' }))
+      .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
+      .mockResolvedValueOnce(jsonResponse([{ reference: '2026/02/19' }, { reference: '2025/01/14' }]))
+      .mockResolvedValueOnce(jsonResponse({ reference: '2025/01/14', message_count: 0 }))
+      .mockResolvedValueOnce(jsonResponse([]))
+      .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19', message_count: 0 }))
+      .mockResolvedValueOnce(jsonResponse([]));
+
+    render(Page);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Type your message')).not.toBeDisabled();
+    });
+
+    const input = screen.getByLabelText('Type your message');
+    await fireEvent.input(input, { target: { value: 'Need research' } });
+    await fireEvent.submit(input.closest('form')!);
+
+    const source = MockEventSource.latest!;
+    source.emit('message_chunk', { text: 'partial reply' });
+
+    await waitFor(() => {
+      expect(screen.getByText('partial reply')).toBeInTheDocument();
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Open journals' }));
+    await fireEvent.click(screen.getByRole('button', { name: '2025/01/14' }));
+
+    await waitFor(() => {
+      expect(screen.queryByText('partial reply')).not.toBeInTheDocument();
+    });
+
+    expect(window.sessionStorage.getItem('exobrain.assistant.pendingStreamId')).toBe('stream-1');
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Open journals' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Today · 2026/02/19' }));
+
+    await waitFor(() => {
+      expect(MockEventSource.latest).not.toBe(source);
+    });
+
+    const resumedSource = MockEventSource.latest!;
+    resumedSource.emit('message_chunk', { text: ' resumed reply' });
+    resumedSource.emit('done', { reason: 'complete' });
+
+    await waitFor(() => {
+      expect(screen.getByText(/resumed reply/)).toBeInTheDocument();
+      expect(window.sessionStorage.getItem('exobrain.assistant.pendingStreamId')).toBeNull();
+    });
+  });
+
   it('clears session storage and returns to intro page after logout', async () => {
     window.sessionStorage.setItem(
       'exobrain.assistant.session',
