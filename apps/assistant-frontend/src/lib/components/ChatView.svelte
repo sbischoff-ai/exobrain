@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { afterUpdate, beforeUpdate, tick } from 'svelte';
-  import { Streamdown } from 'svelte-streamdown';
-  import StreamdownCode from 'svelte-streamdown/code';
-  import gruvboxDarkMedium from '@shikijs/themes/gruvbox-dark-medium';
+  import { afterUpdate, beforeUpdate, onDestroy, tick } from 'svelte';
 
   import type { StoredMessage } from '$lib/models/journal';
+  import ChatComposer from '$lib/components/ChatComposer.svelte';
+  import ChatMessages from '$lib/components/ChatMessages.svelte';
+  import { ChatAutoScroller, getDistanceFromBottom } from '$lib/utils/chatAutoScroll';
 
   export let messages: StoredMessage[] = [];
   export let loading = false;
@@ -14,38 +14,10 @@
   export let inputDisabled = false;
   export let disabledReason = '';
   export let requestError = '';
+  export let streamingInProgress = false;
   export let onSend: (text: string) => void = () => {};
   export let onLoadOlder: () => void = () => {};
 
-  const streamdownTheme = {
-    h1: { base: 'exo-md-heading' },
-    h2: { base: 'exo-md-heading' },
-    h3: { base: 'exo-md-heading' },
-    h4: { base: 'exo-md-heading' },
-    h5: { base: 'exo-md-heading' },
-    h6: { base: 'exo-md-heading' },
-    table: { base: 'exo-md-table-wrap', table: 'exo-md-table' },
-    link: { base: 'exo-md-link' },
-    blockquote: { base: 'exo-md-blockquote' },
-    hr: { base: 'exo-md-hr' },
-    th: { base: 'exo-md-th' },
-    td: { base: 'exo-md-td' },
-    li: { checkbox: 'exo-md-task-checkbox' },
-    codespan: { base: 'exo-md-inline-code' },
-    code: {
-      container: 'exo-md-code-wrap',
-      pre: 'exo-md-code-pre',
-      base: 'exo-md-code',
-      buttons: 'exo-md-control-group',
-      language: 'exo-md-code-language'
-    },
-    components: {
-      button: 'exo-md-control-button',
-      popover: 'exo-md-control-popover'
-    }
-  };
-
-  let messageInput = '';
   let messagesContainer: HTMLDivElement | undefined;
 
   let previousReference = '';
@@ -61,24 +33,39 @@
   let shouldForceJumpToLatest = false;
 
   let activeStreamingMessageId: string | null = null;
-  let streamScrollMode: 'normal' | 'slow' | 'paused' = 'normal';
   let lastObservedScrollTop = 0;
   let isProgrammaticScroll = false;
 
-  $: disabledTooltip = inputDisabled && disabledReason ? disabledReason : undefined;
+  const autoScroller = new ChatAutoScroller();
+  let frameHandle: number | null = null;
+  let previousFrameTime = 0;
 
   $: {
-    const nextStreamingMessageId = getCurrentStreamingMessageId();
-    if (nextStreamingMessageId !== activeStreamingMessageId) {
-      activeStreamingMessageId = nextStreamingMessageId;
-      streamScrollMode = 'normal';
+    const candidateStreamingMessageId = getCurrentStreamingMessageId();
+    if (candidateStreamingMessageId !== activeStreamingMessageId) {
+      activeStreamingMessageId = candidateStreamingMessageId;
+      autoScroller.maybeResume(0);
+      jumpToBottom('smooth');
+      ensureAutoScrollLoop();
     }
   }
+
+  $: {
+    if (!streamingInProgress) {
+      ensureAutoScrollLoop();
+    }
+  }
+
+  onDestroy(() => {
+    if (frameHandle != null) {
+      cancelAnimationFrame(frameHandle);
+    }
+  });
 
   beforeUpdate(() => {
     const currentFirstMessageId = messages[0]?.clientMessageId ?? null;
     const currentLastMessage = messages.at(-1);
-    const nextMessageSignature = `${messages.length}|${currentFirstMessageId ?? ''}|${currentLastMessage?.clientMessageId ?? ''}|${currentLastMessage?.content ?? ''}`;
+    const nextMessageSignature = `${messages.length}|${currentFirstMessageId ?? ''}|${currentLastMessage?.clientMessageId ?? ''}|${currentLastMessage?.content ?? ''}|${currentLastMessage?.processInfos?.length ?? 0}`;
 
     shouldReactToMessageUpdate =
       previousReference !== reference ||
@@ -128,27 +115,21 @@
         lastObservedScrollTop = messagesContainer.scrollTop;
       } else {
         await tick();
-        scrollToLatestMessage(shouldForceJumpToLatest);
+        if (shouldForceJumpToLatest) {
+          jumpToBottom('smooth');
+        } else if (!streamingInProgress) {
+          jumpToBottom('smooth');
+        }
       }
+      ensureAutoScrollLoop();
     }
 
     previousReference = reference;
     previousFirstMessageId = currentFirstMessageId;
     previousLastMessageId = currentLastMessage?.clientMessageId ?? null;
-    previousMessageSignature = `${messages.length}|${currentFirstMessageId ?? ''}|${currentLastMessage?.clientMessageId ?? ''}|${currentLastMessage?.content ?? ''}`;
+    previousMessageSignature = `${messages.length}|${currentFirstMessageId ?? ''}|${currentLastMessage?.clientMessageId ?? ''}|${currentLastMessage?.content ?? ''}|${currentLastMessage?.processInfos?.length ?? 0}`;
     previousLoading = loading;
   });
-
-  function handleSubmit(event: SubmitEvent): void {
-    event.preventDefault();
-    const trimmed = messageInput.trim();
-    if (!trimmed || inputDisabled) {
-      return;
-    }
-
-    onSend(trimmed);
-    messageInput = '';
-  }
 
   function getCurrentStreamingMessageId(): string | null {
     const lastMessage = messages.at(-1);
@@ -159,47 +140,13 @@
     return lastMessage.clientMessageId;
   }
 
-  function isNearBottom(): boolean {
-    if (!messagesContainer) {
-      return false;
-    }
-
-    const distanceFromBottom = messagesContainer.scrollHeight - (messagesContainer.scrollTop + messagesContainer.clientHeight);
-    return distanceFromBottom <= 20;
-  }
-
-  function handleMessagesScroll(): void {
-    if (!messagesContainer) {
-      return;
-    }
-
-    const currentTop = messagesContainer.scrollTop;
-
-    if (!isProgrammaticScroll && activeStreamingMessageId) {
-      if (currentTop < lastObservedScrollTop - 1) {
-        streamScrollMode = 'paused';
-      } else if (isNearBottom()) {
-        streamScrollMode = 'normal';
-      }
-    }
-
-    lastObservedScrollTop = currentTop;
-  }
-
-  function handleMessagesWheel(event: WheelEvent): void {
-    if (activeStreamingMessageId && event.deltaY < 0) {
-      streamScrollMode = 'paused';
-    }
-  }
-
-  function applyScroll(top: number, behavior: ScrollBehavior): void {
+  function jumpToBottom(behavior: ScrollBehavior): void {
     if (!messagesContainer) {
       return;
     }
 
     isProgrammaticScroll = true;
-    messagesContainer.scrollTo({ top, behavior });
-
+    messagesContainer.scrollTo({ top: messagesContainer.scrollHeight, behavior });
     requestAnimationFrame(() => {
       if (!messagesContainer) {
         return;
@@ -209,12 +156,35 @@
     });
   }
 
-  function shouldUseSlowStreamingPace(streamingMessageId: string): boolean {
+  function handleMessagesScroll(): void {
+    if (!messagesContainer) {
+      return;
+    }
+
+    const currentTop = messagesContainer.scrollTop;
+
+    if (!isProgrammaticScroll && activeStreamingMessageId && currentTop < lastObservedScrollTop - 1) {
+      autoScroller.markSuspended();
+    }
+
+    autoScroller.maybeResume(getDistanceFromBottom(messagesContainer));
+    lastObservedScrollTop = currentTop;
+    ensureAutoScrollLoop();
+  }
+
+  function handleMessagesWheel(event: CustomEvent<WheelEvent>): void {
+    if (activeStreamingMessageId && event.detail.deltaY < 0) {
+      autoScroller.markSuspended();
+      ensureAutoScrollLoop();
+    }
+  }
+
+  function isStreamingMessageAtTopBoundary(messageId: string): boolean {
     if (!messagesContainer) {
       return false;
     }
 
-    const streamElement = messagesContainer.querySelector<HTMLElement>(`[data-message-id="${streamingMessageId}"]`);
+    const streamElement = messagesContainer.querySelector<HTMLElement>(`[data-message-id="${messageId}"]`);
     if (!streamElement) {
       return false;
     }
@@ -224,41 +194,69 @@
     return streamRect.top <= containerRect.top + 8;
   }
 
-
-
-
-  function scrollToLatestMessage(forceToLatest = false): void {
+  function ensureAutoScrollLoop(): void {
     if (!messagesContainer) {
       return;
     }
 
-    if (forceToLatest) {
-      streamScrollMode = 'normal';
-      applyScroll(messagesContainer.scrollHeight, 'smooth');
+    const distanceFromBottom = getDistanceFromBottom(messagesContainer);
+    const next = autoScroller.nextPhase({
+      streamingInProgress,
+      streamMessageTopAtOrAboveContainerTop: activeStreamingMessageId
+        ? isStreamingMessageAtTopBoundary(activeStreamingMessageId)
+        : false,
+      distanceFromBottom
+    });
+
+    if (next.phase === 'idle') {
+      if (frameHandle != null) {
+        cancelAnimationFrame(frameHandle);
+        frameHandle = null;
+      }
       return;
     }
 
-    if (activeStreamingMessageId) {
-      if (streamScrollMode === 'paused') {
-        return;
-      }
+    if (frameHandle == null) {
+      previousFrameTime = performance.now();
+      frameHandle = requestAnimationFrame(runAutoScrollFrame);
+    }
+  }
 
-      if (streamScrollMode === 'normal' && shouldUseSlowStreamingPace(activeStreamingMessageId)) {
-        streamScrollMode = 'slow';
-      }
+  function runAutoScrollFrame(timestamp: number): void {
+    frameHandle = null;
 
-      if (streamScrollMode === 'slow') {
-        const maxScrollTop = Math.max(messagesContainer.scrollHeight - messagesContainer.clientHeight, 0);
-        const nextTop = Math.min(messagesContainer.scrollTop + 2, maxScrollTop);
-        applyScroll(nextTop, 'auto');
-        return;
-      }
-
-      applyScroll(messagesContainer.scrollHeight, 'smooth');
+    if (!messagesContainer) {
       return;
     }
 
-    applyScroll(messagesContainer.scrollHeight, 'smooth');
+    const deltaMs = Math.max(timestamp - previousFrameTime, 16);
+    previousFrameTime = timestamp;
+
+    const distanceFromBottom = getDistanceFromBottom(messagesContainer);
+    const snapshot = autoScroller.nextPhase({
+      streamingInProgress,
+      streamMessageTopAtOrAboveContainerTop: activeStreamingMessageId
+        ? isStreamingMessageAtTopBoundary(activeStreamingMessageId)
+        : false,
+      distanceFromBottom
+    });
+
+    if (snapshot.phase === 'idle') {
+      return;
+    }
+
+    const maxScrollTop = Math.max(messagesContainer.scrollHeight - messagesContainer.clientHeight, 0);
+    const scrollStep = autoScroller.getStepForPhase(snapshot.phase, deltaMs);
+    const nextTop = Math.min(messagesContainer.scrollTop + scrollStep, maxScrollTop);
+
+    if (nextTop > messagesContainer.scrollTop) {
+      isProgrammaticScroll = true;
+      messagesContainer.scrollTo({ top: nextTop, behavior: 'auto' });
+      lastObservedScrollTop = messagesContainer.scrollTop;
+      isProgrammaticScroll = false;
+    }
+
+    ensureAutoScrollLoop();
   }
 </script>
 
@@ -273,65 +271,24 @@
       <p>Loading journal...</p>
     </div>
   {:else}
-    <div class="messages" bind:this={messagesContainer} on:scroll={handleMessagesScroll} on:wheel={handleMessagesWheel}>
-      {#if canLoadOlder}
-        <div class="load-older-wrap">
-          <button class="load-older" type="button" on:click={onLoadOlder} disabled={loadingOlder}>
-            {#if loadingOlder}Loading older messages...{:else}Load older messages{/if}
-          </button>
-        </div>
-      {/if}
-
-      {#each messages as message, index (message.clientMessageId ?? `${message.role}-${index}`)}
-        <article
-          class="message"
-          class:user={message.role === 'user'}
-          data-message-id={message.clientMessageId}
-          data-message-role={message.role}
-        >
-          <div class="assistant-markdown" class:user-markdown={message.role === 'user'}>
-            {#if message.role === 'assistant' && message.processInfos?.length}
-              <div class="process-info-list">
-                {#each message.processInfos as info (info.id)}
-                  <div class="process-info" class:animated={info.state === 'pending'} class:error={info.state === 'error'}>
-                    <p class="process-title">{info.title}</p>
-                    <p class="process-description">{info.description}{info.state === 'pending' ? '...' : ''}</p>
-                  </div>
-                {/each}
-              </div>
-            {/if}
-            <Streamdown
-              content={message.content}
-              theme={streamdownTheme}
-              shikiTheme="gruvbox-dark-medium"
-              shikiThemes={{ 'gruvbox-dark-medium': gruvboxDarkMedium }}
-              components={{ code: StreamdownCode }}
-            />
-          </div>
-        </article>
-      {/each}
-    </div>
+    <ChatMessages
+      bind:containerElement={messagesContainer}
+      {messages}
+      {canLoadOlder}
+      {loadingOlder}
+      {onLoadOlder}
+      on:scroll={handleMessagesScroll}
+      on:wheel={handleMessagesWheel}
+    />
   {/if}
 
   {#if requestError}
     <p class="chat-notice" role="status" aria-live="polite">{requestError}</p>
   {/if}
 
-  <form class="chat-input" on:submit={handleSubmit}>
-    <label class="sr-only" for="message-input">Type your message</label>
-    <input
-      id="message-input"
-      type="text"
-      bind:value={messageInput}
-      placeholder="What's up?"
-      autocomplete="off"
-      disabled={inputDisabled || loading}
-      title={disabledTooltip}
-    />
-    <button type="submit" aria-label="Send message" disabled={inputDisabled || loading} title={disabledTooltip}>
-      <svg viewBox="0 0 24 24" role="img" aria-hidden="true">
-        <path d="M4 4h16v12H6.17L4 18.17V4zm2 2v7.34L7.34 12H18V6H6zm3 1h6v2H9V7zm0 3h4v2H9v-2z" />
-      </svg>
-    </button>
-  </form>
+  <ChatComposer
+    disabled={inputDisabled || loading}
+    disabledReason={disabledReason}
+    on:send={(event) => onSend(event.detail.text)}
+  />
 </section>
