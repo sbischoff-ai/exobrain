@@ -7,8 +7,6 @@ These tests verify how request-level auth context is resolved by priority:
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import pytest
 
 from fastapi import HTTPException
@@ -17,7 +15,7 @@ from app.api.dependencies.auth import get_optional_auth_context, get_required_au
 from app.api.schemas.auth import UnifiedPrincipal
 from app.core.settings import Settings
 from app.services.contracts import AuthServiceProtocol
-from tests.conftest import FakeContainer
+from tests.conftest import build_test_container, build_test_request
 
 
 class FakeAuthService:
@@ -38,32 +36,18 @@ class FakeAuthService:
         return self.session_principal
 
 
-class FakeRequest:
-    """Request-shaped object with only the attributes the dependency requires."""
-
-    def __init__(self, *, auth_service: FakeAuthService, headers: dict[str, str], cookies: dict[str, str]) -> None:
-        self.app = SimpleNamespace(
-            state=SimpleNamespace(
-                container=FakeContainer(
-                    {
-                        AuthServiceProtocol: auth_service,
-                        Settings: Settings(AUTH_COOKIE_NAME="exobrain_session"),
-                    }
-                )
-            )
-        )
-        self.headers = headers
-        self.cookies = cookies
-
-
 @pytest.mark.asyncio
 async def test_dependency_prefers_bearer_token_over_cookie() -> None:
     """When both sources exist, bearer auth should win and cookie lookup is skipped."""
 
     bearer = UnifiedPrincipal(user_id="1", email="a@example.com", display_name="A")
     auth_service = FakeAuthService(bearer_principal=bearer, session_principal=None)
-    request = FakeRequest(
-        auth_service=auth_service,
+    container = build_test_container({
+        AuthServiceProtocol: auth_service,
+        Settings: Settings(AUTH_COOKIE_NAME="exobrain_session"),
+    })
+    request = build_test_request(
+        container,
         headers={"authorization": "Bearer valid-token"},
         cookies={"exobrain_session": "session-123"},
     )
@@ -81,8 +65,12 @@ async def test_dependency_falls_back_to_session_cookie() -> None:
 
     session = UnifiedPrincipal(user_id="2", email="b@example.com", display_name="B")
     auth_service = FakeAuthService(bearer_principal=None, session_principal=session)
-    request = FakeRequest(
-        auth_service=auth_service,
+    container = build_test_container({
+        AuthServiceProtocol: auth_service,
+        Settings: Settings(AUTH_COOKIE_NAME="exobrain_session"),
+    })
+    request = build_test_request(
+        container,
         headers={},
         cookies={"exobrain_session": "session-xyz"},
     )
@@ -97,7 +85,11 @@ async def test_dependency_falls_back_to_session_cookie() -> None:
 @pytest.mark.asyncio
 async def test_required_dependency_rejects_missing_auth() -> None:
     auth_service = FakeAuthService(bearer_principal=None, session_principal=None)
-    request = FakeRequest(auth_service=auth_service, headers={}, cookies={})
+    container = build_test_container({
+        AuthServiceProtocol: auth_service,
+        Settings: Settings(AUTH_COOKIE_NAME="exobrain_session"),
+    })
+    request = build_test_request(container, headers={}, cookies={})
 
     with pytest.raises(HTTPException) as exc:
         await get_required_auth_context(request)
