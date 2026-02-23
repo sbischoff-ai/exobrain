@@ -5,6 +5,8 @@ __all__ = [
     "ChatService",
     "DatabaseService",
     "RedisSessionStore",
+    "RedisJournalCacheStore",
     "SessionStoreProtocol",
+    "JournalCacheProtocol",
     "UserService",
 ]
