@@ -12,7 +12,7 @@ The chat viewport auto-scroll logic is implemented as a small state machine so s
 
 ## Behavioral contract
 
-1. **Send/stream start jump**: on new user message and on assistant stream start, the viewport jumps near-instantly with smooth scroll to the newest message.
+1. **Send/stream start jump**: on new user message and on assistant stream start, the viewport begins a near-instant, smooth **regressive** scroll-to-bottom (faster when farther away, decelerating near the end; target ~1-2s even on long journals).
 2. **Fast follow while room remains**: while streaming and the top of the active assistant message is below the viewport top, auto-scroll runs quickly to keep tokens visible at the bottom.
 3. **Slow follow for long responses**: once that message reaches the top edge, auto-scroll throttles to approximately one line per second.
 4. **Suspend on upward user scroll**: any upward manual scroll gesture during active streaming suspends auto-scroll.
@@ -20,6 +20,8 @@ The chat viewport auto-scroll logic is implemented as a small state machine so s
 6. **Post-stream catch-up**: when streaming ends, auto-scroll does not stop until either:
    - bottom is reached, or
    - user suspension is active.
+
+   If streaming ends while the viewport is still above bottom and not suspended, auto-scroll continues in reading-speed catch-up until the bottom end condition is met.
 7. **Journal-open behavior**:
    - opening **today's journal** performs a near-instant smooth jump to the bottom once the messages render, then remains idle until a new stream starts.
    - opening a **past journal** keeps auto-scroll fully disabled.

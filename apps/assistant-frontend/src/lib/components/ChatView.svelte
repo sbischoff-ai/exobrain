@@ -39,6 +39,8 @@
 
   const autoScroller = new ChatAutoScroller();
   let catchupUntilBottom = false;
+  let smoothScrollToBottomActive = false;
+  let smoothScrollStartedAt = 0;
   let frameHandle: number | null = null;
   let previousFrameTime = 0;
 
@@ -50,6 +52,8 @@
 
       if (activeStreamingMessageId) {
         catchupUntilBottom = true;
+        smoothScrollToBottomActive = true;
+        smoothScrollStartedAt = performance.now();
         jumpToBottom('smooth');
       }
 
@@ -137,8 +141,12 @@
 
         if (shouldForceJumpToLatest && autoScrollEnabled) {
           catchupUntilBottom = true;
+          smoothScrollToBottomActive = true;
+          smoothScrollStartedAt = performance.now();
           jumpToBottom('smooth');
         } else if (switchedReference && autoScrollEnabled) {
+          smoothScrollToBottomActive = true;
+          smoothScrollStartedAt = performance.now();
           jumpToBottom('smooth');
         }
       }
@@ -187,6 +195,7 @@
     if (!isProgrammaticScroll && (activeStreamingMessageId || catchupUntilBottom) && currentTop < lastObservedScrollTop - 1) {
       autoScroller.markSuspended();
       catchupUntilBottom = false;
+      smoothScrollToBottomActive = false;
     }
 
     autoScroller.maybeResume(getDistanceFromBottom(messagesContainer));
@@ -198,6 +207,7 @@
     if ((activeStreamingMessageId || catchupUntilBottom) && event.detail.deltaY < 0) {
       autoScroller.markSuspended();
       catchupUntilBottom = false;
+      smoothScrollToBottomActive = false;
       ensureAutoScrollLoop();
     }
   }
@@ -226,7 +236,13 @@
 
     const distanceFromBottom = getDistanceFromBottom(messagesContainer);
     const shouldCatchup = autoScrollEnabled && catchupUntilBottom;
-    if (!streamingInProgress && !shouldCatchup) {
+    const shouldContinueSmoothScroll =
+      autoScrollEnabled &&
+      smoothScrollToBottomActive &&
+      distanceFromBottom > 1 &&
+      performance.now() - smoothScrollStartedAt < 2000;
+
+    if (!streamingInProgress && !shouldCatchup && !shouldContinueSmoothScroll) {
       if (frameHandle != null) {
         cancelAnimationFrame(frameHandle);
         frameHandle = null;
@@ -236,6 +252,7 @@
 
     if (distanceFromBottom <= 1) {
       catchupUntilBottom = false;
+      smoothScrollToBottomActive = false;
     }
 
     const next = autoScroller.nextPhase({
@@ -272,12 +289,17 @@
 
     const distanceFromBottom = getDistanceFromBottom(messagesContainer);
     const shouldCatchup = autoScrollEnabled && catchupUntilBottom;
-    if (!streamingInProgress && !shouldCatchup) {
+    const smoothElapsedMs = timestamp - smoothScrollStartedAt;
+    const shouldContinueSmoothScroll =
+      autoScrollEnabled && smoothScrollToBottomActive && distanceFromBottom > 1 && smoothElapsedMs < 2000;
+
+    if (!streamingInProgress && !shouldCatchup && !shouldContinueSmoothScroll) {
       return;
     }
 
     if (distanceFromBottom <= 1) {
       catchupUntilBottom = false;
+      smoothScrollToBottomActive = false;
       return;
     }
 
@@ -289,13 +311,16 @@
       distanceFromBottom
     });
 
-    if (snapshot.phase === 'idle') {
+    if (snapshot.phase === 'idle' && !shouldContinueSmoothScroll) {
       return;
     }
 
     const currentTop = messagesContainer.scrollTop;
     const maxScrollTop = Math.max(messagesContainer.scrollHeight - messagesContainer.clientHeight, 0);
-    const scrollStep = autoScroller.getStepForPhase(snapshot.phase, deltaMs);
+    const remainingRatio = Math.min(distanceFromBottom / Math.max(messagesContainer.clientHeight, 1), 1);
+    const adaptiveSmoothPxPerSecond = 300 + 2100 * remainingRatio;
+    const smoothStep = (adaptiveSmoothPxPerSecond * deltaMs) / 1000;
+    const scrollStep = shouldContinueSmoothScroll ? smoothStep : autoScroller.getStepForPhase(snapshot.phase, deltaMs);
     const nextTop = Math.min(currentTop + scrollStep, maxScrollTop);
 
     if (nextTop > currentTop) {
@@ -307,11 +332,17 @@
 
       if (!streamingInProgress && updatedTop <= currentTop + 0.5) {
         catchupUntilBottom = false;
+        smoothScrollToBottomActive = false;
         return;
       }
     } else if (!streamingInProgress) {
       catchupUntilBottom = false;
+      smoothScrollToBottomActive = false;
       return;
+    }
+
+    if (!shouldContinueSmoothScroll || smoothElapsedMs >= 1800) {
+      smoothScrollToBottomActive = false;
     }
 
     ensureAutoScrollLoop();

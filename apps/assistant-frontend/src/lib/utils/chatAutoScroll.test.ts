@@ -69,5 +69,7 @@ describe('ChatAutoScroller', () => {
         distanceFromBottom: 5
       }).phase
     ).toBe('idle');
+
+    expect(Math.round(scroller.getStepForPhase('catchup', 1000))).toBe(22);
   });
 });
