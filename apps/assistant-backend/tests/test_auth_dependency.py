@@ -15,6 +15,9 @@ from fastapi import HTTPException
 
 from app.api.dependencies.auth import get_optional_auth_context, get_required_auth_context
 from app.api.schemas.auth import UnifiedPrincipal
+from app.core.settings import Settings
+from app.services.contracts import AuthServiceProtocol
+from tests.conftest import FakeContainer
 
 
 class FakeAuthService:
@@ -41,8 +44,12 @@ class FakeRequest:
     def __init__(self, *, auth_service: FakeAuthService, headers: dict[str, str], cookies: dict[str, str]) -> None:
         self.app = SimpleNamespace(
             state=SimpleNamespace(
-                auth_service=auth_service,
-                settings=SimpleNamespace(auth_cookie_name="exobrain_session"),
+                container=FakeContainer(
+                    {
+                        AuthServiceProtocol: auth_service,
+                        Settings: Settings(AUTH_COOKIE_NAME="exobrain_session"),
+                    }
+                )
             )
         )
         self.headers = headers

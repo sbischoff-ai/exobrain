@@ -5,6 +5,16 @@ from __future__ import annotations
 import pytest
 
 
+class FakeContainer:
+    """Tiny DI container test double that resolves preregistered services by key."""
+
+    def __init__(self, mapping: dict[object, object]) -> None:
+        self._mapping = mapping
+
+    def resolve(self, key: object):
+        return self._mapping[key]
+
+
 class FakeDatabaseService:
     """Shared fake DB service used at the external DB boundary in unit tests."""
 

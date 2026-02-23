@@ -3,7 +3,9 @@ import logging
 from fastapi import APIRouter, HTTPException, Request, Response, status
 
 from app.api.schemas.auth import LoginRequest, SessionResponse, TokenPairResponse, TokenRefreshRequest
-from app.services.auth_service import AuthService
+from app.core.settings import Settings
+from app.dependency_injection import get_container
+from app.services.contracts import AuthServiceProtocol
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -19,7 +21,9 @@ router = APIRouter(prefix="/auth", tags=["auth"])
     ),
 )
 async def login(payload: LoginRequest, request: Request, response: Response) -> TokenPairResponse | SessionResponse:
-    auth_service: AuthService = request.app.state.auth_service
+    container = get_container(request)
+    auth_service = container.resolve(AuthServiceProtocol)
+    settings = container.resolve(Settings)
     principal = await auth_service.login(payload)
 
     if principal is None:
@@ -32,9 +36,9 @@ async def login(payload: LoginRequest, request: Request, response: Response) -> 
         # Browser mode: persist state in cookie + Redis-backed session store.
         session_id = await auth_service.issue_session(principal)
         response.set_cookie(
-            key=request.app.state.settings.auth_cookie_name,
+            key=settings.auth_cookie_name,
             value=session_id,
-            max_age=request.app.state.settings.auth_refresh_token_ttl_seconds,
+            max_age=settings.auth_refresh_token_ttl_seconds,
             httponly=True,
             samesite="lax",
             secure=False,
@@ -49,7 +53,7 @@ async def login(payload: LoginRequest, request: Request, response: Response) -> 
     return TokenPairResponse(
         access_token=access_token,
         refresh_token=refresh_token,
-        expires_in=request.app.state.settings.auth_access_token_ttl_seconds,
+        expires_in=settings.auth_access_token_ttl_seconds,
     )
 
 
@@ -60,7 +64,9 @@ async def login(payload: LoginRequest, request: Request, response: Response) -> 
     description="Consumes a valid refresh token, revokes it, then issues a fresh access+refresh pair.",
 )
 async def token_refresh(payload: TokenRefreshRequest, request: Request) -> TokenPairResponse:
-    auth_service: AuthService = request.app.state.auth_service
+    container = get_container(request)
+    auth_service = container.resolve(AuthServiceProtocol)
+    settings = container.resolve(Settings)
     principal = await auth_service.principal_from_refresh_token(payload.refresh_token)
     if principal is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid refresh token")
@@ -71,7 +77,7 @@ async def token_refresh(payload: TokenRefreshRequest, request: Request) -> Token
     return TokenPairResponse(
         access_token=access_token,
         refresh_token=refresh_token,
-        expires_in=request.app.state.settings.auth_access_token_ttl_seconds,
+        expires_in=settings.auth_access_token_ttl_seconds,
     )
 
 
@@ -82,8 +88,10 @@ async def token_refresh(payload: TokenRefreshRequest, request: Request) -> Token
     description="Clears the auth session cookie and revokes matching Redis-backed session state.",
 )
 async def logout(request: Request, response: Response) -> None:
-    auth_service: AuthService = request.app.state.auth_service
-    session_cookie_name = request.app.state.settings.auth_cookie_name
+    container = get_container(request)
+    auth_service = container.resolve(AuthServiceProtocol)
+    settings = container.resolve(Settings)
+    session_cookie_name = settings.auth_cookie_name
     session_id = request.cookies.get(session_cookie_name)
 
     await auth_service.revoke_session(session_id)

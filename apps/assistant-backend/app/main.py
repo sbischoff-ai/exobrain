@@ -3,18 +3,13 @@ import logging
 
 from fastapi import FastAPI
 
+from app.agents.factory import build_main_agent
 from app.api.router import api_router
 from app.api.routers.health import router as health_router
 from app.core.logging import configure_logging
 from app.core.settings import get_settings
-from app.agents.factory import build_main_agent
-from app.services.auth_service import AuthService
-from app.services.database_service import DatabaseService
-from app.services.session_store import RedisSessionStore
-from app.services.conversation_service import ConversationService
-from app.services.journal_service import JournalService
-from app.services.chat_service import ChatService
-from app.services.user_service import UserService
+from app.dependency_injection import build_container, register_chat_agent
+from app.services.contracts import DatabaseServiceProtocol, SessionStoreProtocol
 
 settings = get_settings()
 configure_logging(settings.effective_log_level)
@@ -25,34 +20,20 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     logger.info("starting assistant backend", extra={"app_env": settings.app_env})
 
-    database_service = DatabaseService(
-        dsn=settings.assistant_db_dsn,
-        reshape_schema_query=settings.reshape_schema_query,
-    )
+    container = build_container(settings)
+
+    database_service = container.resolve(DatabaseServiceProtocol)
     await database_service.connect()
     logger.info("database connection pool initialized")
 
-    user_service = UserService(database=database_service)
-    session_store = RedisSessionStore(
-        redis_url=settings.assistant_cache_redis_url,
-        key_prefix=settings.assistant_cache_key_prefix,
-    )
+    session_store = container.resolve(SessionStoreProtocol)
     await session_store.ping()
     logger.info("assistant cache connection initialized")
-    auth_service = AuthService(settings=settings, user_service=user_service, session_store=session_store)
-    conversation_service = ConversationService(database=database_service)
-    journal_service = JournalService(conversation_service=conversation_service)
-    main_agent = await build_main_agent(settings)
-    chat_service = ChatService(agent=main_agent, journal_service=journal_service)
 
-    app.state.settings = settings
-    app.state.database_service = database_service
-    app.state.user_service = user_service
-    app.state.auth_service = auth_service
-    app.state.session_store = session_store
-    app.state.conversation_service = conversation_service
-    app.state.journal_service = journal_service
-    app.state.chat_service = chat_service
+    main_agent = await build_main_agent(settings)
+    register_chat_agent(container, main_agent)
+
+    app.state.container = container
 
     try:
         yield

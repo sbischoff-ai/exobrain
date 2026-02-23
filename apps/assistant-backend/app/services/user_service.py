@@ -1,7 +1,7 @@
 import logging
 
 from app.api.schemas.auth import UserResponse
-from app.services.database_service import DatabaseService
+from app.services.contracts import DatabaseServiceProtocol
 
 logger = logging.getLogger(__name__)
 
@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 class UserService:
     """User identity and credential operations."""
 
-    def __init__(self, database: DatabaseService) -> None:
+    def __init__(self, database: DatabaseServiceProtocol) -> None:
         self._database = database
 
     async def get_user_by_email(self, email: str) -> dict[str, str] | None:

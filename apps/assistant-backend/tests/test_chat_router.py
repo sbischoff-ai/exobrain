@@ -10,6 +10,8 @@ import pytest
 from app.api.routers import chat as chat_router
 from app.api.schemas.auth import UnifiedPrincipal
 from app.api.schemas.chat import ChatMessageRequest
+from app.services.contracts import ChatServiceProtocol
+from tests.conftest import FakeContainer
 
 
 class FakeChatService:
@@ -33,10 +35,10 @@ class FakeChatService:
 
 
 @pytest.mark.asyncio
-async def test_message_uses_chat_service_from_app_state() -> None:
+async def test_message_uses_chat_service_from_app_container() -> None:
     service = FakeChatService()
     principal = UnifiedPrincipal(user_id="user-1", email="u@example.com", display_name="U")
-    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(chat_service=service)))
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(container=FakeContainer({ChatServiceProtocol: service}))))
     payload = ChatMessageRequest(message="hello", client_message_id=uuid.uuid4())
 
     response = await chat_router.message(payload=payload, request=request, auth_context=principal)
@@ -51,7 +53,7 @@ async def test_message_uses_chat_service_from_app_state() -> None:
 async def test_stream_forwards_sse_payload_from_chat_service() -> None:
     service = FakeChatService()
     principal = UnifiedPrincipal(user_id="user-1", email="u@example.com", display_name="U")
-    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(chat_service=service)))
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(container=FakeContainer({ChatServiceProtocol: service}))))
 
     response = await chat_router.stream(stream_id="stream-123", request=request, _auth_context=principal)
 

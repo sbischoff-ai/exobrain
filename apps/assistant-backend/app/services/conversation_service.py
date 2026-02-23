@@ -5,13 +5,13 @@ import uuid
 
 import asyncpg
 
-from app.services.database_service import DatabaseService
+from app.services.contracts import DatabaseServiceProtocol
 
 
 class ConversationService:
     """Application service for conversation and message persistence."""
 
-    def __init__(self, database: DatabaseService) -> None:
+    def __init__(self, database: DatabaseServiceProtocol) -> None:
         self._database = database
 
     async def ensure_conversation(self, user_id: str, reference: str) -> str:
