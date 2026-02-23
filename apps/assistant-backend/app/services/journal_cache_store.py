@@ -5,6 +5,7 @@ import logging
 import random
 from typing import Any
 
+from fastapi.encoders import jsonable_encoder
 from redis.asyncio import Redis
 
 from app.services.contracts import JournalCacheProtocol
@@ -41,7 +42,8 @@ class RedisJournalCacheStore:
 
     async def set_json(self, key: str, payload: Any, ttl_seconds: int) -> None:
         ttl_with_jitter = max(1, ttl_seconds + random.randint(0, self._jitter_max_seconds))
-        await self._redis.set(self._full_key(key), json.dumps(payload), ex=ttl_with_jitter)
+        encoded_payload = jsonable_encoder(payload)
+        await self._redis.set(self._full_key(key), json.dumps(encoded_payload), ex=ttl_with_jitter)
 
     async def index_key(self, index_key: str, entry_key: str) -> None:
         full_index_key = self._full_key(index_key)
