@@ -194,6 +194,12 @@ def test_chat_and_journal_endpoints_persist_activity(client: httpx.Client) -> No
     message_payload = messages.json()
     assert any(item["role"] == "user" for item in message_payload)
     assert any(item["role"] == "assistant" for item in message_payload)
+    assert all("tool_calls" in item for item in message_payload)
+
+    today_messages = client.get("/api/journal/today/messages", headers=headers)
+    assert today_messages.status_code == 200
+    today_message_payload = today_messages.json()
+    assert all("tool_calls" in item for item in today_message_payload)
 
     paginated_messages = client.get(f"/api/journal/{reference}/messages", params={"limit": 1}, headers=headers)
     assert paginated_messages.status_code == 200

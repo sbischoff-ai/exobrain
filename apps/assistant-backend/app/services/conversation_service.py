@@ -76,6 +76,33 @@ class ConversationService:
         assert row is not None
         return row["id"]
 
+    async def insert_tool_call(
+        self,
+        *,
+        message_id: str,
+        tool_call_id: str,
+        title: str,
+        description: str,
+        response: str | None = None,
+        error: str | None = None,
+    ) -> str:
+        """Persist one tool-call lifecycle row for an assistant message."""
+        row = await self._database.fetchrow(
+            """
+            INSERT INTO tool_calls (message_id, tool_call_id, title, description, response, error)
+            VALUES ($1::uuid, $2, $3, $4, $5, $6)
+            RETURNING id::text AS id
+            """,
+            message_id,
+            tool_call_id,
+            title,
+            description,
+            response,
+            error,
+        )
+        assert row is not None
+        return row["id"]
+
     async def list_conversations(self, user_id: str, limit: int, before: str | None = None) -> Sequence[asyncpg.Record]:
         """List conversations ordered by descending reference with cursor pagination."""
         return await self._database.fetch(
@@ -138,12 +165,28 @@ class ConversationService:
               m.content,
               m.sequence,
               m.created_at,
-              m.metadata
+              m.metadata,
+              COALESCE(
+                jsonb_agg(
+                  jsonb_build_object(
+                    'id', tc.id::text,
+                    'tool_call_id', tc.tool_call_id,
+                    'title', tc.title,
+                    'description', tc.description,
+                    'response', tc.response,
+                    'error', tc.error
+                  )
+                  ORDER BY tc.created_at ASC, tc.id ASC
+                ) FILTER (WHERE tc.id IS NOT NULL),
+                '[]'::jsonb
+              ) AS tool_calls
             FROM messages m
             JOIN conversations c ON c.id = m.conversation_id
+            LEFT JOIN tool_calls tc ON tc.message_id = m.id
             WHERE c.user_id = $1::uuid
               AND c.reference = $2
               AND ($3::int IS NULL OR m.sequence < $3)
+            GROUP BY m.id, m.role, m.content, m.sequence, m.created_at, m.metadata
             ORDER BY m.sequence DESC
             LIMIT $4
             """,

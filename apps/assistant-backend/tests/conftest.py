@@ -24,6 +24,8 @@ class FakeDatabaseService:
             return {"id": "conv-1"}
         if "INSERT INTO messages" in query:
             return {"id": "msg-1"}
+        if "INSERT INTO tool_calls" in query:
+            return {"id": "tool-1"}
         if "WHERE c.user_id = $1::uuid AND c.reference = $2" in query:
             return {"id": "conv-1", "reference": args[1]}
         if "WHERE c.id = $1::uuid AND c.user_id = $2::uuid" in query:
@@ -34,8 +36,8 @@ class FakeDatabaseService:
         self.fetch_calls.append((query, args))
         if "FROM messages" in query:
             return [
-                {"id": "msg-2", "role": "assistant", "content": "hi", "sequence": 2},
-                {"id": "msg-1", "role": "user", "content": "hello", "sequence": 1},
+                {"id": "msg-2", "role": "assistant", "content": "hi", "sequence": 2, "tool_calls": [{"id": "tool-1", "tool_call_id": "tc-1", "title": "Web search", "description": "Searching the web", "response": "Found 1 candidate source", "error": None}]},
+                {"id": "msg-1", "role": "user", "content": "hello", "sequence": 1, "tool_calls": []},
             ]
         return [{"id": "conv-1", "reference": "2026/02/19", "message_count": 2, "status": "open"}]
 

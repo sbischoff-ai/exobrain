@@ -56,6 +56,32 @@ class JournalService:
             await self._invalidate_for_reference(user_id=user_id, reference=reference)
         return message_id
 
+    async def create_journal_tool_call(
+        self,
+        *,
+        conversation_id: str,
+        user_id: str,
+        message_id: str,
+        tool_call_id: str,
+        title: str,
+        description: str,
+        response: str | None = None,
+        error: str | None = None,
+    ) -> str:
+        """Persist tool-call details for a journal message and invalidate caches."""
+        tool_call_row_id = await self._conversation_service.insert_tool_call(
+            message_id=message_id,
+            tool_call_id=tool_call_id,
+            title=title,
+            description=description,
+            response=response,
+            error=error,
+        )
+        reference = await self._conversation_service.get_reference_by_conversation_id(conversation_id, user_id)
+        if reference is not None:
+            await self._invalidate_for_reference(user_id=user_id, reference=reference)
+        return tool_call_row_id
+
     async def list_journals(self, user_id: str, limit: int, before: str | None = None) -> Sequence[Mapping[str, Any]]:
         """List journal entries using reference-based cursor pagination."""
         cache_key = self._key_journals(user_id=user_id, limit=limit, before=before)
@@ -188,6 +214,7 @@ class JournalService:
             "sequence": row["sequence"],
             "created_at": row.get("created_at"),
             "metadata": row.get("metadata"),
+            "tool_calls": row.get("tool_calls") or [],
         }
 
     @staticmethod

@@ -72,6 +72,18 @@ class ConversationServiceProtocol(Protocol):
     ) -> Sequence[asyncpg.Record]:
         """Return paginated message rows for a single conversation reference."""
 
+    async def insert_tool_call(
+        self,
+        *,
+        message_id: str,
+        tool_call_id: str,
+        title: str,
+        description: str,
+        response: str | None = None,
+        error: str | None = None,
+    ) -> str:
+        """Insert one tool-call row associated to a persisted assistant message."""
+
     async def search_conversations(self, user_id: str, query: str, limit: int) -> Sequence[asyncpg.Record]:
         """Search conversations by textual query with a caller-supplied limit."""
 
@@ -95,6 +107,21 @@ class JournalServiceProtocol(Protocol):
         client_message_id: str | None = None,
     ) -> str:
         """Persist a journal message tied to an existing conversation id."""
+
+
+    async def create_journal_tool_call(
+        self,
+        *,
+        conversation_id: str,
+        user_id: str,
+        message_id: str,
+        tool_call_id: str,
+        title: str,
+        description: str,
+        response: str | None = None,
+        error: str | None = None,
+    ) -> str:
+        """Persist one tool-call row associated to a journal assistant message."""
 
     async def list_journals(self, user_id: str, limit: int, before: str | None = None) -> Sequence[dict[str, Any]]:
         """List journal entries for a user with optional reference cursor pagination."""

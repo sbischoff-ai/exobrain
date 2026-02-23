@@ -13,6 +13,16 @@ class JournalEntryResponse(BaseModel):
     status: str = Field(..., description="Journal status marker for UI rendering")
 
 
+
+
+class ToolCallResponse(BaseModel):
+    id: str = Field(..., description="Tool call row identifier")
+    tool_call_id: str = Field(..., description="Tool call identifier emitted via SSE")
+    title: str = Field(..., description="Human-readable tool execution title")
+    description: str = Field(..., description="Tool execution description shown during progress")
+    response: str | None = Field(default=None, description="Tool response message shown when execution succeeds")
+    error: str | None = Field(default=None, description="Tool error message shown when execution fails")
+
 class JournalMessageResponse(BaseModel):
     id: str = Field(..., description="Message identifier")
     role: str = Field(..., description="Message speaker role, e.g. user/assistant")
@@ -20,3 +30,4 @@ class JournalMessageResponse(BaseModel):
     sequence: int = Field(..., description="Per-conversation sequence cursor (higher is newer)")
     created_at: datetime = Field(..., description="Message creation timestamp")
     metadata: dict | None = Field(default=None, description="Optional model/runtime metadata")
+    tool_calls: list[ToolCallResponse] = Field(default_factory=list, description="Tool-call lifecycle records for this message")

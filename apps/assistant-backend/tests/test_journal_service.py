@@ -39,6 +39,7 @@ async def test_journal_service_uses_real_conversation_service_flow(
     assert journals[0]["id"] == "conv-1"
     assert journal == {"id": "conv-1", "reference": "2026/02/19", "created_at": None, "updated_at": None, "last_message_at": None, "message_count": 0, "status": "open"}
     assert messages[0]["sequence"] == 2
+    assert messages[0]["tool_calls"][0]["tool_call_id"] == "tc-1"
     assert search[0]["id"] == "conv-1"
     assert any("UPDATE conversations SET updated_at = NOW()" in query for query, _ in fake_database_service.execute_calls)
 

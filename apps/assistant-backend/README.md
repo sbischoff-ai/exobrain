@@ -99,6 +99,7 @@ This applies TOML-based Reshape migrations from `infra/metastore/assistant-backe
 - Journal APIs (`/api/journal`, `/api/journal/today`, `/api/journal/{reference}`, `/api/journal/{reference}/messages`, `/api/journal/search`) provide authenticated access to persisted conversation history.
 - Journal read endpoints (`GET /api/journal`, `GET /api/journal/today`, `GET /api/journal/today/messages`, `GET /api/journal/{reference}`, `GET /api/journal/{reference}/messages`) use Redis-backed cache-aside reads with targeted invalidation on journal/message writes.
 - Message endpoints paginate with a `sequence` cursor and return newest-first results by default.
+- Journal message endpoints (`GET /api/journal/today/messages`, `GET /api/journal/{reference}/messages`) include persisted `tool_calls` arrays with SSE-correlated fields: `tool_call_id`, `title`, `description`, `response`, and `error`.
 
 ## Local build and run
 

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from app.api.dependencies.auth import get_required_auth_context
 from app.api.schemas.auth import UnifiedPrincipal
-from app.api.schemas.journal import JournalEntryResponse, JournalMessageResponse
+from app.api.schemas.journal import JournalEntryResponse, JournalMessageResponse, ToolCallResponse
 from app.dependency_injection import get_container
 from app.services.contracts import JournalServiceProtocol
 
@@ -30,6 +30,7 @@ def _messages_from_records(rows) -> list[JournalMessageResponse]:
             sequence=row["sequence"],
             created_at=row["created_at"],
             metadata=row["metadata"],
+            tool_calls=[ToolCallResponse(**item) for item in (row.get("tool_calls") or [])],
         )
         for row in rows
     ]
