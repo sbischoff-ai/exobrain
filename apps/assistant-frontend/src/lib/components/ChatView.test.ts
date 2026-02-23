@@ -169,6 +169,46 @@ describe('ChatView', () => {
   });
 
 
+  it('submits on Enter without Shift', async () => {
+    const sent: string[] = [];
+    render(ChatView, { props: { messages: [], onSend: (text: string) => sent.push(text) } });
+
+    const input = screen.getByLabelText('Type your message');
+    await fireEvent.input(input, { target: { value: 'Line one' } });
+    await fireEvent.keyDown(input, { key: 'Enter', code: 'Enter', shiftKey: false });
+
+    expect(sent).toEqual(['Line one']);
+  });
+
+  it('allows Shift+Enter for multiline input and sends preserved line breaks', async () => {
+    const sent: string[] = [];
+    render(ChatView, { props: { messages: [], onSend: (text: string) => sent.push(text) } });
+
+    const input = screen.getByLabelText('Type your message');
+    await fireEvent.input(input, { target: { value: 'Line one\nLine two' } });
+    await fireEvent.keyDown(input, { key: 'Enter', code: 'Enter', shiftKey: true });
+    await fireEvent.submit(input.closest('form')!);
+
+    expect(sent).toEqual(['Line one\nLine two']);
+  });
+
+  it('grows composer height up to three lines', async () => {
+    render(ChatView, { props: { messages: [] } });
+
+    const input = screen.getByLabelText('Type your message') as HTMLTextAreaElement;
+
+    Object.defineProperty(input, 'scrollHeight', {
+      configurable: true,
+      get() {
+        return 120;
+      }
+    });
+
+    await fireEvent.input(input, { target: { value: 'One\nTwo\nThree' } });
+
+    expect(input.style.height).toBe('120px');
+  });
+
   it('shows tooltip when chat controls are disabled for a past journal', () => {
     render(ChatView, {
       props: {

@@ -130,7 +130,7 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
   gap: 0.55rem;
   background: rgb(60 56 54 / 85%);
 }
-.chat-input input {
+.chat-input textarea {
   flex: 1;
   border: 1px solid var(--border);
   border-radius: 0.65rem;
@@ -138,6 +138,11 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
   background: var(--surface);
   color: var(--text);
   font: inherit;
+  line-height: 1.45;
+  min-height: calc(1.45em + 1.5rem);
+  max-height: calc((1.45em * 3) + 1.5rem);
+  resize: none;
+  overflow-y: auto;
 }
 .chat-input button {
   width: 2.75rem;
@@ -149,10 +154,11 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
   display: grid;
   place-items: center;
   cursor: pointer;
+  align-self: flex-end;
 }
 .chat-input button svg { width: 2.4rem; height: 2.4rem; fill: currentColor; }
 .chat-notice { margin: 0; padding: 0.5rem 0.9rem 0; color: #fb4934; font-size: 0.9rem; }
-.chat-input input:disabled,.chat-input button:disabled { opacity: 0.55; cursor: not-allowed; }
+.chat-input textarea:disabled,.chat-input button:disabled { opacity: 0.55; cursor: not-allowed; }
 
 
 .arrow-icon {
