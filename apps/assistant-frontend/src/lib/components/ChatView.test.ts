@@ -365,7 +365,8 @@ describe('ChatView', () => {
         messages: [
           { role: 'user', content: 'Prompt', clientMessageId: 'u-1' },
           { role: 'assistant', content: 'first', clientMessageId: 'a-1' }
-        ]
+        ],
+        streamingInProgress: true
       }
     });
 
@@ -379,7 +380,8 @@ describe('ChatView', () => {
       messages: [
         { role: 'user', content: 'Prompt', clientMessageId: 'u-1' },
         { role: 'assistant', content: 'first second', clientMessageId: 'a-1' }
-      ]
+      ],
+      streamingInProgress: true
     });
 
     await waitFor(() => {
@@ -432,7 +434,8 @@ describe('ChatView', () => {
           messages: [
             { role: 'user', content: 'Prompt', clientMessageId: 'u-1' },
             { role: 'assistant', content: 'first', clientMessageId: 'a-1' }
-          ]
+          ],
+          streamingInProgress: true
         }
       });
 
@@ -446,7 +449,8 @@ describe('ChatView', () => {
         messages: [
           { role: 'user', content: 'Prompt', clientMessageId: 'u-1' },
           { role: 'assistant', content: 'first second', clientMessageId: 'a-1' }
-        ]
+        ],
+        streamingInProgress: true
       });
 
       await waitFor(() => {
@@ -456,12 +460,14 @@ describe('ChatView', () => {
       scrollState.scrollTop = 500;
       await fireEvent.scroll(messagesContainer);
 
+      scrollState.scrollHeight = 1200;
       await rerender({
         reference: '2026/02/19',
         messages: [
           { role: 'user', content: 'Prompt', clientMessageId: 'u-1' },
           { role: 'assistant', content: 'first second third', clientMessageId: 'a-1' }
-        ]
+        ],
+        streamingInProgress: true
       });
 
       await waitFor(() => {
@@ -489,7 +495,8 @@ describe('ChatView', () => {
         messages: [
           { role: 'user', content: 'Prompt', clientMessageId: 'u-1' },
           { role: 'assistant', content: 'a', clientMessageId: 'a-1' }
-        ]
+        ],
+        streamingInProgress: true
       }
     });
 
@@ -500,7 +507,8 @@ describe('ChatView', () => {
       messages: [
         { role: 'user', content: 'Prompt', clientMessageId: 'u-1' },
         { role: 'assistant', content: 'ab', clientMessageId: 'a-1' }
-      ]
+      ],
+      streamingInProgress: true
     });
 
     await rerender({
@@ -508,7 +516,8 @@ describe('ChatView', () => {
       messages: [
         { role: 'user', content: 'Prompt', clientMessageId: 'u-1' },
         { role: 'assistant', content: 'abc', clientMessageId: 'a-1' }
-      ]
+      ],
+      streamingInProgress: true
     });
 
     await waitFor(() => {

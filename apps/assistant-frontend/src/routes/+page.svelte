@@ -1,8 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import ChatView from '$lib/components/ChatView.svelte';
-  import JournalSidebar from '$lib/components/JournalSidebar.svelte';
-  import UserMenu from '$lib/components/UserMenu.svelte';
+  import AssistantWorkspace from '$lib/components/AssistantWorkspace.svelte';
+  import IntroLoginPanel from '$lib/components/IntroLoginPanel.svelte';
   import type { CurrentUser } from '$lib/models/auth';
   import type { JournalEntry, ProcessInfo, StoredMessage } from '$lib/models/journal';
   import { authService } from '$lib/services/authService';
@@ -36,10 +35,6 @@
     text: string;
   }
 
-  interface DonePayload {
-    reason: string;
-  }
-
   let initializing = true;
   let authenticated = false;
   let loadingJournal = false;
@@ -49,8 +44,6 @@
   let awaitingAssistant = false;
 
   let authError = '';
-  let email = '';
-  let password = '';
   let user: CurrentUser | null = null;
 
   let journalEntries: JournalEntry[] = [];
@@ -89,14 +82,11 @@
     }
   }
 
-  async function login(event: SubmitEvent): Promise<void> {
-    event.preventDefault();
+  async function login(event: CustomEvent<{ email: string; password: string }>): Promise<void> {
     authError = '';
 
     try {
-      await authService.login(email, password);
-      email = '';
-      password = '';
+      await authService.login(event.detail.email, event.detail.password);
       authenticated = true;
       user = await authService.getCurrentUser();
       await refreshAllState();
@@ -277,7 +267,7 @@
     );
   }
 
-  async function handleSend(text: string): Promise<void> {
+  async function handleSend(event: CustomEvent<{ text: string }>): Promise<void> {
     requestError = '';
 
     if (isPastJournalSelected) {
@@ -285,6 +275,7 @@
       return;
     }
 
+    const text = event.detail.text;
     const userClientMessageId = makeClientMessageId();
     const assistantClientMessageId = makeClientMessageId();
 
@@ -358,7 +349,7 @@
           updateStreamingMessage(assistantClientMessageId, accumulated, processInfos);
         });
 
-        eventSource.addEventListener('done', (_event) => {
+        eventSource.addEventListener('done', () => {
           doneReceived = true;
           eventSource.close();
           resolve();
@@ -376,11 +367,11 @@
       processInfos = interruptPendingProcessInfos(processInfos);
       updateStreamingMessage(assistantClientMessageId, accumulated, processInfos);
 
-        currentMessageCount += 2;
+      currentMessageCount += 2;
       saveSessionState(buildSessionState(currentReference, messages, currentMessageCount));
       await loadJournalEntries();
     } catch {
-        requestError = 'Could not reach the assistant backend. Please try again.';
+      requestError = 'Could not reach the assistant backend. Please try again.';
     } finally {
       awaitingAssistant = false;
     }
@@ -394,61 +385,27 @@
 {#if initializing}
   <div class="intro-page"><span class="spinner"></span></div>
 {:else if !authenticated}
-  <main class="intro-page">
-    <div class="intro-content">
-      <img src="/logo.png" alt="DRVID logo" class="intro-logo" />
-      <h1>DRVID</h1>
-      <form class="intro-login" on:submit={login}>
-        <label>
-          Email
-          <input type="email" bind:value={email} required autocomplete="email" />
-        </label>
-        <label>
-          Password
-          <input type="password" bind:value={password} required minlength="8" autocomplete="current-password" />
-        </label>
-        <button type="submit">Login</button>
-      </form>
-      {#if authError}
-        <p class="chat-notice">{authError}</p>
-      {/if}
-    </div>
-  </main>
-{:else}
-  <div class="app-shell">
-    <header class="header">
-      <div class="header-inner">
-        <div class="brand">
-          <img src="/logo.png" alt="DRVID logo" class="logo" />
-          <h1>DRVID</h1>
-        </div>
-        <UserMenu {user} onLogout={logout} />
-      </div>
-    </header>
-
-    <main class="main-content workspace">
-      <JournalSidebar
-        entries={journalEntries}
-        currentReference={currentReference}
-        todayReference={todayReference}
-        collapsed={sidebarCollapsed}
-        on:toggle={() => (sidebarCollapsed = !sidebarCollapsed)}
-        on:close={() => (sidebarCollapsed = true)}
-        on:select={selectJournal}
-      />
-
-      <ChatView
-        messages={messages}
-        loading={loadingJournal || syncingMessages}
-        loadingOlder={loadingOlderMessages}
-        canLoadOlder={canLoadOlderMessages}
-        reference={currentReference}
-        inputDisabled={chatInputDisabled}
-        disabledReason={isPastJournalSelected ? 'You can not chat with past journals.' : ''}
-        requestError={requestError}
-        onSend={handleSend}
-        onLoadOlder={loadOlderMessages}
-      />
-    </main>
-  </div>
+  <IntroLoginPanel {authError} on:login={login} />
+{:else if user}
+  <AssistantWorkspace
+    {user}
+    {journalEntries}
+    {currentReference}
+    {todayReference}
+    {sidebarCollapsed}
+    {messages}
+    loading={loadingJournal || syncingMessages}
+    loadingOlder={loadingOlderMessages}
+    canLoadOlder={canLoadOlderMessages}
+    inputDisabled={chatInputDisabled}
+    disabledReason={isPastJournalSelected ? 'You can not chat with past journals.' : ''}
+    {requestError}
+    streamingInProgress={awaitingAssistant}
+    on:logout={logout}
+    on:toggleSidebar={() => (sidebarCollapsed = !sidebarCollapsed)}
+    on:closeSidebar={() => (sidebarCollapsed = true)}
+    on:selectJournal={selectJournal}
+    on:send={handleSend}
+    on:loadOlder={loadOlderMessages}
+  />
 {/if}
