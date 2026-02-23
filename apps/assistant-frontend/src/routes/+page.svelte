@@ -401,6 +401,7 @@
     disabledReason={isPastJournalSelected ? 'You can not chat with past journals.' : ''}
     {requestError}
     streamingInProgress={awaitingAssistant}
+    autoScrollEnabled={!isPastJournalSelected}
     on:logout={logout}
     on:toggleSidebar={() => (sidebarCollapsed = !sidebarCollapsed)}
     on:closeSidebar={() => (sidebarCollapsed = true)}

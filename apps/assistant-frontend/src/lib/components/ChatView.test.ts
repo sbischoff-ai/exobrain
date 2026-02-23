@@ -573,4 +573,31 @@ describe('ChatView', () => {
       expect(scrollSpy.mock.calls.length).toBe(callsAfterDone);
     });
   });
+
+  it('does not auto-scroll when autoScrollEnabled is false', async () => {
+    const scrollSpy = vi.spyOn(HTMLElement.prototype, 'scrollTo');
+
+    const { rerender } = render(ChatView, {
+      props: {
+        reference: '2025/01/14',
+        autoScrollEnabled: false,
+        messages: [{ role: 'assistant', content: 'older', clientMessageId: 'a-1' }]
+      }
+    });
+
+    const baselineCalls = scrollSpy.mock.calls.length;
+
+    await rerender({
+      reference: '2025/01/14',
+      autoScrollEnabled: false,
+      messages: [
+        { role: 'assistant', content: 'older', clientMessageId: 'a-1' },
+        { role: 'assistant', content: 'older-2', clientMessageId: 'a-2' }
+      ]
+    });
+
+    await waitFor(() => {
+      expect(scrollSpy.mock.calls.length).toBe(baselineCalls);
+    });
+  });
 });
