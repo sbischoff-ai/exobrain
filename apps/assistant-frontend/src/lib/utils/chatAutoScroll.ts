@@ -18,7 +18,7 @@ const defaultConfig: AutoScrollConfig = {
   resumeThresholdPx: 24,
   fastPxPerSecond: 900,
   slowPxPerSecond: 22,
-  catchupPxPerSecond: 320
+  catchupPxPerSecond: 22
 };
 
 export class ChatAutoScroller {

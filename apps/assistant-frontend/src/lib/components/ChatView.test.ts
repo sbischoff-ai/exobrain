@@ -574,6 +574,93 @@ describe('ChatView', () => {
     });
   });
 
+  it('continues auto-scroll after stream ends until bottom is reached when not interrupted', async () => {
+    const originalScrollTop = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollTop');
+    const originalScrollHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight');
+    const originalClientHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientHeight');
+    const originalScrollTo = HTMLElement.prototype.scrollTo;
+
+    const scrollState = {
+      scrollTop: 100,
+      scrollHeight: 1600,
+      clientHeight: 500
+    };
+
+    try {
+      Object.defineProperty(HTMLElement.prototype, 'scrollTop', {
+        configurable: true,
+        get() {
+          return scrollState.scrollTop;
+        },
+        set(value: number) {
+          scrollState.scrollTop = value;
+        }
+      });
+
+      Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+        configurable: true,
+        get() {
+          return scrollState.scrollHeight;
+        }
+      });
+
+      Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
+        configurable: true,
+        get() {
+          return scrollState.clientHeight;
+        }
+      });
+
+      HTMLElement.prototype.scrollTo = function (options: ScrollToOptions | number, y?: number): void {
+        if (typeof options === 'number') {
+          scrollState.scrollTop = typeof y === 'number' ? y : options;
+          return;
+        }
+
+        if (typeof options.top === 'number') {
+          scrollState.scrollTop = options.top;
+        }
+      };
+
+      const { rerender } = render(ChatView, {
+        props: {
+          reference: '2026/02/19',
+          messages: [
+            { role: 'user', content: 'Prompt', clientMessageId: 'u-1' },
+            { role: 'assistant', content: 'short stream', clientMessageId: 'a-1' }
+          ],
+          streamingInProgress: true
+        }
+      });
+
+      const topBeforeDone = scrollState.scrollTop;
+
+      await rerender({
+        reference: '2026/02/19',
+        messages: [
+          { role: 'user', content: 'Prompt', clientMessageId: 'u-1' },
+          { role: 'assistant', content: 'short stream done', clientMessageId: 'a-1' }
+        ],
+        streamingInProgress: false
+      });
+
+      await waitFor(() => {
+        expect(scrollState.scrollTop).toBeGreaterThan(topBeforeDone);
+      });
+    } finally {
+      HTMLElement.prototype.scrollTo = originalScrollTo;
+      if (originalScrollTop) {
+        Object.defineProperty(HTMLElement.prototype, 'scrollTop', originalScrollTop);
+      }
+      if (originalScrollHeight) {
+        Object.defineProperty(HTMLElement.prototype, 'scrollHeight', originalScrollHeight);
+      }
+      if (originalClientHeight) {
+        Object.defineProperty(HTMLElement.prototype, 'clientHeight', originalClientHeight);
+      }
+    }
+  });
+
   it('does not auto-scroll when autoScrollEnabled is false', async () => {
     const scrollSpy = vi.spyOn(HTMLElement.prototype, 'scrollTo');
 
