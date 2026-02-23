@@ -1,0 +1,61 @@
+[[actions]]
+type = "create_table"
+name = "tool_calls"
+primary_key = ["id"]
+
+    [[actions.columns]]
+    name = "id"
+    type = "UUID"
+    nullable = false
+    default = "gen_random_uuid()"
+
+    [[actions.columns]]
+    name = "message_id"
+    type = "UUID"
+    nullable = false
+
+    [[actions.columns]]
+    name = "tool_call_id"
+    type = "TEXT"
+    nullable = false
+
+    [[actions.columns]]
+    name = "title"
+    type = "TEXT"
+    nullable = false
+
+    [[actions.columns]]
+    name = "description"
+    type = "TEXT"
+    nullable = false
+
+    [[actions.columns]]
+    name = "response"
+    type = "TEXT"
+
+    [[actions.columns]]
+    name = "error"
+    type = "TEXT"
+
+    [[actions.columns]]
+    name = "created_at"
+    type = "TIMESTAMPTZ"
+    nullable = false
+    default = "NOW()"
+
+[[actions]]
+type = "add_foreign_key"
+table = "tool_calls"
+
+    [actions.foreign_key]
+    columns = ["message_id"]
+    referenced_table = "messages"
+    referenced_columns = ["id"]
+
+[[actions]]
+type = "add_index"
+table = "tool_calls"
+
+    [actions.index]
+    name = "idx_tool_calls_message_created"
+    columns = ["message_id", "created_at"]

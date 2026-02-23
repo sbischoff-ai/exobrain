@@ -57,7 +57,13 @@ async def test_chat_service_stream_events_forwards_conversation_context(fake_dat
 
 @pytest.mark.asyncio
 async def test_chat_service_stream_journal_message_persists_user_and_assistant(fake_database_service, fake_journal_cache, test_settings) -> None:
-    agent = FakeChatAgent(responses=[[{"type": "message_chunk", "data": {"text": "assistant-reply"}}]])
+    agent = FakeChatAgent(
+        responses=[[
+            {"type": "tool_call", "data": {"tool_call_id": "tc-1", "title": "Web search", "description": "Searching the web for cats"}},
+            {"type": "tool_response", "data": {"tool_call_id": "tc-1", "message": "Found 1 candidate source"}},
+            {"type": "message_chunk", "data": {"text": "assistant-reply"}},
+        ]]
+    )
     journal_service = JournalService(
         conversation_service=ConversationService(database=fake_database_service),  # type: ignore[arg-type]
         cache=fake_journal_cache,  # type: ignore[arg-type]
@@ -74,7 +80,8 @@ async def test_chat_service_stream_journal_message_persists_user_and_assistant(f
     )
     _ = [event async for event in service.stream_events(stream_id)]
 
-    assert len(fake_database_service.fetchrow_calls) >= 3
+    assert len(fake_database_service.fetchrow_calls) >= 4
+    assert any("INSERT INTO tool_calls" in query for query, _ in fake_database_service.fetchrow_calls)
     assert agent.calls == [("hello", "conv-1")]
 
 

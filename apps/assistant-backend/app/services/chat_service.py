@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from typing import Any
 import asyncio
 import logging
 import uuid
@@ -78,21 +79,58 @@ class ChatService:
             )
 
             chunks: list[str] = []
+            tool_calls: dict[str, dict[str, Any]] = {}
             async for event in self._agent.astream(message=message, conversation_id=conversation_id):
                 await queue.put(event)
                 if event["type"] == "message_chunk":
                     text = event["data"].get("text") if isinstance(event.get("data"), dict) else None
                     if isinstance(text, str):
                         chunks.append(text)
+                elif event["type"] == "tool_call" and isinstance(event.get("data"), dict):
+                    tool_call_id = event["data"].get("tool_call_id")
+                    title = event["data"].get("title")
+                    description = event["data"].get("description")
+                    if isinstance(tool_call_id, str) and tool_call_id:
+                        tool_calls[tool_call_id] = {
+                            "tool_call_id": tool_call_id,
+                            "title": str(title or ""),
+                            "description": str(description or ""),
+                            "response": None,
+                            "error": None,
+                        }
+                elif event["type"] == "tool_response" and isinstance(event.get("data"), dict):
+                    tool_call_id = event["data"].get("tool_call_id")
+                    response = event["data"].get("message")
+                    if isinstance(tool_call_id, str) and tool_call_id in tool_calls and isinstance(response, str):
+                        tool_calls[tool_call_id]["response"] = response
+                elif event["type"] == "error" and isinstance(event.get("data"), dict):
+                    tool_call_id = event["data"].get("tool_call_id")
+                    error = event["data"].get("message")
+                    if isinstance(tool_call_id, str) and tool_call_id in tool_calls and isinstance(error, str):
+                        tool_calls[tool_call_id]["error"] = error
 
             assistant_message = "".join(chunks).strip()
+            assistant_message_id: str | None = None
             if assistant_message:
-                await self._journal_service.create_journal_message(
+                assistant_message_id = await self._journal_service.create_journal_message(
                     conversation_id=conversation_id,
                     user_id=principal.user_id,
                     role="assistant",
                     content=assistant_message,
                 )
+
+            if assistant_message_id is not None:
+                for tool_call in tool_calls.values():
+                    await self._journal_service.create_journal_tool_call(
+                        conversation_id=conversation_id,
+                        user_id=principal.user_id,
+                        message_id=assistant_message_id,
+                        tool_call_id=tool_call["tool_call_id"],
+                        title=tool_call["title"],
+                        description=tool_call["description"],
+                        response=tool_call["response"],
+                        error=tool_call["error"],
+                    )
         except Exception:
             logger.exception("chat stream failed", extra={"stream_id": stream_id})
             await queue.put({"type": "error", "data": {"message": "Assistant stream failed"}})
