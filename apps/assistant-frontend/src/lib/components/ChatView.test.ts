@@ -524,4 +524,53 @@ describe('ChatView', () => {
       expect(scrollSpy.mock.calls.length).toBeGreaterThan(callsAfterInitialRender + 1);
     });
   });
+
+  it('stops auto-scrolling after stream ends when already at bottom', async () => {
+    const scrollSpy = vi.spyOn(HTMLElement.prototype, 'scrollTo');
+
+    const { rerender } = render(ChatView, {
+      props: {
+        reference: '2026/02/19',
+        messages: [
+          { role: 'user', content: 'Prompt', clientMessageId: 'u-1' },
+          { role: 'assistant', content: 'streaming text', clientMessageId: 'a-1' }
+        ],
+        streamingInProgress: true
+      }
+    });
+
+    await waitFor(() => {
+      expect(scrollSpy.mock.calls.length).toBeGreaterThan(0);
+    });
+
+    const callsDuringStreaming = scrollSpy.mock.calls.length;
+
+    await rerender({
+      reference: '2026/02/19',
+      messages: [
+        { role: 'user', content: 'Prompt', clientMessageId: 'u-1' },
+        { role: 'assistant', content: 'streaming text done', clientMessageId: 'a-1' }
+      ],
+      streamingInProgress: false
+    });
+
+    await waitFor(() => {
+      expect(scrollSpy.mock.calls.length).toBe(callsDuringStreaming + 1);
+    });
+
+    const callsAfterDone = scrollSpy.mock.calls.length;
+
+    await rerender({
+      reference: '2026/02/19',
+      messages: [
+        { role: 'user', content: 'Prompt', clientMessageId: 'u-1' },
+        { role: 'assistant', content: 'streaming text done', clientMessageId: 'a-1' }
+      ],
+      streamingInProgress: false
+    });
+
+    await waitFor(() => {
+      expect(scrollSpy.mock.calls.length).toBe(callsAfterDone);
+    });
+  });
 });

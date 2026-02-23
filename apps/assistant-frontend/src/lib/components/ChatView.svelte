@@ -41,11 +41,15 @@
   let previousFrameTime = 0;
 
   $: {
-    const candidateStreamingMessageId = getCurrentStreamingMessageId();
+    const candidateStreamingMessageId = streamingInProgress ? getCurrentStreamingMessageId() : null;
     if (candidateStreamingMessageId !== activeStreamingMessageId) {
       activeStreamingMessageId = candidateStreamingMessageId;
       autoScroller.maybeResume(0);
-      jumpToBottom('smooth');
+
+      if (activeStreamingMessageId) {
+        jumpToBottom('smooth');
+      }
+
       ensureAutoScrollLoop();
     }
   }
@@ -191,7 +195,9 @@
 
     const containerRect = messagesContainer.getBoundingClientRect();
     const streamRect = streamElement.getBoundingClientRect();
-    return streamRect.top <= containerRect.top + 8;
+    const streamCoversViewportHeight = streamRect.height >= messagesContainer.clientHeight;
+
+    return streamCoversViewportHeight && streamRect.top <= containerRect.top + 8;
   }
 
   function ensureAutoScrollLoop(): void {
@@ -245,15 +251,18 @@
       return;
     }
 
+    const currentTop = messagesContainer.scrollTop;
     const maxScrollTop = Math.max(messagesContainer.scrollHeight - messagesContainer.clientHeight, 0);
     const scrollStep = autoScroller.getStepForPhase(snapshot.phase, deltaMs);
-    const nextTop = Math.min(messagesContainer.scrollTop + scrollStep, maxScrollTop);
+    const nextTop = Math.min(currentTop + scrollStep, maxScrollTop);
 
-    if (nextTop > messagesContainer.scrollTop) {
+    if (nextTop > currentTop) {
       isProgrammaticScroll = true;
       messagesContainer.scrollTo({ top: nextTop, behavior: 'auto' });
       lastObservedScrollTop = messagesContainer.scrollTop;
       isProgrammaticScroll = false;
+    } else if (!streamingInProgress) {
+      return;
     }
 
     ensureAutoScrollLoop();
