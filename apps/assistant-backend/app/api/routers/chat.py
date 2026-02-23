@@ -6,7 +6,8 @@ from fastapi.responses import StreamingResponse
 from app.api.dependencies.auth import get_required_auth_context
 from app.api.schemas.auth import UnifiedPrincipal
 from app.api.schemas.chat import ChatMessageRequest, ChatMessageStartResponse
-from app.services.chat_service import ChatService
+from app.dependency_injection import get_container
+from app.services.contracts import ChatServiceProtocol
 from app.services.chat_stream import encode_sse_event
 
 logger = logging.getLogger(__name__)
@@ -28,7 +29,7 @@ async def message(
     auth_context: UnifiedPrincipal = Depends(get_required_auth_context),
 ) -> ChatMessageStartResponse:
     logger.info("assistant chat request", extra={"user_name": auth_context.display_name})
-    chat_service: ChatService = request.app.state.chat_service
+    chat_service = get_container(request).resolve(ChatServiceProtocol)
     stream_id = await chat_service.start_journal_stream(
         principal=auth_context,
         message=payload.message,
@@ -50,7 +51,7 @@ async def stream(
     request: Request,
     _auth_context: UnifiedPrincipal = Depends(get_required_auth_context),
 ) -> StreamingResponse:
-    chat_service: ChatService = request.app.state.chat_service
+    chat_service = get_container(request).resolve(ChatServiceProtocol)
 
     async def event_stream() -> str:
         async for event in chat_service.stream_events(stream_id):

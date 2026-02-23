@@ -5,6 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from app.api.dependencies.auth import get_optional_auth_context
 from app.api.schemas.auth import UnifiedPrincipal
 from app.api.schemas.users import SelfUserResponse
+from app.dependency_injection import get_container
+from app.services.contracts import UserServiceProtocol
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/users", tags=["users"])
@@ -19,7 +21,8 @@ async def get_me(
         logger.info("users/me unauthorized")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required")
 
-    user = await request.app.state.user_service.get_user(principal.user_id)
+    user_service = get_container(request).resolve(UserServiceProtocol)
+    user = await user_service.get_user(principal.user_id)
     if user is None:
         logger.warning("users/me principal missing", extra={"user_id": principal.user_id})
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user not found")

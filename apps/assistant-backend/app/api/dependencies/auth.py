@@ -3,13 +3,16 @@ import logging
 from fastapi import HTTPException, Request, status
 
 from app.api.schemas.auth import UnifiedPrincipal
-from app.services.auth_service import AuthService
+from app.core.settings import Settings
+from app.dependency_injection import get_container
+from app.services.contracts import AuthServiceProtocol
 
 logger = logging.getLogger(__name__)
 
 
 async def get_optional_auth_context(request: Request) -> UnifiedPrincipal | None:
-    auth_service: AuthService = request.app.state.auth_service
+    container = get_container(request)
+    auth_service = container.resolve(AuthServiceProtocol)
 
     auth_header = request.headers.get("authorization")
     bearer_token: str | None = None
@@ -21,7 +24,8 @@ async def get_optional_auth_context(request: Request) -> UnifiedPrincipal | None
         logger.debug("authenticated via bearer token", extra={"user_id": principal.user_id})
         return principal
 
-    session_id = request.cookies.get(request.app.state.settings.auth_cookie_name)
+    settings = container.resolve(Settings)
+    session_id = request.cookies.get(settings.auth_cookie_name)
     principal = await auth_service.principal_from_session(session_id)
     if principal is not None:
         logger.debug("authenticated via session", extra={"user_id": principal.user_id})

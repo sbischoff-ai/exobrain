@@ -5,13 +5,13 @@ from datetime import UTC, datetime
 
 import asyncpg
 
-from app.services.conversation_service import ConversationService
+from app.services.contracts import ConversationServiceProtocol
 
 
 class JournalService:
     """Service that projects conversation operations into journal-specific workflows."""
 
-    def __init__(self, conversation_service: ConversationService) -> None:
+    def __init__(self, conversation_service: ConversationServiceProtocol) -> None:
         self._conversation_service = conversation_service
 
     async def ensure_journal(self, user_id: str, journal_reference: str) -> str:

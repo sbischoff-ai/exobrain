@@ -3,7 +3,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from app.api.dependencies.auth import get_required_auth_context
 from app.api.schemas.auth import UnifiedPrincipal
 from app.api.schemas.journal import JournalEntryResponse, JournalMessageResponse
-from app.services.journal_service import JournalService
+from app.dependency_injection import get_container
+from app.services.contracts import JournalServiceProtocol
 
 router = APIRouter(prefix="/journal", tags=["journal"])
 
@@ -45,7 +46,7 @@ async def list_journal_entries(
     limit: int = Query(default=20, ge=1, le=100, description="Maximum entries to return"),
     cursor: str | None = Query(default=None, description="Optional reference cursor for pagination"),
 ) -> list[JournalEntryResponse]:
-    service: JournalService = request.app.state.journal_service
+    service = get_container(request).resolve(JournalServiceProtocol)
     rows = await service.list_journals(user_id=principal.user_id, limit=limit, before=cursor)
     return [_entry_from_record(row) for row in rows]
 
@@ -60,7 +61,7 @@ async def get_today_journal(
     principal: UnifiedPrincipal = Depends(get_required_auth_context),
     create: bool = Query(default=False, description="If true, create today's journal when missing"),
 ) -> JournalEntryResponse:
-    service: JournalService = request.app.state.journal_service
+    service = get_container(request).resolve(JournalServiceProtocol)
     row = await service.get_today_journal(user_id=principal.user_id, create=create)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="journal entry not found")
@@ -78,7 +79,7 @@ async def get_today_messages(
     limit: int = Query(default=100, ge=1, le=500, description="Maximum messages to return"),
     cursor: int | None = Query(default=None, description="Optional sequence cursor for message pagination"),
 ) -> list[JournalMessageResponse]:
-    service: JournalService = request.app.state.journal_service
+    service = get_container(request).resolve(JournalServiceProtocol)
     rows = await service.list_today_messages(user_id=principal.user_id, limit=limit, before_sequence=cursor)
     return _messages_from_records(rows)
 
@@ -94,7 +95,7 @@ async def search_journal_entries(
     principal: UnifiedPrincipal = Depends(get_required_auth_context),
     limit: int = Query(default=20, ge=1, le=100, description="Maximum entries to return"),
 ) -> list[JournalEntryResponse]:
-    service: JournalService = request.app.state.journal_service
+    service = get_container(request).resolve(JournalServiceProtocol)
     rows = await service.search_journals(user_id=principal.user_id, query=q, limit=limit)
     return [_entry_from_record(row) for row in rows]
 
@@ -111,7 +112,7 @@ async def get_journal_messages(
     limit: int = Query(default=100, ge=1, le=500, description="Maximum messages to return"),
     cursor: int | None = Query(default=None, description="Optional sequence cursor for message pagination"),
 ) -> list[JournalMessageResponse]:
-    service: JournalService = request.app.state.journal_service
+    service = get_container(request).resolve(JournalServiceProtocol)
     rows = await service.list_messages(
         user_id=principal.user_id,
         journal_reference=reference,
@@ -131,7 +132,7 @@ async def get_journal_by_reference(
     request: Request,
     principal: UnifiedPrincipal = Depends(get_required_auth_context),
 ) -> JournalEntryResponse:
-    service: JournalService = request.app.state.journal_service
+    service = get_container(request).resolve(JournalServiceProtocol)
     row = await service.get_journal(user_id=principal.user_id, journal_reference=reference)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="journal entry not found")

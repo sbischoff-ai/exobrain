@@ -2,40 +2,10 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 import json
-from typing import Protocol
 
 from redis.asyncio import Redis
 
-
-class SessionStore(Protocol):
-    """Protocol for storing and resolving assistant auth sessions and refresh tokens."""
-
-    async def create_session(self, session_id: str, user_id: str, ttl_seconds: int) -> None:
-        ...
-
-    async def get_user_id(self, session_id: str) -> str | None:
-        ...
-
-    async def revoke_session(self, session_id: str) -> None:
-        ...
-
-    async def store_refresh_token(
-        self,
-        refresh_token: str,
-        user_id: str,
-        expires_at: datetime,
-        ttl_seconds: int,
-    ) -> None:
-        ...
-
-    async def get_refresh_token_user_id(self, refresh_token: str) -> str | None:
-        ...
-
-    async def revoke_refresh_token(self, refresh_token: str) -> None:
-        ...
-
-    async def close(self) -> None:
-        ...
+from app.services.contracts import SessionStoreProtocol
 
 
 class RedisSessionStore:
@@ -100,3 +70,6 @@ class RedisSessionStore:
 
     def _refresh_token_key(self, refresh_token: str) -> str:
         return f"{self._key_prefix}:refresh:{refresh_token}"
+
+
+SessionStore = SessionStoreProtocol

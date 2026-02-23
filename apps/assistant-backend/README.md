@@ -10,8 +10,11 @@ The backend follows a layered design:
 - **Service layer** (`app/services`): use-case orchestration, independent from FastAPI.
 - **Agent layer** (`app/agents`): chat agent interfaces and implementations.
 - **Core layer** (`app/core`): runtime configuration and app settings.
+- **Dependency injection** (`app/dependency_injection`): application container assembly via `punq`, with protocol-to-implementation bindings and lifecycle wiring through FastAPI app state.
 
 Cross-service standards for router/service boundaries are documented in [`docs/standards/engineering-standards.md`](../../docs/standards/engineering-standards.md).
+
+The runtime stores a single `punq` container on `app.state.container`; routers/dependencies resolve protocol contracts from the container instead of using per-service `app.state` fields.
 
 The current implementation uses LangChain `create_agent()` with LangGraph streaming and a
 Postgres-backed checkpointer so each journal conversation has isolated memory by conversation id.

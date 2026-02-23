@@ -8,7 +8,7 @@ import uuid
 from app.agents.base import ChatAgent
 from app.api.schemas.auth import UnifiedPrincipal
 from app.services.chat_stream import ChatStreamEvent
-from app.services.journal_service import JournalService
+from app.services.contracts import JournalServiceProtocol
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ _SENTINEL = object()
 class ChatService:
     """Use-case service for chat messaging and journal persistence orchestration."""
 
-    def __init__(self, agent: ChatAgent, journal_service: JournalService) -> None:
+    def __init__(self, agent: ChatAgent, journal_service: JournalServiceProtocol) -> None:
         self._agent = agent
         self._journal_service = journal_service
         self._streams: dict[str, asyncio.Queue[ChatStreamEvent | object]] = {}

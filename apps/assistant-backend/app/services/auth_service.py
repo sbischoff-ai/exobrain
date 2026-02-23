@@ -9,8 +9,7 @@ import jwt
 
 from app.api.schemas.auth import LoginRequest, UnifiedPrincipal
 from app.core.settings import Settings
-from app.services.session_store import SessionStore
-from app.services.user_service import UserService
+from app.services.contracts import SessionStoreProtocol, UserServiceProtocol
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +66,7 @@ def verify_password(password: str, encoded_hash: str) -> bool:
 class AuthService:
     """Authentication orchestration with Redis-backed session and refresh-token state."""
 
-    def __init__(self, settings: Settings, user_service: UserService, session_store: SessionStore) -> None:
+    def __init__(self, settings: Settings, user_service: UserServiceProtocol, session_store: SessionStoreProtocol) -> None:
         self._settings = settings
         self._user_service = user_service
         self._session_store = session_store
