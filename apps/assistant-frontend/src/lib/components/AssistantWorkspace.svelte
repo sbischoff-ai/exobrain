@@ -19,6 +19,7 @@
   export let disabledReason = '';
   export let requestError = '';
   export let streamingInProgress = false;
+  export let autoScrollEnabled = true;
 
   const dispatch = createEventDispatcher<{
     logout: void;
@@ -62,6 +63,7 @@
       {disabledReason}
       {requestError}
       {streamingInProgress}
+      {autoScrollEnabled}
       onSend={(text) => dispatch('send', { text })}
       onLoadOlder={() => dispatch('loadOlder')}
     />

@@ -15,6 +15,7 @@
   export let disabledReason = '';
   export let requestError = '';
   export let streamingInProgress = false;
+  export let autoScrollEnabled = true;
   export let onSend: (text: string) => void = () => {};
   export let onLoadOlder: () => void = () => {};
 
@@ -37,16 +38,18 @@
   let isProgrammaticScroll = false;
 
   const autoScroller = new ChatAutoScroller();
+  let catchupUntilBottom = false;
   let frameHandle: number | null = null;
   let previousFrameTime = 0;
 
   $: {
-    const candidateStreamingMessageId = streamingInProgress ? getCurrentStreamingMessageId() : null;
+    const candidateStreamingMessageId = autoScrollEnabled && streamingInProgress ? getCurrentStreamingMessageId() : null;
     if (candidateStreamingMessageId !== activeStreamingMessageId) {
       activeStreamingMessageId = candidateStreamingMessageId;
       autoScroller.maybeResume(0);
 
       if (activeStreamingMessageId) {
+        catchupUntilBottom = true;
         jumpToBottom('smooth');
       }
 
@@ -57,6 +60,17 @@
   $: {
     if (!streamingInProgress) {
       ensureAutoScrollLoop();
+    }
+  }
+
+  $: {
+    if (!autoScrollEnabled) {
+      catchupUntilBottom = false;
+      activeStreamingMessageId = null;
+      if (frameHandle != null) {
+        cancelAnimationFrame(frameHandle);
+        frameHandle = null;
+      }
     }
   }
 
@@ -119,9 +133,12 @@
         lastObservedScrollTop = messagesContainer.scrollTop;
       } else {
         await tick();
-        if (shouldForceJumpToLatest) {
+        const switchedReference = reference !== previousReference;
+
+        if (shouldForceJumpToLatest && autoScrollEnabled) {
+          catchupUntilBottom = true;
           jumpToBottom('smooth');
-        } else if (!streamingInProgress) {
+        } else if (switchedReference && autoScrollEnabled) {
           jumpToBottom('smooth');
         }
       }
@@ -167,8 +184,9 @@
 
     const currentTop = messagesContainer.scrollTop;
 
-    if (!isProgrammaticScroll && activeStreamingMessageId && currentTop < lastObservedScrollTop - 1) {
+    if (!isProgrammaticScroll && (activeStreamingMessageId || catchupUntilBottom) && currentTop < lastObservedScrollTop - 1) {
       autoScroller.markSuspended();
+      catchupUntilBottom = false;
     }
 
     autoScroller.maybeResume(getDistanceFromBottom(messagesContainer));
@@ -177,8 +195,9 @@
   }
 
   function handleMessagesWheel(event: CustomEvent<WheelEvent>): void {
-    if (activeStreamingMessageId && event.detail.deltaY < 0) {
+    if ((activeStreamingMessageId || catchupUntilBottom) && event.detail.deltaY < 0) {
       autoScroller.markSuspended();
+      catchupUntilBottom = false;
       ensureAutoScrollLoop();
     }
   }
@@ -206,12 +225,25 @@
     }
 
     const distanceFromBottom = getDistanceFromBottom(messagesContainer);
+    const shouldCatchup = autoScrollEnabled && catchupUntilBottom;
+    if (!streamingInProgress && !shouldCatchup) {
+      if (frameHandle != null) {
+        cancelAnimationFrame(frameHandle);
+        frameHandle = null;
+      }
+      return;
+    }
+
+    if (distanceFromBottom <= 1) {
+      catchupUntilBottom = false;
+    }
+
     const next = autoScroller.nextPhase({
-      streamingInProgress,
+      streamingInProgress: autoScrollEnabled && streamingInProgress,
       streamMessageTopAtOrAboveContainerTop: activeStreamingMessageId
         ? isStreamingMessageAtTopBoundary(activeStreamingMessageId)
         : false,
-      distanceFromBottom
+      distanceFromBottom: shouldCatchup || streamingInProgress ? distanceFromBottom : 0
     });
 
     if (next.phase === 'idle') {
@@ -239,8 +271,18 @@
     previousFrameTime = timestamp;
 
     const distanceFromBottom = getDistanceFromBottom(messagesContainer);
+    const shouldCatchup = autoScrollEnabled && catchupUntilBottom;
+    if (!streamingInProgress && !shouldCatchup) {
+      return;
+    }
+
+    if (distanceFromBottom <= 1) {
+      catchupUntilBottom = false;
+      return;
+    }
+
     const snapshot = autoScroller.nextPhase({
-      streamingInProgress,
+      streamingInProgress: autoScrollEnabled && streamingInProgress,
       streamMessageTopAtOrAboveContainerTop: activeStreamingMessageId
         ? isStreamingMessageAtTopBoundary(activeStreamingMessageId)
         : false,
@@ -259,9 +301,16 @@
     if (nextTop > currentTop) {
       isProgrammaticScroll = true;
       messagesContainer.scrollTo({ top: nextTop, behavior: 'auto' });
-      lastObservedScrollTop = messagesContainer.scrollTop;
+      const updatedTop = messagesContainer.scrollTop;
+      lastObservedScrollTop = updatedTop;
       isProgrammaticScroll = false;
+
+      if (!streamingInProgress && updatedTop <= currentTop + 0.5) {
+        catchupUntilBottom = false;
+        return;
+      }
     } else if (!streamingInProgress) {
+      catchupUntilBottom = false;
       return;
     }
 

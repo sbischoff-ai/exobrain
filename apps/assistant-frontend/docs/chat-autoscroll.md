@@ -20,6 +20,9 @@ The chat viewport auto-scroll logic is implemented as a small state machine so s
 6. **Post-stream catch-up**: when streaming ends, auto-scroll does not stop until either:
    - bottom is reached, or
    - user suspension is active.
+7. **Journal-open behavior**:
+   - opening **today's journal** performs a near-instant smooth jump to the bottom once the messages render, then remains idle until a new stream starts.
+   - opening a **past journal** keeps auto-scroll fully disabled.
 
 ## Mermaid flow
 
