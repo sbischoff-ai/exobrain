@@ -294,6 +294,37 @@ describe('ChatView', () => {
     }
   });
 
+
+  it('auto-scrolls to bottom after loading finishes on initial today journal open', async () => {
+    const scrollSpy = vi.spyOn(HTMLElement.prototype, 'scrollTo');
+
+    const { rerender } = render(ChatView, {
+      props: {
+        reference: '2026/02/19',
+        loading: true,
+        messages: [
+          { role: 'assistant', content: 'today earliest', clientMessageId: 'today-1' },
+          { role: 'assistant', content: 'today latest', clientMessageId: 'today-2' }
+        ]
+      }
+    });
+
+    const baselineCalls = scrollSpy.mock.calls.length;
+
+    await rerender({
+      reference: '2026/02/19',
+      loading: false,
+      messages: [
+        { role: 'assistant', content: 'today earliest', clientMessageId: 'today-1' },
+        { role: 'assistant', content: 'today latest', clientMessageId: 'today-2' }
+      ]
+    });
+
+    await waitFor(() => {
+      expect(scrollSpy.mock.calls.length).toBeGreaterThan(baselineCalls);
+    });
+  });
+
   it('auto-scrolls to bottom when journal reference changes', async () => {
     const scrollSpy = vi.spyOn(HTMLElement.prototype, 'scrollTo');
 

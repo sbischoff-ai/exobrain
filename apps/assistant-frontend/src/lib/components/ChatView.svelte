@@ -32,6 +32,7 @@
   let previousScrollHeight = 0;
   let shouldReactToMessageUpdate = false;
   let shouldForceJumpToLatest = false;
+  let shouldScrollAfterLoading = false;
 
   let activeStreamingMessageId: string | null = null;
   let lastObservedScrollTop = 0;
@@ -101,6 +102,10 @@
       currentLastMessageId !== previousLastMessageId &&
       !preserveScrollPosition;
 
+    if (loading) {
+      shouldScrollAfterLoading = true;
+    }
+
     if (!messagesContainer || loading) {
       preserveScrollPosition = false;
       return;
@@ -146,7 +151,15 @@
           startRegressiveScrollToBottom();
         }
       }
+      if (shouldScrollAfterLoading && autoScrollEnabled) {
+        catchupUntilBottom = true;
+        startRegressiveScrollToBottom();
+      }
       ensureAutoScrollLoop();
+    }
+
+    if (!loading) {
+      shouldScrollAfterLoading = false;
     }
 
     previousReference = reference;
