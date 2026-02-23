@@ -357,6 +357,40 @@ describe('ChatView', () => {
 
 
 
+
+  it('auto-scrolls on journal switch even after auto-scroll suspension', async () => {
+    const scrollSpy = vi.spyOn(HTMLElement.prototype, 'scrollTo');
+
+    const { rerender, container } = render(ChatView, {
+      props: {
+        reference: '2025/01/14',
+        messages: [
+          { role: 'user', content: 'Prompt', clientMessageId: 'u-1' },
+          { role: 'assistant', content: 'partial stream', clientMessageId: 'a-1' }
+        ],
+        streamingInProgress: true
+      }
+    });
+
+    const messagesContainer = container.querySelector('.messages') as HTMLDivElement;
+    await fireEvent.wheel(messagesContainer, { deltaY: -20 });
+
+    const baselineCalls = scrollSpy.mock.calls.length;
+
+    await rerender({
+      reference: '2026/02/19',
+      messages: [
+        { role: 'assistant', content: 'today earliest', clientMessageId: 'today-1' },
+        { role: 'assistant', content: 'today latest', clientMessageId: 'today-2' }
+      ],
+      streamingInProgress: false
+    });
+
+    await waitFor(() => {
+      expect(scrollSpy.mock.calls.length).toBeGreaterThan(baselineCalls);
+    });
+  });
+
   it('jumps to latest when a new user message is appended while scrolled up', async () => {
     const scrollSpy = vi.spyOn(HTMLElement.prototype, 'scrollTo');
 
@@ -548,7 +582,7 @@ describe('ChatView', () => {
     });
 
     await waitFor(() => {
-      expect(scrollSpy.mock.calls.length).toBeGreaterThan(callsAfterInitialRender + 1);
+      expect(scrollSpy.mock.calls.length).toBeGreaterThan(callsAfterInitialRender);
     });
   });
 

@@ -148,17 +148,30 @@
           catchupUntilBottom = true;
           startRegressiveScrollToBottom();
         } else if (switchedReference && autoScrollEnabled) {
+          catchupUntilBottom = true;
+          autoScroller.maybeResume(0);
           startRegressiveScrollToBottom();
         }
       }
       if (shouldScrollAfterLoading && autoScrollEnabled) {
         catchupUntilBottom = true;
+        autoScroller.maybeResume(0);
         startRegressiveScrollToBottom();
+        shouldScrollAfterLoading = false;
       }
       ensureAutoScrollLoop();
     }
 
-    if (!loading) {
+    if (messagesContainer && !loading && shouldScrollAfterLoading && autoScrollEnabled) {
+      await tick();
+      catchupUntilBottom = true;
+      autoScroller.maybeResume(0);
+      startRegressiveScrollToBottom();
+      ensureAutoScrollLoop();
+      shouldScrollAfterLoading = false;
+    }
+
+    if (!loading && !autoScrollEnabled) {
       shouldScrollAfterLoading = false;
     }
 
