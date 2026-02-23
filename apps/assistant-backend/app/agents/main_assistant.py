@@ -124,12 +124,13 @@ class MainAssistantAgent(ChatAgent):
                     args = tool_call.get("args") if isinstance(tool_call.get("args"), dict) else {}
                     if tool_id:
                         pending_mappers[tool_id] = (mapper, args)
-                    events.append(mapper.map_tool_call(args=args))
+                    events.append(mapper.map_tool_call(tool_call_id=tool_id, args=args))
 
                 if getattr(message, "type", None) != "tool":
                     continue
 
-                mapper_tuple = pending_mappers.pop(str(getattr(message, "tool_call_id", "")), None)
+                tool_call_id = str(getattr(message, "tool_call_id", ""))
+                mapper_tuple = pending_mappers.pop(tool_call_id, None)
                 if mapper_tuple is None:
                     continue
                 mapper, args = mapper_tuple
@@ -137,10 +138,22 @@ class MainAssistantAgent(ChatAgent):
                 status = str(getattr(message, "status", "") or "")
                 artifact = getattr(message, "artifact", None)
                 if status == "error":
-                    events.append(mapper.map_tool_error(args=args, error=str(getattr(message, "content", "error"))))
+                    events.append(
+                        mapper.map_tool_error(
+                            tool_call_id=tool_call_id,
+                            args=args,
+                            error=str(getattr(message, "content", "error")),
+                        )
+                    )
                     continue
 
-                events.append(mapper.map_tool_response(args=args, result=artifact if artifact is not None else getattr(message, "content", None)))
+                events.append(
+                    mapper.map_tool_response(
+                        tool_call_id=tool_call_id,
+                        args=args,
+                        result=artifact if artifact is not None else getattr(message, "content", None),
+                    )
+                )
 
         return events
 

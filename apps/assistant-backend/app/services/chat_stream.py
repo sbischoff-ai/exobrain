@@ -5,16 +5,19 @@ from typing import Literal, TypedDict
 
 
 class ToolCallEventData(TypedDict):
+    tool_call_id: str
     title: str
     description: str
 
 
 class ToolResponseEventData(TypedDict):
+    tool_call_id: str
     message: str
 
 
 class ErrorEventData(TypedDict):
     message: str
+    tool_call_id: str | None
 
 
 class MessageChunkEventData(TypedDict):

@@ -43,7 +43,14 @@ async def message(
     summary="Consume assistant SSE stream",
     description=(
         "Server-sent event stream for a previously started chat response. "
-        "Event types currently include tool_call, tool_response, error, message_chunk, and done."
+        "Events arrive as text/event-stream records with `event:` set to one of "
+        "`tool_call`, `tool_response`, `error`, `message_chunk`, or `done`, and `data:` containing JSON. "
+        "Tool lifecycle events are correlated by `tool_call_id`: each `tool_call` includes "
+        "`{tool_call_id, title, description}` and its matching `tool_response` includes "
+        "`{tool_call_id, message}`. Tool-related `error` events may include `tool_call_id`, while "
+        "stream-level errors can omit it. `message_chunk` includes `{text}` and `done` includes `{reason}`. "
+        "See apps/assistant-backend/docs/chat-stream-sse-contract.md for the complete wire contract, "
+        "ordering guarantees, and frontend mapping guidance."
     ),
 )
 async def stream(

@@ -10,11 +10,11 @@ class StreamEventMapper(Protocol):
 
     tool_name: str
 
-    def map_tool_call(self, *, args: dict[str, Any]) -> ChatStreamEvent:
+    def map_tool_call(self, *, tool_call_id: str, args: dict[str, Any]) -> ChatStreamEvent:
         ...
 
-    def map_tool_response(self, *, args: dict[str, Any], result: Any) -> ChatStreamEvent:
+    def map_tool_response(self, *, tool_call_id: str, args: dict[str, Any], result: Any) -> ChatStreamEvent:
         ...
 
-    def map_tool_error(self, *, args: dict[str, Any], error: str) -> ChatStreamEvent:
+    def map_tool_error(self, *, tool_call_id: str, args: dict[str, Any], error: str) -> ChatStreamEvent:
         ...

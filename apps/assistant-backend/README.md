@@ -95,7 +95,7 @@ This applies TOML-based Reshape migrations from `infra/metastore/assistant-backe
   - token pair mode (`session_mode=api`, `issuance_policy=tokens`)
 - `POST /api/auth/token_refresh` accepts an API refresh token and returns a rotated access+refresh pair.
 - `POST /api/chat/message` now requires authentication and a `client_message_id` UUID for idempotency. It responds with a `stream_id` and persists user/assistant journal messages around the asynchronous stream processing lifecycle
-- `GET /api/chat/stream/{stream_id}` serves an SSE stream (`text/event-stream`) with `message_chunk`, `tool_call`, `tool_response`, `error`, and terminal `done` events for the pending assistant reply
+- `GET /api/chat/stream/{stream_id}` serves an SSE stream (`text/event-stream`) with `message_chunk`, `tool_call`, `tool_response`, `error`, and terminal `done` events for the pending assistant reply. `tool_call`/`tool_response` payloads include a shared `tool_call_id` for deterministic frontend correlation. See `docs/chat-stream-sse-contract.md`.
 - Journal APIs (`/api/journal`, `/api/journal/today`, `/api/journal/{reference}`, `/api/journal/{reference}/messages`, `/api/journal/search`) provide authenticated access to persisted conversation history.
 - Journal read endpoints (`GET /api/journal`, `GET /api/journal/today`, `GET /api/journal/today/messages`, `GET /api/journal/{reference}`, `GET /api/journal/{reference}/messages`) use Redis-backed cache-aside reads with targeted invalidation on journal/message writes.
 - Message endpoints paginate with a `sequence` cursor and return newest-first results by default.
