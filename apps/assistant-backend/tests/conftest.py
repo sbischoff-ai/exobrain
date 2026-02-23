@@ -2,17 +2,10 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
-
-
-class FakeContainer:
-    """Tiny DI container test double that resolves preregistered services by key."""
-
-    def __init__(self, mapping: dict[object, object]) -> None:
-        self._mapping = mapping
-
-    def resolve(self, key: object):
-        return self._mapping[key]
+import punq
 
 
 class FakeDatabaseService:
@@ -47,3 +40,22 @@ class FakeDatabaseService:
 @pytest.fixture
 def fake_database_service() -> FakeDatabaseService:
     return FakeDatabaseService()
+
+
+def build_test_request(container: punq.Container, *, headers: dict[str, str] | None = None, cookies: dict[str, str] | None = None):
+    """Build a request-shaped object using a real punq container in app state."""
+
+    return SimpleNamespace(
+        app=SimpleNamespace(state=SimpleNamespace(container=container)),
+        headers=headers or {},
+        cookies=cookies or {},
+    )
+
+
+def build_test_container(bindings: dict[object, object]) -> punq.Container:
+    """Create a punq container and bind protocol/service keys to test doubles."""
+
+    container = punq.Container()
+    for key, value in bindings.items():
+        container.register(key, instance=value)
+    return container
