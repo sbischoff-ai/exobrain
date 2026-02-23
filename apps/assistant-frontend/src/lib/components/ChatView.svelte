@@ -41,6 +41,8 @@
   let catchupUntilBottom = false;
   let smoothScrollToBottomActive = false;
   let smoothScrollStartedAt = 0;
+  let smoothScrollStartTop = 0;
+  let smoothScrollDistance = 0;
   let frameHandle: number | null = null;
   let previousFrameTime = 0;
 
@@ -52,9 +54,7 @@
 
       if (activeStreamingMessageId) {
         catchupUntilBottom = true;
-        smoothScrollToBottomActive = true;
-        smoothScrollStartedAt = performance.now();
-        jumpToBottom('smooth');
+        startRegressiveScrollToBottom();
       }
 
       ensureAutoScrollLoop();
@@ -141,13 +141,9 @@
 
         if (shouldForceJumpToLatest && autoScrollEnabled) {
           catchupUntilBottom = true;
-          smoothScrollToBottomActive = true;
-          smoothScrollStartedAt = performance.now();
-          jumpToBottom('smooth');
+          startRegressiveScrollToBottom();
         } else if (switchedReference && autoScrollEnabled) {
-          smoothScrollToBottomActive = true;
-          smoothScrollStartedAt = performance.now();
-          jumpToBottom('smooth');
+          startRegressiveScrollToBottom();
         }
       }
       ensureAutoScrollLoop();
@@ -183,6 +179,26 @@
       lastObservedScrollTop = messagesContainer.scrollTop;
       isProgrammaticScroll = false;
     });
+  }
+
+  function startRegressiveScrollToBottom(): void {
+    if (!messagesContainer) {
+      return;
+    }
+
+    smoothScrollToBottomActive = true;
+    smoothScrollStartedAt = performance.now();
+    smoothScrollStartTop = messagesContainer.scrollTop;
+    smoothScrollDistance = Math.max(messagesContainer.scrollHeight - messagesContainer.clientHeight - smoothScrollStartTop, 0);
+
+    isProgrammaticScroll = true;
+    messagesContainer.scrollTo({ top: smoothScrollStartTop, behavior: 'auto' });
+    lastObservedScrollTop = messagesContainer.scrollTop;
+    isProgrammaticScroll = false;
+
+    if (smoothScrollDistance <= 1) {
+      smoothScrollToBottomActive = false;
+    }
   }
 
   function handleMessagesScroll(): void {
@@ -260,10 +276,10 @@
       streamMessageTopAtOrAboveContainerTop: activeStreamingMessageId
         ? isStreamingMessageAtTopBoundary(activeStreamingMessageId)
         : false,
-      distanceFromBottom: shouldCatchup || streamingInProgress ? distanceFromBottom : 0
+      distanceFromBottom: shouldCatchup || streamingInProgress || shouldContinueSmoothScroll ? distanceFromBottom : 0
     });
 
-    if (next.phase === 'idle') {
+    if (next.phase === 'idle' && !shouldContinueSmoothScroll) {
       if (frameHandle != null) {
         cancelAnimationFrame(frameHandle);
         frameHandle = null;
@@ -291,7 +307,7 @@
     const shouldCatchup = autoScrollEnabled && catchupUntilBottom;
     const smoothElapsedMs = timestamp - smoothScrollStartedAt;
     const shouldContinueSmoothScroll =
-      autoScrollEnabled && smoothScrollToBottomActive && distanceFromBottom > 1 && smoothElapsedMs < 2000;
+      autoScrollEnabled && smoothScrollToBottomActive && distanceFromBottom > 1 && smoothElapsedMs < 1500;
 
     if (!streamingInProgress && !shouldCatchup && !shouldContinueSmoothScroll) {
       return;
@@ -317,11 +333,14 @@
 
     const currentTop = messagesContainer.scrollTop;
     const maxScrollTop = Math.max(messagesContainer.scrollHeight - messagesContainer.clientHeight, 0);
-    const remainingRatio = Math.min(distanceFromBottom / Math.max(messagesContainer.clientHeight, 1), 1);
-    const adaptiveSmoothPxPerSecond = 300 + 2100 * remainingRatio;
-    const smoothStep = (adaptiveSmoothPxPerSecond * deltaMs) / 1000;
-    const scrollStep = shouldContinueSmoothScroll ? smoothStep : autoScroller.getStepForPhase(snapshot.phase, deltaMs);
-    const nextTop = Math.min(currentTop + scrollStep, maxScrollTop);
+    const normalizedTime = Math.min(Math.max(smoothElapsedMs / 1500, 0), 1);
+    const easeOutProgress = 2 * normalizedTime - normalizedTime * normalizedTime;
+    const easedTop = smoothScrollStartTop + smoothScrollDistance * easeOutProgress;
+
+    const scrollStep = autoScroller.getStepForPhase(snapshot.phase, deltaMs);
+    const nextTop = shouldContinueSmoothScroll
+      ? Math.min(easedTop, maxScrollTop)
+      : Math.min(currentTop + scrollStep, maxScrollTop);
 
     if (nextTop > currentTop) {
       isProgrammaticScroll = true;
@@ -341,7 +360,15 @@
       return;
     }
 
-    if (!shouldContinueSmoothScroll || smoothElapsedMs >= 1800) {
+    if (shouldContinueSmoothScroll && normalizedTime >= 1) {
+      isProgrammaticScroll = true;
+      messagesContainer.scrollTo({ top: maxScrollTop, behavior: 'auto' });
+      lastObservedScrollTop = messagesContainer.scrollTop;
+      isProgrammaticScroll = false;
+      smoothScrollToBottomActive = false;
+    }
+
+    if (!shouldContinueSmoothScroll || smoothElapsedMs >= 1500) {
       smoothScrollToBottomActive = false;
     }
 
