@@ -148,15 +148,11 @@
           catchupUntilBottom = true;
           startRegressiveScrollToBottom();
         } else if (switchedReference && autoScrollEnabled) {
-          catchupUntilBottom = true;
-          autoScroller.maybeResume(0);
-          startRegressiveScrollToBottom();
+          scrollToBottomImmediately();
         }
       }
       if (shouldScrollAfterLoading && autoScrollEnabled) {
-        catchupUntilBottom = true;
-        autoScroller.maybeResume(0);
-        startRegressiveScrollToBottom();
+        scrollToBottomImmediately();
         shouldScrollAfterLoading = false;
       }
       ensureAutoScrollLoop();
@@ -164,9 +160,7 @@
 
     if (messagesContainer && !loading && shouldScrollAfterLoading && autoScrollEnabled) {
       await tick();
-      catchupUntilBottom = true;
-      autoScroller.maybeResume(0);
-      startRegressiveScrollToBottom();
+      scrollToBottomImmediately();
       ensureAutoScrollLoop();
       shouldScrollAfterLoading = false;
     }
@@ -205,6 +199,13 @@
       lastObservedScrollTop = messagesContainer.scrollTop;
       isProgrammaticScroll = false;
     });
+  }
+
+  function scrollToBottomImmediately(): void {
+    autoScroller.maybeResume(0);
+    catchupUntilBottom = false;
+    smoothScrollToBottomActive = false;
+    jumpToBottom('auto');
   }
 
   function startRegressiveScrollToBottom(): void {
