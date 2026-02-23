@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 
 from app.services.journal_cache_store import RedisJournalCacheStore
@@ -63,3 +65,21 @@ async def test_redis_journal_cache_store_set_get_and_index_invalidation() -> Non
 
     await store.close()
     assert fake_redis.closed is True
+
+
+@pytest.mark.asyncio
+async def test_redis_journal_cache_store_encodes_datetime_payloads() -> None:
+    fake_redis = FakeRedisClient()
+    store = RedisJournalCacheStore(
+        redis_url="redis://unused:6379/0",
+        key_prefix="tests:journal-cache",
+        jitter_max_seconds=0,
+        redis_client=fake_redis,  # type: ignore[arg-type]
+    )
+
+    timestamp = datetime(2026, 2, 23, 22, 36, 36, tzinfo=UTC)
+    await store.set_json("key-datetime", {"created_at": timestamp}, ttl_seconds=30)
+
+    payload = await store.get_json("key-datetime")
+
+    assert payload == {"created_at": "2026-02-23T22:36:36+00:00"}
