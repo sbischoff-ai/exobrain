@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Sequence
+from typing import Any
 from datetime import datetime
 from typing import Protocol
 
@@ -74,6 +75,9 @@ class ConversationServiceProtocol(Protocol):
     async def search_conversations(self, user_id: str, query: str, limit: int) -> Sequence[asyncpg.Record]:
         """Search conversations by textual query with a caller-supplied limit."""
 
+    async def get_reference_by_conversation_id(self, conversation_id: str, user_id: str) -> str | None:
+        """Resolve journal reference by conversation id scoped to the owning user."""
+
 
 class JournalServiceProtocol(Protocol):
     """Journal-focused façade over conversation persistence operations."""
@@ -92,13 +96,13 @@ class JournalServiceProtocol(Protocol):
     ) -> str:
         """Persist a journal message tied to an existing conversation id."""
 
-    async def list_journals(self, user_id: str, limit: int, before: str | None = None) -> Sequence[asyncpg.Record]:
+    async def list_journals(self, user_id: str, limit: int, before: str | None = None) -> Sequence[dict[str, Any]]:
         """List journal entries for a user with optional reference cursor pagination."""
 
-    async def get_journal(self, user_id: str, journal_reference: str) -> asyncpg.Record | None:
+    async def get_journal(self, user_id: str, journal_reference: str) -> dict[str, Any] | None:
         """Fetch one journal entry by slash-formatted reference."""
 
-    async def get_today_journal(self, user_id: str, create: bool = False) -> asyncpg.Record | None:
+    async def get_today_journal(self, user_id: str, create: bool = False) -> dict[str, Any] | None:
         """Return today's journal entry, creating it first when ``create`` is true."""
 
     async def list_messages(
@@ -108,7 +112,7 @@ class JournalServiceProtocol(Protocol):
         journal_reference: str,
         limit: int,
         before_sequence: int | None = None,
-    ) -> Sequence[asyncpg.Record]:
+    ) -> Sequence[dict[str, Any]]:
         """List messages for a journal reference using optional sequence cursor pagination."""
 
     async def list_today_messages(
@@ -117,7 +121,7 @@ class JournalServiceProtocol(Protocol):
         user_id: str,
         limit: int,
         before_sequence: int | None = None,
-    ) -> Sequence[asyncpg.Record]:
+    ) -> Sequence[dict[str, Any]]:
         """List messages for the current-day journal reference."""
 
     async def search_journals(self, *, user_id: str, query: str, limit: int) -> Sequence[asyncpg.Record]:
@@ -125,6 +129,33 @@ class JournalServiceProtocol(Protocol):
 
     def today_reference(self) -> str:
         """Return the canonical UTC ``YYYY/MM/DD`` journal reference string."""
+
+
+class JournalCacheProtocol(Protocol):
+    """Cache contract for journal read models keyed by user, reference, and cursor."""
+
+    async def ping(self) -> bool:
+        """Probe cache availability during startup checks."""
+
+    async def get_json(self, key: str) -> Any | None:
+        """Return cached JSON payload for ``key`` or ``None`` when missing."""
+
+    async def set_json(self, key: str, payload: Any, ttl_seconds: int) -> None:
+        """Store JSON payload under ``key`` with TTL."""
+
+    async def index_key(self, index_key: str, entry_key: str) -> None:
+        """Track ``entry_key`` in a Redis set to support targeted invalidation."""
+
+    async def delete(self, key: str) -> None:
+        """Delete a single cache key."""
+
+    async def delete_indexed(self, index_key: str) -> None:
+        """Delete all keys tracked by ``index_key`` and then remove the index key."""
+
+    async def close(self) -> None:
+        """Release underlying network resources during shutdown."""
+
+
 
 
 class AuthServiceProtocol(Protocol):

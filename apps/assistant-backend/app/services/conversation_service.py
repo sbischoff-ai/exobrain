@@ -153,6 +153,22 @@ class ConversationService:
             limit,
         )
 
+
+    async def get_reference_by_conversation_id(self, conversation_id: str, user_id: str) -> str | None:
+        """Resolve a conversation reference by id and user scope."""
+        row = await self._database.fetchrow(
+            """
+            SELECT c.reference
+            FROM conversations c
+            WHERE c.id = $1::uuid AND c.user_id = $2::uuid
+            """,
+            conversation_id,
+            user_id,
+        )
+        if row is None:
+            return None
+        return str(row["reference"])
+
     async def search_conversations(self, user_id: str, query: str, limit: int) -> Sequence[asyncpg.Record]:
         """Search conversations by reference or message content."""
         return await self._database.fetch(

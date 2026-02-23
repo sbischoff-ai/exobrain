@@ -6,6 +6,7 @@ from app.services.contracts import (
     AuthServiceProtocol,
     ConversationServiceProtocol,
     DatabaseServiceProtocol,
+    JournalCacheProtocol,
     JournalServiceProtocol,
     SessionStoreProtocol,
     UserServiceProtocol,
@@ -17,6 +18,7 @@ def test_container_resolves_singleton_services() -> None:
 
     assert container.resolve(DatabaseServiceProtocol) is container.resolve(DatabaseServiceProtocol)
     assert container.resolve(SessionStoreProtocol) is container.resolve(SessionStoreProtocol)
+    assert container.resolve(JournalCacheProtocol) is container.resolve(JournalCacheProtocol)
     assert container.resolve(UserServiceProtocol) is container.resolve(UserServiceProtocol)
     assert container.resolve(AuthServiceProtocol) is container.resolve(AuthServiceProtocol)
     assert container.resolve(ConversationServiceProtocol) is container.resolve(ConversationServiceProtocol)

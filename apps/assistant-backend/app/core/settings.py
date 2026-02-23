@@ -1,5 +1,4 @@
 from functools import lru_cache
-
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -46,6 +45,24 @@ class Settings(BaseSettings):
 
     assistant_cache_redis_url: str = Field(default="redis://localhost:16379/0", alias="ASSISTANT_CACHE_REDIS_URL")
     assistant_cache_key_prefix: str = Field(default="assistant:sessions", alias="ASSISTANT_CACHE_KEY_PREFIX")
+    assistant_journal_cache_key_prefix: str = Field(
+        default="assistant:journal-cache",
+        alias="ASSISTANT_JOURNAL_CACHE_KEY_PREFIX",
+    )
+    assistant_journal_cache_entry_ttl_seconds: int = Field(default=30, alias="ASSISTANT_JOURNAL_CACHE_ENTRY_TTL_SECONDS")
+    assistant_journal_cache_messages_ttl_seconds: int = Field(
+        default=20,
+        alias="ASSISTANT_JOURNAL_CACHE_MESSAGES_TTL_SECONDS",
+    )
+    assistant_journal_cache_list_ttl_seconds: int = Field(default=20, alias="ASSISTANT_JOURNAL_CACHE_LIST_TTL_SECONDS")
+    assistant_journal_cache_negative_ttl_seconds: int = Field(
+        default=8,
+        alias="ASSISTANT_JOURNAL_CACHE_NEGATIVE_TTL_SECONDS",
+    )
+    assistant_journal_cache_jitter_max_seconds: int = Field(
+        default=5,
+        alias="ASSISTANT_JOURNAL_CACHE_JITTER_MAX_SECONDS",
+    )
     tavily_api_key: str | None = Field(default=None, alias="TAVILY_API_KEY")
     web_tools_use_mock: bool = Field(default=False, alias="WEB_TOOLS_USE_MOCK")
     web_tools_mock_data_file: str | None = Field(default=None, alias="WEB_TOOLS_MOCK_DATA_FILE")

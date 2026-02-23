@@ -45,6 +45,15 @@ Model selection settings:
 - `WEB_TOOLS_USE_MOCK=false` (default): set to `true` to avoid Tavily network calls and return offline mock tool payloads.
 - `WEB_TOOLS_MOCK_DATA_FILE=mock-data/web-tools.mock.json`: optional JSON file overriding mock `web_search` and `web_fetch` payloads.
 
+Journal cache settings:
+
+- `ASSISTANT_JOURNAL_CACHE_KEY_PREFIX=assistant:journal-cache`: Redis key prefix for journal response cache data.
+- `ASSISTANT_JOURNAL_CACHE_ENTRY_TTL_SECONDS=30`: TTL for single-entry payloads (`/api/journal/{reference}`, `/api/journal/today`).
+- `ASSISTANT_JOURNAL_CACHE_MESSAGES_TTL_SECONDS=20`: TTL for messages page payloads.
+- `ASSISTANT_JOURNAL_CACHE_LIST_TTL_SECONDS=20`: TTL for journal list payloads (`/api/journal`).
+- `ASSISTANT_JOURNAL_CACHE_NEGATIVE_TTL_SECONDS=8`: short negative-cache TTL for missing journal lookups.
+- `ASSISTANT_JOURNAL_CACHE_JITTER_MAX_SECONDS=5`: randomized TTL extension cap to avoid synchronized expiry stampedes.
+
 The fake model cycles through configured responses and wraps back to the first message after the last one.
 
 Session storage settings:
@@ -88,6 +97,7 @@ This applies TOML-based Reshape migrations from `infra/metastore/assistant-backe
 - `POST /api/chat/message` now requires authentication and a `client_message_id` UUID for idempotency. It responds with a `stream_id` and persists user/assistant journal messages around the asynchronous stream processing lifecycle
 - `GET /api/chat/stream/{stream_id}` serves an SSE stream (`text/event-stream`) with `message_chunk`, `tool_call`, `tool_response`, `error`, and terminal `done` events for the pending assistant reply
 - Journal APIs (`/api/journal`, `/api/journal/today`, `/api/journal/{reference}`, `/api/journal/{reference}/messages`, `/api/journal/search`) provide authenticated access to persisted conversation history.
+- Journal read endpoints (`GET /api/journal`, `GET /api/journal/today`, `GET /api/journal/today/messages`, `GET /api/journal/{reference}`, `GET /api/journal/{reference}/messages`) use Redis-backed cache-aside reads with targeted invalidation on journal/message writes.
 - Message endpoints paginate with a `sequence` cursor and return newest-first results by default.
 
 ## Local build and run

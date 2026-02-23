@@ -9,7 +9,7 @@ from app.api.routers.health import router as health_router
 from app.core.logging import configure_logging
 from app.core.settings import get_settings
 from app.dependency_injection import build_container, register_chat_agent
-from app.services.contracts import DatabaseServiceProtocol, SessionStoreProtocol
+from app.services.contracts import DatabaseServiceProtocol, JournalCacheProtocol, SessionStoreProtocol
 
 settings = get_settings()
 configure_logging(settings.effective_log_level)
@@ -28,6 +28,9 @@ async def lifespan(app: FastAPI):
 
     session_store = container.resolve(SessionStoreProtocol)
     await session_store.ping()
+
+    journal_cache = container.resolve(JournalCacheProtocol)
+    await journal_cache.ping()
     logger.info("assistant cache connection initialized")
 
     main_agent = await build_main_agent(settings)
@@ -40,6 +43,7 @@ async def lifespan(app: FastAPI):
     finally:
         if hasattr(main_agent, "aclose"):
             await main_agent.aclose()
+        await journal_cache.close()
         await session_store.close()
         await database_service.disconnect()
         logger.info("assistant backend shutdown complete")

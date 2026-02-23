@@ -30,9 +30,13 @@ class FakeChatAgent:
 
 
 @pytest.mark.asyncio
-async def test_chat_service_stream_events_forwards_conversation_context(fake_database_service) -> None:
+async def test_chat_service_stream_events_forwards_conversation_context(fake_database_service, fake_journal_cache, test_settings) -> None:
     agent = FakeChatAgent(responses=[[{"type": "message_chunk", "data": {"text": "first"}}]])
-    journal_service = JournalService(conversation_service=ConversationService(database=fake_database_service))  # type: ignore[arg-type]
+    journal_service = JournalService(
+        conversation_service=ConversationService(database=fake_database_service),  # type: ignore[arg-type]
+        cache=fake_journal_cache,  # type: ignore[arg-type]
+        settings=test_settings,
+    )
     service = ChatService(agent=agent, journal_service=journal_service)
 
     principal = UnifiedPrincipal(user_id="user-1", email="u@example.com", display_name="User")
@@ -52,9 +56,13 @@ async def test_chat_service_stream_events_forwards_conversation_context(fake_dat
 
 
 @pytest.mark.asyncio
-async def test_chat_service_stream_journal_message_persists_user_and_assistant(fake_database_service) -> None:
+async def test_chat_service_stream_journal_message_persists_user_and_assistant(fake_database_service, fake_journal_cache, test_settings) -> None:
     agent = FakeChatAgent(responses=[[{"type": "message_chunk", "data": {"text": "assistant-reply"}}]])
-    journal_service = JournalService(conversation_service=ConversationService(database=fake_database_service))  # type: ignore[arg-type]
+    journal_service = JournalService(
+        conversation_service=ConversationService(database=fake_database_service),  # type: ignore[arg-type]
+        cache=fake_journal_cache,  # type: ignore[arg-type]
+        settings=test_settings,
+    )
     service = ChatService(agent=agent, journal_service=journal_service)
 
     principal = UnifiedPrincipal(user_id="7d6722a0-905e-4e9a-8c1c-4e4504e194f4", email="alice@example.com", display_name="Alice")
