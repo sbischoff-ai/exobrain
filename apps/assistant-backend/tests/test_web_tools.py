@@ -106,9 +106,10 @@ def test_build_web_tools_uses_provider_for_search_and_fetch() -> None:
 def test_web_search_stream_mapper_counts_list_results() -> None:
     mapper = WebSearchStreamMapper()
 
-    event = mapper.map_tool_response(args={"query": "x"}, result=[{"url": "https://example.com"}])
+    event = mapper.map_tool_response(tool_call_id="tc-1", args={"query": "x"}, result=[{"url": "https://example.com"}])
 
     assert event["type"] == "tool_response"
+    assert event["data"]["tool_call_id"] == "tc-1"
     assert event["data"]["message"] == "Found 1 candidate source"
 
 
@@ -116,8 +117,10 @@ def test_web_search_stream_mapper_counts_json_string_results() -> None:
     mapper = WebSearchStreamMapper()
 
     event = mapper.map_tool_response(
+        tool_call_id="tc-2",
         args={"query": "x"},
         result='{"results": [{"url": "https://a"}, {"url": "https://b"}]}'
     )
 
+    assert event["data"]["tool_call_id"] == "tc-2"
     assert event["data"]["message"] == "Found 2 candidate sources"

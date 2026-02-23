@@ -21,6 +21,7 @@ export interface JournalMessage {
 
 export interface ProcessInfo {
   id: string;
+  toolCallId?: string;
   title: string;
   description: string;
   state: 'pending' | 'resolved' | 'error' | 'interrupted';

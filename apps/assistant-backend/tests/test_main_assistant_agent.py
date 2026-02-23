@@ -68,9 +68,19 @@ async def test_astream_yields_message_and_tool_events() -> None:
 
     events = [chunk async for chunk in agent.astream(message="hi", conversation_id="conv-1")]
 
-    assert events[0]["type"] == "tool_call"
+    assert events[0] == {
+        "type": "tool_call",
+        "data": {
+            "tool_call_id": "tc-1",
+            "title": "Web search",
+            "description": "Searching the web for news",
+        },
+    }
     assert events[1] == {"type": "message_chunk", "data": {"text": "hello"}}
-    assert events[2]["type"] == "tool_response"
+    assert events[2] == {
+        "type": "tool_response",
+        "data": {"tool_call_id": "tc-1", "message": "Found 1 candidate source"},
+    }
     assert events[3] == {"type": "message_chunk", "data": {"text": " world"}}
 
 
@@ -116,4 +126,7 @@ async def test_astream_tool_response_counts_sources_from_string_payload() -> Non
 
     events = [chunk async for chunk in agent.astream(message="hi", conversation_id="conv-1")]
 
-    assert events[1] == {"type": "tool_response", "data": {"message": "Found 2 candidate sources"}}
+    assert events[1] == {
+        "type": "tool_response",
+        "data": {"tool_call_id": "tc-1", "message": "Found 2 candidate sources"},
+    }

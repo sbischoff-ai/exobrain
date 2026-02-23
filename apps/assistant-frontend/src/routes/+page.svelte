@@ -19,15 +19,18 @@
   }
 
   interface ToolCallEventPayload {
+    tool_call_id: string;
     title: string;
     description: string;
   }
 
   interface ToolResponseEventPayload {
+    tool_call_id: string;
     message: string;
   }
 
   interface ErrorEventPayload {
+    tool_call_id?: string;
     message: string;
   }
 
@@ -301,6 +304,7 @@
           ...processInfos,
           {
             id: makeClientMessageId(),
+            toolCallId: payload.tool_call_id,
             title: payload.title,
             description: payload.description,
             state: 'pending'
@@ -314,7 +318,7 @@
           return;
         }
         const payload = JSON.parse((event as MessageEvent).data) as ToolResponseEventPayload;
-        processInfos = resolvePendingProcessInfo(processInfos, payload.message);
+        processInfos = resolvePendingProcessInfo(processInfos, payload.tool_call_id, payload.message);
         updateStreamingMessage(assistantClientMessageId, accumulated, processInfos);
       });
 
@@ -328,6 +332,7 @@
           ...processInfos,
           {
             id: makeClientMessageId(),
+            toolCallId: payload.tool_call_id,
             title: 'Error',
             description: payload.message,
             state: 'error'
@@ -435,7 +440,18 @@
     ];
   }
 
-  function resolvePendingProcessInfo(processInfos: ProcessInfo[], message: string): ProcessInfo[] {
+  function resolvePendingProcessInfo(processInfos: ProcessInfo[], toolCallId: string, message: string): ProcessInfo[] {
+    if (toolCallId) {
+      for (let index = processInfos.length - 1; index >= 0; index -= 1) {
+        const item = processInfos[index];
+        if (item.state === 'pending' && item.toolCallId === toolCallId) {
+          return processInfos.map((entry, entryIndex) =>
+            entryIndex === index ? { ...entry, state: 'resolved', description: message } : entry
+          );
+        }
+      }
+    }
+
     for (let index = processInfos.length - 1; index >= 0; index -= 1) {
       const item = processInfos[index];
       if (item.state === 'pending') {
@@ -445,7 +461,10 @@
       }
     }
 
-    return [...processInfos, { id: makeClientMessageId(), title: 'Tool result', description: message, state: 'resolved' }];
+    return [
+      ...processInfos,
+      { id: makeClientMessageId(), toolCallId, title: 'Tool result', description: message, state: 'resolved' }
+    ];
   }
 
   function interruptPendingProcessInfos(processInfos: ProcessInfo[]): ProcessInfo[] {

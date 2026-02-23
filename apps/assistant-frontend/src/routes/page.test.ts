@@ -252,9 +252,9 @@ describe('root page', () => {
     await fireEvent.submit(input.closest('form')!);
 
     const source = MockEventSource.latest!;
-    source.emit('tool_call', { title: 'Web search', description: 'Searching the web' });
+    source.emit('tool_call', { tool_call_id: 'tc-1', title: 'Web search', description: 'Searching the web' });
     source.emit('message_chunk', { text: 'assistant reply' });
-    source.emit('tool_response', { message: 'Found 1 source' });
+    source.emit('tool_response', { tool_call_id: 'tc-1', message: 'Found 1 source' });
     source.emit('done', { reason: 'complete' });
 
     await waitFor(() => {
@@ -264,6 +264,58 @@ describe('root page', () => {
     });
   });
 
+
+
+  it('maps out-of-order tool responses to matching tool_call_id boxes', async () => {
+    window.sessionStorage.setItem(
+      'exobrain.assistant.session',
+      JSON.stringify({
+        user: { name: 'Test User', email: 'test.user@exobrain.local' },
+        journalReference: '2026/02/19',
+        messageCount: 0,
+        messages: []
+      })
+    );
+
+    vi.stubGlobal('EventSource', MockEventSource as unknown as typeof EventSource);
+
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(jsonResponse({ name: 'Test User', email: 'test.user@exobrain.local' }))
+      .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19', message_count: 0 }))
+      .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
+      .mockResolvedValueOnce(jsonResponse([{ reference: '2026/02/19' }]))
+      .mockResolvedValueOnce(jsonResponse({ stream_id: 'stream-1' }))
+      .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
+      .mockResolvedValueOnce(jsonResponse([{ reference: '2026/02/19' }]));
+
+    render(Page);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Type your message')).not.toBeDisabled();
+    });
+
+    const input = screen.getByLabelText('Type your message');
+    await fireEvent.input(input, { target: { value: 'Need research' } });
+    await fireEvent.submit(input.closest('form')!);
+
+    const source = MockEventSource.latest!;
+    source.emit('tool_call', { tool_call_id: 'tc-1', title: 'Web search', description: 'Searching for alpha' });
+    source.emit('tool_call', { tool_call_id: 'tc-2', title: 'Web fetch', description: 'Looking at beta' });
+    source.emit('tool_response', { tool_call_id: 'tc-2', message: 'Summarized beta page' });
+    source.emit('tool_response', { tool_call_id: 'tc-1', message: 'Found alpha source' });
+    source.emit('done', { reason: 'complete' });
+
+    await waitFor(() => {
+      expect(screen.getByText('Found alpha source')).toBeInTheDocument();
+      expect(screen.getByText('Summarized beta page')).toBeInTheDocument();
+    });
+
+    const descriptions = Array.from(document.querySelectorAll('.process-description')).map((el) => el.textContent ?? '');
+    expect(descriptions).toContain('Found alpha source');
+    expect(descriptions).toContain('Summarized beta page');
+    expect(descriptions).not.toContain('Searching for alpha...');
+    expect(descriptions).not.toContain('Looking at beta...');
+  });
 
 
   it('stops live stream updates when switching journals and resumes when returning to today', async () => {
