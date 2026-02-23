@@ -120,6 +120,7 @@ The frontend calls `POST /api/chat/message` to start a reply and then opens `GET
 - Chat view auto-scrolling follows a state machine tailored for streamed assistant responses (fast-follow, slow-follow, suspension, and post-stream catch-up). See [`docs/chat-autoscroll.md`](./docs/chat-autoscroll.md).
 - If no stored state exists, the client initializes state from `/api/journal/today?create=true` and `/api/journal/today/messages`.
 - The journal sidebar is collapsed by default and allows switching between journal references. Only today's journal keeps chat input enabled; past journals disable input/send and show a tooltip explaining that chat is unavailable for historical entries.
+- The chat composer supports multiline drafting via `Shift+Enter`, auto-grows with content up to 3 lines, and then becomes internally scrollable for longer drafts.
 
 - Chat requests use the backend idempotency contract and send `client_message_id` with each `/api/chat/message` request, then consume SSE event types (`message_chunk`, `tool_call`, `tool_response`, `error`, `done`) from `/api/chat/stream/{stream_id}`. Tool lifecycle events include `tool_call_id` so responses can map to the correct in-flight info box even when multiple tool calls overlap.
 
