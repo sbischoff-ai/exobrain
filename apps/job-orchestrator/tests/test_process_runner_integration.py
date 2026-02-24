@@ -57,5 +57,8 @@ async def test_process_runner_raises_when_target_unreachable(monkeypatch: pytest
     )
 
     runner = LocalProcessWorkerRunner()
-    with pytest.raises(RuntimeError):
+    with pytest.raises(RuntimeError) as exc_info:
         await runner.run_job(job)
+
+    assert "knowledge-interface connection timed out" in str(exc_info.value)
+    assert "Traceback" not in str(exc_info.value)
