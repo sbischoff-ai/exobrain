@@ -22,6 +22,7 @@ class JobOrchestrator:
         events_subject_prefix: str,
         dlq_subject: str,
         max_attempts: int,
+        dlq_raw_message_max_chars: int,
         publish_event: Callable[[str, bytes], Awaitable[None]],
     ) -> None:
         self._repository = repository
@@ -29,6 +30,7 @@ class JobOrchestrator:
         self._events_subject_prefix = events_subject_prefix
         self._dlq_subject = dlq_subject
         self._max_attempts = max_attempts
+        self._dlq_raw_message_max_chars = dlq_raw_message_max_chars
         self._publish_event = publish_event
 
     async def process_message(self, msg: Msg) -> None:
@@ -116,9 +118,13 @@ class JobOrchestrator:
         await self._publish_event(subject, event.model_dump_json().encode("utf-8"))
 
     async def _emit_dlq(self, *, reason: str, detail: str, raw_message: bytes) -> None:
+        clipped_raw = raw_message.decode("utf-8", errors="replace")[: self._dlq_raw_message_max_chars]
         event = DeadLetterEvent(
             reason=reason,
             detail=detail,
-            raw_message=raw_message.decode("utf-8", errors="replace"),
+            raw_message=clipped_raw,
         )
-        await self._publish_event(self._dlq_subject, event.model_dump_json().encode("utf-8"))
+        try:
+            await self._publish_event(self._dlq_subject, event.model_dump_json().encode("utf-8"))
+        except Exception:
+            logger.exception("failed to publish dlq event", extra={"reason": reason})

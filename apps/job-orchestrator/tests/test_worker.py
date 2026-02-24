@@ -51,6 +51,18 @@ class FakeMsg:
         self.nacked = True
 
 
+def _build_worker(repo: FakeRepo, runner: FakeRunner, publish):
+    return JobOrchestrator(
+        repository=repo,
+        runner=runner,
+        events_subject_prefix="jobs.events",
+        dlq_subject="jobs.dlq",
+        max_attempts=3,
+        dlq_raw_message_max_chars=128,
+        publish_event=publish,
+    )
+
+
 def _valid_payload(job_id: str = "job-1") -> dict[str, object]:
     return {
         "job_id": job_id,
@@ -73,14 +85,7 @@ async def test_worker_marks_completed_for_new_job() -> None:
         events.append(subject)
 
     repo = FakeRepo(inserted=True)
-    worker = JobOrchestrator(
-        repository=repo,
-        runner=FakeRunner(),
-        events_subject_prefix="jobs.events",
-        dlq_subject="jobs.dlq",
-        max_attempts=3,
-        publish_event=publish,
-    )
+    worker = _build_worker(repo, FakeRunner(), publish)
 
     msg = FakeMsg(_valid_payload())
     await worker.process_message(msg)
@@ -99,14 +104,7 @@ async def test_worker_sends_invalid_envelope_to_dlq_and_acks() -> None:
         events.append(subject)
 
     repo = FakeRepo(inserted=True)
-    worker = JobOrchestrator(
-        repository=repo,
-        runner=FakeRunner(),
-        events_subject_prefix="jobs.events",
-        dlq_subject="jobs.dlq",
-        max_attempts=3,
-        publish_event=publish,
-    )
+    worker = _build_worker(repo, FakeRunner(), publish)
     msg = FakeMsg(raw_data=b"not-json")
 
     await worker.process_message(msg)
@@ -117,6 +115,20 @@ async def test_worker_sends_invalid_envelope_to_dlq_and_acks() -> None:
 
 
 @pytest.mark.asyncio
+async def test_worker_acks_even_if_dlq_publish_fails() -> None:
+    async def publish(_: str, __: bytes) -> None:
+        raise RuntimeError("publish failed")
+
+    repo = FakeRepo(inserted=True)
+    worker = _build_worker(repo, FakeRunner(), publish)
+    msg = FakeMsg(raw_data=b"not-json")
+
+    await worker.process_message(msg)
+
+    assert msg.acked is True
+
+
+@pytest.mark.asyncio
 async def test_worker_sends_invalid_payload_to_dlq_and_acks() -> None:
     events: list[str] = []
 
@@ -124,14 +136,7 @@ async def test_worker_sends_invalid_payload_to_dlq_and_acks() -> None:
         events.append(subject)
 
     repo = FakeRepo(inserted=True)
-    worker = JobOrchestrator(
-        repository=repo,
-        runner=FakeRunner(),
-        events_subject_prefix="jobs.events",
-        dlq_subject="jobs.dlq",
-        max_attempts=3,
-        publish_event=publish,
-    )
+    worker = _build_worker(repo, FakeRunner(), publish)
     bad = _valid_payload()
     bad["payload"] = {"journal_reference": "2026/02/24"}
     msg = FakeMsg(bad)
@@ -151,14 +156,7 @@ async def test_worker_naks_on_retryable_failure() -> None:
         events.append(subject)
 
     repo = FakeRepo(inserted=True)
-    worker = JobOrchestrator(
-        repository=repo,
-        runner=FakeRunner(should_fail=True),
-        events_subject_prefix="jobs.events",
-        dlq_subject="jobs.dlq",
-        max_attempts=3,
-        publish_event=publish,
-    )
+    worker = _build_worker(repo, FakeRunner(should_fail=True), publish)
     msg = FakeMsg(_valid_payload(), delivery_attempt=1)
 
     await worker.process_message(msg)
@@ -177,14 +175,7 @@ async def test_worker_dlqs_when_max_attempts_reached() -> None:
         events.append(subject)
 
     repo = FakeRepo(inserted=True)
-    worker = JobOrchestrator(
-        repository=repo,
-        runner=FakeRunner(should_fail=True),
-        events_subject_prefix="jobs.events",
-        dlq_subject="jobs.dlq",
-        max_attempts=3,
-        publish_event=publish,
-    )
+    worker = _build_worker(repo, FakeRunner(should_fail=True), publish)
     msg = FakeMsg(_valid_payload(), delivery_attempt=3)
 
     await worker.process_message(msg)
@@ -200,14 +191,7 @@ async def test_worker_skips_duplicate_first_delivery() -> None:
         return None
 
     repo = FakeRepo(inserted=False)
-    worker = JobOrchestrator(
-        repository=repo,
-        runner=FakeRunner(),
-        events_subject_prefix="jobs.events",
-        dlq_subject="jobs.dlq",
-        max_attempts=3,
-        publish_event=publish,
-    )
+    worker = _build_worker(repo, FakeRunner(), publish)
     msg = FakeMsg(_valid_payload(job_id="job-duplicate"), delivery_attempt=1)
 
     await worker.process_message(msg)

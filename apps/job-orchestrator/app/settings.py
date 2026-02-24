@@ -12,10 +12,11 @@ class Settings(BaseSettings):
         alias="JOB_ORCHESTRATOR_DB_DSN",
     )
     exobrain_nats_url: str = Field(default="nats://localhost:14222", alias="EXOBRAIN_NATS_URL")
-    job_queue_subject: str = Field(default="jobs.>", alias="JOB_QUEUE_SUBJECT")
+    job_queue_subject: str = Field(default="jobs.*.*.requested", alias="JOB_QUEUE_SUBJECT")
     job_events_subject_prefix: str = Field(default="jobs.events", alias="JOB_EVENTS_SUBJECT_PREFIX")
     job_dlq_subject: str = Field(default="jobs.dlq", alias="JOB_DLQ_SUBJECT")
     job_max_attempts: int = Field(default=3, alias="JOB_MAX_ATTEMPTS", ge=1)
+    job_dlq_raw_message_max_chars: int = Field(default=4096, alias="JOB_DLQ_RAW_MESSAGE_MAX_CHARS", ge=256)
     worker_replica_count: int = Field(default=1, alias="WORKER_REPLICA_COUNT", ge=1)
     knowledge_interface_grpc_target: str = Field(
         default="localhost:15051",

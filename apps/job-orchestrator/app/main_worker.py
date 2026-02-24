@@ -33,6 +33,7 @@ async def main() -> None:
         events_subject_prefix=settings.job_events_subject_prefix,
         dlq_subject=settings.job_dlq_subject,
         max_attempts=settings.job_max_attempts,
+        dlq_raw_message_max_chars=settings.job_dlq_raw_message_max_chars,
         publish_event=js.publish,
     )
     concurrency_guard = asyncio.Semaphore(settings.worker_replica_count)
