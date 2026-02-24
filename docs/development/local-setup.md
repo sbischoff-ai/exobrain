@@ -91,6 +91,12 @@ Then run:
 ./scripts/local/run-knowledge-interface.sh
 ```
 
+Apply knowledge schema migrations:
+
+```bash
+./scripts/local/knowledge-schema-migrate.sh
+```
+
 Optional: seed starter graph schema types:
 
 ```bash

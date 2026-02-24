@@ -243,3 +243,38 @@ dbJobs:
       limits:
         cpu: 500m
         memory: 512Mi
+
+
+  knowledgeSchemaMigrations:
+    enabled: true
+    backoffLimit: 4
+    ttlSecondsAfterFinished: 600
+    env:
+      POSTGRES_DSN: postgresql://exobrain:exobrain@exobrain-metastore:5432/postgres
+      KNOWLEDGE_SCHEMA_DSN: postgresql://knowledge_schema:knowledge_schema@exobrain-metastore:5432/knowledge_graph_schema
+      MIGRATIONS_DIR: /opt/exobrain/knowledge-interface/migrations
+      BOOTSTRAP_SQL_PATH: /opt/exobrain/sql/init/01-assistant-db.sql
+      WAIT_TIMEOUT_SECONDS: "180"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+  knowledgeSchemaSeed:
+    enabled: false
+    backoffLimit: 2
+    ttlSecondsAfterFinished: 600
+    env:
+      KNOWLEDGE_SCHEMA_DSN: postgresql://knowledge_schema:knowledge_schema@exobrain-metastore:5432/knowledge_graph_schema
+      SEED_SQL_DIR: /opt/exobrain/knowledge-interface/seeds
+      WAIT_TIMEOUT_SECONDS: "180"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi

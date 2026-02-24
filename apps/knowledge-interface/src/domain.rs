@@ -10,6 +10,35 @@ pub struct SchemaType {
 }
 
 #[derive(Debug, Clone)]
+pub struct TypeInheritance {
+    pub child_type_id: String,
+    pub parent_type_id: String,
+    pub description: String,
+    pub active: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct TypeProperty {
+    pub owner_type_id: String,
+    pub prop_name: String,
+    pub value_type: String,
+    pub required: bool,
+    pub readable: bool,
+    pub writable: bool,
+    pub active: bool,
+    pub description: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct EdgeEndpointRule {
+    pub edge_type_id: String,
+    pub from_node_type_id: String,
+    pub to_node_type_id: String,
+    pub active: bool,
+    pub description: String,
+}
+
+#[derive(Debug, Clone)]
 pub struct TimeWindow {
     pub start: Option<String>,
     pub end: Option<String>,

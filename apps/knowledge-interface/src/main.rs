@@ -220,7 +220,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         embedder,
         vector_store,
     ));
-    app.ensure_schema().await?;
 
     let grpc = KnowledgeInterfaceServer::new(KnowledgeGrpcService { app });
 

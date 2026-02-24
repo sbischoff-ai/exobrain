@@ -3,7 +3,9 @@ use std::sync::Arc;
 use anyhow::{anyhow, Result};
 
 use crate::{
-    domain::{EmbeddedBlock, GraphDelta, SchemaType},
+    domain::{
+        EdgeEndpointRule, EmbeddedBlock, GraphDelta, SchemaType, TypeInheritance, TypeProperty,
+    },
     ports::{Embedder, GraphStore, SchemaRepository, VectorStore},
 };
 
@@ -29,22 +31,53 @@ impl KnowledgeApplication {
         }
     }
 
-    pub async fn ensure_schema(&self) -> Result<()> {
-        self.schema_repository.ensure_schema().await
-    }
-
     pub async fn get_schema(&self) -> Result<(Vec<SchemaType>, Vec<SchemaType>, Vec<SchemaType>)> {
         let node_types = self.schema_repository.get_by_kind("node").await?;
         let edge_types = self.schema_repository.get_by_kind("edge").await?;
-        let block_types = self.schema_repository.get_by_kind("block").await?;
+        let block_types = self
+            .schema_repository
+            .get_block_compatibility_types()
+            .await?;
         Ok((node_types, edge_types, block_types))
     }
 
     pub async fn upsert_schema_type(&self, schema_type: SchemaType) -> Result<SchemaType> {
-        if !matches!(schema_type.kind.as_str(), "node" | "edge" | "block") {
-            return Err(anyhow!("schema kind must be one of: node, edge, block"));
-        }
-        self.schema_repository.upsert(&schema_type).await
+        let canonical_kind = match schema_type.kind.as_str() {
+            "node" => "node",
+            "edge" => "edge",
+            "block" => "node",
+            _ => return Err(anyhow!("schema kind must be one of: node, edge, block")),
+        };
+
+        let canonical_id = if schema_type.id.starts_with("block.") {
+            format!("node.{}", schema_type.id.trim_start_matches("block."))
+        } else {
+            schema_type.id
+        };
+
+        self.schema_repository
+            .upsert(&SchemaType {
+                id: canonical_id,
+                kind: canonical_kind.to_string(),
+                name: schema_type.name,
+                description: schema_type.description,
+                active: schema_type.active,
+            })
+            .await
+    }
+
+    pub async fn get_schema_inheritance(&self) -> Result<Vec<TypeInheritance>> {
+        self.schema_repository.get_type_inheritance().await
+    }
+
+    pub async fn get_type_properties(&self, owner_type_id: &str) -> Result<Vec<TypeProperty>> {
+        self.schema_repository
+            .get_properties_for_type(owner_type_id)
+            .await
+    }
+
+    pub async fn get_edge_endpoint_rules(&self) -> Result<Vec<EdgeEndpointRule>> {
+        self.schema_repository.get_edge_endpoint_rules().await
     }
 
     pub async fn ingest_graph_delta(&self, delta: GraphDelta) -> Result<()> {
@@ -89,10 +122,6 @@ mod tests {
 
     #[async_trait]
     impl SchemaRepository for FakeSchemaRepo {
-        async fn ensure_schema(&self) -> Result<()> {
-            Ok(())
-        }
-
         async fn get_by_kind(&self, kind: &str) -> Result<Vec<SchemaType>> {
             Ok(vec![SchemaType {
                 id: format!("{kind}.default"),
@@ -103,8 +132,30 @@ mod tests {
             }])
         }
 
+        async fn get_block_compatibility_types(&self) -> Result<Vec<SchemaType>> {
+            Ok(vec![SchemaType {
+                id: "node.block".to_string(),
+                kind: "block".to_string(),
+                name: "Block".to_string(),
+                description: "compatibility".to_string(),
+                active: true,
+            }])
+        }
+
         async fn upsert(&self, schema_type: &SchemaType) -> Result<SchemaType> {
             Ok(schema_type.clone())
+        }
+
+        async fn get_type_inheritance(&self) -> Result<Vec<TypeInheritance>> {
+            Ok(vec![])
+        }
+
+        async fn get_properties_for_type(&self, _owner_type_id: &str) -> Result<Vec<TypeProperty>> {
+            Ok(vec![])
+        }
+
+        async fn get_edge_endpoint_rules(&self) -> Result<Vec<EdgeEndpointRule>> {
+            Ok(vec![])
         }
     }
 
@@ -162,6 +213,32 @@ mod tests {
             .expect_err("invalid schema kind should fail");
 
         assert!(err.to_string().contains("schema kind must be one of"));
+    }
+
+    #[tokio::test]
+    async fn canonicalizes_legacy_block_kind_and_id() {
+        let app = KnowledgeApplication::new(
+            Arc::new(FakeSchemaRepo),
+            Arc::new(FakeGraphStore),
+            Arc::new(FakeEmbedder),
+            Arc::new(CapturingVectorStore {
+                seen: Arc::new(Mutex::new(vec![])),
+            }),
+        );
+
+        let schema = app
+            .upsert_schema_type(SchemaType {
+                id: "block.quote".to_string(),
+                kind: "block".to_string(),
+                name: "Quote".to_string(),
+                description: "legacy".to_string(),
+                active: true,
+            })
+            .await
+            .expect("legacy block input should canonicalize");
+
+        assert_eq!(schema.id, "node.quote");
+        assert_eq!(schema.kind, "node");
     }
 
     #[tokio::test]

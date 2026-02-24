@@ -12,7 +12,9 @@ use serde::{Deserialize, Serialize};
 use sqlx::{postgres::PgPoolOptions, PgPool, Row};
 
 use crate::{
-    domain::{EmbeddedBlock, GraphDelta, SchemaType},
+    domain::{
+        EdgeEndpointRule, EmbeddedBlock, GraphDelta, SchemaType, TypeInheritance, TypeProperty,
+    },
     ports::{Embedder, GraphStore, SchemaRepository, VectorStore},
 };
 
@@ -29,25 +31,9 @@ impl PostgresSchemaRepository {
 
 #[async_trait]
 impl SchemaRepository for PostgresSchemaRepository {
-    async fn ensure_schema(&self) -> Result<()> {
-        sqlx::query(
-            r#"CREATE TABLE IF NOT EXISTS knowledge_graph_schema_types (
-                id TEXT PRIMARY KEY,
-                kind TEXT NOT NULL,
-                name TEXT NOT NULL,
-                description TEXT NOT NULL DEFAULT '',
-                active BOOLEAN NOT NULL DEFAULT TRUE,
-                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-            )"#,
-        )
-        .execute(&self.pool)
-        .await?;
-        Ok(())
-    }
-
     async fn get_by_kind(&self, kind: &str) -> Result<Vec<SchemaType>> {
         let rows = sqlx::query(
-            "SELECT id, kind, name, description, active FROM knowledge_graph_schema_types WHERE kind = $1 ORDER BY name",
+            "SELECT id, kind, name, description, active FROM knowledge_graph_schema_types WHERE kind = $1 AND active = TRUE ORDER BY name",
         )
         .bind(kind)
         .fetch_all(&self.pool)
@@ -58,6 +44,25 @@ impl SchemaRepository for PostgresSchemaRepository {
             .map(|row| SchemaType {
                 id: row.get("id"),
                 kind: row.get("kind"),
+                name: row.get("name"),
+                description: row.get("description"),
+                active: row.get("active"),
+            })
+            .collect())
+    }
+
+    async fn get_block_compatibility_types(&self) -> Result<Vec<SchemaType>> {
+        let rows = sqlx::query(
+            "SELECT id, kind, name, description, active FROM knowledge_graph_schema_types WHERE id IN ('node.block', 'node.quote') AND kind = 'node' AND active = TRUE ORDER BY name",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| SchemaType {
+                id: row.get("id"),
+                kind: "block".to_string(),
                 name: row.get("name"),
                 description: row.get("description"),
                 active: row.get("active"),
@@ -88,6 +93,83 @@ impl SchemaRepository for PostgresSchemaRepository {
             description: row.get("description"),
             active: row.get("active"),
         })
+    }
+
+    async fn get_type_inheritance(&self) -> Result<Vec<TypeInheritance>> {
+        let rows = sqlx::query(
+            "SELECT child_type_id, parent_type_id, description, active FROM knowledge_graph_schema_type_inheritance WHERE active = TRUE ORDER BY child_type_id, parent_type_id",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| TypeInheritance {
+                child_type_id: row.get("child_type_id"),
+                parent_type_id: row.get("parent_type_id"),
+                description: row.get("description"),
+                active: row.get("active"),
+            })
+            .collect())
+    }
+
+    async fn get_properties_for_type(&self, owner_type_id: &str) -> Result<Vec<TypeProperty>> {
+        let rows = sqlx::query(
+            r#"WITH RECURSIVE lineage AS (
+                SELECT $1::TEXT AS type_id, 0 AS depth
+                UNION ALL
+                SELECT i.parent_type_id AS type_id, lineage.depth + 1 AS depth
+                FROM knowledge_graph_schema_type_inheritance i
+                JOIN lineage ON i.child_type_id = lineage.type_id
+                WHERE i.active = TRUE
+            ), ranked AS (
+                SELECT p.owner_type_id, p.prop_name, p.value_type, p.required, p.readable, p.writable, p.active, p.description,
+                       ROW_NUMBER() OVER (PARTITION BY p.prop_name ORDER BY lineage.depth ASC) AS rank_order
+                FROM lineage
+                JOIN knowledge_graph_schema_type_properties p ON p.owner_type_id = lineage.type_id
+                WHERE p.active = TRUE
+            )
+            SELECT owner_type_id, prop_name, value_type, required, readable, writable, active, description
+            FROM ranked
+            WHERE rank_order = 1
+            ORDER BY prop_name"#,
+        )
+        .bind(owner_type_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| TypeProperty {
+                owner_type_id: row.get("owner_type_id"),
+                prop_name: row.get("prop_name"),
+                value_type: row.get("value_type"),
+                required: row.get("required"),
+                readable: row.get("readable"),
+                writable: row.get("writable"),
+                active: row.get("active"),
+                description: row.get("description"),
+            })
+            .collect())
+    }
+
+    async fn get_edge_endpoint_rules(&self) -> Result<Vec<EdgeEndpointRule>> {
+        let rows = sqlx::query(
+            "SELECT edge_type_id, from_node_type_id, to_node_type_id, active, description FROM knowledge_graph_schema_edge_rules WHERE active = TRUE ORDER BY edge_type_id, from_node_type_id, to_node_type_id",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| EdgeEndpointRule {
+                edge_type_id: row.get("edge_type_id"),
+                from_node_type_id: row.get("from_node_type_id"),
+                to_node_type_id: row.get("to_node_type_id"),
+                active: row.get("active"),
+                description: row.get("description"),
+            })
+            .collect())
     }
 }
 
