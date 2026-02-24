@@ -45,6 +45,7 @@ export class ChatAutoScroller {
     streamingInProgress: boolean;
     streamMessageTopAtOrAboveContainerTop: boolean;
     distanceFromBottom: number;
+    forceCatchup?: boolean;
   }): AutoScrollSnapshot {
     if (this.suspended) {
       this.phase = 'idle';
@@ -53,6 +54,11 @@ export class ChatAutoScroller {
 
     if (params.streamingInProgress) {
       this.phase = params.streamMessageTopAtOrAboveContainerTop ? 'stream-slow' : 'stream-fast';
+      return this.getSnapshot();
+    }
+
+    if (params.forceCatchup && params.distanceFromBottom > 1) {
+      this.phase = 'catchup';
       return this.getSnapshot();
     }
 

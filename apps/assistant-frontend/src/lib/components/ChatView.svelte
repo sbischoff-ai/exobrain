@@ -265,11 +265,10 @@
       return false;
     }
 
-    const containerRect = messagesContainer.getBoundingClientRect();
-    const streamRect = streamElement.getBoundingClientRect();
-    const streamCoversViewportHeight = streamRect.height >= messagesContainer.clientHeight;
+    const streamTopWithinContainer = streamElement.offsetTop - messagesContainer.scrollTop;
+    const streamCoversViewportHeight = streamElement.offsetHeight >= messagesContainer.clientHeight;
 
-    return streamCoversViewportHeight && streamRect.top <= containerRect.top + 8;
+    return streamCoversViewportHeight && streamTopWithinContainer <= 8;
   }
 
   function ensureAutoScrollLoop(): void {
@@ -303,7 +302,8 @@
       streamMessageTopAtOrAboveContainerTop: activeStreamingMessageId
         ? isStreamingMessageAtTopBoundary(activeStreamingMessageId)
         : false,
-      distanceFromBottom: shouldCatchup || streamingInProgress || shouldContinueSmoothScroll ? distanceFromBottom : 0
+      distanceFromBottom: shouldCatchup || streamingInProgress || shouldContinueSmoothScroll ? distanceFromBottom : 0,
+      forceCatchup: shouldCatchup
     });
 
     if (next.phase === 'idle' && !shouldContinueSmoothScroll) {
@@ -351,7 +351,8 @@
       streamMessageTopAtOrAboveContainerTop: activeStreamingMessageId
         ? isStreamingMessageAtTopBoundary(activeStreamingMessageId)
         : false,
-      distanceFromBottom
+      distanceFromBottom,
+      forceCatchup: shouldCatchup
     });
 
     if (snapshot.phase === 'idle' && !shouldContinueSmoothScroll) {
