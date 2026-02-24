@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     job_consumer_durable: str = Field(default="job-orchestrator-worker-v2", alias="JOB_CONSUMER_DURABLE")
     worker_replica_count: int = Field(default=1, alias="WORKER_REPLICA_COUNT", ge=1)
     knowledge_interface_grpc_target: str = Field(
-        default="localhost:15051",
+        default="localhost:50051",
         alias="KNOWLEDGE_INTERFACE_GRPC_TARGET",
     )
     knowledge_interface_connect_timeout_seconds: float = Field(

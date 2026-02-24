@@ -21,6 +21,7 @@ To run the worker only:
 
 ```bash
 cd apps/job-orchestrator
+cp .env.example .env
 uv sync --extra dev
 uv run python -m app.main_worker
 ```
@@ -44,7 +45,7 @@ Apply local migrations:
 
 Keep request subject patterns narrow enough that they do not also match events/DLQ subjects.
 - `WORKER_REPLICA_COUNT` (default: `1`, max concurrent worker processes)
-- `KNOWLEDGE_INTERFACE_GRPC_TARGET` (default: `localhost:15051`)
+- `KNOWLEDGE_INTERFACE_GRPC_TARGET` (default: `localhost:50051`)
 - `KNOWLEDGE_INTERFACE_CONNECT_TIMEOUT_SECONDS` (default: `5.0`)
 - `RESHAPE_SCHEMA_QUERY` (optional)
 

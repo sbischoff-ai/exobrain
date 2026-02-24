@@ -33,7 +33,6 @@ assistantBackend:
   env:
     APP_ENV: cluster
     LOG_LEVEL: INFO
-    KNOWLEDGE_INTERFACE_ADDR: exobrain-knowledge-interface:50051
     METASTORE_DSN: postgresql://exobrain:exobrain@exobrain-metastore:5432/exobrain
     ASSISTANT_DB_DSN: postgresql://assistant_backend:assistant_backend@exobrain-metastore:5432/assistant_db
     ASSISTANT_CACHE_REDIS_URL: redis://exobrain-assistant-cache:6379/0
@@ -197,8 +196,13 @@ jobOrchestrator:
   env:
     JOB_ORCHESTRATOR_DB_DSN: postgresql://job_orchestrator:job_orchestrator@exobrain-metastore:5432/job_orchestrator_db
     EXOBRAIN_NATS_URL: nats://exobrain-message-broker:4222
-    JOB_QUEUE_SUBJECT: jobs.>
+    JOB_QUEUE_SUBJECT: jobs.*.*.requested
     JOB_EVENTS_SUBJECT_PREFIX: jobs.events
+    JOB_DLQ_SUBJECT: jobs.dlq
+    JOB_MAX_ATTEMPTS: "3"
+    JOB_DLQ_RAW_MESSAGE_MAX_CHARS: "4096"
+    JOB_CONSUMER_DURABLE: job-orchestrator-worker-v2
+    KNOWLEDGE_INTERFACE_GRPC_TARGET: exobrain-knowledge-interface:50051
   worker:
     replicaCount: 1
     resources:

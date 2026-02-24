@@ -28,4 +28,14 @@ spec:
               value: {{ .Values.jobOrchestrator.env.JOB_QUEUE_SUBJECT | quote }}
             - name: JOB_EVENTS_SUBJECT_PREFIX
               value: {{ .Values.jobOrchestrator.env.JOB_EVENTS_SUBJECT_PREFIX | quote }}
+            - name: JOB_DLQ_SUBJECT
+              value: {{ .Values.jobOrchestrator.env.JOB_DLQ_SUBJECT | quote }}
+            - name: JOB_MAX_ATTEMPTS
+              value: {{ .Values.jobOrchestrator.env.JOB_MAX_ATTEMPTS | quote }}
+            - name: JOB_DLQ_RAW_MESSAGE_MAX_CHARS
+              value: {{ .Values.jobOrchestrator.env.JOB_DLQ_RAW_MESSAGE_MAX_CHARS | quote }}
+            - name: JOB_CONSUMER_DURABLE
+              value: {{ .Values.jobOrchestrator.env.JOB_CONSUMER_DURABLE | quote }}
+            - name: KNOWLEDGE_INTERFACE_GRPC_TARGET
+              value: {{ printf "exobrain-knowledge-interface:%v" .Values.knowledgeInterface.service.port | quote }}
           resources: {{- toYaml .Values.jobOrchestrator.worker.resources | nindent 12 }}
