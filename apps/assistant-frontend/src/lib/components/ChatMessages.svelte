@@ -77,6 +77,7 @@
       <div class="assistant-markdown" class:user-markdown={message.role === 'user'}>
         {#if message.role === 'assistant' && message.processInfos?.length}
           {@const stackExpanded = expandedProcessStacks.has(message.clientMessageId)}
+          {@const orderedProcessInfos = stackExpanded ? message.processInfos : [...message.processInfos].reverse()}
           <div class="process-info-stack" class:expanded={stackExpanded}>
             {#if message.processInfos.length > 1}
               <button
@@ -91,7 +92,7 @@
             {/if}
 
             <div class="process-info-list" class:expanded={stackExpanded}>
-              {#each [...message.processInfos].reverse() as info, stackIndex (info.id)}
+              {#each orderedProcessInfos as info, stackIndex (info.id)}
                 <section
                   class="process-info-card"
                   class:error={info.state === 'error'}

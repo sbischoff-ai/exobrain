@@ -32,6 +32,11 @@ describe('ChatView', () => {
     expect(screen.getByText('Failed')).toBeInTheDocument();
     expect(screen.getByText('Confirmed')).toBeInTheDocument();
 
+    const expandedTitles = Array.from(document.querySelectorAll('.process-info-list.expanded .process-title')).map(
+      (node) => node.textContent?.trim()
+    );
+    expect(expandedTitles).toEqual(['Web search', 'Web fetch', 'Error', 'Calendar']);
+
     await fireEvent.click(screen.getByRole('button', { name: 'Fold tool call cards' }));
     expect(screen.getByRole('button', { name: 'Unfold tool call cards' })).toBeInTheDocument();
   });
