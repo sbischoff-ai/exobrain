@@ -59,6 +59,7 @@ knowledgeInterface:
     type: ClusterIP
     port: 50051
   env:
+    APP_ENV: cluster
     MEMGRAPH_BOLT_ADDR: bolt://exobrain-knowledge-graph:7687
     QDRANT_ADDR: http://exobrain-vector-store:6333
     METASTORE_DSN: postgresql://exobrain:exobrain@exobrain-metastore:5432/exobrain
