@@ -37,6 +37,8 @@ assistantBackend:
     METASTORE_DSN: postgresql://exobrain:exobrain@exobrain-metastore:5432/exobrain
     ASSISTANT_DB_DSN: postgresql://assistant_backend:assistant_backend@exobrain-metastore:5432/assistant_db
     ASSISTANT_CACHE_REDIS_URL: redis://exobrain-assistant-cache:6379/0
+    EXOBRAIN_NATS_URL: nats://exobrain-message-broker:4222
+    JOBS_SUBJECT_PREFIX: jobs
   secrets:
     openaiApiKey:
       name: exobrain-secrets
@@ -170,6 +172,27 @@ messageBroker:
       cpu: 500m
       memory: 256Mi
 
+
+jobOrchestrator:
+  image:
+    repository: exobrain/job-orchestrator
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+  env:
+    JOB_ORCHESTRATOR_DB_DSN: postgresql://job_orchestrator:job_orchestrator@exobrain-metastore:5432/job_orchestrator_db
+    EXOBRAIN_NATS_URL: nats://exobrain-message-broker:4222
+    JOB_QUEUE_SUBJECT: jobs.>
+    JOB_EVENTS_SUBJECT_PREFIX: jobs.events
+  worker:
+    replicaCount: 1
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 1
+        memory: 512Mi
+
 ingress:
   enabled: true
   className: traefik
@@ -207,6 +230,24 @@ dbJobs:
       POSTGRES_DSN: postgresql://exobrain:exobrain@exobrain-metastore:5432/postgres
       ASSISTANT_DB_DSN: postgresql://assistant_backend:assistant_backend@exobrain-metastore:5432/assistant_db
       MIGRATIONS_DIR: /opt/exobrain/assistant-backend/migrations
+      BOOTSTRAP_SQL_PATH: /opt/exobrain/sql/init/01-assistant-db.sql
+      WAIT_TIMEOUT_SECONDS: "180"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+  jobOrchestratorMigrations:
+    enabled: true
+    backoffLimit: 4
+    ttlSecondsAfterFinished: 600
+    env:
+      POSTGRES_DSN: postgresql://exobrain:exobrain@exobrain-metastore:5432/postgres
+      JOB_ORCHESTRATOR_DB_DSN: postgresql://job_orchestrator:job_orchestrator@exobrain-metastore:5432/job_orchestrator_db
+      MIGRATIONS_DIR: /opt/exobrain/job-orchestrator/migrations
       BOOTSTRAP_SQL_PATH: /opt/exobrain/sql/init/01-assistant-db.sql
       WAIT_TIMEOUT_SECONDS: "180"
     resources:

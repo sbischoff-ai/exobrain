@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: exobrain-job-orchestrator
+  labels:
+    app.kubernetes.io/name: exobrain-job-orchestrator
+    {{- include "exobrain-stack.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.jobOrchestrator.worker.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: exobrain-job-orchestrator
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: exobrain-job-orchestrator
+    spec:
+      containers:
+        - name: worker
+          image: "{{ .Values.jobOrchestrator.image.repository }}:{{ .Values.jobOrchestrator.image.tag }}"
+          imagePullPolicy: {{ .Values.jobOrchestrator.image.pullPolicy }}
+          env:
+            - name: JOB_ORCHESTRATOR_DB_DSN
+              value: {{ .Values.jobOrchestrator.env.JOB_ORCHESTRATOR_DB_DSN | quote }}
+            - name: EXOBRAIN_NATS_URL
+              value: {{ .Values.jobOrchestrator.env.EXOBRAIN_NATS_URL | quote }}
+            - name: JOB_QUEUE_SUBJECT
+              value: {{ .Values.jobOrchestrator.env.JOB_QUEUE_SUBJECT | quote }}
+            - name: JOB_EVENTS_SUBJECT_PREFIX
+              value: {{ .Values.jobOrchestrator.env.JOB_EVENTS_SUBJECT_PREFIX | quote }}
+          resources: {{- toYaml .Values.jobOrchestrator.worker.resources | nindent 12 }}

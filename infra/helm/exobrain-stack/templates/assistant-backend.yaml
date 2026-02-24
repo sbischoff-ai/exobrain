@@ -32,6 +32,10 @@ spec:
               value: {{ .Values.assistantBackend.env.ASSISTANT_DB_DSN | quote }}
             - name: ASSISTANT_CACHE_REDIS_URL
               value: {{ .Values.assistantBackend.env.ASSISTANT_CACHE_REDIS_URL | quote }}
+            - name: EXOBRAIN_NATS_URL
+              value: {{ .Values.assistantBackend.env.EXOBRAIN_NATS_URL | quote }}
+            - name: JOBS_SUBJECT_PREFIX
+              value: {{ .Values.assistantBackend.env.JOBS_SUBJECT_PREFIX | quote }}
             - name: OPENAI_API_KEY
               valueFrom:
                 secretKeyRef:

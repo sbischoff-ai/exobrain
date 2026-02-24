@@ -19,5 +19,6 @@ COPY --from=builder /usr/local/cargo/bin/reshape /usr/local/bin/reshape
 COPY infra/docker/metastore/init/01-assistant-db.sql /opt/exobrain/sql/init/01-assistant-db.sql
 COPY infra/metastore/assistant-backend/migrations /opt/exobrain/assistant-backend/migrations
 COPY infra/metastore/assistant-backend/seeds /opt/exobrain/assistant-backend/seeds
+COPY infra/metastore/job-orchestrator/migrations /opt/exobrain/job-orchestrator/migrations
 
 CMD ["bash"]

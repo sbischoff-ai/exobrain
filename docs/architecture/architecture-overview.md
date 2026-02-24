@@ -20,6 +20,8 @@ This document gives a stable, high-level map of Exobrain runtime components and 
   - Runs a LangGraph-based assistant agent with pluggable tools (`app/agents/tools`), including web research wrappers (`web_search`, `web_fetch`).
 - **knowledge-interface** (`apps/knowledge-interface`)
   - gRPC boundary for retrieval and knowledge update workflows.
+- **job-orchestrator** (`apps/job-orchestrator`)
+  - Asynchronous job orchestrator/worker consuming NATS subjects and persisting job state.
 - **PostgreSQL metastore**
   - Assistant state and relational metadata.
 - **Memgraph**
@@ -33,6 +35,7 @@ This document gives a stable, high-level map of Exobrain runtime components and 
 
 - Frontend uses backend HTTP APIs (`/api/*`).
 - Backend may call knowledge-interface over gRPC for retrieval/update use cases.
+- Backend publishes asynchronous job requests to NATS; job-orchestrator workers execute them out-of-band.
 - Backend persists assistant domain state in PostgreSQL.
 - Knowledge workflows may rely on Memgraph and Qdrant.
 

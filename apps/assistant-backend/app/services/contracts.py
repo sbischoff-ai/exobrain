@@ -232,6 +232,19 @@ class ChatServiceProtocol(Protocol):
         """Yield typed stream events for a previously started stream id."""
 
 
+class JobPublisherProtocol(Protocol):
+    """Asynchronous job queue publisher contract."""
+
+    async def connect(self) -> None:
+        """Initialize queue client resources during app startup."""
+
+    async def close(self) -> None:
+        """Release queue client resources during shutdown."""
+
+    async def enqueue_job(self, *, job_type: str, correlation_id: str, payload: dict[str, object]) -> str:
+        """Publish a new job request envelope and return the generated job id."""
+
+
 class SessionStoreProtocol(Protocol):
     """State-store contract for browser sessions and API refresh tokens."""
 

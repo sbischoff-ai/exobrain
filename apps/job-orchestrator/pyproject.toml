@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "exobrain-job-orchestrator"
+version = "0.1.0"
+description = "NATS-backed job orchestrator and worker for Exobrain"
+requires-python = ">=3.11"
+dependencies = [
+  "asyncpg>=0.30.0",
+  "nats-py>=2.9.0",
+  "pydantic-settings>=2.3.0"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3.0",
+  "pytest-asyncio>=0.23.0"
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]

@@ -58,6 +58,7 @@ Or run both in order:
 
 ```bash
 ./scripts/local/assistant-db-setup.sh
+./scripts/local/job-orchestrator-db-setup.sh
 ```
 
 ### 3) Build applications
@@ -66,6 +67,7 @@ Or run both in order:
 ./scripts/local/build-assistant-backend.sh
 ./scripts/local/build-assistant-frontend.sh
 ./scripts/local/build-knowledge-interface.sh
+./scripts/local/build-job-orchestrator.sh
 ```
 
 Build notes:
@@ -80,6 +82,7 @@ Build notes:
 ./scripts/local/run-assistant-backend.sh
 ./scripts/local/run-assistant-frontend.sh
 ./scripts/local/run-knowledge-interface.sh
+./scripts/local/run-job-orchestrator.sh
 ```
 
 Default local app endpoints:
@@ -87,6 +90,7 @@ Default local app endpoints:
 - Backend API: `http://localhost:8000`
 - Frontend: `http://localhost:5173`
 - Knowledge interface gRPC: `localhost:50051`
+- Job orchestrator worker: subscribes on NATS `jobs.>`
 
 ### 5) Run unit tests
 
