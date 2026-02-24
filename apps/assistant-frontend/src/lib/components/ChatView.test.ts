@@ -209,6 +209,28 @@ describe('ChatView', () => {
     expect(input.style.height).toBe('120px');
   });
 
+  it('resets composer height to one line after submit', async () => {
+    const sent: string[] = [];
+    render(ChatView, { props: { messages: [], onSend: (text: string) => sent.push(text) } });
+
+    const input = screen.getByLabelText('Type your message') as HTMLTextAreaElement;
+
+    Object.defineProperty(input, 'scrollHeight', {
+      configurable: true,
+      get() {
+        return 120;
+      }
+    });
+
+    await fireEvent.input(input, { target: { value: 'One\nTwo\nThree' } });
+    expect(input.style.height).toBe('120px');
+
+    await fireEvent.submit(input.closest('form')!);
+
+    expect(sent).toEqual(['One\nTwo\nThree']);
+    expect(input.style.height).toBe('');
+  });
+
   it('shows tooltip when chat controls are disabled for a past journal', () => {
     render(ChatView, {
       props: {
