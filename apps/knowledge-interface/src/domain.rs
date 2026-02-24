@@ -114,10 +114,21 @@ pub struct EmbeddedBlock {
 }
 
 #[derive(Debug, Clone)]
-pub struct FullSchema {
-    pub node_types: Vec<SchemaType>,
-    pub edge_types: Vec<SchemaType>,
-    pub inheritance: Vec<TypeInheritance>,
+pub struct SchemaNodeTypeHydrated {
+    pub schema_type: SchemaType,
     pub properties: Vec<TypeProperty>,
-    pub edge_rules: Vec<EdgeEndpointRule>,
+    pub parents: Vec<TypeInheritance>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SchemaEdgeTypeHydrated {
+    pub schema_type: SchemaType,
+    pub properties: Vec<TypeProperty>,
+    pub rules: Vec<EdgeEndpointRule>,
+}
+
+#[derive(Debug, Clone)]
+pub struct FullSchema {
+    pub node_types: Vec<SchemaNodeTypeHydrated>,
+    pub edge_types: Vec<SchemaEdgeTypeHydrated>,
 }

@@ -10,14 +10,8 @@ service KnowledgeInterface {
 }
 
 message HealthRequest {}
-
-message HealthReply {
-  string status = 1;
-}
-
-message GetSchemaRequest {
-  string universe_id = 1;
-}
+message HealthReply { string status = 1; }
+message GetSchemaRequest { string universe_id = 1; }
 
 message SchemaType {
   string id = 1;
@@ -53,12 +47,21 @@ message EdgeEndpointRule {
   string description = 5;
 }
 
+message SchemaNodeType {
+  SchemaType type = 1;
+  repeated TypeProperty properties = 2;
+  repeated TypeInheritance parents = 3;
+}
+
+message SchemaEdgeType {
+  SchemaType type = 1;
+  repeated TypeProperty properties = 2;
+  repeated EdgeEndpointRule rules = 3;
+}
+
 message GetSchemaReply {
-  repeated SchemaType node_types = 1;
-  repeated SchemaType edge_types = 2;
-  repeated TypeInheritance inheritance = 3;
-  repeated TypeProperty properties = 4;
-  repeated EdgeEndpointRule edge_rules = 5;
+  repeated SchemaNodeType node_types = 1;
+  repeated SchemaEdgeType edge_types = 2;
 }
 
 message UpsertSchemaTypeProperty {
@@ -81,9 +84,7 @@ message UpsertSchemaTypeRequest {
   repeated UpsertSchemaTypeProperty properties = 7;
 }
 
-message UpsertSchemaTypeReply {
-  SchemaType schema_type = 1;
-}
+message UpsertSchemaTypeReply { SchemaType schema_type = 1; }
 
 message PropertyValue {
   string key = 1;
