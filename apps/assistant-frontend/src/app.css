@@ -338,51 +338,69 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
   position: absolute;
   top: -0.3rem;
   right: -0.3rem;
-  z-index: 4;
+  z-index: 12;
   width: 1.35rem;
   height: 1.35rem;
   border-radius: 999px;
   border: 1px solid var(--border);
-  background: #5a4f48;
+  background: #665c54;
   color: var(--text);
   font-weight: 700;
   line-height: 1;
   cursor: pointer;
+  transition: transform 160ms ease, background-color 160ms ease;
+}
+
+.process-stack-toggle:hover {
+  transform: scale(1.05);
+  background: #7a6f66;
 }
 
 .process-info-list {
+  position: relative;
   display: grid;
   gap: 0.45rem;
+  min-height: 7rem;
+  transition: min-height 220ms ease;
 }
 
-.process-info-collapsed {
-  position: relative;
-  min-height: 5.35rem;
+.process-info-list:not(.expanded) {
+  min-height: 8rem;
 }
 
 .process-info-card {
   font-size: 0.84rem;
   color: var(--text);
-  background: rgb(80 73 69 / 55%);
+  background: #4f4742;
   border: 1px solid var(--border);
   border-radius: 0.62rem;
-  padding: 0.48rem 0.56rem;
-  min-height: 4.75rem;
-  max-height: 4.75rem;
-  overflow-y: auto;
+  padding: 0.5rem 0.6rem;
+  min-height: 7rem;
+  transition: transform 220ms ease, opacity 220ms ease, box-shadow 220ms ease;
 }
 
 .process-info-card.collapsed {
   position: absolute;
   inset: 0;
-  z-index: calc(4 - var(--stack-index));
-  transform: translate(calc(var(--stack-index) * 4px), calc(var(--stack-index) * 4px));
-  opacity: calc(1 - min(var(--stack-index), 2) * 0.1);
+  z-index: calc(6 - var(--stack-index));
+  transform: translate(calc(var(--stack-index) * 6px), calc(var(--stack-index) * 6px));
   pointer-events: none;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 8%);
 }
 
-.process-info-card.collapsed:not(:first-child) {
-  filter: saturate(0.85);
+.process-info-card.hidden-collapsed {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.process-info-list.expanded .process-info-card {
+  position: relative;
+  inset: unset;
+  transform: translate(0, 0);
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  box-shadow: none;
 }
 
 .process-title {
@@ -396,15 +414,14 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
 }
 
 .process-description.muted {
-  font-size: 0.68rem;
-  opacity: 0.52;
-  animation: none;
+  font-size: 0.7rem;
+  opacity: 0.78;
 }
 
 .process-response {
-  margin: 0.25rem 0 0;
+  margin: 0.28rem 0 0;
   color: var(--text);
-  line-height: 1.3;
+  line-height: 1.35;
 }
 
 .loading-dots > span {
