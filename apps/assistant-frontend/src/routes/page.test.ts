@@ -368,11 +368,15 @@ describe('root page', () => {
       expect(screen.getByText('Summarized beta page')).toBeInTheDocument();
     });
 
-    const descriptions = Array.from(document.querySelectorAll('.process-description')).map((el) => el.textContent ?? '');
-    expect(descriptions).toContain('Found alpha source');
-    expect(descriptions).toContain('Summarized beta page');
+    const descriptions = Array.from(document.querySelectorAll('.process-description')).map((el) => el.textContent?.trim() ?? '');
+    const responses = Array.from(document.querySelectorAll('.process-response')).map((el) => el.textContent?.trim() ?? '');
+
+    expect(descriptions).toContain('Searching for alpha');
+    expect(descriptions).toContain('Looking at beta');
     expect(descriptions).not.toContain('Searching for alpha...');
     expect(descriptions).not.toContain('Looking at beta...');
+    expect(responses).toContain('Found alpha source');
+    expect(responses).toContain('Summarized beta page');
   });
 
 

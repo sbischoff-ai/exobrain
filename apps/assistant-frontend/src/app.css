@@ -10,9 +10,11 @@
   --border: #7c6f64;
   --code-bg: #282828;
   --header-height: 5.4rem;
+  --mobile-ui-scale: 1;
 }
 
 * { box-sizing: border-box; }
+html { font-size: 16px; }
 html, body { margin: 0; height: 100%; }
 body {
   background: var(--bg);
@@ -33,11 +35,16 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
   gap: 0.8rem;
 }
 .brand { display: flex; align-items: center; gap: 0.8rem; }
-.logo { width: 3.375rem; height: 3.375rem; border-radius: 0.45rem; object-fit: cover; }
+.logo {
+  width: calc(3.375rem * var(--mobile-ui-scale));
+  height: calc(3.375rem * var(--mobile-ui-scale));
+  border-radius: 0.45rem;
+  object-fit: cover;
+}
 .brand h1 {
   font-family: 'Cinzel', 'Eurostile', 'Trebuchet MS', sans-serif;
   letter-spacing: 0.085em;
-  font-size: clamp(2rem, 2vw, 1.35rem);
+  font-size: calc(clamp(2rem, 2vw, 1.35rem) * var(--mobile-ui-scale));
   color: var(--accent-soft);
   text-shadow: 0 0 10px rgb(250 189 47 / 22%);
 }
@@ -176,15 +183,15 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
   left: 0;
   top: 34vh;
   transform: translateY(-34%);
-  width: 2.2rem;
-  height: 4rem;
+  width: calc(2.2rem * var(--mobile-ui-scale));
+  height: calc(4rem * var(--mobile-ui-scale));
   border: 1px solid var(--border);
   border-left: 0;
   border-radius: 0 0.7rem 0.7rem 0;
   background: #4b443e;
   color: var(--accent-soft);
   font: inherit;
-  font-size: 1.2rem;
+  font-size: calc(1.2rem * var(--mobile-ui-scale));
   cursor: pointer;
   z-index: 20;
   opacity: 1;
@@ -294,7 +301,7 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
 .intro-content h1 {
   font-family: 'Cinzel', 'Eurostile', 'Trebuchet MS', sans-serif;
   letter-spacing: 0.085em;
-  font-size: 3em;
+  font-size: calc(3em * var(--mobile-ui-scale));
   color: var(--text);
 }
 .intro-login { width: min(20rem, 90vw); display: flex; flex-direction: column; gap: 0.6rem; }
@@ -637,4 +644,11 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
   :root { --header-height: 5rem; }
   .main-content { padding: 0.75rem; }
   .message.user { width: min(85%, 26rem); }
+}
+
+@media (max-width: 600px) and (orientation: portrait) {
+  html { font-size: 70%; }
+  :root {
+    --mobile-ui-scale: 0.8;
+  }
 }

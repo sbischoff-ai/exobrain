@@ -79,8 +79,8 @@
 <style>
   .user-menu-root { position: relative; }
   .user-trigger {
-    width: 2.75rem;
-    height: 2.75rem;
+    width: calc(2.75rem * var(--mobile-ui-scale, 1));
+    height: calc(2.75rem * var(--mobile-ui-scale, 1));
     border-radius: 999px;
     border: 1px solid var(--border);
     background: var(--surface);
@@ -91,7 +91,11 @@
     transition: background-color 120ms ease, border-color 120ms ease;
   }
   .user-trigger:hover { border-color: var(--accent); background: #5a4f48; }
-  .user-trigger svg { width: 1.45rem; height: 1.45rem; fill: currentColor; }
+  .user-trigger svg {
+    width: calc(1.45rem * var(--mobile-ui-scale, 1));
+    height: calc(1.45rem * var(--mobile-ui-scale, 1));
+    fill: currentColor;
+  }
   .menu-panel {
     position: absolute;
     right: 0;
