@@ -61,12 +61,24 @@ message GetSchemaReply {
   repeated EdgeEndpointRule edge_rules = 5;
 }
 
+message UpsertSchemaTypeProperty {
+  string prop_name = 1;
+  string value_type = 2;
+  bool required = 3;
+  bool readable = 4;
+  bool writable = 5;
+  bool active = 6;
+  string description = 7;
+}
+
 message UpsertSchemaTypeRequest {
   string id = 1;
   string kind = 2;
   string name = 3;
   string description = 4;
   bool active = 5;
+  optional string parent_type_id = 6;
+  repeated UpsertSchemaTypeProperty properties = 7;
 }
 
 message UpsertSchemaTypeReply {

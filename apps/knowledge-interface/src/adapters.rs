@@ -14,7 +14,7 @@ use sqlx::{postgres::PgPoolOptions, PgPool, Row};
 use crate::{
     domain::{
         EdgeEndpointRule, EmbeddedBlock, GraphDelta, PropertyScalar, PropertyValue, SchemaType,
-        TypeInheritance, TypeProperty,
+        TypeInheritance, TypeProperty, UpsertSchemaTypePropertyInput,
     },
     ports::{Embedder, GraphStore, SchemaRepository, VectorStore},
 };
@@ -134,6 +134,111 @@ impl SchemaRepository for PostgresSchemaRepository {
                 description: row.get("description"),
             })
             .collect())
+    }
+
+    async fn get_schema_type(&self, id: &str) -> Result<Option<SchemaType>> {
+        let row = sqlx::query(
+            "SELECT id, kind, name, description, active FROM knowledge_graph_schema_types WHERE id = $1",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(|row| SchemaType {
+            id: row.get("id"),
+            kind: row.get("kind"),
+            name: row.get("name"),
+            description: row.get("description"),
+            active: row.get("active"),
+        }))
+    }
+
+    async fn get_parent_for_child(&self, child_type_id: &str) -> Result<Option<String>> {
+        let row = sqlx::query(
+            "SELECT parent_type_id FROM knowledge_graph_schema_type_inheritance WHERE child_type_id = $1 AND active = TRUE LIMIT 1",
+        )
+        .bind(child_type_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(|r| r.get("parent_type_id")))
+    }
+
+    async fn is_descendant_of_entity(&self, node_type_id: &str) -> Result<bool> {
+        if node_type_id == "node.entity" {
+            return Ok(true);
+        }
+
+        let row = sqlx::query(
+            r#"WITH RECURSIVE lineage AS (
+                SELECT child_type_id, parent_type_id
+                FROM knowledge_graph_schema_type_inheritance
+                WHERE child_type_id = $1 AND active = TRUE
+                UNION ALL
+                SELECT i.child_type_id, i.parent_type_id
+                FROM knowledge_graph_schema_type_inheritance i
+                JOIN lineage l ON i.child_type_id = l.parent_type_id
+                WHERE i.active = TRUE
+            )
+            SELECT 1 AS found FROM lineage WHERE parent_type_id = 'node.entity' LIMIT 1"#,
+        )
+        .bind(node_type_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.is_some())
+    }
+
+    async fn upsert_inheritance(
+        &self,
+        child_type_id: &str,
+        parent_type_id: &str,
+        description: &str,
+    ) -> Result<()> {
+        sqlx::query(
+            r#"INSERT INTO knowledge_graph_schema_type_inheritance (child_type_id, parent_type_id, active, description, universe_id)
+            VALUES ($1, $2, TRUE, $3, NULL)
+            ON CONFLICT (child_type_id, parent_type_id)
+            DO UPDATE SET active = TRUE, description = EXCLUDED.description"#,
+        )
+        .bind(child_type_id)
+        .bind(parent_type_id)
+        .bind(description)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    async fn upsert_type_property(
+        &self,
+        owner_type_id: &str,
+        property: &UpsertSchemaTypePropertyInput,
+    ) -> Result<()> {
+        sqlx::query(
+            r#"INSERT INTO knowledge_graph_schema_type_properties (owner_type_id, prop_name, value_type, required, readable, writable, active, description)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            ON CONFLICT (owner_type_id, prop_name)
+            DO UPDATE SET
+              value_type = EXCLUDED.value_type,
+              required = EXCLUDED.required,
+              readable = EXCLUDED.readable,
+              writable = EXCLUDED.writable,
+              active = EXCLUDED.active,
+              description = EXCLUDED.description"#,
+        )
+        .bind(owner_type_id)
+        .bind(&property.prop_name)
+        .bind(&property.value_type)
+        .bind(property.required)
+        .bind(property.readable)
+        .bind(property.writable)
+        .bind(property.active)
+        .bind(&property.description)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
     }
 }
 

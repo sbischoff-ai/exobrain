@@ -8,6 +8,7 @@ use std::{env, sync::Arc};
 use adapters::{Neo4jGraphStore, OpenAiEmbedder, PostgresSchemaRepository, QdrantVectorStore};
 use domain::{
     BlockNode, EntityNode, GraphDelta, GraphEdge, PropertyScalar, PropertyValue, SchemaType,
+    UpsertSchemaTypeCommand, UpsertSchemaTypePropertyInput,
 };
 use service::KnowledgeApplication;
 use tonic::{transport::Server, Request, Response, Status};
@@ -141,12 +142,28 @@ impl KnowledgeInterface for KnowledgeGrpcService {
         let payload = request.into_inner();
         let upserted = self
             .app
-            .upsert_schema_type(SchemaType {
-                id: payload.id,
-                kind: payload.kind,
-                name: payload.name,
-                description: payload.description,
-                active: payload.active,
+            .upsert_schema_type(UpsertSchemaTypeCommand {
+                schema_type: SchemaType {
+                    id: payload.id,
+                    kind: payload.kind,
+                    name: payload.name,
+                    description: payload.description,
+                    active: payload.active,
+                },
+                parent_type_id: payload.parent_type_id,
+                properties: payload
+                    .properties
+                    .into_iter()
+                    .map(|prop| UpsertSchemaTypePropertyInput {
+                        prop_name: prop.prop_name,
+                        value_type: prop.value_type,
+                        required: prop.required,
+                        readable: prop.readable,
+                        writable: prop.writable,
+                        active: prop.active,
+                        description: prop.description,
+                    })
+                    .collect(),
             })
             .await
             .map_err(|e| Status::invalid_argument(e.to_string()))?;

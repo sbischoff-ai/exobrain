@@ -3,7 +3,9 @@ use std::sync::Arc;
 use anyhow::{anyhow, Result};
 
 use crate::{
-    domain::{EmbeddedBlock, FullSchema, GraphDelta, PropertyScalar, SchemaType},
+    domain::{
+        EmbeddedBlock, FullSchema, GraphDelta, PropertyScalar, SchemaType, UpsertSchemaTypeCommand,
+    },
     ports::{Embedder, GraphStore, SchemaRepository, VectorStore},
 };
 
@@ -39,11 +41,80 @@ impl KnowledgeApplication {
         })
     }
 
-    pub async fn upsert_schema_type(&self, schema_type: SchemaType) -> Result<SchemaType> {
+    pub async fn upsert_schema_type(&self, command: UpsertSchemaTypeCommand) -> Result<SchemaType> {
+        let schema_type = command.schema_type;
+
         if !matches!(schema_type.kind.as_str(), "node" | "edge") {
             return Err(anyhow!("schema kind must be one of: node, edge"));
         }
-        self.schema_repository.upsert(&schema_type).await
+
+        if schema_type.kind == "edge" && command.parent_type_id.is_some() {
+            return Err(anyhow!("edge inheritance is out of scope"));
+        }
+
+        if schema_type.kind == "node" {
+            if schema_type.id == "node.entity" {
+                if command.parent_type_id.is_some() {
+                    return Err(anyhow!("node.entity cannot declare a parent"));
+                }
+            } else {
+                let parent_type_id = command.parent_type_id.clone().ok_or_else(|| {
+                    anyhow!("node types (except node.entity) must declare parent_type_id")
+                })?;
+
+                let parent_schema = self
+                    .schema_repository
+                    .get_schema_type(&parent_type_id)
+                    .await?
+                    .ok_or_else(|| anyhow!("parent type does not exist"))?;
+
+                if parent_schema.kind != "node" {
+                    return Err(anyhow!("parent type must be a node"));
+                }
+
+                if !self
+                    .schema_repository
+                    .is_descendant_of_entity(&parent_type_id)
+                    .await?
+                {
+                    return Err(anyhow!("node parent must descend from node.entity"));
+                }
+
+                if let Some(existing_parent) = self
+                    .schema_repository
+                    .get_parent_for_child(&schema_type.id)
+                    .await?
+                {
+                    if existing_parent != parent_type_id {
+                        return Err(anyhow!("a node type cannot have multiple parents"));
+                    }
+                }
+            }
+        }
+
+        let upserted = self.schema_repository.upsert(&schema_type).await?;
+
+        if upserted.kind == "node" && upserted.id != "node.entity" {
+            let parent = command
+                .parent_type_id
+                .as_ref()
+                .ok_or_else(|| anyhow!("parent_type_id required for node subtype"))?;
+            self.schema_repository
+                .upsert_inheritance(
+                    &upserted.id,
+                    parent,
+                    "Parent relation created via UpsertSchemaType",
+                )
+                .await?;
+        }
+
+        for property in &command.properties {
+            self.schema_repository
+                .upsert_type_property(&upserted.id, property)
+                .await?;
+        }
+
+        Ok(upserted)
     }
 
     pub async fn ingest_graph_delta(&self, delta: GraphDelta) -> Result<()> {
@@ -87,6 +158,7 @@ fn extract_text(properties: &[crate::domain::PropertyValue]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
 
     use async_trait::async_trait;
@@ -94,12 +166,35 @@ mod tests {
     use crate::{
         domain::{
             BlockNode, EdgeEndpointRule, EntityNode, GraphEdge, PropertyValue, TypeInheritance,
-            TypeProperty,
+            TypeProperty, UpsertSchemaTypePropertyInput,
         },
         ports::{Embedder, GraphStore, SchemaRepository, VectorStore},
     };
 
-    struct FakeSchemaRepo;
+    struct FakeSchemaRepo {
+        types: Mutex<HashMap<String, SchemaType>>,
+        parents: Mutex<HashMap<String, String>>,
+    }
+
+    impl FakeSchemaRepo {
+        fn new() -> Self {
+            let mut types = HashMap::new();
+            types.insert(
+                "node.entity".to_string(),
+                SchemaType {
+                    id: "node.entity".to_string(),
+                    kind: "node".to_string(),
+                    name: "Entity".to_string(),
+                    description: "".to_string(),
+                    active: true,
+                },
+            );
+            Self {
+                types: Mutex::new(types),
+                parents: Mutex::new(HashMap::new()),
+            }
+        }
+    }
 
     #[async_trait]
     impl SchemaRepository for FakeSchemaRepo {
@@ -114,6 +209,10 @@ mod tests {
         }
 
         async fn upsert(&self, schema_type: &SchemaType) -> Result<SchemaType> {
+            self.types
+                .lock()
+                .expect("lock")
+                .insert(schema_type.id.clone(), schema_type.clone());
             Ok(schema_type.clone())
         }
 
@@ -127,6 +226,48 @@ mod tests {
 
         async fn get_edge_endpoint_rules(&self) -> Result<Vec<EdgeEndpointRule>> {
             Ok(vec![])
+        }
+
+        async fn get_schema_type(&self, id: &str) -> Result<Option<SchemaType>> {
+            Ok(self.types.lock().expect("lock").get(id).cloned())
+        }
+
+        async fn get_parent_for_child(&self, child_type_id: &str) -> Result<Option<String>> {
+            Ok(self
+                .parents
+                .lock()
+                .expect("lock")
+                .get(child_type_id)
+                .cloned())
+        }
+
+        async fn is_descendant_of_entity(&self, node_type_id: &str) -> Result<bool> {
+            if node_type_id == "node.entity" {
+                return Ok(true);
+            }
+            let parents = self.parents.lock().expect("lock");
+            Ok(matches!(parents.get(node_type_id), Some(v) if v == "node.entity"))
+        }
+
+        async fn upsert_inheritance(
+            &self,
+            child_type_id: &str,
+            parent_type_id: &str,
+            _description: &str,
+        ) -> Result<()> {
+            self.parents
+                .lock()
+                .expect("lock")
+                .insert(child_type_id.to_string(), parent_type_id.to_string());
+            Ok(())
+        }
+
+        async fn upsert_type_property(
+            &self,
+            _owner_type_id: &str,
+            _property: &UpsertSchemaTypePropertyInput,
+        ) -> Result<()> {
+            Ok(())
         }
     }
 
@@ -164,7 +305,7 @@ mod tests {
     #[tokio::test]
     async fn rejects_invalid_schema_kind() {
         let app = KnowledgeApplication::new(
-            Arc::new(FakeSchemaRepo),
+            Arc::new(FakeSchemaRepo::new()),
             Arc::new(FakeGraphStore),
             Arc::new(FakeEmbedder),
             Arc::new(CapturingVectorStore {
@@ -173,12 +314,16 @@ mod tests {
         );
 
         let err = app
-            .upsert_schema_type(SchemaType {
-                id: "x".to_string(),
-                kind: "invalid".to_string(),
-                name: "x".to_string(),
-                description: String::new(),
-                active: true,
+            .upsert_schema_type(UpsertSchemaTypeCommand {
+                schema_type: SchemaType {
+                    id: "x".to_string(),
+                    kind: "invalid".to_string(),
+                    name: "x".to_string(),
+                    description: String::new(),
+                    active: true,
+                },
+                parent_type_id: None,
+                properties: vec![],
             })
             .await
             .expect_err("invalid schema kind should fail");
@@ -187,10 +332,39 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn rejects_node_without_parent() {
+        let app = KnowledgeApplication::new(
+            Arc::new(FakeSchemaRepo::new()),
+            Arc::new(FakeGraphStore),
+            Arc::new(FakeEmbedder),
+            Arc::new(CapturingVectorStore {
+                seen: Arc::new(Mutex::new(vec![])),
+            }),
+        );
+
+        let err = app
+            .upsert_schema_type(UpsertSchemaTypeCommand {
+                schema_type: SchemaType {
+                    id: "node.person".to_string(),
+                    kind: "node".to_string(),
+                    name: "Person".to_string(),
+                    description: String::new(),
+                    active: true,
+                },
+                parent_type_id: None,
+                properties: vec![],
+            })
+            .await
+            .expect_err("missing parent should fail");
+
+        assert!(err.to_string().contains("must declare parent_type_id"));
+    }
+
+    #[tokio::test]
     async fn ingests_blocks_and_creates_embeddings() {
         let captured = Arc::new(Mutex::new(vec![]));
         let app = KnowledgeApplication::new(
-            Arc::new(FakeSchemaRepo),
+            Arc::new(FakeSchemaRepo::new()),
             Arc::new(FakeGraphStore),
             Arc::new(FakeEmbedder),
             Arc::new(CapturingVectorStore {
