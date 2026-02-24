@@ -20,7 +20,7 @@
 
     dispatch('send', { text: trimmed });
     messageInput = '';
-    resizeInput();
+    resetInputHeight();
   }
 
   function resizeInput(): void {
@@ -30,6 +30,14 @@
 
     messageInputElement.style.height = 'auto';
     messageInputElement.style.height = `${messageInputElement.scrollHeight}px`;
+  }
+
+  function resetInputHeight(): void {
+    if (!messageInputElement) {
+      return;
+    }
+
+    messageInputElement.style.height = '';
   }
 
   function handleInput(): void {
