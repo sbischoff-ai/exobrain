@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 import logging
 from typing import Awaitable, Callable
 
 from nats.aio.msg import Msg
+from pydantic import ValidationError
 
 from app.contracts import JobEnvelope, JobResultEvent, WorkerJobRunnerProtocol
 from app.job_repository import JobRepository
@@ -26,7 +28,11 @@ class JobOrchestrator:
         self._publish_event = publish_event
 
     async def process_message(self, msg: Msg) -> None:
-        job = JobEnvelope.model_validate_json(msg.data)
+        job = self._parse_job_envelope(msg.data)
+        if job is None:
+            logger.warning("dropping invalid job envelope")
+            await msg.ack()
+            return
 
         inserted = await self._repository.register_requested(job)
         if not inserted:
@@ -46,6 +52,30 @@ class JobOrchestrator:
             await self._repository.mark_failed(job.job_id, str(exc))
             await self._emit_result(job, "failed", detail=str(exc))
             await msg.ack()
+
+    @staticmethod
+    def _parse_job_envelope(data: bytes) -> JobEnvelope | None:
+        try:
+            return JobEnvelope.model_validate_json(data)
+        except ValidationError:
+            pass
+
+        try:
+            decoded = json.loads(data)
+        except json.JSONDecodeError:
+            return None
+
+        if not isinstance(decoded, dict):
+            return None
+
+        # Backward compatibility: tolerate envelopes missing payload and default to empty dict.
+        if "payload" not in decoded:
+            decoded["payload"] = {}
+
+        try:
+            return JobEnvelope.model_validate(decoded)
+        except ValidationError:
+            return None
 
     async def _emit_result(self, job: JobEnvelope, status: str, detail: str | None = None) -> None:
         event = JobResultEvent(

@@ -37,8 +37,8 @@ class FakeRunner:
 
 
 class FakeMsg:
-    def __init__(self, payload: dict[str, object]) -> None:
-        self.data = json.dumps(payload).encode("utf-8")
+    def __init__(self, payload: dict[str, object] | None = None, *, raw_data: bytes | None = None) -> None:
+        self.data = raw_data if raw_data is not None else json.dumps(payload or {}).encode("utf-8")
         self.acked = False
 
     async def ack(self) -> None:
@@ -74,6 +74,57 @@ async def test_worker_marks_completed_for_new_job() -> None:
     assert msg.acked is True
     assert ("completed", "job-1") in repo.calls
     assert events == ["jobs.events.knowledge.update.completed"]
+
+
+@pytest.mark.asyncio
+async def test_worker_accepts_legacy_envelope_without_payload() -> None:
+    events: list[str] = []
+
+    async def publish(subject: str, _: bytes) -> None:
+        events.append(subject)
+
+    repo = FakeRepo(inserted=True)
+    worker = JobOrchestrator(
+        repository=repo,
+        runner=FakeRunner(),
+        events_subject_prefix="jobs.events",
+        publish_event=publish,
+    )
+
+    msg = FakeMsg(
+        {
+            "job_id": "job-legacy",
+            "job_type": "knowledge.update",
+            "correlation_id": "corr-1",
+            "attempt": 0,
+        }
+    )
+
+    await worker.process_message(msg)
+
+    assert msg.acked is True
+    assert ("completed", "job-legacy") in repo.calls
+    assert events == ["jobs.events.knowledge.update.completed"]
+
+
+@pytest.mark.asyncio
+async def test_worker_drops_invalid_envelope_and_acks() -> None:
+    async def publish(_: str, __: bytes) -> None:
+        return None
+
+    repo = FakeRepo(inserted=True)
+    worker = JobOrchestrator(
+        repository=repo,
+        runner=FakeRunner(),
+        events_subject_prefix="jobs.events",
+        publish_event=publish,
+    )
+    msg = FakeMsg(raw_data=b"not-json")
+
+    await worker.process_message(msg)
+
+    assert msg.acked is True
+    assert repo.calls == []
 
 
 @pytest.mark.asyncio
