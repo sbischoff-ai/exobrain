@@ -41,6 +41,7 @@ grpcui -plaintext localhost:50051
 - Copy env template: `cp apps/knowledge-interface/.env.example apps/knowledge-interface/.env`
 - `APP_ENV=local` enables local gRPC reflection.
 - `LOG_LEVEL` defaults to `DEBUG` for local and `INFO` otherwise.
+- `MEMGRAPH_DB` defaults to `memgraph`; set it explicitly if your Memgraph uses a different database name.
 
 
 ## Built-in graph bootstrapping

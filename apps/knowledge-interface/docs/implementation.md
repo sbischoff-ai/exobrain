@@ -59,7 +59,7 @@ This document is code-oriented: it helps a new contributor quickly navigate the 
 
 ## Startup root graph seeding
 
-During service startup (`main.rs`), `KnowledgeApplication::ensure_common_root_graph` checks Memgraph for the shared Exobrain root graph and seeds it when absent. Seeding uses standard ingestion flow so block embeddings are generated with the configured embedding model.
+During service startup (`main.rs`), `KnowledgeApplication::ensure_common_root_graph` checks Memgraph for the shared Exobrain root graph and seeds it when absent. Seeding uses standard ingestion flow so block embeddings are generated with the configured embedding model. Memgraph connection now sets database name from `MEMGRAPH_DB` (default `memgraph`) to avoid Neo4j-driver defaults targeting `neo4j`.
 
 ## Internal architecture pattern
 

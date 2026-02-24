@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use anyhow::{Context, Result};
 use async_trait::async_trait;
-use neo4rs::{query, Graph};
+use neo4rs::{query, ConfigBuilder, Graph};
 use qdrant_client::{
     qdrant::{PointStruct, UpsertPointsBuilder, Value},
     Qdrant,
@@ -247,8 +247,14 @@ pub struct Neo4jGraphStore {
 }
 
 impl Neo4jGraphStore {
-    pub async fn new(uri: &str) -> Result<Self> {
-        let graph = Graph::new(uri, "", "").await?;
+    pub async fn new(uri: &str, database: &str) -> Result<Self> {
+        let config = ConfigBuilder::default()
+            .uri(uri)
+            .user("")
+            .password("")
+            .db(database)
+            .build()?;
+        let graph = Graph::connect(config).await?;
         Ok(Self { graph })
     }
 }
