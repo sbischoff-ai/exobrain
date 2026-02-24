@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Protocol
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -26,3 +26,8 @@ class JobResultEvent(BaseModel):
     attempt: int
     detail: str | None = None
     emitted_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class WorkerJobRunnerProtocol(Protocol):
+    async def run_job(self, job: JobEnvelope) -> None:
+        """Execute a single job in a worker runtime."""

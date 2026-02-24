@@ -5,7 +5,7 @@ import json
 import pytest
 
 from app.contracts import JobEnvelope
-from app.worker import JobWorker
+from app.orchestrator import JobOrchestrator
 
 
 class FakeRepo:
@@ -27,6 +27,15 @@ class FakeRepo:
         self.calls.append(("failed", job_id))
 
 
+class FakeRunner:
+    def __init__(self, should_fail: bool = False) -> None:
+        self.should_fail = should_fail
+
+    async def run_job(self, _: JobEnvelope) -> None:
+        if self.should_fail:
+            raise RuntimeError("boom")
+
+
 class FakeMsg:
     def __init__(self, payload: dict[str, object]) -> None:
         self.data = json.dumps(payload).encode("utf-8")
@@ -44,25 +53,27 @@ async def test_worker_marks_completed_for_new_job() -> None:
         events.append(subject)
 
     repo = FakeRepo(inserted=True)
-    worker = JobWorker(repository=repo, events_subject_prefix="jobs.events", publish_event=publish)
+    worker = JobOrchestrator(
+        repository=repo,
+        runner=FakeRunner(),
+        events_subject_prefix="jobs.events",
+        publish_event=publish,
+    )
 
     payload = {
         "job_id": "job-1",
-        "job_type": "knowledge.ingest",
+        "job_type": "knowledge.update",
         "correlation_id": "corr-1",
-        "payload": {"entity": "note"},
+        "payload": {"messages": ["note"]},
         "attempt": 0,
     }
 
-    async def handler(_: JobEnvelope) -> None:
-        return None
-
     msg = FakeMsg(payload)
-    await worker.process_message(msg, handler)
+    await worker.process_message(msg)
 
     assert msg.acked is True
     assert ("completed", "job-1") in repo.calls
-    assert events == ["jobs.events.knowledge.ingest.completed"]
+    assert events == ["jobs.events.knowledge.update.completed"]
 
 
 @pytest.mark.asyncio
@@ -71,21 +82,23 @@ async def test_worker_skips_duplicate_job() -> None:
         return None
 
     repo = FakeRepo(inserted=False)
-    worker = JobWorker(repository=repo, events_subject_prefix="jobs.events", publish_event=publish)
+    worker = JobOrchestrator(
+        repository=repo,
+        runner=FakeRunner(),
+        events_subject_prefix="jobs.events",
+        publish_event=publish,
+    )
     msg = FakeMsg(
         {
             "job_id": "job-duplicate",
-            "job_type": "knowledge.ingest",
+            "job_type": "knowledge.update",
             "correlation_id": "corr-1",
             "payload": {},
             "attempt": 0,
         }
     )
 
-    async def handler(_: JobEnvelope) -> None:
-        raise AssertionError("handler should not run")
-
-    await worker.process_message(msg, handler)
+    await worker.process_message(msg)
 
     assert msg.acked is True
     assert repo.calls == [("register", "job-duplicate")]

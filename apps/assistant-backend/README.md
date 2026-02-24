@@ -1,6 +1,6 @@
 # Exobrain Assistant Backend
 
-FastAPI service for auth, chat orchestration, journal APIs, and async job publishing.
+FastAPI service for auth, chat orchestration, journal APIs, and async job publishing. Includes `/api/knowledge/update` for enqueueing knowledge-update jobs from journal messages.
 
 ## What this service is
 
