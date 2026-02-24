@@ -38,7 +38,7 @@
         <img src="/logo.png" alt="DRVID logo" class="logo" />
         <h1>DRVID</h1>
       </div>
-      <UserMenu {user} onLogout={() => dispatch('logout')} />
+      <UserMenu {user} onLogout={async () => void dispatch('logout')} />
     </div>
   </header>
 

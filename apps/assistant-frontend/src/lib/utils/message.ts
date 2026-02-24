@@ -1,4 +1,60 @@
-import type { JournalMessage, StoredMessage } from '$lib/models/journal';
+import type { JournalMessage, JournalToolCall, ProcessInfo, StoredMessage } from '$lib/models/journal';
+
+
+const toProcessInfo = (toolCall: JournalToolCall): ProcessInfo => {
+  if (typeof toolCall.error === 'string' && toolCall.error.length > 0) {
+    return {
+      id: makeClientMessageId(),
+      toolCallId: toolCall.tool_call_id,
+      title: toolCall.title,
+      description: toolCall.error,
+      state: 'error'
+    };
+  }
+
+  if (typeof toolCall.response === 'string' && toolCall.response.length > 0) {
+    return {
+      id: makeClientMessageId(),
+      toolCallId: toolCall.tool_call_id,
+      title: toolCall.title,
+      description: toolCall.response,
+      state: 'resolved'
+    };
+  }
+
+  return {
+    id: makeClientMessageId(),
+    toolCallId: toolCall.tool_call_id,
+    title: toolCall.title,
+    description: toolCall.description,
+    state: 'pending'
+  };
+};
+
+const toProcessInfos = (toolCalls: unknown): ProcessInfo[] | undefined => {
+  if (!Array.isArray(toolCalls) || toolCalls.length === 0) {
+    return undefined;
+  }
+
+  const validCalls = toolCalls.filter((item): item is JournalToolCall => {
+    if (!item || typeof item !== 'object') {
+      return false;
+    }
+
+    const maybeCall = item as JournalToolCall;
+    return (
+      typeof maybeCall.tool_call_id === 'string' &&
+      typeof maybeCall.title === 'string' &&
+      typeof maybeCall.description === 'string'
+    );
+  });
+
+  if (!validCalls.length) {
+    return undefined;
+  }
+
+  return validCalls.map(toProcessInfo);
+};
 
 /** Generate a client idempotency key for outgoing chat messages. */
 export const makeClientMessageId = (): string =>
@@ -13,7 +69,9 @@ export const toStoredMessage = (message: Partial<JournalMessage> & { clientMessa
     (message.client_message_id as string | undefined) ??
     (message.id as string | undefined) ??
     makeClientMessageId(),
-  sequence: typeof message.sequence === 'number' ? message.sequence : undefined
+  sequence: typeof message.sequence === 'number' ? message.sequence : undefined,
+  toolCalls: Array.isArray(message.tool_calls) ? message.tool_calls : undefined,
+  processInfos: toProcessInfos(message.tool_calls)
 });
 
 /**

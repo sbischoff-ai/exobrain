@@ -1,3 +1,5 @@
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from app.api.dependencies.auth import get_required_auth_context
@@ -21,6 +23,23 @@ def _entry_from_record(record) -> JournalEntryResponse:
     )
 
 
+def _coerce_tool_calls(raw_tool_calls: object) -> list[dict]:
+    if raw_tool_calls is None:
+        return []
+
+    parsed = raw_tool_calls
+    if isinstance(raw_tool_calls, str):
+        try:
+            parsed = json.loads(raw_tool_calls)
+        except json.JSONDecodeError:
+            return []
+
+    if not isinstance(parsed, list):
+        return []
+
+    return [item for item in parsed if isinstance(item, dict)]
+
+
 def _messages_from_records(rows) -> list[JournalMessageResponse]:
     return [
         JournalMessageResponse(
@@ -30,7 +49,7 @@ def _messages_from_records(rows) -> list[JournalMessageResponse]:
             sequence=row["sequence"],
             created_at=row["created_at"],
             metadata=row["metadata"],
-            tool_calls=[ToolCallResponse(**item) for item in (row.get("tool_calls") or [])],
+            tool_calls=[ToolCallResponse(**item) for item in _coerce_tool_calls(row.get("tool_calls"))],
         )
         for row in rows
     ]
