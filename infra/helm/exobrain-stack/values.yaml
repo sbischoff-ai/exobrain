@@ -194,6 +194,8 @@ jobOrchestrator:
     tag: "0.1.0"
     pullPolicy: IfNotPresent
   env:
+    APP_ENV: cluster
+    LOG_LEVEL: INFO
     JOB_ORCHESTRATOR_DB_DSN: postgresql://job_orchestrator:job_orchestrator@exobrain-metastore:5432/job_orchestrator_db
     EXOBRAIN_NATS_URL: nats://exobrain-message-broker:4222
     JOB_QUEUE_SUBJECT: jobs.*.*.requested

@@ -7,22 +7,26 @@ import nats
 
 from app.database import Database
 from app.job_repository import JobRepository
+from app.logging import configure_logging
 from app.orchestrator import JobOrchestrator
 from app.settings import get_settings
 from app.worker import LocalProcessWorkerRunner
 
-logging.basicConfig(level=logging.INFO)
+settings = get_settings()
+configure_logging(settings.effective_log_level)
 logger = logging.getLogger(__name__)
 
 
 async def main() -> None:
-    settings = get_settings()
+    logger.info("starting job orchestrator", extra={"app_env": settings.app_env, "log_level": settings.effective_log_level})
 
     db = Database(settings.job_orchestrator_db_dsn, reshape_schema_query=settings.reshape_schema_query)
     await db.connect()
+    logger.info("job orchestrator database connected")
 
     nc = await nats.connect(settings.exobrain_nats_url)
     js = nc.jetstream()
+    logger.info("job orchestrator nats connected", extra={"nats_url": settings.exobrain_nats_url})
 
     await js.add_stream(name="JOBS", subjects=["jobs.>"])
 
@@ -39,6 +43,7 @@ async def main() -> None:
     concurrency_guard = asyncio.Semaphore(settings.worker_replica_count)
 
     async def handle(msg):
+        logger.debug("received job message", extra={"subject": msg.subject})
         async with concurrency_guard:
             await orchestrator.process_message(msg)
 
@@ -50,7 +55,7 @@ async def main() -> None:
     )
     logger.info(
         "job orchestrator worker started",
-        extra={"subject": settings.job_queue_subject, "replicas": settings.worker_replica_count},
+        extra={"subject": settings.job_queue_subject, "replicas": settings.worker_replica_count, "durable": settings.job_consumer_durable},
     )
 
     try:
@@ -59,6 +64,7 @@ async def main() -> None:
     finally:
         await nc.drain()
         await db.close()
+        logger.info("job orchestrator shutdown complete")
 
 
 if __name__ == "__main__":

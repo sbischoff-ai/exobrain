@@ -7,6 +7,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
+    app_env: str = Field(default="local", alias="APP_ENV")
+    log_level: str | None = Field(default=None, alias="LOG_LEVEL")
+
     job_orchestrator_db_dsn: str = Field(
         default="postgresql://job_orchestrator:job_orchestrator@localhost:15432/job_orchestrator_db",
         alias="JOB_ORCHESTRATOR_DB_DSN",
@@ -29,6 +32,12 @@ class Settings(BaseSettings):
         gt=0,
     )
     reshape_schema_query: str = Field(default="", alias="RESHAPE_SCHEMA_QUERY")
+
+    @property
+    def effective_log_level(self) -> str:
+        if self.log_level:
+            return self.log_level
+        return "DEBUG" if self.app_env == "local" else "INFO"
 
 
 @lru_cache

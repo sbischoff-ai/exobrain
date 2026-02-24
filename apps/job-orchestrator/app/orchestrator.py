@@ -67,6 +67,7 @@ class JobOrchestrator:
             return
 
         run_job = job.model_copy(update={"attempt": delivery_attempt - 1})
+        logger.debug("validated job envelope", extra={"job_id": run_job.job_id, "job_type": run_job.job_type, "attempt": delivery_attempt})
 
         if delivery_attempt == 1:
             inserted = await self._repository.register_requested(run_job)
@@ -78,9 +79,11 @@ class JobOrchestrator:
         await self._repository.mark_processing(run_job.job_id, delivery_attempt)
 
         try:
+            logger.info("starting job execution", extra={"job_id": run_job.job_id, "job_type": run_job.job_type, "attempt": delivery_attempt})
             await self._runner.run_job(run_job)
             await self._repository.mark_completed(run_job.job_id)
             await self._emit_result(run_job, "completed", attempt=delivery_attempt)
+            logger.info("job execution completed", extra={"job_id": run_job.job_id, "job_type": run_job.job_type, "attempt": delivery_attempt})
             await msg.ack()
         except Exception as exc:  # noqa: BLE001
             logger.exception(
