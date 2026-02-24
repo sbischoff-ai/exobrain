@@ -36,8 +36,11 @@ This document is code-oriented: it helps a new contributor quickly navigate the 
 ### 2) `UpsertSchemaType`
 
 1. gRPC handler maps proto payload to domain `SchemaType`.
-2. `KnowledgeApplication::upsert_schema_type` validates canonical kinds (`node`/`edge`).
-3. canonical row is upserted via repository.
+2. `KnowledgeApplication::upsert_schema_type` validates parent/type rules:
+   - nodes must inherit from `node.entity` (except `node.entity` itself)
+   - single-parent enforcement for node inheritance
+   - edge inheritance is rejected
+3. schema type, inheritance row, and additive properties are upserted via repository.
 
 ### 3) `IngestGraphDelta`
 

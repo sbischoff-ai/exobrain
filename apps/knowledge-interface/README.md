@@ -15,7 +15,7 @@ This API is **breaking-change friendly** right now (pre-launch). It is optimized
   - edge endpoint rules (domain/range guidance)
 - gRPC API for:
   - schema introspection (`GetSchema`) including types + properties + inheritance + edge rules
-  - schema type upsert (`UpsertSchemaType`)
+  - schema type upsert (`UpsertSchemaType`) with parent + additive property updates
   - schema-driven graph delta ingestion (`IngestGraphDelta`) using typed property values
 
 ## Key protocol design choices
@@ -59,3 +59,10 @@ cp apps/knowledge-interface/.env.example apps/knowledge-interface/.env
 - Service implementation notes: [`./docs/implementation.md`](./docs/implementation.md)
 - System-wide graph schema: [`../../docs/knowledge/graph-schema.md`](../../docs/knowledge/graph-schema.md)
 - Repository docs hub: [`../../docs/README.md`](../../docs/README.md)
+
+## Upsert rules enforced by service
+
+- upserted node types must inherit from `node.entity` (directly or transitively)
+- a node can have only one parent
+- edge inheritance is rejected
+- properties are additive/upsert-only via request payload (no delete operation)

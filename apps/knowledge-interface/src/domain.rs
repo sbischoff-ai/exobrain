@@ -10,6 +10,24 @@ pub struct SchemaType {
 }
 
 #[derive(Debug, Clone)]
+pub struct UpsertSchemaTypePropertyInput {
+    pub prop_name: String,
+    pub value_type: String,
+    pub required: bool,
+    pub readable: bool,
+    pub writable: bool,
+    pub active: bool,
+    pub description: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct UpsertSchemaTypeCommand {
+    pub schema_type: SchemaType,
+    pub parent_type_id: Option<String>,
+    pub properties: Vec<UpsertSchemaTypePropertyInput>,
+}
+
+#[derive(Debug, Clone)]
 pub struct TypeInheritance {
     pub child_type_id: String,
     pub parent_type_id: String,
