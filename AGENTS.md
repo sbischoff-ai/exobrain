@@ -148,3 +148,5 @@ A skill is a set of local instructions in a `SKILL.md` file.
 - Local workstation startup now defaults to Docker Compose infra plus `mprocs` app orchestration; keep `.mprocs/*.yml` and `scripts/local/run-*-suite.sh` aligned when adding/removing services.
 
 - In job-orchestrator, avoid broad `JOB_QUEUE_SUBJECT` patterns that also match result/DLQ subjects; keep request subscription scoped (for example `jobs.*.*.requested`) to prevent self-consumption loops.
+
+- When changing `JOB_QUEUE_SUBJECT` filtering semantics, rotate `JOB_CONSUMER_DURABLE` (or recreate the consumer) so old JetStream consumer filters do not persist and cause unexpected message fan-in.

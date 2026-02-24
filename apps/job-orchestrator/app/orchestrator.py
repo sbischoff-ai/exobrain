@@ -36,12 +36,24 @@ class JobOrchestrator:
     async def process_message(self, msg: Msg) -> None:
         delivery_attempt = self._delivery_attempt(msg)
 
+        if not msg.subject.endswith(".requested"):
+            logger.warning("ignoring non-request subject", extra={"subject": msg.subject})
+            await msg.ack()
+            return
+
         try:
             job = JobEnvelope.model_validate_json(msg.data)
         except ValidationError as exc:
-            logger.error("invalid job envelope, sending to DLQ", extra={"error": str(exc)})
-            await self._emit_dlq(reason="invalid-envelope", detail=str(exc), raw_message=msg.data)
-            await msg.ack()
+            logger.error(
+                "invalid job envelope",
+                extra={"error": str(exc), "attempt": delivery_attempt, "max_attempts": self._max_attempts, "subject": msg.subject},
+            )
+            if delivery_attempt >= self._max_attempts:
+                await self._emit_dlq(reason="invalid-envelope", detail=str(exc), raw_message=msg.data)
+                await msg.ack()
+                return
+
+            await msg.nak()
             return
 
         payload_error = self._validate_payload(job)

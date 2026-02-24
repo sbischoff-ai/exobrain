@@ -44,7 +44,7 @@ async def main() -> None:
 
     await js.subscribe(
         settings.job_queue_subject,
-        durable="job-orchestrator-worker",
+        durable=settings.job_consumer_durable,
         cb=handle,
         manual_ack=True,
     )
