@@ -31,6 +31,8 @@ async def main() -> None:
         repository=repository,
         runner=LocalProcessWorkerRunner(),
         events_subject_prefix=settings.job_events_subject_prefix,
+        dlq_subject=settings.job_dlq_subject,
+        max_attempts=settings.job_max_attempts,
         publish_event=js.publish,
     )
     concurrency_guard = asyncio.Semaphore(settings.worker_replica_count)
