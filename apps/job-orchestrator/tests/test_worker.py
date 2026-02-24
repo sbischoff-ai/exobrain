@@ -38,9 +38,10 @@ class FakeRunner:
 
 
 class FakeMsg:
-    def __init__(self, payload: dict[str, object] | None = None, *, raw_data: bytes | None = None, delivery_attempt: int = 1) -> None:
+    def __init__(self, payload: dict[str, object] | None = None, *, raw_data: bytes | None = None, delivery_attempt: int = 1, subject: str = "jobs.knowledge.update.requested") -> None:
         self.data = raw_data if raw_data is not None else json.dumps(payload or {}).encode("utf-8")
         self.metadata = SimpleNamespace(num_delivered=delivery_attempt)
+        self.subject = subject
         self.acked = False
         self.nacked = False
 
@@ -97,7 +98,7 @@ async def test_worker_marks_completed_for_new_job() -> None:
 
 
 @pytest.mark.asyncio
-async def test_worker_sends_invalid_envelope_to_dlq_and_acks() -> None:
+async def test_worker_retries_invalid_envelope_before_dlq() -> None:
     events: list[str] = []
 
     async def publish(subject: str, _: bytes) -> None:
@@ -105,11 +106,31 @@ async def test_worker_sends_invalid_envelope_to_dlq_and_acks() -> None:
 
     repo = FakeRepo(inserted=True)
     worker = _build_worker(repo, FakeRunner(), publish)
-    msg = FakeMsg(raw_data=b"not-json")
+    msg = FakeMsg(raw_data=b"not-json", delivery_attempt=1)
+
+    await worker.process_message(msg)
+
+    assert msg.acked is False
+    assert msg.nacked is True
+    assert repo.calls == []
+    assert events == []
+
+
+@pytest.mark.asyncio
+async def test_worker_dlqs_invalid_envelope_at_max_attempts() -> None:
+    events: list[str] = []
+
+    async def publish(subject: str, _: bytes) -> None:
+        events.append(subject)
+
+    repo = FakeRepo(inserted=True)
+    worker = _build_worker(repo, FakeRunner(), publish)
+    msg = FakeMsg(raw_data=b"not-json", delivery_attempt=3)
 
     await worker.process_message(msg)
 
     assert msg.acked is True
+    assert msg.nacked is False
     assert repo.calls == []
     assert events == ["jobs.dlq"]
 
@@ -121,7 +142,7 @@ async def test_worker_acks_even_if_dlq_publish_fails() -> None:
 
     repo = FakeRepo(inserted=True)
     worker = _build_worker(repo, FakeRunner(), publish)
-    msg = FakeMsg(raw_data=b"not-json")
+    msg = FakeMsg(raw_data=b"not-json", delivery_attempt=3)
 
     await worker.process_message(msg)
 
@@ -183,6 +204,25 @@ async def test_worker_dlqs_when_max_attempts_reached() -> None:
     assert msg.acked is True
     assert msg.nacked is False
     assert events == ["jobs.events.knowledge.update.failed", "jobs.dlq"]
+
+
+@pytest.mark.asyncio
+async def test_worker_ignores_non_requested_subject() -> None:
+    events: list[str] = []
+
+    async def publish(subject: str, _: bytes) -> None:
+        events.append(subject)
+
+    repo = FakeRepo(inserted=True)
+    worker = _build_worker(repo, FakeRunner(), publish)
+    msg = FakeMsg(_valid_payload(), subject="jobs.dlq")
+
+    await worker.process_message(msg)
+
+    assert msg.acked is True
+    assert msg.nacked is False
+    assert repo.calls == []
+    assert events == []
 
 
 @pytest.mark.asyncio

@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     job_dlq_subject: str = Field(default="jobs.dlq", alias="JOB_DLQ_SUBJECT")
     job_max_attempts: int = Field(default=3, alias="JOB_MAX_ATTEMPTS", ge=1)
     job_dlq_raw_message_max_chars: int = Field(default=4096, alias="JOB_DLQ_RAW_MESSAGE_MAX_CHARS", ge=256)
+    job_consumer_durable: str = Field(default="job-orchestrator-worker-v2", alias="JOB_CONSUMER_DURABLE")
     worker_replica_count: int = Field(default=1, alias="WORKER_REPLICA_COUNT", ge=1)
     knowledge_interface_grpc_target: str = Field(
         default="localhost:15051",
