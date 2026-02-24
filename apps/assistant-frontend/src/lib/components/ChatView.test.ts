@@ -15,7 +15,8 @@ describe('ChatView', () => {
             clientMessageId: 'a-1',
             processInfos: [
               { id: 'p-1', title: 'Web search', description: 'Searching', state: 'pending' },
-              { id: 'p-2', title: 'Error', description: 'Failed', state: 'error' }
+              { id: 'p-2', title: 'Web fetch', description: 'Fetching', response: 'Done', state: 'resolved' },
+              { id: 'p-3', title: 'Error', description: 'Failed', state: 'error' }
             ]
           }
         ]
@@ -23,8 +24,10 @@ describe('ChatView', () => {
     });
 
     expect(screen.getByText('Web search')).toBeInTheDocument();
-    expect(screen.getByText('Searching...')).toBeInTheDocument();
+    expect(screen.getByText('Searching')).toBeInTheDocument();
+    expect(screen.getByText('Done')).toBeInTheDocument();
     expect(screen.getByText('Failed')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Unfold tool call cards' })).toBeInTheDocument();
   });
 
   it('renders journal reference and messages', () => {

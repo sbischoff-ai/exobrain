@@ -41,9 +41,9 @@ describe('message utils', () => {
     ]);
 
     expect(assistantMessage.toolCalls).toHaveLength(2);
-    expect(assistantMessage.processInfos?.map((item) => ({ title: item.title, description: item.description, state: item.state }))).toEqual([
-      { title: 'Web search', description: 'Found sources', state: 'resolved' },
-      { title: 'Web fetch', description: 'Failed to fetch', state: 'error' }
+    expect(assistantMessage.processInfos?.map((item) => ({ title: item.title, description: item.description, response: item.response, state: item.state }))).toEqual([
+      { title: 'Web search', description: 'Searching', response: 'Found sources', state: 'resolved' },
+      { title: 'Web fetch', description: 'Failed to fetch', response: undefined, state: 'error' }
     ]);
   });
 });

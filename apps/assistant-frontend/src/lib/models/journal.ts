@@ -33,6 +33,7 @@ export interface ProcessInfo {
   toolCallId?: string;
   title: string;
   description: string;
+  response?: string;
   state: 'pending' | 'resolved' | 'error' | 'interrupted';
 }
 
