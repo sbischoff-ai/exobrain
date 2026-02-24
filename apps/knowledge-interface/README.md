@@ -64,6 +64,29 @@ From repository root:
 ./scripts/local/run-knowledge-interface.sh
 ```
 
+
+## gRPC inspection tips (grpcui)
+
+The service listens with **plaintext gRPC** in local development (no TLS).
+
+Use:
+
+```bash
+grpcui -plaintext localhost:50051
+```
+
+If you omit `-plaintext`, grpcui attempts TLS and you will see:
+
+`tls: first record does not look like a TLS handshake`
+
+### About the Memgraph compatibility warning
+
+You may see this on startup:
+
+`Failed to obtain server version. Unable to check client-server compatibility...`
+
+This comes from the Neo4j driver compatibility check path when used against Memgraph. It is noisy but non-fatal; the service can still run and serve gRPC if dependencies are reachable.
+
 ## Related docs
 
 - Service implementation notes: [`./docs/implementation.md`](./docs/implementation.md)

@@ -111,6 +111,14 @@ Default local app endpoints:
 
 When `APP_ENV=local`, knowledge-interface enables gRPC reflection so you can inspect APIs with `grpcui`.
 
+Use plaintext mode locally:
+
+```bash
+grpcui -plaintext localhost:50051
+```
+
+If you see `tls: first record does not look like a TLS handshake`, grpcui was run without `-plaintext`.
+
 ### 5) Run unit tests
 
 ```bash
