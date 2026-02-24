@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -37,12 +38,31 @@ class FakeRunner:
 
 
 class FakeMsg:
-    def __init__(self, payload: dict[str, object] | None = None, *, raw_data: bytes | None = None) -> None:
+    def __init__(self, payload: dict[str, object] | None = None, *, raw_data: bytes | None = None, delivery_attempt: int = 1) -> None:
         self.data = raw_data if raw_data is not None else json.dumps(payload or {}).encode("utf-8")
+        self.metadata = SimpleNamespace(num_delivered=delivery_attempt)
         self.acked = False
+        self.nacked = False
 
     async def ack(self) -> None:
         self.acked = True
+
+    async def nak(self) -> None:
+        self.nacked = True
+
+
+def _valid_payload(job_id: str = "job-1") -> dict[str, object]:
+    return {
+        "job_id": job_id,
+        "job_type": "knowledge.update",
+        "correlation_id": "corr-1",
+        "payload": {
+            "journal_reference": "2026/02/24",
+            "messages": [{"role": "user", "content": "hello"}],
+            "requested_by_user_id": "user-1",
+        },
+        "attempt": 0,
+    }
 
 
 @pytest.mark.asyncio
@@ -57,27 +77,22 @@ async def test_worker_marks_completed_for_new_job() -> None:
         repository=repo,
         runner=FakeRunner(),
         events_subject_prefix="jobs.events",
+        dlq_subject="jobs.dlq",
+        max_attempts=3,
         publish_event=publish,
     )
 
-    payload = {
-        "job_id": "job-1",
-        "job_type": "knowledge.update",
-        "correlation_id": "corr-1",
-        "payload": {"messages": ["note"]},
-        "attempt": 0,
-    }
-
-    msg = FakeMsg(payload)
+    msg = FakeMsg(_valid_payload())
     await worker.process_message(msg)
 
     assert msg.acked is True
+    assert msg.nacked is False
     assert ("completed", "job-1") in repo.calls
     assert events == ["jobs.events.knowledge.update.completed"]
 
 
 @pytest.mark.asyncio
-async def test_worker_accepts_legacy_envelope_without_payload() -> None:
+async def test_worker_sends_invalid_envelope_to_dlq_and_acks() -> None:
     events: list[str] = []
 
     async def publish(subject: str, _: bytes) -> None:
@@ -88,35 +103,8 @@ async def test_worker_accepts_legacy_envelope_without_payload() -> None:
         repository=repo,
         runner=FakeRunner(),
         events_subject_prefix="jobs.events",
-        publish_event=publish,
-    )
-
-    msg = FakeMsg(
-        {
-            "job_id": "job-legacy",
-            "job_type": "knowledge.update",
-            "correlation_id": "corr-1",
-            "attempt": 0,
-        }
-    )
-
-    await worker.process_message(msg)
-
-    assert msg.acked is True
-    assert ("completed", "job-legacy") in repo.calls
-    assert events == ["jobs.events.knowledge.update.completed"]
-
-
-@pytest.mark.asyncio
-async def test_worker_drops_invalid_envelope_and_acks() -> None:
-    async def publish(_: str, __: bytes) -> None:
-        return None
-
-    repo = FakeRepo(inserted=True)
-    worker = JobOrchestrator(
-        repository=repo,
-        runner=FakeRunner(),
-        events_subject_prefix="jobs.events",
+        dlq_subject="jobs.dlq",
+        max_attempts=3,
         publish_event=publish,
     )
     msg = FakeMsg(raw_data=b"not-json")
@@ -125,10 +113,89 @@ async def test_worker_drops_invalid_envelope_and_acks() -> None:
 
     assert msg.acked is True
     assert repo.calls == []
+    assert events == ["jobs.dlq"]
 
 
 @pytest.mark.asyncio
-async def test_worker_skips_duplicate_job() -> None:
+async def test_worker_sends_invalid_payload_to_dlq_and_acks() -> None:
+    events: list[str] = []
+
+    async def publish(subject: str, _: bytes) -> None:
+        events.append(subject)
+
+    repo = FakeRepo(inserted=True)
+    worker = JobOrchestrator(
+        repository=repo,
+        runner=FakeRunner(),
+        events_subject_prefix="jobs.events",
+        dlq_subject="jobs.dlq",
+        max_attempts=3,
+        publish_event=publish,
+    )
+    bad = _valid_payload()
+    bad["payload"] = {"journal_reference": "2026/02/24"}
+    msg = FakeMsg(bad)
+
+    await worker.process_message(msg)
+
+    assert msg.acked is True
+    assert repo.calls == []
+    assert events == ["jobs.dlq"]
+
+
+@pytest.mark.asyncio
+async def test_worker_naks_on_retryable_failure() -> None:
+    events: list[str] = []
+
+    async def publish(subject: str, _: bytes) -> None:
+        events.append(subject)
+
+    repo = FakeRepo(inserted=True)
+    worker = JobOrchestrator(
+        repository=repo,
+        runner=FakeRunner(should_fail=True),
+        events_subject_prefix="jobs.events",
+        dlq_subject="jobs.dlq",
+        max_attempts=3,
+        publish_event=publish,
+    )
+    msg = FakeMsg(_valid_payload(), delivery_attempt=1)
+
+    await worker.process_message(msg)
+
+    assert msg.acked is False
+    assert msg.nacked is True
+    assert ("failed", "job-1") in repo.calls
+    assert events == []
+
+
+@pytest.mark.asyncio
+async def test_worker_dlqs_when_max_attempts_reached() -> None:
+    events: list[str] = []
+
+    async def publish(subject: str, _: bytes) -> None:
+        events.append(subject)
+
+    repo = FakeRepo(inserted=True)
+    worker = JobOrchestrator(
+        repository=repo,
+        runner=FakeRunner(should_fail=True),
+        events_subject_prefix="jobs.events",
+        dlq_subject="jobs.dlq",
+        max_attempts=3,
+        publish_event=publish,
+    )
+    msg = FakeMsg(_valid_payload(), delivery_attempt=3)
+
+    await worker.process_message(msg)
+
+    assert msg.acked is True
+    assert msg.nacked is False
+    assert events == ["jobs.events.knowledge.update.failed", "jobs.dlq"]
+
+
+@pytest.mark.asyncio
+async def test_worker_skips_duplicate_first_delivery() -> None:
     async def publish(_: str, __: bytes) -> None:
         return None
 
@@ -137,17 +204,11 @@ async def test_worker_skips_duplicate_job() -> None:
         repository=repo,
         runner=FakeRunner(),
         events_subject_prefix="jobs.events",
+        dlq_subject="jobs.dlq",
+        max_attempts=3,
         publish_event=publish,
     )
-    msg = FakeMsg(
-        {
-            "job_id": "job-duplicate",
-            "job_type": "knowledge.update",
-            "correlation_id": "corr-1",
-            "payload": {},
-            "attempt": 0,
-        }
-    )
+    msg = FakeMsg(_valid_payload(job_id="job-duplicate"), delivery_attempt=1)
 
     await worker.process_message(msg)
 

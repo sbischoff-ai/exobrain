@@ -6,7 +6,7 @@ Python service responsible for asynchronous job orchestration.
 
 - Subscribes to NATS job request subjects.
 - Persists job lifecycle state in `job_orchestrator_db`.
-- Executes worker job scripts idempotently and publishes completion/failure events.
+- Executes worker job scripts idempotently, retries failures, and publishes completion/failure events.
 - Uses an orchestration/runner abstraction so local process execution can later switch to pod orchestration.
 
 ## Quick start
@@ -38,6 +38,8 @@ Apply local migrations:
 - `EXOBRAIN_NATS_URL` (default: `nats://localhost:14222`)
 - `JOB_QUEUE_SUBJECT` (default: `jobs.>`)
 - `JOB_EVENTS_SUBJECT_PREFIX` (default: `jobs.events`)
+- `JOB_DLQ_SUBJECT` (default: `jobs.dlq`, dead-letter queue subject)
+- `JOB_MAX_ATTEMPTS` (default: `3`, max delivery attempts before DLQ)
 - `WORKER_REPLICA_COUNT` (default: `1`, max concurrent worker processes)
 - `KNOWLEDGE_INTERFACE_GRPC_TARGET` (default: `localhost:15051`)
 - `KNOWLEDGE_INTERFACE_CONNECT_TIMEOUT_SECONDS` (default: `5.0`)
