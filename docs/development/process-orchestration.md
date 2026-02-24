@@ -35,7 +35,7 @@ This guide defines the canonical way to start Exobrain processes for local devel
 ## Operational checklist
 
 1. Start infra (`./scripts/local/infra-up.sh`).
-2. Run database/schema setup scripts needed for your profile.
+2. Run per-database setup scripts needed for your profile (`assistant-db-setup.sh`, `job-orchestrator-db-setup.sh`, `knowledge-schema-setup.sh`).
 3. Start app processes via mprocs wrapper script.
 4. Use `Ctrl+C` in mprocs to stop app processes.
 5. Stop infra (`./scripts/local/infra-down.sh`).

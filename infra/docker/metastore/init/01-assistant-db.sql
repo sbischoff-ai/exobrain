@@ -11,37 +11,5 @@ WHERE NOT EXISTS (
 REVOKE ALL ON DATABASE assistant_db FROM PUBLIC;
 GRANT CONNECT, TEMPORARY ON DATABASE assistant_db TO assistant_backend;
 
-SELECT 'CREATE ROLE job_orchestrator LOGIN PASSWORD ''job_orchestrator''' 
-WHERE NOT EXISTS (
-  SELECT FROM pg_catalog.pg_roles WHERE rolname = 'job_orchestrator'
-)\gexec
-
-SELECT 'CREATE DATABASE job_orchestrator_db OWNER job_orchestrator'
-WHERE NOT EXISTS (
-  SELECT FROM pg_database WHERE datname = 'job_orchestrator_db'
-)\gexec
-
-REVOKE ALL ON DATABASE job_orchestrator_db FROM PUBLIC;
-GRANT CONNECT, TEMPORARY ON DATABASE job_orchestrator_db TO job_orchestrator;
-
-SELECT 'CREATE ROLE knowledge_schema LOGIN PASSWORD ''knowledge_schema''' 
-WHERE NOT EXISTS (
-  SELECT FROM pg_catalog.pg_roles WHERE rolname = 'knowledge_schema'
-)\gexec
-
-SELECT 'CREATE DATABASE knowledge_graph_schema OWNER knowledge_schema'
-WHERE NOT EXISTS (
-  SELECT FROM pg_database WHERE datname = 'knowledge_graph_schema'
-)\gexec
-
-REVOKE ALL ON DATABASE knowledge_graph_schema FROM PUBLIC;
-GRANT CONNECT, TEMPORARY ON DATABASE knowledge_graph_schema TO knowledge_schema;
-
 \connect assistant_db
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
-
-\connect job_orchestrator_db
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
-
-\connect knowledge_graph_schema
 CREATE EXTENSION IF NOT EXISTS pgcrypto;

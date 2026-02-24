@@ -8,9 +8,17 @@ This directory contains canonical knowledge graph schema registry assets for `kn
 ## Local usage
 
 ```bash
+./scripts/local/knowledge-schema-setup.sh
+```
+
+Equivalent explicit commands:
+
+```bash
 ./scripts/local/knowledge-schema-migrate.sh
 ./scripts/local/knowledge-schema-seed.sh
 ```
+
+Bootstrap SQL: `infra/docker/metastore/init/03-knowledge-schema-db.sql`.
 
 ## Migration validation
 
