@@ -15,12 +15,14 @@ from app.services.contracts import (
     DatabaseServiceProtocol,
     JournalCacheProtocol,
     JournalServiceProtocol,
+    JobPublisherProtocol,
     SessionStoreProtocol,
     UserServiceProtocol,
 )
 from app.services.database_service import DatabaseService
 from app.services.journal_cache_store import RedisJournalCacheStore
 from app.services.journal_service import JournalService
+from app.services.job_publisher import NatsJobPublisher
 from app.services.session_store import RedisSessionStore
 from app.services.user_service import UserService
 
@@ -51,6 +53,14 @@ def build_container(settings: Settings) -> punq.Container:
             redis_url=settings.assistant_cache_redis_url,
             key_prefix=settings.assistant_journal_cache_key_prefix,
             jitter_max_seconds=settings.assistant_journal_cache_jitter_max_seconds,
+        ),
+        scope=punq.Scope.singleton,
+    )
+    container.register(
+        JobPublisherProtocol,
+        factory=lambda: NatsJobPublisher(
+            nats_url=settings.exobrain_nats_url,
+            subject_prefix=settings.jobs_subject_prefix,
         ),
         scope=punq.Scope.singleton,
     )

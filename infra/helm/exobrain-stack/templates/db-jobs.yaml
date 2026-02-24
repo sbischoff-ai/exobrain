@@ -156,19 +156,6 @@ spec:
               done
               psql "$POSTGRES_DSN" -v ON_ERROR_STOP=1 -f "$BOOTSTRAP_SQL_PATH"
               reshape check --dirs "$MIGRATIONS_DIR"
-              reshape migration start --complete --url "$KNOWLEDGE_SCHEMA_DSN" --dirs "$MIGRATIONS_DIR"
-          env:
-            - name: POSTGRES_DSN
-              value: {{ .Values.dbJobs.knowledgeSchemaMigrations.env.POSTGRES_DSN | quote }}
-            - name: KNOWLEDGE_SCHEMA_DSN
-              value: {{ .Values.dbJobs.knowledgeSchemaMigrations.env.KNOWLEDGE_SCHEMA_DSN | quote }}
-            - name: MIGRATIONS_DIR
-              value: {{ .Values.dbJobs.knowledgeSchemaMigrations.env.MIGRATIONS_DIR | quote }}
-            - name: BOOTSTRAP_SQL_PATH
-              value: {{ .Values.dbJobs.knowledgeSchemaMigrations.env.BOOTSTRAP_SQL_PATH | quote }}
-            - name: WAIT_TIMEOUT_SECONDS
-              value: {{ .Values.dbJobs.knowledgeSchemaMigrations.env.WAIT_TIMEOUT_SECONDS | quote }}
-          resources: {{- toYaml .Values.dbJobs.knowledgeSchemaMigrations.resources | nindent 12 }}
 {{- end }}
 ---
 {{- if .Values.dbJobs.knowledgeSchemaSeed.enabled }}
@@ -228,4 +215,89 @@ spec:
             - name: WAIT_TIMEOUT_SECONDS
               value: {{ .Values.dbJobs.knowledgeSchemaSeed.env.WAIT_TIMEOUT_SECONDS | quote }}
           resources: {{- toYaml .Values.dbJobs.knowledgeSchemaSeed.resources | nindent 12 }}
+{{- end }}
+---
+{{- if .Values.dbJobs.jobOrchestratorMigrations.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: exobrain-job-orchestrator-migrations
+  labels:
+    app.kubernetes.io/name: exobrain-job-orchestrator-migrations
+    {{- include "exobrain-stack.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "15"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: {{ .Values.dbJobs.jobOrchestratorMigrations.backoffLimit }}
+  ttlSecondsAfterFinished: {{ .Values.dbJobs.jobOrchestratorMigrations.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: exobrain-job-orchestrator-migrations
+    spec:
+      restartPolicy: Never
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: job-orchestrator-migrations
+          image: "{{ .Values.dbJobs.image.repository }}:{{ .Values.dbJobs.image.tag }}"
+          imagePullPolicy: {{ .Values.dbJobs.image.pullPolicy }}
+          command: ["bash", "-ec"]
+          args:
+            - |
+              start_time=$(date +%s)
+              until pg_isready -d "$POSTGRES_DSN" >/dev/null 2>&1; do
+                if (( $(date +%s) - start_time >= WAIT_TIMEOUT_SECONDS )); then
+                  echo "Timed out waiting for Postgres after ${WAIT_TIMEOUT_SECONDS}s" >&2
+                  exit 1
+                fi
+                sleep 2
+              done
+              psql "$POSTGRES_DSN" -v ON_ERROR_STOP=1 -f "$BOOTSTRAP_SQL_PATH"
+              reshape check --dirs "$MIGRATIONS_DIR"
+              reshape migration start --complete --url "$JOB_ORCHESTRATOR_DB_DSN" --dirs "$MIGRATIONS_DIR"
+          env:
+            - name: POSTGRES_DSN
+              value: {{ .Values.dbJobs.jobOrchestratorMigrations.env.POSTGRES_DSN | quote }}
+            - name: JOB_ORCHESTRATOR_DB_DSN
+              value: {{ .Values.dbJobs.jobOrchestratorMigrations.env.JOB_ORCHESTRATOR_DB_DSN | quote }}
+            - name: MIGRATIONS_DIR
+              value: {{ .Values.dbJobs.jobOrchestratorMigrations.env.MIGRATIONS_DIR | quote }}
+            - name: BOOTSTRAP_SQL_PATH
+              value: {{ .Values.dbJobs.jobOrchestratorMigrations.env.BOOTSTRAP_SQL_PATH | quote }}
+            - name: WAIT_TIMEOUT_SECONDS
+              value: {{ .Values.dbJobs.jobOrchestratorMigrations.env.WAIT_TIMEOUT_SECONDS | quote }}
+          resources: {{- toYaml .Values.dbJobs.jobOrchestratorMigrations.resources | nindent 12 }}
+          image: "{{ .Values.dbJobs.image.repository }}:{{ .Values.dbJobs.image.tag }}"
+          imagePullPolicy: {{ .Values.dbJobs.image.pullPolicy }}
+          command: ["bash", "-ec"]
+          args:
+            - |
+              start_time=$(date +%s)
+              until pg_isready -d "$POSTGRES_DSN" >/dev/null 2>&1; do
+                if (( $(date +%s) - start_time >= WAIT_TIMEOUT_SECONDS )); then
+                  echo "Timed out waiting for Postgres after ${WAIT_TIMEOUT_SECONDS}s" >&2
+                  exit 1
+                fi
+                sleep 2
+              done
+              psql "$POSTGRES_DSN" -v ON_ERROR_STOP=1 -f "$BOOTSTRAP_SQL_PATH"
+              reshape check --dirs "$MIGRATIONS_DIR"
+              reshape migration start --complete --url "$KNOWLEDGE_SCHEMA_DSN" --dirs "$MIGRATIONS_DIR"
+          env:
+            - name: POSTGRES_DSN
+              value: {{ .Values.dbJobs.knowledgeSchemaMigrations.env.POSTGRES_DSN | quote }}
+            - name: KNOWLEDGE_SCHEMA_DSN
+              value: {{ .Values.dbJobs.knowledgeSchemaMigrations.env.KNOWLEDGE_SCHEMA_DSN | quote }}
+            - name: MIGRATIONS_DIR
+              value: {{ .Values.dbJobs.knowledgeSchemaMigrations.env.MIGRATIONS_DIR | quote }}
+            - name: BOOTSTRAP_SQL_PATH
+              value: {{ .Values.dbJobs.knowledgeSchemaMigrations.env.BOOTSTRAP_SQL_PATH | quote }}
+            - name: WAIT_TIMEOUT_SECONDS
+              value: {{ .Values.dbJobs.knowledgeSchemaMigrations.env.WAIT_TIMEOUT_SECONDS | quote }}
+          resources: {{- toYaml .Values.dbJobs.knowledgeSchemaMigrations.resources | nindent 12 }}
 {{- end }}

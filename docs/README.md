@@ -22,6 +22,11 @@ Use this page as the index for Exobrain documentation.
 
 - [Major changes log](operations/major-changes.md)
 
+## Metastore assets
+
+- [Assistant backend metastore](../infra/metastore/assistant-backend/README.md)
+- [Job orchestrator metastore](../infra/metastore/job-orchestrator/README.md)
+
 ## Agent-focused materials
 
 - [Codex runbook](agents/codex-runbook.agent.md)

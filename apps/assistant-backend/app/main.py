@@ -9,7 +9,7 @@ from app.api.routers.health import router as health_router
 from app.core.logging import configure_logging
 from app.core.settings import get_settings
 from app.dependency_injection import build_container, register_chat_agent
-from app.services.contracts import DatabaseServiceProtocol, JournalCacheProtocol, SessionStoreProtocol
+from app.services.contracts import DatabaseServiceProtocol, JobPublisherProtocol, JournalCacheProtocol, SessionStoreProtocol
 
 settings = get_settings()
 configure_logging(settings.effective_log_level)
@@ -33,6 +33,10 @@ async def lifespan(app: FastAPI):
     await journal_cache.ping()
     logger.info("assistant cache connection initialized")
 
+    job_publisher = container.resolve(JobPublisherProtocol)
+    await job_publisher.connect()
+    logger.info("job publisher connection initialized")
+
     main_agent = await build_main_agent(settings)
     register_chat_agent(container, main_agent)
 
@@ -43,6 +47,7 @@ async def lifespan(app: FastAPI):
     finally:
         if hasattr(main_agent, "aclose"):
             await main_agent.aclose()
+        await job_publisher.close()
         await journal_cache.close()
         await session_store.close()
         await database_service.disconnect()
