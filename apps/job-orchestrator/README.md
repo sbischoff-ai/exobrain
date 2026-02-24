@@ -52,3 +52,8 @@ Keep request subject patterns narrow enough that they do not also match events/D
 
 - Docs hub: [`../../docs/README.md`](../../docs/README.md)
 - Metastore migrations: [`../../infra/metastore/job-orchestrator/README.md`](../../infra/metastore/job-orchestrator/README.md)
+
+
+## Troubleshooting
+
+- If `knowledge.update` retries with timeout errors, verify `KNOWLEDGE_INTERFACE_GRPC_TARGET` points to a reachable knowledge-interface gRPC endpoint.
