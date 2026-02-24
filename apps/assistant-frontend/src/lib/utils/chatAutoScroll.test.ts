@@ -51,6 +51,20 @@ describe('ChatAutoScroller', () => {
     ).toBe('stream-fast');
   });
 
+
+  it('keeps catchup phase active below bottom threshold when forced', () => {
+    const scroller = new ChatAutoScroller();
+
+    expect(
+      scroller.nextPhase({
+        streamingInProgress: false,
+        streamMessageTopAtOrAboveContainerTop: true,
+        distanceFromBottom: 5,
+        forceCatchup: true
+      }).phase
+    ).toBe('catchup');
+  });
+
   it('continues catchup scrolling after stream ends until bottom is reached', () => {
     const scroller = new ChatAutoScroller();
 
