@@ -5,7 +5,7 @@ import ChatView from './ChatView.svelte';
 
 describe('ChatView', () => {
 
-  it('renders assistant process info labels', () => {
+  it('renders assistant process info labels and toggles card stack', async () => {
     render(ChatView, {
       props: {
         messages: [
@@ -16,17 +16,23 @@ describe('ChatView', () => {
             processInfos: [
               { id: 'p-1', title: 'Web search', description: 'Searching', state: 'pending' },
               { id: 'p-2', title: 'Web fetch', description: 'Fetching', response: 'Done', state: 'resolved' },
-              { id: 'p-3', title: 'Error', description: 'Failed', state: 'error' }
+              { id: 'p-3', title: 'Error', description: 'Failed', state: 'error' },
+              { id: 'p-4', title: 'Calendar', description: 'Booked', response: 'Confirmed', state: 'resolved' }
             ]
           }
         ]
       }
     });
 
-    expect(screen.getByText('Web search')).toBeInTheDocument();
-    expect(screen.getByText('Searching')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Unfold tool call cards' })).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Unfold tool call cards' }));
+    expect(screen.getByRole('button', { name: 'Fold tool call cards' })).toBeInTheDocument();
     expect(screen.getByText('Done')).toBeInTheDocument();
     expect(screen.getByText('Failed')).toBeInTheDocument();
+    expect(screen.getByText('Confirmed')).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Fold tool call cards' }));
     expect(screen.getByRole('button', { name: 'Unfold tool call cards' })).toBeInTheDocument();
   });
 
