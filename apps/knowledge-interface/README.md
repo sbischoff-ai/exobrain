@@ -1,29 +1,29 @@
 # Exobrain Knowledge Interface
 
-Rust + tonic gRPC service for GraphRAG ingestion and schema management.
+Rust + tonic gRPC service for GraphRAG ingestion and canonical KG schema registry access.
 
 ## What this service provides
 
-- Dynamic graph schema metadata in PostgreSQL (`knowledge_graph_schema` database).
+- Canonical knowledge schema registry in PostgreSQL (`knowledge_graph_schema`), including:
+  - schema types (node/edge)
+  - type inheritance/subtyping
+  - per-type property contracts
+  - edge endpoint rules (domain/range guidance)
 - gRPC API for:
   - schema introspection (`GetSchema`)
   - schema upsert (`UpsertSchemaType`)
   - unified graph delta ingestion (`IngestGraphDelta`) for entities, edges, and blocks.
-- Pluggable adapters behind traits for:
-  - graph store (Neo4j/Memgraph via `neo4rs`)
-  - vector store (Qdrant via `qdrant-client`)
-  - embedding model provider (OpenAI embeddings API)
+- Pluggable adapters behind traits for graph store, vector store, and embeddings.
 
-Retrieval/query over the graph is intentionally out of scope in this increment.
+Retrieval/query over the graph remains out of scope.
 
-## gRPC methods
+## gRPC compatibility note (`block_types`)
 
-- `Health`
-- `GetSchema`
-- `UpsertSchemaType`
-- `IngestGraphDelta`
+Canonical storage does **not** use a separate block kind. Blocks are node types (`node.block`, `node.quote`).
 
-See `proto/knowledge.proto` for payload details.
+For proto compatibility:
+- `node_types` includes canonical block node types.
+- `block_types` is returned as a compatibility view containing `node.block` and `node.quote` (with `kind=block` in response payload only).
 
 ## Environment configuration
 
@@ -36,8 +36,24 @@ cp apps/knowledge-interface/.env.example apps/knowledge-interface/.env
 `OPENAI_API_KEY` is intentionally not stored in `.env`.
 
 Reflection behavior:
-- `APP_ENV=local`: gRPC reflection enabled (useful for `grpcui`).
+- `APP_ENV=local`: gRPC reflection enabled (`grpcui` friendly).
 - non-local env (for example `cluster`): reflection disabled.
+
+## Schema migrations and seed
+
+Knowledge schema is managed by **Reshape migrations** (service startup does not run DDL).
+
+Apply migrations:
+
+```bash
+./scripts/local/knowledge-schema-migrate.sh
+```
+
+Apply starter schema seed:
+
+```bash
+./scripts/local/knowledge-schema-seed.sh
+```
 
 ## Local build and run
 
@@ -47,20 +63,6 @@ From repository root:
 ./scripts/local/build-knowledge-interface.sh
 ./scripts/local/run-knowledge-interface.sh
 ```
-
-Seed starter schema types:
-
-```bash
-./scripts/local/knowledge-schema-seed.sh
-```
-
-## Local environment endpoints
-
-- Knowledge interface gRPC: `localhost:50051`
-- PostgreSQL: `localhost:15432`
-- Qdrant: `localhost:16333` (HTTP), `localhost:16334` (gRPC)
-- Memgraph: `localhost:17687` (Bolt), `localhost:17444` (HTTP)
-- NATS: `localhost:14222` (client), `localhost:18222` (monitoring)
 
 ## Related docs
 

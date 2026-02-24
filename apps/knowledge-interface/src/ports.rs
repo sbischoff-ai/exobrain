@@ -1,13 +1,18 @@
 use anyhow::Result;
 use async_trait::async_trait;
 
-use crate::domain::{EmbeddedBlock, GraphDelta, SchemaType};
+use crate::domain::{
+    EdgeEndpointRule, EmbeddedBlock, GraphDelta, SchemaType, TypeInheritance, TypeProperty,
+};
 
 #[async_trait]
 pub trait SchemaRepository: Send + Sync {
-    async fn ensure_schema(&self) -> Result<()>;
     async fn get_by_kind(&self, kind: &str) -> Result<Vec<SchemaType>>;
+    async fn get_block_compatibility_types(&self) -> Result<Vec<SchemaType>>;
     async fn upsert(&self, schema_type: &SchemaType) -> Result<SchemaType>;
+    async fn get_type_inheritance(&self) -> Result<Vec<TypeInheritance>>;
+    async fn get_properties_for_type(&self, owner_type_id: &str) -> Result<Vec<TypeProperty>>;
+    async fn get_edge_endpoint_rules(&self) -> Result<Vec<EdgeEndpointRule>>;
 }
 
 #[async_trait]

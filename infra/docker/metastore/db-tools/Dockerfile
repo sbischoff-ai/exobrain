@@ -21,3 +21,5 @@ COPY infra/metastore/assistant-backend/migrations /opt/exobrain/assistant-backen
 COPY infra/metastore/assistant-backend/seeds /opt/exobrain/assistant-backend/seeds
 
 CMD ["bash"]
+COPY infra/metastore/knowledge-interface/migrations /opt/exobrain/knowledge-interface/migrations
+COPY infra/metastore/knowledge-interface/seeds /opt/exobrain/knowledge-interface/seeds

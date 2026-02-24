@@ -1,0 +1,48 @@
+[[actions]]
+type = "create_table"
+name = "knowledge_graph_schema_types"
+primary_key = ["id"]
+
+    [[actions.columns]]
+    name = "id"
+    type = "TEXT"
+    nullable = false
+
+    [[actions.columns]]
+    name = "kind"
+    type = "TEXT"
+    nullable = false
+
+    [[actions.columns]]
+    name = "name"
+    type = "TEXT"
+    nullable = false
+
+    [[actions.columns]]
+    name = "description"
+    type = "TEXT"
+    nullable = false
+
+    [[actions.columns]]
+    name = "active"
+    type = "BOOLEAN"
+    nullable = false
+    default = "TRUE"
+
+    [[actions.columns]]
+    name = "universe_id"
+    type = "TEXT"
+
+    [[actions.columns]]
+    name = "updated_at"
+    type = "TIMESTAMPTZ"
+    nullable = false
+    default = "NOW()"
+
+[[actions]]
+type = "add_index"
+table = "knowledge_graph_schema_types"
+
+    [actions.index]
+    name = "idx_kg_schema_types_kind_active"
+    columns = ["kind", "active"]
