@@ -1,4 +1,4 @@
-export type ScrollPhase = 'idle' | 'stream-fast' | 'stream-slow' | 'catchup';
+export type ScrollPhase = 'idle' | 'stream-follow' | 'catchup';
 
 export interface AutoScrollSnapshot {
   phase: ScrollPhase;
@@ -8,24 +8,20 @@ export interface AutoScrollSnapshot {
 interface AutoScrollConfig {
   bottomThresholdPx: number;
   resumeThresholdPx: number;
-  fastPxPerSecond: number;
-  slowPxPerSecond: number;
+  followPxPerSecond: number;
   catchupPxPerSecond: number;
 }
 
 const defaultConfig: AutoScrollConfig = {
   bottomThresholdPx: 20,
   resumeThresholdPx: 24,
-  fastPxPerSecond: 900,
-  slowPxPerSecond: 22,
-  catchupPxPerSecond: 22
+  followPxPerSecond: 900,
+  catchupPxPerSecond: 900
 };
 
 export class ChatAutoScroller {
   private suspended = false;
   private phase: ScrollPhase = 'idle';
-  private pendingStepPx = 0;
-  private pendingStepPhase: ScrollPhase = 'idle';
 
   constructor(private readonly config: AutoScrollConfig = defaultConfig) {}
 
@@ -45,7 +41,6 @@ export class ChatAutoScroller {
 
   nextPhase(params: {
     streamingInProgress: boolean;
-    streamMessageTopAtOrAboveContainerTop: boolean;
     distanceFromBottom: number;
     forceCatchup?: boolean;
   }): AutoScrollSnapshot {
@@ -55,7 +50,7 @@ export class ChatAutoScroller {
     }
 
     if (params.streamingInProgress) {
-      this.phase = params.streamMessageTopAtOrAboveContainerTop ? 'stream-slow' : 'stream-fast';
+      this.phase = 'stream-follow';
       return this.getSnapshot();
     }
 
@@ -69,38 +64,13 @@ export class ChatAutoScroller {
   }
 
   getStepForPhase(phase: ScrollPhase, deltaMs: number): number {
-    if (phase === 'stream-fast') {
-      return (this.config.fastPxPerSecond * deltaMs) / 1000;
-    }
-    if (phase === 'stream-slow') {
-      return (this.config.slowPxPerSecond * deltaMs) / 1000;
+    if (phase === 'stream-follow') {
+      return (this.config.followPxPerSecond * deltaMs) / 1000;
     }
     if (phase === 'catchup') {
       return (this.config.catchupPxPerSecond * deltaMs) / 1000;
     }
     return 0;
-  }
-
-  consumeStepForPhase(phase: ScrollPhase, deltaMs: number): number {
-    if (phase === 'idle') {
-      this.pendingStepPx = 0;
-      this.pendingStepPhase = phase;
-      return 0;
-    }
-
-    if (this.pendingStepPhase !== phase) {
-      this.pendingStepPx = 0;
-      this.pendingStepPhase = phase;
-    }
-
-    this.pendingStepPx += this.getStepForPhase(phase, deltaMs);
-    const wholePixelStep = Math.floor(this.pendingStepPx);
-
-    if (wholePixelStep > 0) {
-      this.pendingStepPx -= wholePixelStep;
-    }
-
-    return wholePixelStep;
   }
 }
 

@@ -3,29 +3,15 @@ import { describe, expect, it } from 'vitest';
 import { ChatAutoScroller } from './chatAutoScroll';
 
 describe('ChatAutoScroller', () => {
-  it('uses fast phase while stream message top is still below container top', () => {
+  it('uses follow phase while streaming is active', () => {
     const scroller = new ChatAutoScroller();
 
     const snapshot = scroller.nextPhase({
       streamingInProgress: true,
-      streamMessageTopAtOrAboveContainerTop: false,
       distanceFromBottom: 240
     });
 
-    expect(snapshot.phase).toBe('stream-fast');
-  });
-
-  it('switches to slow phase once stream message reaches top boundary', () => {
-    const scroller = new ChatAutoScroller();
-
-    const snapshot = scroller.nextPhase({
-      streamingInProgress: true,
-      streamMessageTopAtOrAboveContainerTop: true,
-      distanceFromBottom: 200
-    });
-
-    expect(snapshot.phase).toBe('stream-slow');
-    expect(Math.round(scroller.getStepForPhase('stream-slow', 1000))).toBe(22);
+    expect(snapshot.phase).toBe('stream-follow');
   });
 
   it('suspends and resumes when user returns close to bottom', () => {
@@ -35,7 +21,6 @@ describe('ChatAutoScroller', () => {
     expect(
       scroller.nextPhase({
         streamingInProgress: true,
-        streamMessageTopAtOrAboveContainerTop: false,
         distanceFromBottom: 140
       }).phase
     ).toBe('idle');
@@ -45,26 +30,9 @@ describe('ChatAutoScroller', () => {
     expect(
       scroller.nextPhase({
         streamingInProgress: true,
-        streamMessageTopAtOrAboveContainerTop: false,
         distanceFromBottom: 140
       }).phase
-    ).toBe('stream-fast');
-  });
-
-
-
-  it('accumulates fractional slow-phase steps into whole-pixel movement', () => {
-    const scroller = new ChatAutoScroller();
-
-    expect(scroller.consumeStepForPhase('stream-slow', 16)).toBe(0);
-    expect(scroller.consumeStepForPhase('stream-slow', 16)).toBe(0);
-
-    let moved = 0;
-    for (let index = 0; index < 40; index += 1) {
-      moved += scroller.consumeStepForPhase('stream-slow', 16);
-    }
-
-    expect(moved).toBeGreaterThanOrEqual(1);
+    ).toBe('stream-follow');
   });
 
   it('keeps catchup phase active below bottom threshold when forced', () => {
@@ -73,7 +41,6 @@ describe('ChatAutoScroller', () => {
     expect(
       scroller.nextPhase({
         streamingInProgress: false,
-        streamMessageTopAtOrAboveContainerTop: true,
         distanceFromBottom: 5,
         forceCatchup: true
       }).phase
@@ -86,7 +53,6 @@ describe('ChatAutoScroller', () => {
     expect(
       scroller.nextPhase({
         streamingInProgress: false,
-        streamMessageTopAtOrAboveContainerTop: true,
         distanceFromBottom: 90
       }).phase
     ).toBe('catchup');
@@ -94,11 +60,10 @@ describe('ChatAutoScroller', () => {
     expect(
       scroller.nextPhase({
         streamingInProgress: false,
-        streamMessageTopAtOrAboveContainerTop: true,
         distanceFromBottom: 5
       }).phase
     ).toBe('idle');
 
-    expect(Math.round(scroller.getStepForPhase('catchup', 1000))).toBe(22);
+    expect(Math.round(scroller.getStepForPhase('catchup', 1000))).toBe(900);
   });
 });

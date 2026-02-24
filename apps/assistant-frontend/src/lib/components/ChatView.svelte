@@ -46,7 +46,6 @@
   let smoothScrollDistance = 0;
   let frameHandle: number | null = null;
   let previousFrameTime = 0;
-  let stalledAutoScrollFrames = 0;
 
   $: {
     const candidateStreamingMessageId = autoScrollEnabled && streamingInProgress ? getCurrentStreamingMessageId() : null;
@@ -77,7 +76,6 @@
         cancelAnimationFrame(frameHandle);
         frameHandle = null;
       }
-      stalledAutoScrollFrames = 0;
     }
   }
 
@@ -257,21 +255,7 @@
     }
   }
 
-  function isStreamingMessageAtTopBoundary(messageId: string): boolean {
-    if (!messagesContainer) {
-      return false;
-    }
 
-    const streamElement = messagesContainer.querySelector<HTMLElement>(`[data-message-id="${messageId}"]`);
-    if (!streamElement) {
-      return false;
-    }
-
-    const streamTopWithinContainer = streamElement.offsetTop - messagesContainer.scrollTop;
-    const streamCoversViewportHeight = streamElement.offsetHeight >= messagesContainer.clientHeight;
-
-    return streamCoversViewportHeight && streamTopWithinContainer <= 8;
-  }
 
   function ensureAutoScrollLoop(): void {
     if (!messagesContainer) {
@@ -301,9 +285,6 @@
 
     const next = autoScroller.nextPhase({
       streamingInProgress: autoScrollEnabled && streamingInProgress,
-      streamMessageTopAtOrAboveContainerTop: activeStreamingMessageId
-        ? isStreamingMessageAtTopBoundary(activeStreamingMessageId)
-        : false,
       distanceFromBottom: shouldCatchup || streamingInProgress || shouldContinueSmoothScroll ? distanceFromBottom : 0,
       forceCatchup: shouldCatchup
     });
@@ -345,15 +326,11 @@
     if (distanceFromBottom <= 1) {
       catchupUntilBottom = false;
       smoothScrollToBottomActive = false;
-      stalledAutoScrollFrames = 0;
       return;
     }
 
     const snapshot = autoScroller.nextPhase({
       streamingInProgress: autoScrollEnabled && streamingInProgress,
-      streamMessageTopAtOrAboveContainerTop: activeStreamingMessageId
-        ? isStreamingMessageAtTopBoundary(activeStreamingMessageId)
-        : false,
       distanceFromBottom,
       forceCatchup: shouldCatchup
     });
@@ -368,7 +345,7 @@
     const easeOutProgress = 2 * normalizedTime - normalizedTime * normalizedTime;
     const easedTop = smoothScrollStartTop + smoothScrollDistance * easeOutProgress;
 
-    const scrollStep = autoScroller.consumeStepForPhase(snapshot.phase, deltaMs);
+    const scrollStep = autoScroller.getStepForPhase(snapshot.phase, deltaMs);
     const nextTop = shouldContinueSmoothScroll
       ? Math.min(easedTop, maxScrollTop)
       : Math.min(currentTop + scrollStep, maxScrollTop);
@@ -380,26 +357,17 @@
       lastObservedScrollTop = updatedTop;
       isProgrammaticScroll = false;
 
-      if (updatedTop <= currentTop + 0.5) {
-        stalledAutoScrollFrames += 1;
-        if (!streamingInProgress && stalledAutoScrollFrames >= 3) {
-          catchupUntilBottom = false;
-          smoothScrollToBottomActive = false;
-          stalledAutoScrollFrames = 0;
-          return;
-        }
-      } else {
-        stalledAutoScrollFrames = 0;
-      }
-    } else {
-      if (!streamingInProgress && !shouldCatchup) {
+      if (!streamingInProgress && updatedTop <= currentTop + 0.5) {
         catchupUntilBottom = false;
         smoothScrollToBottomActive = false;
-        stalledAutoScrollFrames = 0;
         return;
       }
-      stalledAutoScrollFrames = 0;
+    } else if (!streamingInProgress) {
+      catchupUntilBottom = false;
+      smoothScrollToBottomActive = false;
+      return;
     }
+
 
     if (shouldContinueSmoothScroll && normalizedTime >= 1) {
       isProgrammaticScroll = true;
