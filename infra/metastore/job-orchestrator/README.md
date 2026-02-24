@@ -7,8 +7,16 @@ This directory contains Reshape migrations for the `job_orchestrator_db` databas
 ## Local setup
 
 ```bash
+./scripts/local/job-orchestrator-db-setup.sh
+```
+
+Equivalent migrate-only command:
+
+```bash
 ./scripts/local/job-orchestrator-db-migrate.sh
 ```
+
+Bootstrap SQL: `infra/docker/metastore/init/02-job-orchestrator-db.sql`.
 
 ## Native agent setup
 

@@ -98,6 +98,10 @@ metastore:
     username: assistant_backend
     password: assistant_backend
     database: assistant_db
+  jobOrchestratorDb:
+    username: job_orchestrator
+    password: job_orchestrator
+    database: job_orchestrator_db
   knowledgeSchemaDb:
     username: knowledge_schema
     password: knowledge_schema
@@ -260,7 +264,7 @@ dbJobs:
       POSTGRES_DSN: postgresql://exobrain:exobrain@exobrain-metastore:5432/postgres
       JOB_ORCHESTRATOR_DB_DSN: postgresql://job_orchestrator:job_orchestrator@exobrain-metastore:5432/job_orchestrator_db
       MIGRATIONS_DIR: /opt/exobrain/job-orchestrator/migrations
-      BOOTSTRAP_SQL_PATH: /opt/exobrain/sql/init/01-assistant-db.sql
+      BOOTSTRAP_SQL_PATH: /opt/exobrain/sql/init/02-job-orchestrator-db.sql
       WAIT_TIMEOUT_SECONDS: "180"
     resources:
       requests:
@@ -295,7 +299,7 @@ dbJobs:
       POSTGRES_DSN: postgresql://exobrain:exobrain@exobrain-metastore:5432/postgres
       KNOWLEDGE_SCHEMA_DSN: postgresql://knowledge_schema:knowledge_schema@exobrain-metastore:5432/knowledge_graph_schema
       MIGRATIONS_DIR: /opt/exobrain/knowledge-interface/migrations
-      BOOTSTRAP_SQL_PATH: /opt/exobrain/sql/init/01-assistant-db.sql
+      BOOTSTRAP_SQL_PATH: /opt/exobrain/sql/init/03-knowledge-schema-db.sql
       WAIT_TIMEOUT_SECONDS: "180"
     resources:
       requests:

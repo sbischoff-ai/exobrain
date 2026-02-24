@@ -11,7 +11,7 @@ fi
 
 JOB_ORCHESTRATOR_DB_DSN="${JOB_ORCHESTRATOR_DB_DSN:-postgresql://job_orchestrator:job_orchestrator@localhost:15432/job_orchestrator_db?sslmode=disable}"
 MIGRATIONS_DIR="${MIGRATIONS_DIR:-${ROOT_DIR}/infra/metastore/job-orchestrator/migrations}"
-BOOTSTRAP_SQL_PATH="${BOOTSTRAP_SQL_PATH:-${ROOT_DIR}/infra/docker/metastore/init/01-assistant-db.sql}"
+BOOTSTRAP_SQL_PATH="${BOOTSTRAP_SQL_PATH:-${ROOT_DIR}/infra/docker/metastore/init/02-job-orchestrator-db.sql}"
 
 if [[ "$(id -u)" -eq 0 ]]; then
   runuser -u postgres -- psql -v ON_ERROR_STOP=1 -f "${BOOTSTRAP_SQL_PATH}" postgres

@@ -17,10 +17,12 @@ RUN apt-get update \
 
 COPY --from=builder /usr/local/cargo/bin/reshape /usr/local/bin/reshape
 COPY infra/docker/metastore/init/01-assistant-db.sql /opt/exobrain/sql/init/01-assistant-db.sql
+COPY infra/docker/metastore/init/02-job-orchestrator-db.sql /opt/exobrain/sql/init/02-job-orchestrator-db.sql
+COPY infra/docker/metastore/init/03-knowledge-schema-db.sql /opt/exobrain/sql/init/03-knowledge-schema-db.sql
 COPY infra/metastore/assistant-backend/migrations /opt/exobrain/assistant-backend/migrations
 COPY infra/metastore/assistant-backend/seeds /opt/exobrain/assistant-backend/seeds
 COPY infra/metastore/job-orchestrator/migrations /opt/exobrain/job-orchestrator/migrations
-
-CMD ["bash"]
 COPY infra/metastore/knowledge-interface/migrations /opt/exobrain/knowledge-interface/migrations
 COPY infra/metastore/knowledge-interface/seeds /opt/exobrain/knowledge-interface/seeds
+
+CMD ["bash"]

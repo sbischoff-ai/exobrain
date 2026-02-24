@@ -4,7 +4,7 @@ set -euo pipefail
 POSTGRES_DSN=${POSTGRES_DSN:-postgresql://exobrain:exobrain@localhost:15432/postgres}
 KNOWLEDGE_SCHEMA_DSN=${KNOWLEDGE_SCHEMA_DSN:-postgresql://knowledge_schema:knowledge_schema@localhost:15432/knowledge_graph_schema}
 MIGRATIONS_DIR=${MIGRATIONS_DIR:-infra/metastore/knowledge-interface/migrations}
-BOOTSTRAP_SQL_PATH=${BOOTSTRAP_SQL_PATH:-infra/docker/metastore/init/01-assistant-db.sql}
+BOOTSTRAP_SQL_PATH=${BOOTSTRAP_SQL_PATH:-infra/docker/metastore/init/03-knowledge-schema-db.sql}
 
 psql "$POSTGRES_DSN" -v ON_ERROR_STOP=1 -f "$BOOTSTRAP_SQL_PATH"
 

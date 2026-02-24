@@ -41,14 +41,7 @@ This starts PostgreSQL, Redis, NATS, Qdrant, and Memgraph.
 ```bash
 ./scripts/local/assistant-db-setup.sh
 ./scripts/local/job-orchestrator-db-setup.sh
-```
-
-When running knowledge-interface, also apply schema assets:
-
-```bash
-./scripts/local/knowledge-schema-migrate.sh
-# optional
-./scripts/local/knowledge-schema-seed.sh
+./scripts/local/knowledge-schema-setup.sh
 ```
 
 ### 3) Build applications (when dependencies or source changed)

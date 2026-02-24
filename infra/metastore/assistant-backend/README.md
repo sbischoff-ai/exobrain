@@ -33,6 +33,8 @@ Run migrations and seed in order with:
 ./scripts/local/assistant-db-setup.sh
 ```
 
+Database bootstrap is service-specific and uses `infra/docker/metastore/init/01-assistant-db.sql`.
+
 ## k3d / Kubernetes setup
 
 For a running local k3d cluster with the Helm chart deployed, run migrations with:

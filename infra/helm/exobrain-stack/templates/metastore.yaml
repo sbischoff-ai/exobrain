@@ -23,6 +23,24 @@ data:
     \connect {{ .Values.metastore.assistantDb.database }}
     CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
+  02-job-orchestrator-db.sql: |
+    SELECT 'CREATE ROLE {{ .Values.metastore.jobOrchestratorDb.username }} LOGIN PASSWORD ''{{ .Values.metastore.jobOrchestratorDb.password }}''' 
+    WHERE NOT EXISTS (
+      SELECT FROM pg_catalog.pg_roles WHERE rolname = '{{ .Values.metastore.jobOrchestratorDb.username }}'
+    )\gexec
+
+    SELECT 'CREATE DATABASE {{ .Values.metastore.jobOrchestratorDb.database }} OWNER {{ .Values.metastore.jobOrchestratorDb.username }}'
+    WHERE NOT EXISTS (
+      SELECT FROM pg_database WHERE datname = '{{ .Values.metastore.jobOrchestratorDb.database }}'
+    )\gexec
+
+    REVOKE ALL ON DATABASE {{ .Values.metastore.jobOrchestratorDb.database }} FROM PUBLIC;
+    GRANT CONNECT, TEMPORARY ON DATABASE {{ .Values.metastore.jobOrchestratorDb.database }} TO {{ .Values.metastore.jobOrchestratorDb.username }};
+
+    \connect {{ .Values.metastore.jobOrchestratorDb.database }}
+    CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+  03-knowledge-schema-db.sql: |
     SELECT 'CREATE ROLE {{ .Values.metastore.knowledgeSchemaDb.username }} LOGIN PASSWORD ''{{ .Values.metastore.knowledgeSchemaDb.password }}''' 
     WHERE NOT EXISTS (
       SELECT FROM pg_catalog.pg_roles WHERE rolname = '{{ .Values.metastore.knowledgeSchemaDb.username }}'
@@ -74,8 +92,7 @@ spec:
             - name: metastore-data
               mountPath: /var/lib/postgresql/data
             - name: metastore-init
-              mountPath: /docker-entrypoint-initdb.d/01-assistant-db.sql
-              subPath: 01-assistant-db.sql
+              mountPath: /docker-entrypoint-initdb.d
           resources: {{- toYaml .Values.metastore.resources | nindent 12 }}
       volumes:
         - name: metastore-init
