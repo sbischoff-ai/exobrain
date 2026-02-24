@@ -8,6 +8,7 @@ This document is code-oriented: it helps a new contributor quickly navigate the 
   - process startup
   - environment loading
   - adapter wiring
+  - startup root-graph bootstrap check
   - gRPC server + reflection toggle
 - `src/service.rs`
   - application orchestration (`KnowledgeApplication`)
@@ -49,6 +50,16 @@ This document is code-oriented: it helps a new contributor quickly navigate the 
 3. service extracts block text from typed properties (`text`) and generates embeddings.
 4. service writes block vectors + payload metadata to Qdrant.
 5. note: this is currently sequential (graph then vectors), not yet outbox-orchestrated.
+
+### 4) `InitializeUserGraph`
+
+1. gRPC handler validates and forwards `user_id` + `user_name`.
+2. `KnowledgeApplication::initialize_user_graph` builds a deterministic starter delta.
+3. starter entities/edge are upserted to Memgraph and assistant block embedding is upserted to Qdrant.
+
+## Startup root graph seeding
+
+During service startup (`main.rs`), `KnowledgeApplication::ensure_common_root_graph` checks Memgraph for the shared Exobrain root graph and seeds it when absent. Seeding uses standard ingestion flow so block embeddings are generated with the configured embedding model.
 
 ## Internal architecture pattern
 

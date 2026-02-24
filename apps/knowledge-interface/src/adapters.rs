@@ -269,6 +269,10 @@ impl GraphStore for Neo4jGraphStore {
                 row.insert("universe_id", entity.universe_id.clone());
                 row.insert("user_id", entity.user_id.clone());
                 row.insert(
+                    "aliases",
+                    prop_as_string(&entity.properties, "aliases").unwrap_or_default(),
+                );
+                row.insert(
                     "visibility",
                     visibility_as_str(entity.visibility).to_string(),
                 );
@@ -280,7 +284,7 @@ impl GraphStore for Neo4jGraphStore {
             self.graph
                 .run(
                     query(
-                        "UNWIND $rows AS row MERGE (e:Entity {id: row.id}) SET e.name = row.name, e.user_id = row.user_id, e.visibility = row.visibility MERGE (u:Universe {id: row.universe_id}) MERGE (e)-[:IS_PART_OF]->(u)",
+                        "UNWIND $rows AS row MERGE (e:Entity {id: row.id}) SET e.name = row.name, e.aliases = row.aliases, e.user_id = row.user_id, e.visibility = row.visibility MERGE (u:Universe {id: row.universe_id}) MERGE (e)-[:IS_PART_OF]->(u)",
                     )
                     .param("rows", entity_rows),
                 )
@@ -352,6 +356,18 @@ impl GraphStore for Neo4jGraphStore {
         }
 
         Ok(())
+    }
+
+    async fn common_root_graph_exists(&self) -> Result<bool> {
+        let mut result = self
+            .graph
+            .execute(query(
+                "MATCH (e:Entity {id: 'concept.exobrain', user_id: 'exobrain', visibility: 'SHARED'})-[:IS_PART_OF]->(:Universe {id: 'universe.real_world'}) MATCH (e)-[:DESCRIBED_BY]->(:Block {id: 'block.concept.exobrain', user_id: 'exobrain', visibility: 'SHARED'}) RETURN 1 AS present LIMIT 1",
+            ))
+            .await
+            .context("failed to query common root graph")?;
+
+        Ok(result.next().await?.is_some())
     }
 }
 

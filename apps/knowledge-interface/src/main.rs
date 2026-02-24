@@ -21,7 +21,8 @@ pub mod proto {
 use proto::knowledge_interface_server::{KnowledgeInterface, KnowledgeInterfaceServer};
 use proto::{
     GetSchemaReply, GetSchemaRequest, HealthReply, HealthRequest, IngestGraphDeltaReply,
-    IngestGraphDeltaRequest, UpsertSchemaTypeReply, UpsertSchemaTypeRequest,
+    IngestGraphDeltaRequest, InitializeUserGraphReply, InitializeUserGraphRequest,
+    UpsertSchemaTypeReply, UpsertSchemaTypeRequest,
 };
 
 const FILE_DESCRIPTOR_SET: &[u8] = tonic::include_file_descriptor_set!("knowledge_descriptor");
@@ -213,6 +214,25 @@ impl KnowledgeInterface for KnowledgeGrpcService {
         }))
     }
 
+    async fn initialize_user_graph(
+        &self,
+        request: Request<InitializeUserGraphRequest>,
+    ) -> Result<Response<InitializeUserGraphReply>, Status> {
+        let payload = request.into_inner();
+        let delta = self
+            .app
+            .initialize_user_graph(&payload.user_id, &payload.user_name)
+            .await
+            .map_err(|e| Status::invalid_argument(e.to_string()))?;
+
+        Ok(Response::new(InitializeUserGraphReply {
+            universe_id: delta.universe_id,
+            entities_upserted: delta.entities.len() as u32,
+            blocks_upserted: delta.blocks.len() as u32,
+            edges_upserted: delta.edges.len() as u32,
+        }))
+    }
+
     async fn ingest_graph_delta(
         &self,
         request: Request<IngestGraphDeltaRequest>,
@@ -349,6 +369,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         embedder,
         vector_store,
     ));
+
+    app.ensure_common_root_graph().await?;
 
     let grpc = KnowledgeInterfaceServer::new(KnowledgeGrpcService { app });
 

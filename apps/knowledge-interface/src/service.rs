@@ -4,10 +4,16 @@ use anyhow::{anyhow, Result};
 
 use crate::{
     domain::{
-        EmbeddedBlock, FullSchema, GraphDelta, PropertyScalar, SchemaType, UpsertSchemaTypeCommand,
+        BlockNode, EmbeddedBlock, EntityNode, FullSchema, GraphDelta, GraphEdge, PropertyScalar,
+        PropertyValue, SchemaType, UpsertSchemaTypeCommand, Visibility,
     },
     ports::{Embedder, GraphStore, SchemaRepository, VectorStore},
 };
+
+const EXOBRAIN_USER_ID: &str = "exobrain";
+const COMMON_UNIVERSE_ID: &str = "universe.real_world";
+const COMMON_EXOBRAIN_ENTITY_ID: &str = "concept.exobrain";
+const COMMON_EXOBRAIN_BLOCK_ID: &str = "block.concept.exobrain";
 
 pub struct KnowledgeApplication {
     schema_repository: Arc<dyn SchemaRepository>,
@@ -164,6 +170,131 @@ impl KnowledgeApplication {
         }
 
         Ok(upserted)
+    }
+
+    pub async fn ensure_common_root_graph(&self) -> Result<()> {
+        if self.graph_store.common_root_graph_exists().await? {
+            return Ok(());
+        }
+
+        self.ingest_graph_delta(Self::common_root_delta()).await
+    }
+
+    pub async fn initialize_user_graph(
+        &self,
+        user_id: &str,
+        user_name: &str,
+    ) -> Result<GraphDelta> {
+        let trimmed_user_id = user_id.trim();
+        if trimmed_user_id.is_empty() {
+            return Err(anyhow!("user_id is required"));
+        }
+
+        let trimmed_user_name = user_name.trim();
+        if trimmed_user_name.is_empty() {
+            return Err(anyhow!("user_name is required"));
+        }
+
+        let delta = Self::user_init_delta(trimmed_user_id, trimmed_user_name);
+        self.ingest_graph_delta(delta.clone()).await?;
+        Ok(delta)
+    }
+
+    fn common_root_delta() -> GraphDelta {
+        GraphDelta {
+            universe_id: COMMON_UNIVERSE_ID.to_string(),
+            user_id: EXOBRAIN_USER_ID.to_string(),
+            visibility: Visibility::Shared,
+            entities: vec![EntityNode {
+                id: COMMON_EXOBRAIN_ENTITY_ID.to_string(),
+                labels: vec!["Entity".to_string(), "Concept".to_string()],
+                universe_id: COMMON_UNIVERSE_ID.to_string(),
+                user_id: EXOBRAIN_USER_ID.to_string(),
+                visibility: Visibility::Shared,
+                properties: vec![
+                    PropertyValue {
+                        key: "name".to_string(),
+                        value: PropertyScalar::String("Exobrain".to_string()),
+                    },
+                    PropertyValue {
+                        key: "kind".to_string(),
+                        value: PropertyScalar::String("platform".to_string()),
+                    },
+                ],
+            }],
+            blocks: vec![BlockNode {
+                id: COMMON_EXOBRAIN_BLOCK_ID.to_string(),
+                labels: vec!["Block".to_string()],
+                root_entity_id: COMMON_EXOBRAIN_ENTITY_ID.to_string(),
+                user_id: EXOBRAIN_USER_ID.to_string(),
+                visibility: Visibility::Shared,
+                properties: vec![PropertyValue {
+                    key: "text".to_string(),
+                    value: PropertyScalar::String("Exobrain is the shared platform for capturing and organizing knowledge, powering assistants and knowledge workflows.".to_string()),
+                }],
+            }],
+            edges: vec![],
+        }
+    }
+
+    fn user_init_delta(user_id: &str, user_name: &str) -> GraphDelta {
+        let person_entity_id = format!("person.{user_id}");
+        let assistant_entity_id = format!("assistant.{user_id}");
+
+        GraphDelta {
+            universe_id: COMMON_UNIVERSE_ID.to_string(),
+            user_id: user_id.to_string(),
+            visibility: Visibility::Shared,
+            entities: vec![
+                EntityNode {
+                    id: person_entity_id.clone(),
+                    labels: vec!["Entity".to_string(), "Person".to_string()],
+                    universe_id: COMMON_UNIVERSE_ID.to_string(),
+                    user_id: user_id.to_string(),
+                    visibility: Visibility::Shared,
+                    properties: vec![
+                        PropertyValue {
+                            key: "name".to_string(),
+                            value: PropertyScalar::String(user_name.to_string()),
+                        },
+                        PropertyValue {
+                            key: "aliases".to_string(),
+                            value: PropertyScalar::Json("[\"me\",\"I\",\"myself\"]".to_string()),
+                        },
+                    ],
+                },
+                EntityNode {
+                    id: assistant_entity_id.clone(),
+                    labels: vec!["Entity".to_string(), "Object".to_string()],
+                    universe_id: COMMON_UNIVERSE_ID.to_string(),
+                    user_id: user_id.to_string(),
+                    visibility: Visibility::Shared,
+                    properties: vec![PropertyValue {
+                        key: "name".to_string(),
+                        value: PropertyScalar::String("Exobrain Assistant".to_string()),
+                    }],
+                },
+            ],
+            blocks: vec![BlockNode {
+                id: format!("block.assistant.{user_id}"),
+                labels: vec!["Block".to_string()],
+                root_entity_id: assistant_entity_id.clone(),
+                user_id: user_id.to_string(),
+                visibility: Visibility::Shared,
+                properties: vec![PropertyValue {
+                    key: "text".to_string(),
+                    value: PropertyScalar::String("Exobrain Assistant is your personal assistant in Exobrain. It chats with you and helps organize your knowledge graph.".to_string()),
+                }],
+            }],
+            edges: vec![GraphEdge {
+                from_id: assistant_entity_id,
+                to_id: person_entity_id,
+                edge_type: "ASSISTS".to_string(),
+                user_id: user_id.to_string(),
+                visibility: Visibility::Shared,
+                properties: vec![],
+            }],
+        }
     }
 
     pub async fn ingest_graph_delta(&self, delta: GraphDelta) -> Result<()> {
@@ -359,12 +490,18 @@ mod tests {
         }
     }
 
-    struct FakeGraphStore;
+    struct FakeGraphStore {
+        root_exists: bool,
+    }
 
     #[async_trait]
     impl GraphStore for FakeGraphStore {
         async fn apply_delta(&self, _delta: &GraphDelta) -> Result<()> {
             Ok(())
+        }
+
+        async fn common_root_graph_exists(&self) -> Result<bool> {
+            Ok(self.root_exists)
         }
     }
 
@@ -394,7 +531,7 @@ mod tests {
     async fn rejects_invalid_schema_kind() {
         let app = KnowledgeApplication::new(
             Arc::new(FakeSchemaRepo::new()),
-            Arc::new(FakeGraphStore),
+            Arc::new(FakeGraphStore { root_exists: false }),
             Arc::new(FakeEmbedder),
             Arc::new(CapturingVectorStore {
                 seen: Arc::new(Mutex::new(vec![])),
@@ -423,7 +560,7 @@ mod tests {
     async fn rejects_node_without_parent() {
         let app = KnowledgeApplication::new(
             Arc::new(FakeSchemaRepo::new()),
-            Arc::new(FakeGraphStore),
+            Arc::new(FakeGraphStore { root_exists: false }),
             Arc::new(FakeEmbedder),
             Arc::new(CapturingVectorStore {
                 seen: Arc::new(Mutex::new(vec![])),
@@ -453,7 +590,7 @@ mod tests {
         let captured = Arc::new(Mutex::new(vec![]));
         let app = KnowledgeApplication::new(
             Arc::new(FakeSchemaRepo::new()),
-            Arc::new(FakeGraphStore),
+            Arc::new(FakeGraphStore { root_exists: false }),
             Arc::new(FakeEmbedder),
             Arc::new(CapturingVectorStore {
                 seen: captured.clone(),
@@ -509,10 +646,61 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn seeds_common_root_when_missing() {
+        let captured = Arc::new(Mutex::new(vec![]));
+        let app = KnowledgeApplication::new(
+            Arc::new(FakeSchemaRepo::new()),
+            Arc::new(FakeGraphStore { root_exists: false }),
+            Arc::new(FakeEmbedder),
+            Arc::new(CapturingVectorStore {
+                seen: captured.clone(),
+            }),
+        );
+
+        app.ensure_common_root_graph()
+            .await
+            .expect("root graph seeding should succeed");
+
+        let guard = captured.lock().expect("lock should be available");
+        assert_eq!(guard.len(), 1);
+        assert_eq!(guard[0].block.id, "block.concept.exobrain");
+        assert_eq!(guard[0].user_id, "exobrain");
+        assert_eq!(guard[0].visibility, Visibility::Shared);
+    }
+
+    #[tokio::test]
+    async fn initializes_user_graph() {
+        let captured = Arc::new(Mutex::new(vec![]));
+        let app = KnowledgeApplication::new(
+            Arc::new(FakeSchemaRepo::new()),
+            Arc::new(FakeGraphStore { root_exists: true }),
+            Arc::new(FakeEmbedder),
+            Arc::new(CapturingVectorStore {
+                seen: captured.clone(),
+            }),
+        );
+
+        let delta = app
+            .initialize_user_graph("user-1", "Alex")
+            .await
+            .expect("user graph init should succeed");
+
+        assert_eq!(delta.user_id, "user-1");
+        assert_eq!(delta.visibility, Visibility::Shared);
+        assert_eq!(delta.entities.len(), 2);
+        assert_eq!(delta.blocks.len(), 1);
+        assert_eq!(delta.edges.len(), 1);
+
+        let guard = captured.lock().expect("lock should be available");
+        assert_eq!(guard.len(), 1);
+        assert_eq!(guard[0].block.root_entity_id, "assistant.user-1");
+    }
+
+    #[tokio::test]
     async fn rejects_mismatched_scope_on_entities() {
         let app = KnowledgeApplication::new(
             Arc::new(FakeSchemaRepo::new()),
-            Arc::new(FakeGraphStore),
+            Arc::new(FakeGraphStore { root_exists: false }),
             Arc::new(FakeEmbedder),
             Arc::new(CapturingVectorStore {
                 seen: Arc::new(Mutex::new(vec![])),

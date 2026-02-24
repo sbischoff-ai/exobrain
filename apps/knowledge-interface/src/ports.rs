@@ -33,6 +33,7 @@ pub trait SchemaRepository: Send + Sync {
 #[async_trait]
 pub trait GraphStore: Send + Sync {
     async fn apply_delta(&self, delta: &GraphDelta) -> Result<()>;
+    async fn common_root_graph_exists(&self) -> Result<bool>;
 }
 
 #[async_trait]
