@@ -13,7 +13,8 @@ use sqlx::{postgres::PgPoolOptions, PgPool, Row};
 
 use crate::{
     domain::{
-        EdgeEndpointRule, EmbeddedBlock, GraphDelta, SchemaType, TypeInheritance, TypeProperty,
+        EdgeEndpointRule, EmbeddedBlock, GraphDelta, PropertyScalar, PropertyValue, SchemaType,
+        TypeInheritance, TypeProperty,
     },
     ports::{Embedder, GraphStore, SchemaRepository, VectorStore},
 };
@@ -44,25 +45,6 @@ impl SchemaRepository for PostgresSchemaRepository {
             .map(|row| SchemaType {
                 id: row.get("id"),
                 kind: row.get("kind"),
-                name: row.get("name"),
-                description: row.get("description"),
-                active: row.get("active"),
-            })
-            .collect())
-    }
-
-    async fn get_block_compatibility_types(&self) -> Result<Vec<SchemaType>> {
-        let rows = sqlx::query(
-            "SELECT id, kind, name, description, active FROM knowledge_graph_schema_types WHERE id IN ('node.block', 'node.quote') AND kind = 'node' AND active = TRUE ORDER BY name",
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        Ok(rows
-            .into_iter()
-            .map(|row| SchemaType {
-                id: row.get("id"),
-                kind: "block".to_string(),
                 name: row.get("name"),
                 description: row.get("description"),
                 active: row.get("active"),
@@ -113,28 +95,10 @@ impl SchemaRepository for PostgresSchemaRepository {
             .collect())
     }
 
-    async fn get_properties_for_type(&self, owner_type_id: &str) -> Result<Vec<TypeProperty>> {
+    async fn get_all_properties(&self) -> Result<Vec<TypeProperty>> {
         let rows = sqlx::query(
-            r#"WITH RECURSIVE lineage AS (
-                SELECT $1::TEXT AS type_id, 0 AS depth
-                UNION ALL
-                SELECT i.parent_type_id AS type_id, lineage.depth + 1 AS depth
-                FROM knowledge_graph_schema_type_inheritance i
-                JOIN lineage ON i.child_type_id = lineage.type_id
-                WHERE i.active = TRUE
-            ), ranked AS (
-                SELECT p.owner_type_id, p.prop_name, p.value_type, p.required, p.readable, p.writable, p.active, p.description,
-                       ROW_NUMBER() OVER (PARTITION BY p.prop_name ORDER BY lineage.depth ASC) AS rank_order
-                FROM lineage
-                JOIN knowledge_graph_schema_type_properties p ON p.owner_type_id = lineage.type_id
-                WHERE p.active = TRUE
-            )
-            SELECT owner_type_id, prop_name, value_type, required, readable, writable, active, description
-            FROM ranked
-            WHERE rank_order = 1
-            ORDER BY prop_name"#,
+            "SELECT owner_type_id, prop_name, value_type, required, readable, writable, active, description FROM knowledge_graph_schema_type_properties WHERE active = TRUE ORDER BY owner_type_id, prop_name",
         )
-        .bind(owner_type_id)
         .fetch_all(&self.pool)
         .await?;
 
@@ -193,7 +157,10 @@ impl GraphStore for Neo4jGraphStore {
             .map(|entity| {
                 let mut row = HashMap::new();
                 row.insert("id", entity.id.clone());
-                row.insert("name", entity.name.clone());
+                row.insert(
+                    "name",
+                    prop_as_string(&entity.properties, "name").unwrap_or_default(),
+                );
                 row.insert("universe_id", entity.universe_id.clone());
                 row
             })
@@ -217,7 +184,10 @@ impl GraphStore for Neo4jGraphStore {
             .map(|block| {
                 let mut row = HashMap::new();
                 row.insert("id", block.id.clone());
-                row.insert("text", block.text.clone());
+                row.insert(
+                    "text",
+                    prop_as_string(&block.properties, "text").unwrap_or_default(),
+                );
                 row.insert("root_entity_id", block.root_entity_id.clone());
                 row
             })
@@ -246,14 +216,19 @@ impl GraphStore for Neo4jGraphStore {
                     query(&cypher)
                         .param("from_id", edge.from_id.clone())
                         .param("to_id", edge.to_id.clone())
-                        .param("confidence", edge.confidence.unwrap_or(1.0))
+                        .param(
+                            "confidence",
+                            prop_as_float(&edge.properties, "confidence").unwrap_or(1.0),
+                        )
                         .param(
                             "status",
-                            edge.status
-                                .clone()
+                            prop_as_string(&edge.properties, "status")
                                 .unwrap_or_else(|| "asserted".to_string()),
                         )
-                        .param("context", edge.context.clone().unwrap_or_default()),
+                        .param(
+                            "context",
+                            prop_as_string(&edge.properties, "context").unwrap_or_default(),
+                        ),
                 )
                 .await
                 .context("failed to upsert edge")?;
@@ -261,6 +236,33 @@ impl GraphStore for Neo4jGraphStore {
 
         Ok(())
     }
+}
+
+fn prop_as_string(props: &[PropertyValue], key: &str) -> Option<String> {
+    props.iter().find_map(|p| {
+        if p.key != key {
+            return None;
+        }
+        match &p.value {
+            PropertyScalar::String(v) | PropertyScalar::Datetime(v) | PropertyScalar::Json(v) => {
+                Some(v.clone())
+            }
+            _ => None,
+        }
+    })
+}
+
+fn prop_as_float(props: &[PropertyValue], key: &str) -> Option<f64> {
+    props.iter().find_map(|p| {
+        if p.key != key {
+            return None;
+        }
+        match p.value {
+            PropertyScalar::Float(v) => Some(v),
+            PropertyScalar::Int(v) => Some(v as f64),
+            _ => None,
+        }
+    })
 }
 
 pub struct OpenAiEmbedder {
@@ -355,7 +357,7 @@ impl VectorStore for QdrantVectorStore {
                     "universe_id".to_string(),
                     Value::from(embedded.universe_id.clone()),
                 );
-                payload.insert("text".to_string(), Value::from(embedded.block.text.clone()));
+                payload.insert("text".to_string(), Value::from(embedded.text.clone()));
                 payload.insert(
                     "root_entity_id".to_string(),
                     Value::from(embedded.block.root_entity_id.clone()),

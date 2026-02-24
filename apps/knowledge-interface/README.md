@@ -2,6 +2,10 @@
 
 Rust + tonic gRPC service for GraphRAG ingestion and canonical KG schema registry access.
 
+## API status
+
+This API is **breaking-change friendly** right now (pre-launch). It is optimized for clean schema-driven ingestion rather than compatibility shims.
+
 ## What this service provides
 
 - Canonical knowledge schema registry in PostgreSQL (`knowledge_graph_schema`), including:
@@ -10,20 +14,23 @@ Rust + tonic gRPC service for GraphRAG ingestion and canonical KG schema registr
   - per-type property contracts
   - edge endpoint rules (domain/range guidance)
 - gRPC API for:
-  - schema introspection (`GetSchema`)
-  - schema upsert (`UpsertSchemaType`)
-  - unified graph delta ingestion (`IngestGraphDelta`) for entities, edges, and blocks.
-- Pluggable adapters behind traits for graph store, vector store, and embeddings.
+  - schema introspection (`GetSchema`) including types + properties + inheritance + edge rules
+  - schema type upsert (`UpsertSchemaType`)
+  - schema-driven graph delta ingestion (`IngestGraphDelta`) using typed property values
 
-Retrieval/query over the graph remains out of scope.
+## Key protocol design choices
 
-## gRPC compatibility note (`block_types`)
+- No separate `block_types` surface in schema response.
+- `IngestGraphDelta` uses generic typed properties on entities, blocks, and edges.
+- Event/task fields like `start`, `end`, `due` are modeled as schema properties, not hardcoded proto fields.
 
-Canonical storage does **not** use a separate block kind. Blocks are node types (`node.block`, `node.quote`).
+## gRPC inspection tips (grpcui)
 
-For proto compatibility:
-- `node_types` includes canonical block node types.
-- `block_types` is returned as a compatibility view containing `node.block` and `node.quote` (with `kind=block` in response payload only).
+The service listens with **plaintext gRPC** in local development (no TLS).
+
+```bash
+grpcui -plaintext localhost:50051
+```
 
 ## Environment configuration
 
@@ -33,59 +40,19 @@ Create local env file:
 cp apps/knowledge-interface/.env.example apps/knowledge-interface/.env
 ```
 
-`OPENAI_API_KEY` is intentionally not stored in `.env`.
-
-Reflection behavior:
-- `APP_ENV=local`: gRPC reflection enabled (`grpcui` friendly).
-- non-local env (for example `cluster`): reflection disabled.
-
 ## Schema migrations and seed
-
-Knowledge schema is managed by **Reshape migrations** (service startup does not run DDL).
-
-Apply migrations:
 
 ```bash
 ./scripts/local/knowledge-schema-migrate.sh
-```
-
-Apply starter schema seed:
-
-```bash
 ./scripts/local/knowledge-schema-seed.sh
 ```
 
 ## Local build and run
 
-From repository root:
-
 ```bash
 ./scripts/local/build-knowledge-interface.sh
 ./scripts/local/run-knowledge-interface.sh
 ```
-
-
-## gRPC inspection tips (grpcui)
-
-The service listens with **plaintext gRPC** in local development (no TLS).
-
-Use:
-
-```bash
-grpcui -plaintext localhost:50051
-```
-
-If you omit `-plaintext`, grpcui attempts TLS and you will see:
-
-`tls: first record does not look like a TLS handshake`
-
-### About the Memgraph compatibility warning
-
-You may see this on startup:
-
-`Failed to obtain server version. Unable to check client-server compatibility...`
-
-This comes from the Neo4j driver compatibility check path when used against Memgraph. It is noisy but non-fatal; the service can still run and serve gRPC if dependencies are reachable.
 
 ## Related docs
 

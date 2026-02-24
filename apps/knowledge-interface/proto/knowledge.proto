@@ -27,10 +27,38 @@ message SchemaType {
   bool active = 5;
 }
 
+message TypeInheritance {
+  string child_type_id = 1;
+  string parent_type_id = 2;
+  string description = 3;
+  bool active = 4;
+}
+
+message TypeProperty {
+  string owner_type_id = 1;
+  string prop_name = 2;
+  string value_type = 3;
+  bool required = 4;
+  bool readable = 5;
+  bool writable = 6;
+  bool active = 7;
+  string description = 8;
+}
+
+message EdgeEndpointRule {
+  string edge_type_id = 1;
+  string from_node_type_id = 2;
+  string to_node_type_id = 3;
+  bool active = 4;
+  string description = 5;
+}
+
 message GetSchemaReply {
   repeated SchemaType node_types = 1;
   repeated SchemaType edge_types = 2;
-  repeated SchemaType block_types = 3;
+  repeated TypeInheritance inheritance = 3;
+  repeated TypeProperty properties = 4;
+  repeated EdgeEndpointRule edge_rules = 5;
 }
 
 message UpsertSchemaTypeRequest {
@@ -45,36 +73,37 @@ message UpsertSchemaTypeReply {
   SchemaType schema_type = 1;
 }
 
-message TimeWindow {
-  string start = 1;
-  string end = 2;
-  string due = 3;
+message PropertyValue {
+  string key = 1;
+  oneof value {
+    string string_value = 2;
+    double float_value = 3;
+    int64 int_value = 4;
+    bool bool_value = 5;
+    string datetime_value = 6;
+    string json_value = 7;
+  }
 }
 
 message EntityNode {
   string id = 1;
-  string name = 2;
-  repeated string labels = 3;
-  string universe_id = 4;
-  TimeWindow time_window = 5;
+  repeated string labels = 2;
+  string universe_id = 3;
+  repeated PropertyValue properties = 4;
 }
 
 message BlockNode {
   string id = 1;
-  string text = 2;
-  repeated string labels = 3;
-  string root_entity_id = 4;
-  optional float confidence = 5;
-  optional string status = 6;
+  repeated string labels = 2;
+  string root_entity_id = 3;
+  repeated PropertyValue properties = 4;
 }
 
 message GraphEdge {
   string from_id = 1;
   string to_id = 2;
   string edge_type = 3;
-  optional float confidence = 4;
-  optional string status = 5;
-  optional string context = 6;
+  repeated PropertyValue properties = 4;
 }
 
 message IngestGraphDeltaRequest {
