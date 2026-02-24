@@ -32,12 +32,61 @@ impl KnowledgeApplication {
     }
 
     pub async fn get_schema(&self) -> Result<FullSchema> {
+        let node_types = self.schema_repository.get_by_kind("node").await?;
+        let edge_types = self.schema_repository.get_by_kind("edge").await?;
+        let inheritance = self.schema_repository.get_type_inheritance().await?;
+        let properties = self.schema_repository.get_all_properties().await?;
+        let edge_rules = self.schema_repository.get_edge_endpoint_rules().await?;
+
+        let hydrated_nodes = node_types
+            .into_iter()
+            .map(|schema_type| {
+                let node_id = schema_type.id.clone();
+                let type_properties = properties
+                    .iter()
+                    .filter(|p| p.owner_type_id == node_id)
+                    .cloned()
+                    .collect();
+                let parents = inheritance
+                    .iter()
+                    .filter(|i| i.child_type_id == node_id)
+                    .cloned()
+                    .collect();
+
+                crate::domain::SchemaNodeTypeHydrated {
+                    schema_type,
+                    properties: type_properties,
+                    parents,
+                }
+            })
+            .collect();
+
+        let hydrated_edges = edge_types
+            .into_iter()
+            .map(|schema_type| {
+                let edge_id = schema_type.id.clone();
+                let type_properties = properties
+                    .iter()
+                    .filter(|p| p.owner_type_id == edge_id)
+                    .cloned()
+                    .collect();
+                let rules = edge_rules
+                    .iter()
+                    .filter(|r| r.edge_type_id == edge_id)
+                    .cloned()
+                    .collect();
+
+                crate::domain::SchemaEdgeTypeHydrated {
+                    schema_type,
+                    properties: type_properties,
+                    rules,
+                }
+            })
+            .collect();
+
         Ok(FullSchema {
-            node_types: self.schema_repository.get_by_kind("node").await?,
-            edge_types: self.schema_repository.get_by_kind("edge").await?,
-            inheritance: self.schema_repository.get_type_inheritance().await?,
-            properties: self.schema_repository.get_all_properties().await?,
-            edge_rules: self.schema_repository.get_edge_endpoint_rules().await?,
+            node_types: hydrated_nodes,
+            edge_types: hydrated_edges,
         })
     }
 

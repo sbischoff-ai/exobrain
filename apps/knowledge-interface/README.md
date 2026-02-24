@@ -14,7 +14,7 @@ This API is **breaking-change friendly** right now (pre-launch). It is optimized
   - per-type property contracts
   - edge endpoint rules (domain/range guidance)
 - gRPC API for:
-  - schema introspection (`GetSchema`) including types + properties + inheritance + edge rules
+  - schema introspection (`GetSchema`) with hydrated node/edge type payloads (per-type properties plus parents/rules)
   - schema type upsert (`UpsertSchemaType`) with parent + additive property updates
   - schema-driven graph delta ingestion (`IngestGraphDelta`) using typed property values
 
@@ -66,3 +66,10 @@ cp apps/knowledge-interface/.env.example apps/knowledge-interface/.env
 - a node can have only one parent
 - edge inheritance is rejected
 - properties are additive/upsert-only via request payload (no delete operation)
+
+
+## Logging
+
+- `LOG_LEVEL` controls runtime log verbosity.
+- Defaults to `DEBUG` when `APP_ENV=local`.
+- Defaults to `INFO` for non-local environments (cluster/docker/k8s).

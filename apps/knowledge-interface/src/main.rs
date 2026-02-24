@@ -12,6 +12,7 @@ use domain::{
 };
 use service::KnowledgeApplication;
 use tonic::{transport::Server, Request, Response, Status};
+use tracing_subscriber::EnvFilter;
 
 pub mod proto {
     tonic::include_proto!("exobrain.knowledge.v1");
@@ -28,6 +29,7 @@ const FILE_DESCRIPTOR_SET: &[u8] = tonic::include_file_descriptor_set!("knowledg
 #[derive(Debug, Clone)]
 struct AppConfig {
     app_env: String,
+    log_level: String,
     metastore_dsn: String,
     memgraph_addr: String,
     qdrant_addr: String,
@@ -41,12 +43,18 @@ impl AppConfig {
         let _ = dotenvy::dotenv();
 
         let app_env = env::var("APP_ENV").unwrap_or_else(|_| "local".to_string());
+        let default_log_level = match app_env.as_str() {
+            "local" => "DEBUG",
+            _ => "INFO",
+        };
+        let log_level = env::var("LOG_LEVEL").unwrap_or_else(|_| default_log_level.to_string());
         let metastore_dsn = env::var("KNOWLEDGE_SCHEMA_DSN")
             .or_else(|_| env::var("METASTORE_DSN"))
             .map_err(|_| "KNOWLEDGE_SCHEMA_DSN or METASTORE_DSN is required")?;
 
         Ok(Self {
             app_env,
+            log_level,
             metastore_dsn,
             memgraph_addr: env::var("MEMGRAPH_BOLT_ADDR")?,
             qdrant_addr: env::var("QDRANT_ADDR")?,
@@ -95,41 +103,67 @@ impl KnowledgeInterface for KnowledgeGrpcService {
         };
 
         Ok(Response::new(GetSchemaReply {
-            node_types: schema.node_types.into_iter().map(map_type).collect(),
-            edge_types: schema.edge_types.into_iter().map(map_type).collect(),
-            inheritance: schema
-                .inheritance
+            node_types: schema
+                .node_types
                 .into_iter()
-                .map(|i| proto::TypeInheritance {
-                    child_type_id: i.child_type_id,
-                    parent_type_id: i.parent_type_id,
-                    description: i.description,
-                    active: i.active,
+                .map(|node| proto::SchemaNodeType {
+                    r#type: Some(map_type(node.schema_type)),
+                    properties: node
+                        .properties
+                        .into_iter()
+                        .map(|p| proto::TypeProperty {
+                            owner_type_id: p.owner_type_id,
+                            prop_name: p.prop_name,
+                            value_type: p.value_type,
+                            required: p.required,
+                            readable: p.readable,
+                            writable: p.writable,
+                            active: p.active,
+                            description: p.description,
+                        })
+                        .collect(),
+                    parents: node
+                        .parents
+                        .into_iter()
+                        .map(|i| proto::TypeInheritance {
+                            child_type_id: i.child_type_id,
+                            parent_type_id: i.parent_type_id,
+                            description: i.description,
+                            active: i.active,
+                        })
+                        .collect(),
                 })
                 .collect(),
-            properties: schema
-                .properties
+            edge_types: schema
+                .edge_types
                 .into_iter()
-                .map(|p| proto::TypeProperty {
-                    owner_type_id: p.owner_type_id,
-                    prop_name: p.prop_name,
-                    value_type: p.value_type,
-                    required: p.required,
-                    readable: p.readable,
-                    writable: p.writable,
-                    active: p.active,
-                    description: p.description,
-                })
-                .collect(),
-            edge_rules: schema
-                .edge_rules
-                .into_iter()
-                .map(|r| proto::EdgeEndpointRule {
-                    edge_type_id: r.edge_type_id,
-                    from_node_type_id: r.from_node_type_id,
-                    to_node_type_id: r.to_node_type_id,
-                    active: r.active,
-                    description: r.description,
+                .map(|edge| proto::SchemaEdgeType {
+                    r#type: Some(map_type(edge.schema_type)),
+                    properties: edge
+                        .properties
+                        .into_iter()
+                        .map(|p| proto::TypeProperty {
+                            owner_type_id: p.owner_type_id,
+                            prop_name: p.prop_name,
+                            value_type: p.value_type,
+                            required: p.required,
+                            readable: p.readable,
+                            writable: p.writable,
+                            active: p.active,
+                            description: p.description,
+                        })
+                        .collect(),
+                    rules: edge
+                        .rules
+                        .into_iter()
+                        .map(|r| proto::EdgeEndpointRule {
+                            edge_type_id: r.edge_type_id,
+                            from_node_type_id: r.from_node_type_id,
+                            to_node_type_id: r.to_node_type_id,
+                            active: r.active,
+                            description: r.description,
+                        })
+                        .collect(),
                 })
                 .collect(),
         }))
@@ -276,6 +310,10 @@ fn map_property_value(value: proto::PropertyValue) -> Result<PropertyValue, Stat
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cfg = AppConfig::from_env()?;
+    tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::new(cfg.log_level.clone()))
+        .init();
+
     let addr = "0.0.0.0:50051".parse()?;
 
     let schema_repo = Arc::new(PostgresSchemaRepository::new(&cfg.metastore_dsn).await?);
@@ -320,6 +358,7 @@ mod tests {
     fn reflection_enabled_for_local() {
         let cfg = AppConfig {
             app_env: "local".to_string(),
+            log_level: "DEBUG".to_string(),
             metastore_dsn: "postgresql://example".to_string(),
             memgraph_addr: "bolt://example".to_string(),
             qdrant_addr: "http://example".to_string(),
@@ -334,6 +373,7 @@ mod tests {
     fn reflection_disabled_for_non_local() {
         let cfg = AppConfig {
             app_env: "cluster".to_string(),
+            log_level: "INFO".to_string(),
             metastore_dsn: "postgresql://example".to_string(),
             memgraph_addr: "bolt://example".to_string(),
             qdrant_addr: "http://example".to_string(),

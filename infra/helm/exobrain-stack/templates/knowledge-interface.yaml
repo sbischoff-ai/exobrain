@@ -22,6 +22,8 @@ spec:
           env:
             - name: APP_ENV
               value: {{ .Values.knowledgeInterface.env.APP_ENV | quote }}
+            - name: LOG_LEVEL
+              value: {{ .Values.knowledgeInterface.env.LOG_LEVEL | quote }}
             - name: MEMGRAPH_BOLT_ADDR
               value: {{ .Values.knowledgeInterface.env.MEMGRAPH_BOLT_ADDR | quote }}
             - name: QDRANT_ADDR
