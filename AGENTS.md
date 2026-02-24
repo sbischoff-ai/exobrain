@@ -140,4 +140,7 @@ A skill is a set of local instructions in a `SKILL.md` file.
 - Metastore bootstrap SQL (`infra/docker/metastore/init/01-assistant-db.sql`) now provisions both `assistant_db` and `job_orchestrator_db`; keep role/database additions there synchronized with local scripts and Helm DB migration jobs.
 
 - In coding-agent environments, prefer `scripts/agent/run-assistant-frontend-mock.sh` for frontend-only UI exploration and `scripts/agent/run-assistant-backend-offline.sh` for backend runs that must avoid OpenAI/Tavily network dependencies.
+- Knowledge-interface local dev should load `apps/knowledge-interface/.env`; keep gRPC reflection local-only (`APP_ENV=local`) so `grpcui` works in dev without exposing reflection in cluster/runtime manifests.
+- Knowledge-interface gRPC is pre-launch and may use clean breaking changes; prefer schema-driven property payloads over hard-coded entity/event fields when evolving ingestion contracts.
 - For assistant-frontend E2E validation in agent environments, use `scripts/agent/run-assistant-frontend-e2e.sh` (Playwright against mock API mode) before finalizing UI/UX changes.
+- Knowledge-interface universe semantics: IDs are globally unique across universes and cross-universe graph edges are intentional; treat universes primarily as filtering/context semantics, and keep ingestion `labels` documented as currently unused forward-compat fields unless explicitly implementing label-aware writes.

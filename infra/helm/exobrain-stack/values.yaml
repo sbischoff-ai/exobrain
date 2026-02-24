@@ -61,10 +61,18 @@ knowledgeInterface:
     type: ClusterIP
     port: 50051
   env:
+    APP_ENV: cluster
+    LOG_LEVEL: INFO
     MEMGRAPH_BOLT_ADDR: bolt://exobrain-knowledge-graph:7687
     QDRANT_ADDR: http://exobrain-vector-store:6333
     METASTORE_DSN: postgresql://exobrain:exobrain@exobrain-metastore:5432/exobrain
+    KNOWLEDGE_SCHEMA_DSN: postgresql://knowledge_schema:knowledge_schema@exobrain-metastore:5432/knowledge_graph_schema
     ASSISTANT_DB_DSN: postgresql://assistant_backend:assistant_backend@exobrain-metastore:5432/assistant_db
+    OPENAI_EMBEDDING_MODEL: text-embedding-3-small
+  secrets:
+    openaiApiKey:
+      name: exobrain-secrets
+      key: OPENAI_API_KEY
   resources:
     requests:
       cpu: 100m
@@ -90,6 +98,10 @@ metastore:
     username: assistant_backend
     password: assistant_backend
     database: assistant_db
+  knowledgeSchemaDb:
+    username: knowledge_schema
+    password: knowledge_schema
+    database: knowledge_graph_schema
   persistence:
     enabled: true
     size: 10Gi
@@ -265,6 +277,41 @@ dbJobs:
     env:
       ASSISTANT_DB_DSN: postgresql://assistant_backend:assistant_backend@exobrain-metastore:5432/assistant_db
       SEED_SQL_DIR: /opt/exobrain/assistant-backend/seeds
+      WAIT_TIMEOUT_SECONDS: "180"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+
+  knowledgeSchemaMigrations:
+    enabled: true
+    backoffLimit: 4
+    ttlSecondsAfterFinished: 600
+    env:
+      POSTGRES_DSN: postgresql://exobrain:exobrain@exobrain-metastore:5432/postgres
+      KNOWLEDGE_SCHEMA_DSN: postgresql://knowledge_schema:knowledge_schema@exobrain-metastore:5432/knowledge_graph_schema
+      MIGRATIONS_DIR: /opt/exobrain/knowledge-interface/migrations
+      BOOTSTRAP_SQL_PATH: /opt/exobrain/sql/init/01-assistant-db.sql
+      WAIT_TIMEOUT_SECONDS: "180"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+  knowledgeSchemaSeed:
+    enabled: false
+    backoffLimit: 2
+    ttlSecondsAfterFinished: 600
+    env:
+      KNOWLEDGE_SCHEMA_DSN: postgresql://knowledge_schema:knowledge_schema@exobrain-metastore:5432/knowledge_graph_schema
+      SEED_SQL_DIR: /opt/exobrain/knowledge-interface/seeds
       WAIT_TIMEOUT_SECONDS: "180"
     resources:
       requests:

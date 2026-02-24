@@ -78,11 +78,32 @@ Build notes:
 
 ### 4) Run services (separate terminals)
 
+For knowledge-interface local config:
+
+```bash
+cp apps/knowledge-interface/.env.example apps/knowledge-interface/.env
+# set OPENAI_API_KEY in your shell
+```
+
+Then run:
+
 ```bash
 ./scripts/local/run-assistant-backend.sh
 ./scripts/local/run-assistant-frontend.sh
 ./scripts/local/run-knowledge-interface.sh
 ./scripts/local/run-job-orchestrator.sh
+```
+
+Apply knowledge schema migrations:
+
+```bash
+./scripts/local/knowledge-schema-migrate.sh
+```
+
+Optional: seed starter graph schema types:
+
+```bash
+./scripts/local/knowledge-schema-seed.sh
 ```
 
 Default local app endpoints:
@@ -91,6 +112,16 @@ Default local app endpoints:
 - Frontend: `http://localhost:5173`
 - Knowledge interface gRPC: `localhost:50051`
 - Job orchestrator worker: subscribes on NATS `jobs.>`
+
+When `APP_ENV=local`, knowledge-interface enables gRPC reflection so you can inspect APIs with `grpcui`.
+
+Use plaintext mode locally:
+
+```bash
+grpcui -plaintext localhost:50051
+```
+
+If you see `tls: first record does not look like a TLS handshake`, grpcui was run without `-plaintext`.
 
 ### 5) Run unit tests
 

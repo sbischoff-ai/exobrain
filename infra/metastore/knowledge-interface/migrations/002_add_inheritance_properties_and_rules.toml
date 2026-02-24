@@ -1,0 +1,203 @@
+[[actions]]
+type = "create_table"
+name = "knowledge_graph_schema_type_inheritance"
+primary_key = ["child_type_id", "parent_type_id"]
+
+    [[actions.columns]]
+    name = "child_type_id"
+    type = "TEXT"
+    nullable = false
+
+    [[actions.columns]]
+    name = "parent_type_id"
+    type = "TEXT"
+    nullable = false
+
+    [[actions.columns]]
+    name = "active"
+    type = "BOOLEAN"
+    nullable = false
+    default = "TRUE"
+
+    [[actions.columns]]
+    name = "description"
+    type = "TEXT"
+    nullable = false
+
+    [[actions.columns]]
+    name = "universe_id"
+    type = "TEXT"
+
+[[actions]]
+type = "add_foreign_key"
+table = "knowledge_graph_schema_type_inheritance"
+
+    [actions.foreign_key]
+    columns = ["child_type_id"]
+    referenced_table = "knowledge_graph_schema_types"
+    referenced_columns = ["id"]
+
+[[actions]]
+type = "add_foreign_key"
+table = "knowledge_graph_schema_type_inheritance"
+
+    [actions.foreign_key]
+    columns = ["parent_type_id"]
+    referenced_table = "knowledge_graph_schema_types"
+    referenced_columns = ["id"]
+
+[[actions]]
+type = "create_table"
+name = "knowledge_graph_schema_type_properties"
+primary_key = ["owner_type_id", "prop_name"]
+
+    [[actions.columns]]
+    name = "owner_type_id"
+    type = "TEXT"
+    nullable = false
+
+    [[actions.columns]]
+    name = "prop_name"
+    type = "TEXT"
+    nullable = false
+
+    [[actions.columns]]
+    name = "value_type"
+    type = "TEXT"
+    nullable = false
+
+    [[actions.columns]]
+    name = "required"
+    type = "BOOLEAN"
+    nullable = false
+    default = "FALSE"
+
+    [[actions.columns]]
+    name = "readable"
+    type = "BOOLEAN"
+    nullable = false
+    default = "TRUE"
+
+    [[actions.columns]]
+    name = "writable"
+    type = "BOOLEAN"
+    nullable = false
+    default = "TRUE"
+
+    [[actions.columns]]
+    name = "active"
+    type = "BOOLEAN"
+    nullable = false
+    default = "TRUE"
+
+    [[actions.columns]]
+    name = "description"
+    type = "TEXT"
+    nullable = false
+
+    [[actions.columns]]
+    name = "enum_values"
+    type = "TEXT"
+
+    [[actions.columns]]
+    name = "pattern"
+    type = "TEXT"
+
+    [[actions.columns]]
+    name = "numeric_min"
+    type = "DOUBLE PRECISION"
+
+    [[actions.columns]]
+    name = "numeric_max"
+    type = "DOUBLE PRECISION"
+
+    [[actions.columns]]
+    name = "universe_id"
+    type = "TEXT"
+
+[[actions]]
+type = "add_foreign_key"
+table = "knowledge_graph_schema_type_properties"
+
+    [actions.foreign_key]
+    columns = ["owner_type_id"]
+    referenced_table = "knowledge_graph_schema_types"
+    referenced_columns = ["id"]
+
+[[actions]]
+type = "create_table"
+name = "knowledge_graph_schema_edge_rules"
+primary_key = ["edge_type_id", "from_node_type_id", "to_node_type_id"]
+
+    [[actions.columns]]
+    name = "edge_type_id"
+    type = "TEXT"
+    nullable = false
+
+    [[actions.columns]]
+    name = "from_node_type_id"
+    type = "TEXT"
+    nullable = false
+
+    [[actions.columns]]
+    name = "to_node_type_id"
+    type = "TEXT"
+    nullable = false
+
+    [[actions.columns]]
+    name = "active"
+    type = "BOOLEAN"
+    nullable = false
+    default = "TRUE"
+
+    [[actions.columns]]
+    name = "description"
+    type = "TEXT"
+    nullable = false
+
+    [[actions.columns]]
+    name = "universe_id"
+    type = "TEXT"
+
+[[actions]]
+type = "add_foreign_key"
+table = "knowledge_graph_schema_edge_rules"
+
+    [actions.foreign_key]
+    columns = ["edge_type_id"]
+    referenced_table = "knowledge_graph_schema_types"
+    referenced_columns = ["id"]
+
+[[actions]]
+type = "add_foreign_key"
+table = "knowledge_graph_schema_edge_rules"
+
+    [actions.foreign_key]
+    columns = ["from_node_type_id"]
+    referenced_table = "knowledge_graph_schema_types"
+    referenced_columns = ["id"]
+
+[[actions]]
+type = "add_foreign_key"
+table = "knowledge_graph_schema_edge_rules"
+
+    [actions.foreign_key]
+    columns = ["to_node_type_id"]
+    referenced_table = "knowledge_graph_schema_types"
+    referenced_columns = ["id"]
+
+[[actions]]
+type = "add_index"
+table = "knowledge_graph_schema_type_properties"
+
+    [actions.index]
+    name = "idx_kg_schema_type_properties_owner_active"
+    columns = ["owner_type_id", "active"]
+
+[[actions]]
+type = "add_index"
+table = "knowledge_graph_schema_edge_rules"
+
+    [actions.index]
+    name = "idx_kg_schema_edge_rules_edge_active"
+    columns = ["edge_type_id", "active"]

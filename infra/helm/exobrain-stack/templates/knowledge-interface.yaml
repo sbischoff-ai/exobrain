@@ -20,12 +20,25 @@ spec:
           image: "{{ .Values.knowledgeInterface.image.repository }}:{{ .Values.knowledgeInterface.image.tag }}"
           imagePullPolicy: {{ .Values.knowledgeInterface.image.pullPolicy }}
           env:
+            - name: APP_ENV
+              value: {{ .Values.knowledgeInterface.env.APP_ENV | quote }}
+            - name: LOG_LEVEL
+              value: {{ .Values.knowledgeInterface.env.LOG_LEVEL | quote }}
             - name: MEMGRAPH_BOLT_ADDR
               value: {{ .Values.knowledgeInterface.env.MEMGRAPH_BOLT_ADDR | quote }}
             - name: QDRANT_ADDR
               value: {{ .Values.knowledgeInterface.env.QDRANT_ADDR | quote }}
             - name: METASTORE_DSN
               value: {{ .Values.knowledgeInterface.env.METASTORE_DSN | quote }}
+            - name: KNOWLEDGE_SCHEMA_DSN
+              value: {{ .Values.knowledgeInterface.env.KNOWLEDGE_SCHEMA_DSN | quote }}
+            - name: OPENAI_EMBEDDING_MODEL
+              value: {{ .Values.knowledgeInterface.env.OPENAI_EMBEDDING_MODEL | quote }}
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.knowledgeInterface.secrets.openaiApiKey.name | quote }}
+                  key: {{ .Values.knowledgeInterface.secrets.openaiApiKey.key | quote }}
           ports:
             - containerPort: {{ .Values.knowledgeInterface.service.port }}
           resources: {{- toYaml .Values.knowledgeInterface.resources | nindent 12 }}

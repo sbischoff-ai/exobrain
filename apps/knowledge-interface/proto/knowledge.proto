@@ -4,10 +4,130 @@ package exobrain.knowledge.v1;
 
 service KnowledgeInterface {
   rpc Health(HealthRequest) returns (HealthReply);
+  rpc GetSchema(GetSchemaRequest) returns (GetSchemaReply);
+  rpc UpsertSchemaType(UpsertSchemaTypeRequest) returns (UpsertSchemaTypeReply);
+  rpc IngestGraphDelta(IngestGraphDeltaRequest) returns (IngestGraphDeltaReply);
 }
 
 message HealthRequest {}
+message HealthReply { string status = 1; }
+message GetSchemaRequest { string universe_id = 1; }
 
-message HealthReply {
-  string status = 1;
+message SchemaType {
+  string id = 1;
+  string kind = 2;
+  string name = 3;
+  string description = 4;
+  bool active = 5;
+}
+
+message TypeInheritance {
+  string child_type_id = 1;
+  string parent_type_id = 2;
+  string description = 3;
+  bool active = 4;
+}
+
+message TypeProperty {
+  string owner_type_id = 1;
+  string prop_name = 2;
+  string value_type = 3;
+  bool required = 4;
+  bool readable = 5;
+  bool writable = 6;
+  bool active = 7;
+  string description = 8;
+}
+
+message EdgeEndpointRule {
+  string edge_type_id = 1;
+  string from_node_type_id = 2;
+  string to_node_type_id = 3;
+  bool active = 4;
+  string description = 5;
+}
+
+message SchemaNodeType {
+  SchemaType type = 1;
+  repeated TypeProperty properties = 2;
+  repeated TypeInheritance parents = 3;
+}
+
+message SchemaEdgeType {
+  SchemaType type = 1;
+  repeated TypeProperty properties = 2;
+  repeated EdgeEndpointRule rules = 3;
+}
+
+message GetSchemaReply {
+  repeated SchemaNodeType node_types = 1;
+  repeated SchemaEdgeType edge_types = 2;
+}
+
+message UpsertSchemaTypeProperty {
+  string prop_name = 1;
+  string value_type = 2;
+  bool required = 3;
+  bool readable = 4;
+  bool writable = 5;
+  bool active = 6;
+  string description = 7;
+}
+
+message UpsertSchemaTypeRequest {
+  string id = 1;
+  string kind = 2;
+  string name = 3;
+  string description = 4;
+  bool active = 5;
+  optional string parent_type_id = 6;
+  repeated UpsertSchemaTypeProperty properties = 7;
+}
+
+message UpsertSchemaTypeReply { SchemaType schema_type = 1; }
+
+message PropertyValue {
+  string key = 1;
+  oneof value {
+    string string_value = 2;
+    double float_value = 3;
+    int64 int_value = 4;
+    bool bool_value = 5;
+    string datetime_value = 6;
+    string json_value = 7;
+  }
+}
+
+message EntityNode {
+  string id = 1;
+  repeated string labels = 2;
+  string universe_id = 3;
+  repeated PropertyValue properties = 4;
+}
+
+message BlockNode {
+  string id = 1;
+  repeated string labels = 2;
+  string root_entity_id = 3;
+  repeated PropertyValue properties = 4;
+}
+
+message GraphEdge {
+  string from_id = 1;
+  string to_id = 2;
+  string edge_type = 3;
+  repeated PropertyValue properties = 4;
+}
+
+message IngestGraphDeltaRequest {
+  string universe_id = 1;
+  repeated EntityNode entities = 2;
+  repeated BlockNode blocks = 3;
+  repeated GraphEdge edges = 4;
+}
+
+message IngestGraphDeltaReply {
+  uint32 entities_upserted = 1;
+  uint32 blocks_upserted = 2;
+  uint32 edges_upserted = 3;
 }

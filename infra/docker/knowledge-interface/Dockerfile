@@ -7,6 +7,8 @@ RUN cargo build --release --locked
 
 FROM debian:bookworm-slim
 WORKDIR /app
+ENV APP_ENV=cluster \
+    LOG_LEVEL=INFO
 COPY --from=builder /app/target/release/exobrain-knowledge-interface /usr/local/bin/exobrain-knowledge-interface
 EXPOSE 50051
 CMD ["exobrain-knowledge-interface"]

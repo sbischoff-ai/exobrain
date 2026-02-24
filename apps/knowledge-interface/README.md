@@ -1,45 +1,86 @@
 # Exobrain Knowledge Interface
 
-Rust + tonic gRPC service for GraphRAG context retrieval and knowledge-base updates.
+Rust + tonic gRPC service for GraphRAG ingestion and canonical KG schema registry access.
+
+## API status
+
+This API is **breaking-change friendly** right now (pre-launch). It is optimized for clean schema-driven ingestion rather than compatibility shims.
+
+## What this service provides
+
+- Canonical knowledge schema registry in PostgreSQL (`knowledge_graph_schema`), including:
+  - schema types (node/edge)
+  - type inheritance/subtyping
+  - per-type property contracts
+  - edge endpoint rules (domain/range guidance)
+- gRPC API for:
+  - schema introspection (`GetSchema`) with hydrated node/edge type payloads (per-type properties plus parents/rules)
+  - schema type upsert (`UpsertSchemaType`) with parent + additive property updates
+  - schema-driven graph delta ingestion (`IngestGraphDelta`) using typed property values
+
+## Key protocol design choices
+
+- No separate `block_types` surface in schema response.
+- `IngestGraphDelta` uses generic typed properties on entities, blocks, and edges.
+- Event/task fields like `start`, `end`, `due` are modeled as schema properties, not hardcoded proto fields.
+
+## gRPC inspection tips (grpcui)
+
+The service listens with **plaintext gRPC** in local development (no TLS).
+
+```bash
+grpcui -plaintext localhost:50051
+```
+
+## Environment configuration
+
+Create local env file:
+
+```bash
+cp apps/knowledge-interface/.env.example apps/knowledge-interface/.env
+```
+
+## Schema migrations and seed
+
+```bash
+./scripts/local/knowledge-schema-migrate.sh
+./scripts/local/knowledge-schema-seed.sh
+```
 
 ## Local build and run
-
-From the repository root:
 
 ```bash
 ./scripts/local/build-knowledge-interface.sh
 ./scripts/local/run-knowledge-interface.sh
 ```
 
-Notes:
-- Re-run the build script after source changes; Rust binaries must be recompiled.
-- `cargo build --locked` reuses incremental artifacts and recompiles only what changed.
-
-## Local environment endpoints
-
-### Application endpoint
-
-- Knowledge interface gRPC: `localhost:50051`
-
-### Infrastructure dependencies (default script wiring)
-
-- PostgreSQL: `localhost:15432`
-- Qdrant: `localhost:16333` (HTTP), `localhost:16334` (gRPC)
-- Memgraph: `localhost:17687` (Bolt), `localhost:17444` (HTTP)
-- NATS: `localhost:14222` (client), `localhost:18222` (monitoring)
-
-## Kubernetes baseline
-
-The project local cluster helper (`scripts/k3d-up.sh`) defaults to:
-
-- Kubernetes image: `rancher/k3s:v1.35.1-k3s1`
-- Local LoadBalancer mapping: `localhost:8080 -> :80`, `localhost:8443 -> :443`
-- Ingress routing: `http://localhost:8080/` -> assistant frontend, `http://localhost:8080/api` -> assistant backend
-
-
 ## Related docs
 
+- Service implementation notes: [`./docs/implementation.md`](./docs/implementation.md)
+- System-wide graph schema: [`../../docs/knowledge/graph-schema.md`](../../docs/knowledge/graph-schema.md)
 - Repository docs hub: [`../../docs/README.md`](../../docs/README.md)
-- Local setup workflow: [`../../docs/development/local-setup.md`](../../docs/development/local-setup.md)
-- k3d workflow: [`../../docs/development/k3d-workflow.md`](../../docs/development/k3d-workflow.md)
-- Architecture overview: [`../../docs/architecture/architecture-overview.md`](../../docs/architecture/architecture-overview.md)
+
+## Upsert rules enforced by service
+
+- upserted node types must inherit from `node.entity` (directly or transitively)
+- a node can have only one parent
+- edge inheritance is rejected
+- properties are additive/upsert-only via request payload (no delete operation)
+
+
+## Logging
+
+- `LOG_LEVEL` controls runtime log verbosity.
+- Defaults to `DEBUG` when `APP_ENV=local`.
+- Defaults to `INFO` for non-local environments (cluster/docker/k8s).
+
+## Ingestion semantics and current limitations
+
+- `IngestGraphDelta` writes to the graph first, then computes/upserts vectors to Qdrant.
+- Block IDs are intended to be globally unique across universes.
+- Cross-universe graph relationships are valid by design; universes are primarily filtering/context semantics.
+- `labels` on `EntityNode`/`BlockNode` are currently accepted as forward-compatible fields, but are not yet applied in Memgraph writes.
+
+### Mild tech debt
+
+- Cross-store graph/vector writes are not yet orchestrated with durable retry/outbox semantics. A partial failure after graph write and before vector upsert can temporarily leave vectors missing for some blocks.
