@@ -16,7 +16,7 @@
 html, body { margin: 0; height: 100%; }
 body {
   background: var(--bg);
-  color: var(--text);
+  color: #83a598;
   font-family: 'Space Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 h1,h2,h3,h4,h5,h6,p { margin: 0; }
@@ -357,7 +357,7 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
 }
 
 .process-info-list {
-  --stack-offset: 6px;
+  --stack-offset: 4px;
   position: relative;
   display: grid;
   gap: 0.45rem;
@@ -366,13 +366,17 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
 
 .process-info-card {
   font-size: 0.84rem;
-  color: var(--text);
-  background: #4f4742;
+  color: #83a598;
+  background: #458588;
   border: 1px solid var(--border);
   border-radius: 0.62rem;
   padding: 0.5rem 0.6rem;
   min-height: 7rem;
   transition: transform 220ms ease, opacity 220ms ease, box-shadow 220ms ease;
+}
+
+.process-info-list:not(.expanded) {
+  margin-bottom: 0.55rem;
 }
 
 .process-info-list:not(.expanded) .process-info-card.collapsed {
@@ -406,7 +410,7 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
 
 .process-description {
   margin: 0.12rem 0 0;
-  color: var(--muted);
+  color: #83a598;
 }
 
 .process-description.muted {
@@ -416,7 +420,7 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
 
 .process-response {
   margin: 0.28rem 0 0;
-  color: var(--text);
+  color: #83a598;
   line-height: 1.35;
 }
 
