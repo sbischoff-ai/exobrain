@@ -150,3 +150,5 @@ A skill is a set of local instructions in a `SKILL.md` file.
 - In job-orchestrator, avoid broad `JOB_QUEUE_SUBJECT` patterns that also match result/DLQ subjects; keep request subscription scoped (for example `jobs.*.*.requested`) to prevent self-consumption loops.
 
 - When changing `JOB_QUEUE_SUBJECT` filtering semantics, rotate `JOB_CONSUMER_DURABLE` (or recreate the consumer) so old JetStream consumer filters do not persist and cause unexpected message fan-in.
+
+- In constrained agent environments, prefer pure-Python gRPC clients for worker-side connectivity checks; native `grpcio` wheels may require missing system libs (for example `libstdc++.so.6`).

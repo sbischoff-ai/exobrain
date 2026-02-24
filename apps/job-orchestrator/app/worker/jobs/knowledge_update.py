@@ -3,18 +3,29 @@ from __future__ import annotations
 import argparse
 import asyncio
 
-import grpc
+from grpclib.client import Channel
 
 from app.contracts import JobEnvelope
 from app.settings import get_settings
+
+
+def _parse_target(target: str) -> tuple[str, int]:
+    host, sep, port = target.rpartition(":")
+    if sep == "" or not host or not port:
+        raise ValueError(f"invalid KNOWLEDGE_INTERFACE_GRPC_TARGET '{target}', expected host:port")
+    return host, int(port)
 
 
 async def run(job: JobEnvelope) -> None:
     """Skeleton knowledge-update worker: verify connectivity to knowledge interface."""
 
     settings = get_settings()
-    async with grpc.aio.insecure_channel(settings.knowledge_interface_grpc_target) as channel:
-        await asyncio.wait_for(channel.channel_ready(), timeout=settings.knowledge_interface_connect_timeout_seconds)
+    host, port = _parse_target(settings.knowledge_interface_grpc_target)
+    channel = Channel(host=host, port=port)
+    try:
+        await asyncio.wait_for(channel.__connect__(), timeout=settings.knowledge_interface_connect_timeout_seconds)
+    finally:
+        channel.close()
 
 
 def main() -> None:
