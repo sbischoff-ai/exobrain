@@ -3,6 +3,7 @@
 let
   libPath = pkgs.lib.makeLibraryPath [
     pkgs.postgresql_16
+    pkgs.stdenv.cc.cc.lib
   ];
 in
 pkgs.mkShell {
