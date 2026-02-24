@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from app.contracts import JobEnvelope
 from app.database import Database
 
@@ -19,7 +21,7 @@ class JobRepository:
             job.job_id,
             job.job_type,
             job.correlation_id,
-            job.payload,
+            json.dumps(job.payload),
             job.attempt,
         )
         return status is not None
