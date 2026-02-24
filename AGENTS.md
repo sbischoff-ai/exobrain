@@ -154,3 +154,5 @@ A skill is a set of local instructions in a `SKILL.md` file.
 - If worker flows rely on native `grpcio`, ensure runtime libraries are provisioned (for example `libstdc++.so.6` in Docker images and local dev shells).
 
 - For worker subprocess jobs, emit concise stderr errors (avoid full tracebacks for expected connectivity timeouts) so orchestrator logs stay actionable during retries.
+
+- When using `logging` `extra` fields, avoid reserved `LogRecord` keys (for example `module`) to prevent runtime `KeyError` in debug-heavy local runs.
