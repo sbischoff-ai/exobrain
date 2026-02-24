@@ -8,7 +8,7 @@ use std::{env, sync::Arc};
 use adapters::{Neo4jGraphStore, OpenAiEmbedder, PostgresSchemaRepository, QdrantVectorStore};
 use domain::{
     BlockNode, EntityNode, GraphDelta, GraphEdge, PropertyScalar, PropertyValue, SchemaType,
-    UpsertSchemaTypeCommand, UpsertSchemaTypePropertyInput,
+    UpsertSchemaTypeCommand, UpsertSchemaTypePropertyInput, Visibility,
 };
 use service::KnowledgeApplication;
 use tonic::{transport::Server, Request, Response, Status};
@@ -227,6 +227,8 @@ impl KnowledgeInterface for KnowledgeGrpcService {
                     id: entity.id,
                     labels: entity.labels,
                     universe_id: entity.universe_id,
+                    user_id: entity.user_id,
+                    visibility: map_visibility(entity.visibility)?,
                     properties: entity
                         .properties
                         .into_iter()
@@ -244,6 +246,8 @@ impl KnowledgeInterface for KnowledgeGrpcService {
                     id: block.id,
                     labels: block.labels,
                     root_entity_id: block.root_entity_id,
+                    user_id: block.user_id,
+                    visibility: map_visibility(block.visibility)?,
                     properties: block
                         .properties
                         .into_iter()
@@ -261,6 +265,8 @@ impl KnowledgeInterface for KnowledgeGrpcService {
                     from_id: edge.from_id,
                     to_id: edge.to_id,
                     edge_type: edge.edge_type,
+                    user_id: edge.user_id,
+                    visibility: map_visibility(edge.visibility)?,
                     properties: edge
                         .properties
                         .into_iter()
@@ -273,6 +279,8 @@ impl KnowledgeInterface for KnowledgeGrpcService {
         self.app
             .ingest_graph_delta(GraphDelta {
                 universe_id: payload.universe_id,
+                user_id: payload.user_id,
+                visibility: map_visibility(payload.visibility)?,
                 entities: entities.clone(),
                 blocks: blocks.clone(),
                 edges: edges.clone(),
@@ -305,6 +313,17 @@ fn map_property_value(value: proto::PropertyValue) -> Result<PropertyValue, Stat
         key: value.key,
         value: scalar,
     })
+}
+
+fn map_visibility(value: i32) -> Result<Visibility, Status> {
+    let visibility = proto::Visibility::try_from(value)
+        .map_err(|_| Status::invalid_argument("visibility is invalid"))?;
+
+    match visibility {
+        proto::Visibility::Private => Ok(Visibility::Private),
+        proto::Visibility::Shared => Ok(Visibility::Shared),
+        proto::Visibility::Unspecified => Err(Status::invalid_argument("visibility is required")),
+    }
 }
 
 #[tokio::main]

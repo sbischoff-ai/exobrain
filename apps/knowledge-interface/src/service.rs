@@ -167,6 +167,8 @@ impl KnowledgeApplication {
     }
 
     pub async fn ingest_graph_delta(&self, delta: GraphDelta) -> Result<()> {
+        validate_delta_access_scope(&delta)?;
+
         self.graph_store.apply_delta(&delta).await?;
 
         let texts: Vec<String> = delta
@@ -184,6 +186,8 @@ impl KnowledgeApplication {
             .map(|((block, vector), text)| EmbeddedBlock {
                 block: block.clone(),
                 universe_id: delta.universe_id.clone(),
+                user_id: delta.user_id.clone(),
+                visibility: delta.visibility,
                 vector,
                 entity_ids: vec![block.root_entity_id.clone()],
                 text,
@@ -192,6 +196,41 @@ impl KnowledgeApplication {
 
         self.vector_store.upsert_blocks(&blocks).await
     }
+}
+
+fn validate_delta_access_scope(delta: &GraphDelta) -> Result<()> {
+    if delta.user_id.trim().is_empty() {
+        return Err(anyhow!("user_id is required"));
+    }
+
+    for entity in &delta.entities {
+        if entity.user_id != delta.user_id {
+            return Err(anyhow!("entity user_id must match request user_id"));
+        }
+        if entity.visibility != delta.visibility {
+            return Err(anyhow!("entity visibility must match request visibility"));
+        }
+    }
+
+    for block in &delta.blocks {
+        if block.user_id != delta.user_id {
+            return Err(anyhow!("block user_id must match request user_id"));
+        }
+        if block.visibility != delta.visibility {
+            return Err(anyhow!("block visibility must match request visibility"));
+        }
+    }
+
+    for edge in &delta.edges {
+        if edge.user_id != delta.user_id {
+            return Err(anyhow!("edge user_id must match request user_id"));
+        }
+        if edge.visibility != delta.visibility {
+            return Err(anyhow!("edge visibility must match request visibility"));
+        }
+    }
+
+    Ok(())
 }
 
 fn extract_text(properties: &[crate::domain::PropertyValue]) -> String {
@@ -215,7 +254,7 @@ mod tests {
     use crate::{
         domain::{
             BlockNode, EdgeEndpointRule, EntityNode, GraphEdge, PropertyValue, TypeInheritance,
-            TypeProperty, UpsertSchemaTypePropertyInput,
+            TypeProperty, UpsertSchemaTypePropertyInput, Visibility,
         },
         ports::{Embedder, GraphStore, SchemaRepository, VectorStore},
     };
@@ -423,10 +462,14 @@ mod tests {
 
         app.ingest_graph_delta(GraphDelta {
             universe_id: "real-life".to_string(),
+            user_id: "user-1".to_string(),
+            visibility: Visibility::Private,
             entities: vec![EntityNode {
                 id: "person.alex".to_string(),
                 labels: vec!["Entity".to_string(), "Person".to_string()],
                 universe_id: "real-life".to_string(),
+                user_id: "user-1".to_string(),
+                visibility: Visibility::Private,
                 properties: vec![PropertyValue {
                     key: "name".to_string(),
                     value: PropertyScalar::String("Alex".to_string()),
@@ -436,6 +479,8 @@ mod tests {
                 id: "block.alex.root".to_string(),
                 labels: vec!["Block".to_string()],
                 root_entity_id: "person.alex".to_string(),
+                user_id: "user-1".to_string(),
+                visibility: Visibility::Private,
                 properties: vec![PropertyValue {
                     key: "text".to_string(),
                     value: PropertyScalar::String("Alex is a close friend.".to_string()),
@@ -445,6 +490,8 @@ mod tests {
                 from_id: "person.alex".to_string(),
                 to_id: "person.alex".to_string(),
                 edge_type: "RELATED_TO".to_string(),
+                user_id: "user-1".to_string(),
+                visibility: Visibility::Private,
                 properties: vec![],
             }],
         })
@@ -457,5 +504,42 @@ mod tests {
         assert_eq!(guard[0].vector.len(), 2);
         assert_eq!(guard[0].entity_ids, vec!["person.alex".to_string()]);
         assert_eq!(guard[0].text, "Alex is a close friend.");
+        assert_eq!(guard[0].user_id, "user-1");
+        assert_eq!(guard[0].visibility, Visibility::Private);
+    }
+
+    #[tokio::test]
+    async fn rejects_mismatched_scope_on_entities() {
+        let app = KnowledgeApplication::new(
+            Arc::new(FakeSchemaRepo::new()),
+            Arc::new(FakeGraphStore),
+            Arc::new(FakeEmbedder),
+            Arc::new(CapturingVectorStore {
+                seen: Arc::new(Mutex::new(vec![])),
+            }),
+        );
+
+        let err = app
+            .ingest_graph_delta(GraphDelta {
+                universe_id: "real-life".to_string(),
+                user_id: "user-1".to_string(),
+                visibility: Visibility::Private,
+                entities: vec![EntityNode {
+                    id: "person.alex".to_string(),
+                    labels: vec![],
+                    universe_id: "real-life".to_string(),
+                    user_id: "user-2".to_string(),
+                    visibility: Visibility::Private,
+                    properties: vec![],
+                }],
+                blocks: vec![],
+                edges: vec![],
+            })
+            .await
+            .expect_err("mismatched user_id should fail");
+
+        assert!(err
+            .to_string()
+            .contains("entity user_id must match request user_id"));
     }
 }

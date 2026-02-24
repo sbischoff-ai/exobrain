@@ -91,6 +91,9 @@ When extending logic, prefer adding tests beside the module under change unless 
 ## Universe and label semantics (current)
 
 - IDs are expected to be globally unique (not universe-scoped IDs).
-- Cross-universe relationships are allowed and used for semantic modeling.
-- Universes are intended mainly for filtering and implicit context semantics.
+- Universes are semantic/contextual only and do not determine access scope.
+- Access scope is modeled via `user_id` ownership and `visibility` (`PRIVATE`/`SHARED`).
+- Ingestion enforces that request-level `user_id`/`visibility` matches all entities/blocks/edges in the delta.
+- Memgraph writes persist `user_id` + `visibility` on entities, blocks, and edges.
+- Qdrant block payloads persist `user_id` + `visibility` for retrieval-time filtering.
 - `labels` fields on entity/block payloads are currently parsed and preserved in domain DTOs, but not yet consumed by graph-write Cypher.

@@ -14,7 +14,7 @@ use sqlx::{postgres::PgPoolOptions, PgPool, Row};
 use crate::{
     domain::{
         EdgeEndpointRule, EmbeddedBlock, GraphDelta, PropertyScalar, PropertyValue, SchemaType,
-        TypeInheritance, TypeProperty, UpsertSchemaTypePropertyInput,
+        TypeInheritance, TypeProperty, UpsertSchemaTypePropertyInput, Visibility,
     },
     ports::{Embedder, GraphStore, SchemaRepository, VectorStore},
 };
@@ -267,6 +267,11 @@ impl GraphStore for Neo4jGraphStore {
                     prop_as_string(&entity.properties, "name").unwrap_or_default(),
                 );
                 row.insert("universe_id", entity.universe_id.clone());
+                row.insert("user_id", entity.user_id.clone());
+                row.insert(
+                    "visibility",
+                    visibility_as_str(entity.visibility).to_string(),
+                );
                 row
             })
             .collect();
@@ -275,7 +280,7 @@ impl GraphStore for Neo4jGraphStore {
             self.graph
                 .run(
                     query(
-                        "UNWIND $rows AS row MERGE (e:Entity {id: row.id}) SET e.name = row.name MERGE (u:Universe {id: row.universe_id}) MERGE (e)-[:IS_PART_OF]->(u)",
+                        "UNWIND $rows AS row MERGE (e:Entity {id: row.id}) SET e.name = row.name, e.user_id = row.user_id, e.visibility = row.visibility MERGE (u:Universe {id: row.universe_id}) MERGE (e)-[:IS_PART_OF]->(u)",
                     )
                     .param("rows", entity_rows),
                 )
@@ -294,6 +299,11 @@ impl GraphStore for Neo4jGraphStore {
                     prop_as_string(&block.properties, "text").unwrap_or_default(),
                 );
                 row.insert("root_entity_id", block.root_entity_id.clone());
+                row.insert("user_id", block.user_id.clone());
+                row.insert(
+                    "visibility",
+                    visibility_as_str(block.visibility).to_string(),
+                );
                 row
             })
             .collect();
@@ -302,7 +312,7 @@ impl GraphStore for Neo4jGraphStore {
             self.graph
                 .run(
                     query(
-                        "UNWIND $rows AS row MERGE (b:Block {id: row.id}) SET b.text = row.text WITH row, b MATCH (e:Entity {id: row.root_entity_id}) MERGE (e)-[:DESCRIBED_BY]->(b)",
+                        "UNWIND $rows AS row MERGE (b:Block {id: row.id}) SET b.text = row.text, b.user_id = row.user_id, b.visibility = row.visibility WITH row, b MATCH (e:Entity {id: row.root_entity_id}) WHERE e.user_id = row.user_id AND e.visibility = row.visibility MERGE (e)-[:DESCRIBED_BY]->(b)",
                     )
                     .param("rows", block_rows),
                 )
@@ -313,7 +323,7 @@ impl GraphStore for Neo4jGraphStore {
         for edge in &delta.edges {
             validate_edge_type(&edge.edge_type)?;
             let cypher = format!(
-                "MATCH (a {{id: $from_id}}), (b {{id: $to_id}}) MERGE (a)-[r:{}]->(b) SET r.confidence = $confidence, r.status = $status, r.context = $context",
+                "MATCH (a {{id: $from_id}}), (b {{id: $to_id}}) WHERE a.user_id = $user_id AND b.user_id = $user_id AND a.visibility = $visibility AND b.visibility = $visibility MERGE (a)-[r:{}]->(b) SET r.confidence = $confidence, r.status = $status, r.context = $context, r.user_id = $user_id, r.visibility = $visibility",
                 edge.edge_type
             );
             self.graph
@@ -321,6 +331,8 @@ impl GraphStore for Neo4jGraphStore {
                     query(&cypher)
                         .param("from_id", edge.from_id.clone())
                         .param("to_id", edge.to_id.clone())
+                        .param("user_id", edge.user_id.clone())
+                        .param("visibility", visibility_as_str(edge.visibility))
                         .param(
                             "confidence",
                             prop_as_float(&edge.properties, "confidence").unwrap_or(1.0),
@@ -462,6 +474,11 @@ impl VectorStore for QdrantVectorStore {
                     "universe_id".to_string(),
                     Value::from(embedded.universe_id.clone()),
                 );
+                payload.insert("user_id".to_string(), Value::from(embedded.user_id.clone()));
+                payload.insert(
+                    "visibility".to_string(),
+                    Value::from(visibility_as_str(embedded.visibility).to_string()),
+                );
                 payload.insert("text".to_string(), Value::from(embedded.text.clone()));
                 payload.insert(
                     "root_entity_id".to_string(),
@@ -480,6 +497,13 @@ impl VectorStore for QdrantVectorStore {
             .upsert_points(UpsertPointsBuilder::new(&self.collection, points).wait(true))
             .await?;
         Ok(())
+    }
+}
+
+fn visibility_as_str(visibility: Visibility) -> &'static str {
+    match visibility {
+        Visibility::Private => "PRIVATE",
+        Visibility::Shared => "SHARED",
     }
 }
 

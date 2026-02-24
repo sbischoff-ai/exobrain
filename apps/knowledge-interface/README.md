@@ -44,7 +44,9 @@ grpcui -plaintext localhost:50051
 ## Ingestion semantics and current limitations
 
 - Graph writes happen before vector upserts to Qdrant.
-- IDs are globally unique across universes; cross-universe graph edges are intentional.
+- IDs are globally unique across universes.
+- Ingestion is access-scoped with `user_id` and `visibility` (`PRIVATE` or `SHARED`) on request + entities + blocks + edges.
+- `PRIVATE` and `SHARED` data are explicitly persisted onto Memgraph nodes/edges and Qdrant payloads.
 - `labels` are forward-compatible inputs and currently not applied in Memgraph writes.
 
 ## Related docs

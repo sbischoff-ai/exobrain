@@ -77,6 +77,8 @@ pub struct EntityNode {
     pub id: String,
     pub labels: Vec<String>,
     pub universe_id: String,
+    pub user_id: String,
+    pub visibility: Visibility,
     pub properties: Vec<PropertyValue>,
 }
 
@@ -85,6 +87,8 @@ pub struct BlockNode {
     pub id: String,
     pub labels: Vec<String>,
     pub root_entity_id: String,
+    pub user_id: String,
+    pub visibility: Visibility,
     pub properties: Vec<PropertyValue>,
 }
 
@@ -93,12 +97,22 @@ pub struct GraphEdge {
     pub from_id: String,
     pub to_id: String,
     pub edge_type: String,
+    pub user_id: String,
+    pub visibility: Visibility,
     pub properties: Vec<PropertyValue>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Visibility {
+    Private,
+    Shared,
 }
 
 #[derive(Debug, Clone)]
 pub struct GraphDelta {
     pub universe_id: String,
+    pub user_id: String,
+    pub visibility: Visibility,
     pub entities: Vec<EntityNode>,
     pub blocks: Vec<BlockNode>,
     pub edges: Vec<GraphEdge>,
@@ -108,6 +122,8 @@ pub struct GraphDelta {
 pub struct EmbeddedBlock {
     pub block: BlockNode,
     pub universe_id: String,
+    pub user_id: String,
+    pub visibility: Visibility,
     pub vector: Vec<f32>,
     pub entity_ids: Vec<String>,
     pub text: String,
