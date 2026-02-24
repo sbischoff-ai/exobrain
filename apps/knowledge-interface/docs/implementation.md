@@ -48,6 +48,7 @@ This document is code-oriented: it helps a new contributor quickly navigate the 
 2. service writes entities/blocks/edges to graph store.
 3. service extracts block text from typed properties (`text`) and generates embeddings.
 4. service writes block vectors + payload metadata to Qdrant.
+5. note: this is currently sequential (graph then vectors), not yet outbox-orchestrated.
 
 ## Internal architecture pattern
 
@@ -86,3 +87,10 @@ Current unit tests are colocated with modules:
 - `adapters.rs`: Cypher edge type validation tests
 
 When extending logic, prefer adding tests beside the module under change unless shared fixtures justify extraction.
+
+## Universe and label semantics (current)
+
+- IDs are expected to be globally unique (not universe-scoped IDs).
+- Cross-universe relationships are allowed and used for semantic modeling.
+- Universes are intended mainly for filtering and implicit context semantics.
+- `labels` fields on entity/block payloads are currently parsed and preserved in domain DTOs, but not yet consumed by graph-write Cypher.
