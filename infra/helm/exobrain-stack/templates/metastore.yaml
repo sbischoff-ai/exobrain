@@ -22,6 +22,22 @@ data:
 
     \connect {{ .Values.metastore.assistantDb.database }}
     CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+    SELECT 'CREATE ROLE {{ .Values.metastore.knowledgeSchemaDb.username }} LOGIN PASSWORD ''{{ .Values.metastore.knowledgeSchemaDb.password }}''' 
+    WHERE NOT EXISTS (
+      SELECT FROM pg_catalog.pg_roles WHERE rolname = '{{ .Values.metastore.knowledgeSchemaDb.username }}'
+    )\gexec
+
+    SELECT 'CREATE DATABASE {{ .Values.metastore.knowledgeSchemaDb.database }} OWNER {{ .Values.metastore.knowledgeSchemaDb.username }}'
+    WHERE NOT EXISTS (
+      SELECT FROM pg_database WHERE datname = '{{ .Values.metastore.knowledgeSchemaDb.database }}'
+    )\gexec
+
+    REVOKE ALL ON DATABASE {{ .Values.metastore.knowledgeSchemaDb.database }} FROM PUBLIC;
+    GRANT CONNECT, TEMPORARY ON DATABASE {{ .Values.metastore.knowledgeSchemaDb.database }} TO {{ .Values.metastore.knowledgeSchemaDb.username }};
+
+    \connect {{ .Values.metastore.knowledgeSchemaDb.database }}
+    CREATE EXTENSION IF NOT EXISTS pgcrypto;
 ---
 apiVersion: apps/v1
 kind: StatefulSet

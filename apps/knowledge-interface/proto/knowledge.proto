@@ -4,10 +4,88 @@ package exobrain.knowledge.v1;
 
 service KnowledgeInterface {
   rpc Health(HealthRequest) returns (HealthReply);
+  rpc GetSchema(GetSchemaRequest) returns (GetSchemaReply);
+  rpc UpsertSchemaType(UpsertSchemaTypeRequest) returns (UpsertSchemaTypeReply);
+  rpc IngestGraphDelta(IngestGraphDeltaRequest) returns (IngestGraphDeltaReply);
 }
 
 message HealthRequest {}
 
 message HealthReply {
   string status = 1;
+}
+
+message GetSchemaRequest {
+  string universe_id = 1;
+}
+
+message SchemaType {
+  string id = 1;
+  string kind = 2;
+  string name = 3;
+  string description = 4;
+  bool active = 5;
+}
+
+message GetSchemaReply {
+  repeated SchemaType node_types = 1;
+  repeated SchemaType edge_types = 2;
+  repeated SchemaType block_types = 3;
+}
+
+message UpsertSchemaTypeRequest {
+  string id = 1;
+  string kind = 2;
+  string name = 3;
+  string description = 4;
+  bool active = 5;
+}
+
+message UpsertSchemaTypeReply {
+  SchemaType schema_type = 1;
+}
+
+message TimeWindow {
+  string start = 1;
+  string end = 2;
+  string due = 3;
+}
+
+message EntityNode {
+  string id = 1;
+  string name = 2;
+  repeated string labels = 3;
+  string universe_id = 4;
+  TimeWindow time_window = 5;
+}
+
+message BlockNode {
+  string id = 1;
+  string text = 2;
+  repeated string labels = 3;
+  string root_entity_id = 4;
+  optional float confidence = 5;
+  optional string status = 6;
+}
+
+message GraphEdge {
+  string from_id = 1;
+  string to_id = 2;
+  string edge_type = 3;
+  optional float confidence = 4;
+  optional string status = 5;
+  optional string context = 6;
+}
+
+message IngestGraphDeltaRequest {
+  string universe_id = 1;
+  repeated EntityNode entities = 2;
+  repeated BlockNode blocks = 3;
+  repeated GraphEdge edges = 4;
+}
+
+message IngestGraphDeltaReply {
+  uint32 entities_upserted = 1;
+  uint32 blocks_upserted = 2;
+  uint32 edges_upserted = 3;
 }

@@ -26,6 +26,15 @@ spec:
               value: {{ .Values.knowledgeInterface.env.QDRANT_ADDR | quote }}
             - name: METASTORE_DSN
               value: {{ .Values.knowledgeInterface.env.METASTORE_DSN | quote }}
+            - name: KNOWLEDGE_SCHEMA_DSN
+              value: {{ .Values.knowledgeInterface.env.KNOWLEDGE_SCHEMA_DSN | quote }}
+            - name: OPENAI_EMBEDDING_MODEL
+              value: {{ .Values.knowledgeInterface.env.OPENAI_EMBEDDING_MODEL | quote }}
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.knowledgeInterface.secrets.openaiApiKey.name | quote }}
+                  key: {{ .Values.knowledgeInterface.secrets.openaiApiKey.key | quote }}
           ports:
             - containerPort: {{ .Values.knowledgeInterface.service.port }}
           resources: {{- toYaml .Values.knowledgeInterface.resources | nindent 12 }}

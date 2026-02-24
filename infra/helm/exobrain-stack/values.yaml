@@ -62,7 +62,13 @@ knowledgeInterface:
     MEMGRAPH_BOLT_ADDR: bolt://exobrain-knowledge-graph:7687
     QDRANT_ADDR: http://exobrain-vector-store:6333
     METASTORE_DSN: postgresql://exobrain:exobrain@exobrain-metastore:5432/exobrain
+    KNOWLEDGE_SCHEMA_DSN: postgresql://knowledge_schema:knowledge_schema@exobrain-metastore:5432/knowledge_graph_schema
     ASSISTANT_DB_DSN: postgresql://assistant_backend:assistant_backend@exobrain-metastore:5432/assistant_db
+    OPENAI_EMBEDDING_MODEL: text-embedding-3-small
+  secrets:
+    openaiApiKey:
+      name: exobrain-secrets
+      key: OPENAI_API_KEY
   resources:
     requests:
       cpu: 100m
@@ -88,6 +94,10 @@ metastore:
     username: assistant_backend
     password: assistant_backend
     database: assistant_db
+  knowledgeSchemaDb:
+    username: knowledge_schema
+    password: knowledge_schema
+    database: knowledge_graph_schema
   persistence:
     enabled: true
     size: 10Gi
