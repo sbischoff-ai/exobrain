@@ -154,6 +154,7 @@ impl GraphStore for Neo4jGraphStore {
         }
 
         for edge in &delta.edges {
+            validate_edge_type(&edge.edge_type)?;
             let cypher = format!(
                 "MATCH (a {{id: $from_id}}), (b {{id: $to_id}}) MERGE (a)-[r:{}]->(b) SET r.confidence = $confidence, r.status = $status, r.context = $context",
                 edge.edge_type
@@ -279,7 +280,7 @@ impl VectorStore for QdrantVectorStore {
                 );
                 payload.insert(
                     "entity_ids".to_string(),
-                    Value::from(embedded.entity_ids.join(",")),
+                    Value::from(embedded.entity_ids.clone()),
                 );
 
                 PointStruct::new(embedded.block.id.clone(), embedded.vector.clone(), payload)
@@ -290,5 +291,35 @@ impl VectorStore for QdrantVectorStore {
             .upsert_points(UpsertPointsBuilder::new(&self.collection, points).wait(true))
             .await?;
         Ok(())
+    }
+}
+
+fn validate_edge_type(edge_type: &str) -> Result<()> {
+    let valid = !edge_type.is_empty()
+        && edge_type
+            .chars()
+            .all(|ch| ch.is_ascii_uppercase() || ch.is_ascii_digit() || ch == '_');
+
+    if !valid {
+        anyhow::bail!("edge_type must be uppercase letters, numbers, or underscore");
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_edge_type;
+
+    #[test]
+    fn validates_good_edge_type() {
+        assert!(validate_edge_type("RELATED_TO").is_ok());
+        assert!(validate_edge_type("PART_OF_2").is_ok());
+    }
+
+    #[test]
+    fn rejects_unsafe_edge_type() {
+        assert!(validate_edge_type("RELATED_TO); MATCH (n)").is_err());
+        assert!(validate_edge_type("related_to").is_err());
     }
 }

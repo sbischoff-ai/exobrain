@@ -76,10 +76,25 @@ Build notes:
 
 ### 4) Run services (separate terminals)
 
+For knowledge-interface local config:
+
+```bash
+cp apps/knowledge-interface/.env.example apps/knowledge-interface/.env
+# set OPENAI_API_KEY in your shell
+```
+
+Then run:
+
 ```bash
 ./scripts/local/run-assistant-backend.sh
 ./scripts/local/run-assistant-frontend.sh
 ./scripts/local/run-knowledge-interface.sh
+```
+
+Optional: seed starter graph schema types:
+
+```bash
+./scripts/local/knowledge-schema-seed.sh
 ```
 
 Default local app endpoints:
@@ -87,6 +102,8 @@ Default local app endpoints:
 - Backend API: `http://localhost:8000`
 - Frontend: `http://localhost:5173`
 - Knowledge interface gRPC: `localhost:50051`
+
+When `APP_ENV=local`, knowledge-interface enables gRPC reflection so you can inspect APIs with `grpcui`.
 
 ### 5) Run unit tests
 

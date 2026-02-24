@@ -6,6 +6,7 @@ Use this page as the index for Exobrain documentation.
 
 - [Architecture overview](architecture/architecture-overview.md)
 - [Architecture intent](architecture/architecture-intent.md)
+- [Knowledge graph schema](knowledge/graph-schema.md)
 
 ## Development workflows
 

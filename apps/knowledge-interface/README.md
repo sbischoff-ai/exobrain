@@ -2,7 +2,7 @@
 
 Rust + tonic gRPC service for GraphRAG ingestion and schema management.
 
-## What this service now provides
+## What this service provides
 
 - Dynamic graph schema metadata in PostgreSQL (`knowledge_graph_schema` database).
 - gRPC API for:
@@ -25,35 +25,34 @@ Retrieval/query over the graph is intentionally out of scope in this increment.
 
 See `proto/knowledge.proto` for payload details.
 
-## Runtime dependencies
+## Environment configuration
 
-Required environment variables:
+Create local env file:
 
-- `MEMGRAPH_BOLT_ADDR` (example: `bolt://localhost:17687`)
-- `QDRANT_ADDR` (example: `http://localhost:16333`)
-- `OPENAI_API_KEY`
+```bash
+cp apps/knowledge-interface/.env.example apps/knowledge-interface/.env
+```
 
-Database environment variables:
+`OPENAI_API_KEY` is intentionally not stored in `.env`.
 
-- `KNOWLEDGE_SCHEMA_DSN` preferred (example: `postgresql://knowledge_schema:knowledge_schema@localhost:15432/knowledge_graph_schema`)
-- falls back to `METASTORE_DSN`
-
-Optional:
-
-- `OPENAI_EMBEDDING_MODEL` (default: `text-embedding-3-small`)
+Reflection behavior:
+- `APP_ENV=local`: gRPC reflection enabled (useful for `grpcui`).
+- non-local env (for example `cluster`): reflection disabled.
 
 ## Local build and run
 
-From the repository root:
+From repository root:
 
 ```bash
 ./scripts/local/build-knowledge-interface.sh
 ./scripts/local/run-knowledge-interface.sh
 ```
 
-Notes:
-- Re-run the build script after source changes; Rust binaries must be recompiled.
-- `cargo build --locked` reuses incremental artifacts and recompiles only what changed.
+Seed starter schema types:
+
+```bash
+./scripts/local/knowledge-schema-seed.sh
+```
 
 ## Local environment endpoints
 
@@ -65,7 +64,6 @@ Notes:
 
 ## Related docs
 
+- Service implementation notes: [`./docs/implementation.md`](./docs/implementation.md)
+- System-wide graph schema: [`../../docs/knowledge/graph-schema.md`](../../docs/knowledge/graph-schema.md)
 - Repository docs hub: [`../../docs/README.md`](../../docs/README.md)
-- Local setup workflow: [`../../docs/development/local-setup.md`](../../docs/development/local-setup.md)
-- k3d workflow: [`../../docs/development/k3d-workflow.md`](../../docs/development/k3d-workflow.md)
-- Architecture overview: [`../../docs/architecture/architecture-overview.md`](../../docs/architecture/architecture-overview.md)

@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 anyhow = "1"
 async-trait = "0.1"
+dotenvy = "0.15"
 neo4rs = "0.8"
 prost = "0.12"
 qdrant-client = "1.12"
@@ -14,6 +15,7 @@ serde = { version = "1", features = ["derive"] }
 sqlx = { version = "0.8", default-features = false, features = ["postgres", "runtime-tokio-rustls"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 tonic = { version = "0.11", features = ["transport"] }
+tonic-reflection = "0.11"
 
 [build-dependencies]
 tonic-build = "0.11"
