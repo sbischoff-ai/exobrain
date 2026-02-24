@@ -13,33 +13,13 @@ Exobrain is a cloud-native AI assistant platform with a GraphRAG-oriented knowle
 
 ## Quick start workflows
 
-Choose **one** setup path and follow the linked guide.
+Choose one startup path and use its canonical runbook.
 
-### Path A: Local app-native development
-
-Use this for fastest iteration on application code.
-
-- Guide: [`docs/development/local-setup.md`](docs/development/local-setup.md)
-- Typical app endpoints:
-  - frontend: `http://localhost:5173`
-  - backend: `http://localhost:8000`
-  - knowledge gRPC: `localhost:50051`
-
-### Path B: Local Kubernetes (k3d + Helm)
-
-Use this for ingress/chart validation and cluster behavior.
-
-- Guide: [`docs/development/k3d-workflow.md`](docs/development/k3d-workflow.md)
-- Typical ingress endpoints:
-  - frontend: `http://localhost:8080/`
-  - backend API: `http://localhost:8080/api`
-
-### Path C: Codex/cloud-agent native workflow
-
-Use this in environments where Docker/k3d are unavailable.
-
-- Guide: [`docs/agents/codex-runbook.agent.md`](docs/agents/codex-runbook.agent.md)
-- Agent constraints and conventions: [`AGENTS.md`](AGENTS.md)
+| Goal | Infra runtime | App process runtime | Primary guide |
+| --- | --- | --- | --- |
+| Fast local app iteration | Docker Compose | `mprocs` | [`docs/development/local-setup.md`](docs/development/local-setup.md) |
+| Helm/ingress/cluster validation | k3d + Helm | Kubernetes workloads | [`docs/development/k3d-workflow.md`](docs/development/k3d-workflow.md) |
+| Codex/cloud-agent constrained environments | Native local services | native scripts | [`docs/agents/codex-runbook.agent.md`](docs/agents/codex-runbook.agent.md) |
 
 ## Repository map
 
@@ -67,12 +47,9 @@ scripts/
   local/
   k3d/
   agent/
-  k3d-up.sh
 ```
 
 ## Common validation commands
-
-Run app-level unit tests after local setup:
 
 ```bash
 cd apps/assistant-backend && uv run --with pytest --with pytest-asyncio pytest
@@ -83,9 +60,10 @@ cd apps/assistant-frontend && npm test
 
 - Documentation hub: [`docs/README.md`](docs/README.md)
 - Architecture overview: [`docs/architecture/architecture-overview.md`](docs/architecture/architecture-overview.md)
-- Architecture intent (long-term): [`docs/architecture/architecture-intent.md`](docs/architecture/architecture-intent.md)
+- Architecture intent: [`docs/architecture/architecture-intent.md`](docs/architecture/architecture-intent.md)
 - Development workflows:
   - local app-native: [`docs/development/local-setup.md`](docs/development/local-setup.md)
+  - local process orchestration: [`docs/development/process-orchestration.md`](docs/development/process-orchestration.md)
   - k3d + Helm: [`docs/development/k3d-workflow.md`](docs/development/k3d-workflow.md)
   - codex/cloud-agent: [`docs/agents/codex-runbook.agent.md`](docs/agents/codex-runbook.agent.md)
 - Standards:
@@ -98,5 +76,4 @@ cd apps/assistant-frontend && npm test
 - Backend: [`apps/assistant-backend/README.md`](apps/assistant-backend/README.md)
 - Frontend: [`apps/assistant-frontend/README.md`](apps/assistant-frontend/README.md)
 - Knowledge interface: [`apps/knowledge-interface/README.md`](apps/knowledge-interface/README.md)
-
 - Job orchestrator: [`apps/job-orchestrator/README.md`](apps/job-orchestrator/README.md)

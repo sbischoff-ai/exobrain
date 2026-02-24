@@ -69,6 +69,22 @@ This guide defines how documentation is organized across the repository so human
   - The root README may exceed 250 lines when needed to preserve first-run onboarding flow.
   - Even when over the target, avoid embedding deep policy content better kept in `docs/`.
 
+## Workflow Documentation Placement Rules
+
+Use these placement rules to avoid startup-command duplication:
+
+- **Cross-service startup flows** belong in `docs/development/local-setup.md`.
+- **Process-orchestration boundaries** (Docker Compose vs `mprocs` vs k3d/agent scripts) belong in `docs/development/process-orchestration.md`.
+- **Service READMEs** should keep only service-specific configuration, tests, and troubleshooting; link to development workflow docs for startup sequences.
+- **Metastore READMEs** (`infra/metastore/*/README.md`) should document schema/migration commands only.
+
+Examples:
+
+- ✅ Allowed: local full-stack run-profile commands in `docs/development/local-setup.md`.
+- ✅ Allowed: environment variables unique to `apps/assistant-backend` in `apps/assistant-backend/README.md`.
+- ❌ Avoid: repeating the full multi-service startup sequence in every service README.
+- ❌ Avoid: copying migration commands from `infra/metastore/*/README.md` into unrelated architecture docs.
+
 ## Redundancy Policy
 
 - Do not duplicate policy text across files unless there is a strong operational reason.

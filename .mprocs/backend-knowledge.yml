@@ -1,0 +1,7 @@
+procs:
+  assistant-backend:
+    shell: ./scripts/local/run-assistant-backend.sh
+  knowledge-interface:
+    shell: ./scripts/local/run-knowledge-interface.sh
+  job-orchestrator:
+    shell: ./scripts/local/run-job-orchestrator.sh

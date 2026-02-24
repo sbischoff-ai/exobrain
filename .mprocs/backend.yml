@@ -1,0 +1,5 @@
+procs:
+  assistant-backend:
+    shell: ./scripts/local/run-assistant-backend.sh
+  job-orchestrator:
+    shell: ./scripts/local/run-job-orchestrator.sh
