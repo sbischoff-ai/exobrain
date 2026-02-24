@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import socket
 
+import grpc
 import pytest
 
 from app.contracts import JobEnvelope
@@ -17,16 +18,10 @@ def _free_port() -> int:
 
 @pytest.mark.asyncio
 async def test_process_runner_executes_knowledge_update_job(monkeypatch: pytest.MonkeyPatch) -> None:
-    async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-        try:
-            await reader.read(24)
-        finally:
-            writer.close()
-            await writer.wait_closed()
-
-    server = await asyncio.start_server(handle_client, host="127.0.0.1", port=0)
-    host, port = server.sockets[0].getsockname()[:2]
-    monkeypatch.setenv("KNOWLEDGE_INTERFACE_GRPC_TARGET", f"{host}:{port}")
+    server = grpc.aio.server()
+    port = server.add_insecure_port("127.0.0.1:0")
+    await server.start()
+    monkeypatch.setenv("KNOWLEDGE_INTERFACE_GRPC_TARGET", f"127.0.0.1:{port}")
     monkeypatch.setenv("KNOWLEDGE_INTERFACE_CONNECT_TIMEOUT_SECONDS", "1")
 
     job = JobEnvelope(
@@ -43,8 +38,7 @@ async def test_process_runner_executes_knowledge_update_job(monkeypatch: pytest.
         runner = LocalProcessWorkerRunner()
         await runner.run_job(job)
     finally:
-        server.close()
-        await server.wait_closed()
+        await server.stop(0)
 
 
 @pytest.mark.asyncio

@@ -7,7 +7,7 @@ Python service responsible for asynchronous job orchestration.
 - Subscribes to NATS job request subjects.
 - Persists job lifecycle state in `job_orchestrator_db`.
 - Executes worker job scripts idempotently, retries failures, and publishes completion/failure events.
-- The `knowledge.update` skeleton uses a pure-Python gRPC client to avoid native runtime library issues in constrained environments.
+- The `knowledge.update` skeleton uses `grpcio`; ensure `libstdc++` is available in runtime/dev environments.
 - Uses an orchestration/runner abstraction so local process execution can later switch to pod orchestration.
 
 ## Quick start

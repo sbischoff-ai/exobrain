@@ -151,4 +151,4 @@ A skill is a set of local instructions in a `SKILL.md` file.
 
 - When changing `JOB_QUEUE_SUBJECT` filtering semantics, rotate `JOB_CONSUMER_DURABLE` (or recreate the consumer) so old JetStream consumer filters do not persist and cause unexpected message fan-in.
 
-- In constrained agent environments, prefer pure-Python gRPC clients for worker-side connectivity checks; native `grpcio` wheels may require missing system libs (for example `libstdc++.so.6`).
+- If worker flows rely on native `grpcio`, ensure runtime libraries are provisioned (for example `libstdc++.so.6` in Docker images and local dev shells).
