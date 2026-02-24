@@ -39,29 +39,35 @@ pub struct EdgeEndpointRule {
 }
 
 #[derive(Debug, Clone)]
-pub struct TimeWindow {
-    pub start: Option<String>,
-    pub end: Option<String>,
-    pub due: Option<String>,
+pub enum PropertyScalar {
+    String(String),
+    Float(f64),
+    Int(i64),
+    Bool(bool),
+    Datetime(String),
+    Json(String),
+}
+
+#[derive(Debug, Clone)]
+pub struct PropertyValue {
+    pub key: String,
+    pub value: PropertyScalar,
 }
 
 #[derive(Debug, Clone)]
 pub struct EntityNode {
     pub id: String,
-    pub name: String,
     pub labels: Vec<String>,
     pub universe_id: String,
-    pub time_window: Option<TimeWindow>,
+    pub properties: Vec<PropertyValue>,
 }
 
 #[derive(Debug, Clone)]
 pub struct BlockNode {
     pub id: String,
-    pub text: String,
     pub labels: Vec<String>,
     pub root_entity_id: String,
-    pub confidence: Option<f32>,
-    pub status: Option<String>,
+    pub properties: Vec<PropertyValue>,
 }
 
 #[derive(Debug, Clone)]
@@ -69,9 +75,7 @@ pub struct GraphEdge {
     pub from_id: String,
     pub to_id: String,
     pub edge_type: String,
-    pub confidence: Option<f32>,
-    pub status: Option<String>,
-    pub context: Option<String>,
+    pub properties: Vec<PropertyValue>,
 }
 
 #[derive(Debug, Clone)]
@@ -88,4 +92,14 @@ pub struct EmbeddedBlock {
     pub universe_id: String,
     pub vector: Vec<f32>,
     pub entity_ids: Vec<String>,
+    pub text: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct FullSchema {
+    pub node_types: Vec<SchemaType>,
+    pub edge_types: Vec<SchemaType>,
+    pub inheritance: Vec<TypeInheritance>,
+    pub properties: Vec<TypeProperty>,
+    pub edge_rules: Vec<EdgeEndpointRule>,
 }

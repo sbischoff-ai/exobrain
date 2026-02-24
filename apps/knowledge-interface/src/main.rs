@@ -6,6 +6,9 @@ mod service;
 use std::{env, sync::Arc};
 
 use adapters::{Neo4jGraphStore, OpenAiEmbedder, PostgresSchemaRepository, QdrantVectorStore};
+use domain::{
+    BlockNode, EntityNode, GraphDelta, GraphEdge, PropertyScalar, PropertyValue, SchemaType,
+};
 use service::KnowledgeApplication;
 use tonic::{transport::Server, Request, Response, Status};
 
@@ -13,7 +16,6 @@ pub mod proto {
     tonic::include_proto!("exobrain.knowledge.v1");
 }
 
-use domain::{BlockNode, EntityNode, GraphDelta, GraphEdge, SchemaType, TimeWindow};
 use proto::knowledge_interface_server::{KnowledgeInterface, KnowledgeInterfaceServer};
 use proto::{
     GetSchemaReply, GetSchemaRequest, HealthReply, HealthRequest, IngestGraphDeltaReply,
@@ -77,13 +79,13 @@ impl KnowledgeInterface for KnowledgeGrpcService {
         &self,
         _request: Request<GetSchemaRequest>,
     ) -> Result<Response<GetSchemaReply>, Status> {
-        let (node_types, edge_types, block_types) = self
+        let schema = self
             .app
             .get_schema()
             .await
             .map_err(|e| Status::internal(e.to_string()))?;
 
-        let map_proto = |s: SchemaType| proto::SchemaType {
+        let map_type = |s: SchemaType| proto::SchemaType {
             id: s.id,
             kind: s.kind,
             name: s.name,
@@ -92,9 +94,43 @@ impl KnowledgeInterface for KnowledgeGrpcService {
         };
 
         Ok(Response::new(GetSchemaReply {
-            node_types: node_types.into_iter().map(map_proto).collect(),
-            edge_types: edge_types.into_iter().map(map_proto).collect(),
-            block_types: block_types.into_iter().map(map_proto).collect(),
+            node_types: schema.node_types.into_iter().map(map_type).collect(),
+            edge_types: schema.edge_types.into_iter().map(map_type).collect(),
+            inheritance: schema
+                .inheritance
+                .into_iter()
+                .map(|i| proto::TypeInheritance {
+                    child_type_id: i.child_type_id,
+                    parent_type_id: i.parent_type_id,
+                    description: i.description,
+                    active: i.active,
+                })
+                .collect(),
+            properties: schema
+                .properties
+                .into_iter()
+                .map(|p| proto::TypeProperty {
+                    owner_type_id: p.owner_type_id,
+                    prop_name: p.prop_name,
+                    value_type: p.value_type,
+                    required: p.required,
+                    readable: p.readable,
+                    writable: p.writable,
+                    active: p.active,
+                    description: p.description,
+                })
+                .collect(),
+            edge_rules: schema
+                .edge_rules
+                .into_iter()
+                .map(|r| proto::EdgeEndpointRule {
+                    edge_type_id: r.edge_type_id,
+                    from_node_type_id: r.from_node_type_id,
+                    to_node_type_id: r.to_node_type_id,
+                    active: r.active,
+                    description: r.description,
+                })
+                .collect(),
         }))
     }
 
@@ -135,44 +171,53 @@ impl KnowledgeInterface for KnowledgeGrpcService {
         let entities: Vec<EntityNode> = payload
             .entities
             .into_iter()
-            .map(|entity| EntityNode {
-                id: entity.id,
-                name: entity.name,
-                labels: entity.labels,
-                universe_id: entity.universe_id,
-                time_window: entity.time_window.map(|tw| TimeWindow {
-                    start: non_empty(tw.start),
-                    end: non_empty(tw.end),
-                    due: non_empty(tw.due),
-                }),
+            .map(|entity| {
+                Ok(EntityNode {
+                    id: entity.id,
+                    labels: entity.labels,
+                    universe_id: entity.universe_id,
+                    properties: entity
+                        .properties
+                        .into_iter()
+                        .map(map_property_value)
+                        .collect::<Result<Vec<_>, _>>()?,
+                })
             })
-            .collect();
+            .collect::<Result<Vec<_>, Status>>()?;
 
         let blocks: Vec<BlockNode> = payload
             .blocks
             .into_iter()
-            .map(|block| BlockNode {
-                id: block.id,
-                text: block.text,
-                labels: block.labels,
-                root_entity_id: block.root_entity_id,
-                confidence: block.confidence,
-                status: block.status,
+            .map(|block| {
+                Ok(BlockNode {
+                    id: block.id,
+                    labels: block.labels,
+                    root_entity_id: block.root_entity_id,
+                    properties: block
+                        .properties
+                        .into_iter()
+                        .map(map_property_value)
+                        .collect::<Result<Vec<_>, _>>()?,
+                })
             })
-            .collect();
+            .collect::<Result<Vec<_>, Status>>()?;
 
         let edges: Vec<GraphEdge> = payload
             .edges
             .into_iter()
-            .map(|edge| GraphEdge {
-                from_id: edge.from_id,
-                to_id: edge.to_id,
-                edge_type: edge.edge_type,
-                confidence: edge.confidence,
-                status: edge.status,
-                context: edge.context,
+            .map(|edge| {
+                Ok(GraphEdge {
+                    from_id: edge.from_id,
+                    to_id: edge.to_id,
+                    edge_type: edge.edge_type,
+                    properties: edge
+                        .properties
+                        .into_iter()
+                        .map(map_property_value)
+                        .collect::<Result<Vec<_>, _>>()?,
+                })
             })
-            .collect();
+            .collect::<Result<Vec<_>, Status>>()?;
 
         self.app
             .ingest_graph_delta(GraphDelta {
@@ -192,13 +237,23 @@ impl KnowledgeInterface for KnowledgeGrpcService {
     }
 }
 
-fn non_empty(input: String) -> Option<String> {
-    let trimmed = input.trim();
-    if trimmed.is_empty() {
-        None
-    } else {
-        Some(trimmed.to_string())
-    }
+fn map_property_value(value: proto::PropertyValue) -> Result<PropertyValue, Status> {
+    let scalar = match value
+        .value
+        .ok_or_else(|| Status::invalid_argument("property value is required"))?
+    {
+        proto::property_value::Value::StringValue(v) => PropertyScalar::String(v),
+        proto::property_value::Value::FloatValue(v) => PropertyScalar::Float(v),
+        proto::property_value::Value::IntValue(v) => PropertyScalar::Int(v),
+        proto::property_value::Value::BoolValue(v) => PropertyScalar::Bool(v),
+        proto::property_value::Value::DatetimeValue(v) => PropertyScalar::Datetime(v),
+        proto::property_value::Value::JsonValue(v) => PropertyScalar::Json(v),
+    };
+
+    Ok(PropertyValue {
+        key: value.key,
+        value: scalar,
+    })
 }
 
 #[tokio::main]
