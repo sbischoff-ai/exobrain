@@ -20,6 +20,10 @@ spec:
           image: "{{ .Values.jobOrchestrator.image.repository }}:{{ .Values.jobOrchestrator.image.tag }}"
           imagePullPolicy: {{ .Values.jobOrchestrator.image.pullPolicy }}
           env:
+            - name: APP_ENV
+              value: {{ .Values.jobOrchestrator.env.APP_ENV | quote }}
+            - name: LOG_LEVEL
+              value: {{ .Values.jobOrchestrator.env.LOG_LEVEL | quote }}
             - name: JOB_ORCHESTRATOR_DB_DSN
               value: {{ .Values.jobOrchestrator.env.JOB_ORCHESTRATOR_DB_DSN | quote }}
             - name: EXOBRAIN_NATS_URL

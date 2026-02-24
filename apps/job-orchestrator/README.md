@@ -47,6 +47,8 @@ Keep request subject patterns narrow enough that they do not also match events/D
 - `WORKER_REPLICA_COUNT` (default: `1`, max concurrent worker processes)
 - `KNOWLEDGE_INTERFACE_GRPC_TARGET` (default: `localhost:50051`)
 - `KNOWLEDGE_INTERFACE_CONNECT_TIMEOUT_SECONDS` (default: `5.0`)
+- `APP_ENV` (default: `local`, influences default logging level)
+- `LOG_LEVEL` (optional override; defaults to `DEBUG` in local, `INFO` otherwise)
 - `RESHAPE_SCHEMA_QUERY` (optional)
 
 ## Related docs
