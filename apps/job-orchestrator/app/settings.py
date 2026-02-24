@@ -14,6 +14,16 @@ class Settings(BaseSettings):
     exobrain_nats_url: str = Field(default="nats://localhost:14222", alias="EXOBRAIN_NATS_URL")
     job_queue_subject: str = Field(default="jobs.>", alias="JOB_QUEUE_SUBJECT")
     job_events_subject_prefix: str = Field(default="jobs.events", alias="JOB_EVENTS_SUBJECT_PREFIX")
+    worker_replica_count: int = Field(default=1, alias="WORKER_REPLICA_COUNT", ge=1)
+    knowledge_interface_grpc_target: str = Field(
+        default="localhost:15051",
+        alias="KNOWLEDGE_INTERFACE_GRPC_TARGET",
+    )
+    knowledge_interface_connect_timeout_seconds: float = Field(
+        default=5.0,
+        alias="KNOWLEDGE_INTERFACE_CONNECT_TIMEOUT_SECONDS",
+        gt=0,
+    )
     reshape_schema_query: str = Field(default="", alias="RESHAPE_SCHEMA_QUERY")
 
 

@@ -9,6 +9,7 @@ from app.services.contracts import (
     JournalCacheProtocol,
     JournalServiceProtocol,
     JobPublisherProtocol,
+    KnowledgeServiceProtocol,
     SessionStoreProtocol,
     UserServiceProtocol,
 )
@@ -25,3 +26,4 @@ def test_container_resolves_singleton_services() -> None:
     assert container.resolve(ConversationServiceProtocol) is container.resolve(ConversationServiceProtocol)
     assert container.resolve(JournalServiceProtocol) is container.resolve(JournalServiceProtocol)
     assert container.resolve(JobPublisherProtocol) is container.resolve(JobPublisherProtocol)
+    assert container.resolve(KnowledgeServiceProtocol) is container.resolve(KnowledgeServiceProtocol)

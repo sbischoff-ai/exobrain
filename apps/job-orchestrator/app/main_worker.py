@@ -7,8 +7,9 @@ import nats
 
 from app.database import Database
 from app.job_repository import JobRepository
+from app.orchestrator import JobOrchestrator
 from app.settings import get_settings
-from app.worker import JobWorker, default_handler
+from app.worker import LocalProcessWorkerRunner
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -26,14 +27,17 @@ async def main() -> None:
     await js.add_stream(name="JOBS", subjects=["jobs.>"])
 
     repository = JobRepository(db)
-    worker = JobWorker(
+    orchestrator = JobOrchestrator(
         repository=repository,
+        runner=LocalProcessWorkerRunner(),
         events_subject_prefix=settings.job_events_subject_prefix,
         publish_event=js.publish,
     )
+    concurrency_guard = asyncio.Semaphore(settings.worker_replica_count)
 
     async def handle(msg):
-        await worker.process_message(msg, default_handler)
+        async with concurrency_guard:
+            await orchestrator.process_message(msg)
 
     await js.subscribe(
         settings.job_queue_subject,
@@ -41,7 +45,10 @@ async def main() -> None:
         cb=handle,
         manual_ack=True,
     )
-    logger.info("job orchestrator worker started", extra={"subject": settings.job_queue_subject})
+    logger.info(
+        "job orchestrator worker started",
+        extra={"subject": settings.job_queue_subject, "replicas": settings.worker_replica_count},
+    )
 
     try:
         while True:

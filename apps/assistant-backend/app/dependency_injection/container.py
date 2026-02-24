@@ -16,6 +16,7 @@ from app.services.contracts import (
     JournalCacheProtocol,
     JournalServiceProtocol,
     JobPublisherProtocol,
+    KnowledgeServiceProtocol,
     SessionStoreProtocol,
     UserServiceProtocol,
 )
@@ -23,6 +24,7 @@ from app.services.database_service import DatabaseService
 from app.services.journal_cache_store import RedisJournalCacheStore
 from app.services.journal_service import JournalService
 from app.services.job_publisher import NatsJobPublisher
+from app.services.knowledge_service import KnowledgeService
 from app.services.session_store import RedisSessionStore
 from app.services.user_service import UserService
 
@@ -68,6 +70,7 @@ def build_container(settings: Settings) -> punq.Container:
     container.register(AuthServiceProtocol, factory=AuthService, scope=punq.Scope.singleton)
     container.register(ConversationServiceProtocol, factory=ConversationService, scope=punq.Scope.singleton)
     container.register(JournalServiceProtocol, factory=JournalService, scope=punq.Scope.singleton)
+    container.register(KnowledgeServiceProtocol, factory=KnowledgeService, scope=punq.Scope.singleton)
     container.register(ChatServiceProtocol, factory=ChatService, scope=punq.Scope.singleton)
 
     return container

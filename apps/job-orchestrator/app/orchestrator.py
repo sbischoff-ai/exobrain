@@ -1,32 +1,31 @@
 from __future__ import annotations
 
-import json
 import logging
 from typing import Awaitable, Callable
 
 from nats.aio.msg import Msg
 
-from app.contracts import JobEnvelope, JobResultEvent
+from app.contracts import JobEnvelope, JobResultEvent, WorkerJobRunnerProtocol
 from app.job_repository import JobRepository
 
 logger = logging.getLogger(__name__)
 
-JobHandler = Callable[[JobEnvelope], Awaitable[None]]
 
-
-class JobWorker:
+class JobOrchestrator:
     def __init__(
         self,
         *,
         repository: JobRepository,
+        runner: WorkerJobRunnerProtocol,
         events_subject_prefix: str,
         publish_event: Callable[[str, bytes], Awaitable[None]],
     ) -> None:
         self._repository = repository
+        self._runner = runner
         self._events_subject_prefix = events_subject_prefix
         self._publish_event = publish_event
 
-    async def process_message(self, msg: Msg, handler: JobHandler) -> None:
+    async def process_message(self, msg: Msg) -> None:
         job = JobEnvelope.model_validate_json(msg.data)
 
         inserted = await self._repository.register_requested(job)
@@ -38,7 +37,7 @@ class JobWorker:
         await self._repository.mark_processing(job.job_id, job.attempt + 1)
 
         try:
-            await handler(job)
+            await self._runner.run_job(job)
             await self._repository.mark_completed(job.job_id)
             await self._emit_result(job, "completed")
             await msg.ack()
@@ -59,10 +58,3 @@ class JobWorker:
         )
         subject = f"{self._events_subject_prefix}.{job.job_type}.{status}"
         await self._publish_event(subject, event.model_dump_json().encode("utf-8"))
-
-
-def default_handler(_: JobEnvelope) -> Awaitable[None]:
-    async def _complete() -> None:
-        return None
-
-    return _complete()
