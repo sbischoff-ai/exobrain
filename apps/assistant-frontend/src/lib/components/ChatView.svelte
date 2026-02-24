@@ -46,6 +46,7 @@
   let smoothScrollDistance = 0;
   let frameHandle: number | null = null;
   let previousFrameTime = 0;
+  let stalledAutoScrollFrames = 0;
 
   $: {
     const candidateStreamingMessageId = autoScrollEnabled && streamingInProgress ? getCurrentStreamingMessageId() : null;
@@ -76,6 +77,7 @@
         cancelAnimationFrame(frameHandle);
         frameHandle = null;
       }
+      stalledAutoScrollFrames = 0;
     }
   }
 
@@ -343,6 +345,7 @@
     if (distanceFromBottom <= 1) {
       catchupUntilBottom = false;
       smoothScrollToBottomActive = false;
+      stalledAutoScrollFrames = 0;
       return;
     }
 
@@ -365,7 +368,7 @@
     const easeOutProgress = 2 * normalizedTime - normalizedTime * normalizedTime;
     const easedTop = smoothScrollStartTop + smoothScrollDistance * easeOutProgress;
 
-    const scrollStep = autoScroller.getStepForPhase(snapshot.phase, deltaMs);
+    const scrollStep = autoScroller.consumeStepForPhase(snapshot.phase, deltaMs);
     const nextTop = shouldContinueSmoothScroll
       ? Math.min(easedTop, maxScrollTop)
       : Math.min(currentTop + scrollStep, maxScrollTop);
@@ -377,15 +380,25 @@
       lastObservedScrollTop = updatedTop;
       isProgrammaticScroll = false;
 
-      if (!streamingInProgress && updatedTop <= currentTop + 0.5) {
+      if (updatedTop <= currentTop + 0.5) {
+        stalledAutoScrollFrames += 1;
+        if (!streamingInProgress && stalledAutoScrollFrames >= 3) {
+          catchupUntilBottom = false;
+          smoothScrollToBottomActive = false;
+          stalledAutoScrollFrames = 0;
+          return;
+        }
+      } else {
+        stalledAutoScrollFrames = 0;
+      }
+    } else {
+      if (!streamingInProgress && !shouldCatchup) {
         catchupUntilBottom = false;
         smoothScrollToBottomActive = false;
+        stalledAutoScrollFrames = 0;
         return;
       }
-    } else if (!streamingInProgress) {
-      catchupUntilBottom = false;
-      smoothScrollToBottomActive = false;
-      return;
+      stalledAutoScrollFrames = 0;
     }
 
     if (shouldContinueSmoothScroll && normalizedTime >= 1) {

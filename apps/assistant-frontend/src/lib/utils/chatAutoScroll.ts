@@ -24,6 +24,8 @@ const defaultConfig: AutoScrollConfig = {
 export class ChatAutoScroller {
   private suspended = false;
   private phase: ScrollPhase = 'idle';
+  private pendingStepPx = 0;
+  private pendingStepPhase: ScrollPhase = 'idle';
 
   constructor(private readonly config: AutoScrollConfig = defaultConfig) {}
 
@@ -77,6 +79,28 @@ export class ChatAutoScroller {
       return (this.config.catchupPxPerSecond * deltaMs) / 1000;
     }
     return 0;
+  }
+
+  consumeStepForPhase(phase: ScrollPhase, deltaMs: number): number {
+    if (phase === 'idle') {
+      this.pendingStepPx = 0;
+      this.pendingStepPhase = phase;
+      return 0;
+    }
+
+    if (this.pendingStepPhase !== phase) {
+      this.pendingStepPx = 0;
+      this.pendingStepPhase = phase;
+    }
+
+    this.pendingStepPx += this.getStepForPhase(phase, deltaMs);
+    const wholePixelStep = Math.floor(this.pendingStepPx);
+
+    if (wholePixelStep > 0) {
+      this.pendingStepPx -= wholePixelStep;
+    }
+
+    return wholePixelStep;
   }
 }
 
