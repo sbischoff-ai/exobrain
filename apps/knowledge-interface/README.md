@@ -73,3 +73,14 @@ cp apps/knowledge-interface/.env.example apps/knowledge-interface/.env
 - `LOG_LEVEL` controls runtime log verbosity.
 - Defaults to `DEBUG` when `APP_ENV=local`.
 - Defaults to `INFO` for non-local environments (cluster/docker/k8s).
+
+## Ingestion semantics and current limitations
+
+- `IngestGraphDelta` writes to the graph first, then computes/upserts vectors to Qdrant.
+- Block IDs are intended to be globally unique across universes.
+- Cross-universe graph relationships are valid by design; universes are primarily filtering/context semantics.
+- `labels` on `EntityNode`/`BlockNode` are currently accepted as forward-compatible fields, but are not yet applied in Memgraph writes.
+
+### Mild tech debt
+
+- Cross-store graph/vector writes are not yet orchestrated with durable retry/outbox semantics. A partial failure after graph write and before vector upsert can temporarily leave vectors missing for some blocks.

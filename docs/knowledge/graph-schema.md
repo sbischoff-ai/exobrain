@@ -74,4 +74,16 @@ flowchart LR
 ```
 
 Required payload fields:
-- `block_id`, `universe_id`, `text`, `block_type`, `root_entity_id`, `entity_ids`
+- `block_id`, `universe_id`, `text`, `root_entity_id`, `entity_ids`
+
+## Universe semantics
+
+- Universe membership is primarily a filtering/context mechanism.
+- Entity/Block IDs are expected to be globally unique across universes.
+- Cross-universe edges are valid and can encode semantic links between real-world concepts and fictional instances.
+- Intended modeling pattern: a real-world `Entity:Concept` (for example, Darth Vader as a character concept) may connect via `INSTANCE_OF` to a fictional-universe `Entity:Person`.
+
+## Label fields in ingestion payloads
+
+- `labels` exist on ingestion payloads for forward compatibility with richer label-aware graph writes.
+- Current implementation does not project payload labels into dynamic Memgraph labels yet; writes currently use stable base labels (`Entity`, `Block`).
