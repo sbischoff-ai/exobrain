@@ -27,7 +27,7 @@ class MockEventSource {
 
   emit(type: string, data: unknown): void {
     for (const handler of this.listeners.get(type) ?? []) {
-      handler({ data: JSON.stringify(data), currentTarget: this } as MessageEvent);
+      handler({ data: JSON.stringify(data), currentTarget: this } as unknown as MessageEvent);
     }
   }
 
@@ -86,6 +86,64 @@ describe('root page', () => {
 
     expect(fetchSpy).toHaveBeenCalledWith('/api/journal/2026/01/01/messages?limit=50', undefined);
     expect(screen.getByRole('button', { name: 'Load older messages' })).toBeInTheDocument();
+  });
+
+
+  it('renders persisted tool call info boxes from fetched journal messages', async () => {
+    window.sessionStorage.setItem(
+      'exobrain.assistant.session',
+      JSON.stringify({
+        user: { name: 'Test User', email: 'test.user@exobrain.local' },
+        journalReference: '2026/01/01',
+        messageCount: 0,
+        messages: []
+      })
+    );
+
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(jsonResponse({ name: 'Test User', email: 'test.user@exobrain.local' }))
+      .mockResolvedValueOnce(jsonResponse({ reference: '2026/01/01', message_count: 2 }))
+      .mockResolvedValueOnce(
+        jsonResponse([
+          {
+            id: 'm2',
+            role: 'assistant',
+            content: 'Result is ready',
+            sequence: 2,
+            tool_calls: [
+              {
+                tool_call_id: 'tc-1',
+                title: 'Web search',
+                description: 'Searching the web',
+                response: 'Found 3 sources',
+                error: null
+              },
+              {
+                tool_call_id: 'tc-2',
+                title: 'Database lookup',
+                description: 'Checking records',
+                response: null,
+                error: 'Lookup failed'
+              }
+            ]
+          },
+          { id: 'm1', role: 'user', content: 'Find sources', sequence: 1, tool_calls: [] }
+        ])
+      )
+      .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
+      .mockResolvedValueOnce(jsonResponse([{ reference: '2026/02/19' }, { reference: '2026/01/01' }]));
+
+    render(Page);
+
+    await waitFor(() => {
+      expect(screen.getByText('Web search')).toBeInTheDocument();
+      expect(screen.getByText('Found 3 sources')).toBeInTheDocument();
+      expect(screen.getByText('Database lookup')).toBeInTheDocument();
+      expect(screen.getByText('Lookup failed')).toBeInTheDocument();
+    });
+
+    const stored = JSON.parse(window.sessionStorage.getItem('exobrain.assistant.session') || '{}');
+    expect(stored.messages[1].toolCalls).toHaveLength(2);
   });
 
   it('loads older messages using cursor pagination and prepends them chronologically', async () => {

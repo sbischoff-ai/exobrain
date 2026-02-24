@@ -17,6 +17,15 @@ export interface JournalMessage {
   sequence?: number;
   created_at?: string;
   metadata?: Record<string, unknown> | null;
+  tool_calls?: JournalToolCall[];
+}
+
+export interface JournalToolCall {
+  tool_call_id: string;
+  title: string;
+  description: string;
+  response?: string | null;
+  error?: string | null;
 }
 
 export interface ProcessInfo {
@@ -32,5 +41,6 @@ export interface StoredMessage {
   content: string;
   clientMessageId: string;
   sequence?: number;
+  toolCalls?: JournalToolCall[];
   processInfos?: ProcessInfo[];
 }

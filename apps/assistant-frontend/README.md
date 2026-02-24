@@ -111,7 +111,7 @@ The frontend calls `POST /api/chat/message` to start a reply and then opens `GET
 
 - The app now opens on an intro/login screen when there is no active backend session.
 - On successful login (cookie-backed web session), the main assistant workspace is shown. Logging out clears local sessionStorage state and returns to the intro screen.
-- The workspace stores user identity, current journal reference, and journal messages (including per-message client ids) in `sessionStorage` under `exobrain.assistant.session`.
+- The workspace stores user identity, current journal reference, and journal messages (including per-message client ids and persisted `tool_calls`) in `sessionStorage` under `exobrain.assistant.session`.
 - On page load, the client re-syncs stored journal state by comparing stored message count with `/api/journal/{reference}` `message_count`; mismatches trigger a refetch of only the latest 50 messages.
 - The frontend stores backend `message_count` in session state and increments it client-side as chat messages are added, so pagination controls remain consistent between syncs.
 - Message APIs return newest-first (`sequence` descending) for cursor paging; the frontend reorders each page to chronological display and prepends older pages via a "Load older messages" control when total count exceeds 50.
@@ -122,7 +122,7 @@ The frontend calls `POST /api/chat/message` to start a reply and then opens `GET
 - The journal sidebar is collapsed by default and allows switching between journal references. Only today's journal keeps chat input enabled; past journals disable input/send and show a tooltip explaining that chat is unavailable for historical entries.
 - The chat composer supports multiline drafting via `Shift+Enter`, auto-grows with content up to 3 lines, and then becomes internally scrollable for longer drafts.
 
-- Chat requests use the backend idempotency contract and send `client_message_id` with each `/api/chat/message` request, then consume SSE event types (`message_chunk`, `tool_call`, `tool_response`, `error`, `done`) from `/api/chat/stream/{stream_id}`. Tool lifecycle events include `tool_call_id` so responses can map to the correct in-flight info box even when multiple tool calls overlap.
+- Chat requests use the backend idempotency contract and send `client_message_id` with each `/api/chat/message` request, then consume SSE event types (`message_chunk`, `tool_call`, `tool_response`, `error`, `done`) from `/api/chat/stream/{stream_id}`. Tool lifecycle events include `tool_call_id` so responses can map to the correct in-flight info box even when multiple tool calls overlap, and persisted journal `tool_calls` are rehydrated into those same info boxes when loading existing journals.
 
 
 ## Related docs
