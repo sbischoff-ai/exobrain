@@ -22,6 +22,7 @@ The chat viewport auto-scroll logic is implemented as a small state machine so s
    - user suspension is active.
 
    If streaming ends while the viewport is still above bottom and not suspended, auto-scroll continues in reading-speed catch-up until the bottom end condition is met.
+   Catch-up/slow-follow motion accumulates fractional frame deltas and applies whole-pixel steps, preventing low-speed phases from stalling on browsers that quantize `scrollTop` updates to integers.
 7. **Journal-open behavior**:
    - opening **today's journal** performs a near-instant smooth jump to the bottom once the messages render, then remains idle until a new stream starts.
    - opening a **past journal** keeps auto-scroll fully disabled.

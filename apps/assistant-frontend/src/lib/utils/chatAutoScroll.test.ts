@@ -52,6 +52,21 @@ describe('ChatAutoScroller', () => {
   });
 
 
+
+  it('accumulates fractional slow-phase steps into whole-pixel movement', () => {
+    const scroller = new ChatAutoScroller();
+
+    expect(scroller.consumeStepForPhase('stream-slow', 16)).toBe(0);
+    expect(scroller.consumeStepForPhase('stream-slow', 16)).toBe(0);
+
+    let moved = 0;
+    for (let index = 0; index < 40; index += 1) {
+      moved += scroller.consumeStepForPhase('stream-slow', 16);
+    }
+
+    expect(moved).toBeGreaterThanOrEqual(1);
+  });
+
   it('keeps catchup phase active below bottom threshold when forced', () => {
     const scroller = new ChatAutoScroller();
 
