@@ -104,4 +104,5 @@ Ingress is path-based (`/api` to backend, everything else to frontend).
 
 - Root index: [`README.md`](../../README.md)
 - Local app-native workflow: [`local-setup.md`](local-setup.md)
+- Local process orchestration: [`process-orchestration.md`](process-orchestration.md)
 - Codex/cloud-agent runbook: [`../agents/codex-runbook.agent.md`](../agents/codex-runbook.agent.md)

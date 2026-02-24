@@ -1,212 +1,85 @@
 # Exobrain Assistant Backend
 
-FastAPI service for chat orchestration and GraphRAG context augmentation.
+FastAPI service for auth, chat orchestration, journal APIs, and async job publishing.
 
-## Architecture overview
+## What this service is
 
-The backend follows a layered design:
+The backend follows layered boundaries:
 
-- **API layer** (`app/api`): request schemas and HTTP routers.
-- **Service layer** (`app/services`): use-case orchestration, independent from FastAPI.
-- **Agent layer** (`app/agents`): chat agent interfaces and implementations.
-- **Core layer** (`app/core`): runtime configuration and app settings.
-- **Dependency injection** (`app/dependency_injection`): application container assembly via `punq`, with protocol-to-implementation bindings and lifecycle wiring through FastAPI app state.
+- API layer (`app/api`) for request/response wiring.
+- Service layer (`app/services`) for use-case orchestration.
+- Agent layer (`app/agents`) for model + tool integrations.
+- DI container (`app/dependency_injection`) resolves app services from `app.state.container`.
 
-Cross-service standards for router/service boundaries are documented in [`docs/standards/engineering-standards.md`](../../docs/standards/engineering-standards.md).
+Cross-service standards are documented in [`../../docs/standards/engineering-standards.md`](../../docs/standards/engineering-standards.md).
 
-The runtime stores a single `punq` container on `app.state.container`; routers/dependencies resolve protocol contracts from the container instead of using per-service `app.state` fields.
+## Quick start
 
-The current implementation uses LangChain `create_agent()` with LangGraph streaming and a
-Postgres-backed checkpointer so each journal conversation has isolated memory by conversation id.
-It supports either `ChatOpenAI` (default) or `FakeListChatModel` for offline development/testing.
+For canonical local startup/orchestration:
 
-Agent tools are defined under `app/agents/tools` and wrapped behind stable tool contracts. The
-main assistant now includes `web_search` (source discovery) and `web_fetch` (plaintext fetch)
-implemented via `langchain-tavily`.
+- [`../../docs/development/local-setup.md`](../../docs/development/local-setup.md)
+- [`../../docs/development/process-orchestration.md`](../../docs/development/process-orchestration.md)
 
-## Environment configuration
-
-Create a local env file from the example:
-
-```bash
-cp .env.example .env
-```
-
-`OPENAI_API_KEY` is intentionally **not** stored in `.env` and must be provided externally when using the real OpenAI-backed model. (Set it in the terminal session that's running the backend process.)
-`TAVILY_API_KEY` follows the same pattern for web-search/web-fetch tools.
-
-Model selection settings:
-
-- `MAIN_AGENT_USE_MOCK=false` (default): use real OpenAI model (`MAIN_AGENT_MODEL`, `MAIN_AGENT_TEMPERATURE`).
-- `MAIN_AGENT_USE_MOCK=true`: use `FakeListChatModel` responses loaded from markdown.
-- `MAIN_AGENT_MOCK_MESSAGES_FILE=mock-data/main-agent-messages.md`: markdown file containing responses separated by `\n\n--- message ---\n\n`.
-- `MAIN_AGENT_SYSTEM_PROMPT=...`: optional system prompt override for assistant behavior.
-- `TAVILY_API_KEY=...`: optional key for web tools (`web_search`, `web_fetch`) when real model mode is active.
-- `WEB_TOOLS_USE_MOCK=false` (default): set to `true` to avoid Tavily network calls and return offline mock tool payloads.
-- `WEB_TOOLS_MOCK_DATA_FILE=mock-data/web-tools.mock.json`: optional JSON file overriding mock `web_search` and `web_fetch` payloads.
-
-Journal cache settings:
-
-- `ASSISTANT_JOURNAL_CACHE_KEY_PREFIX=assistant:journal-cache`: Redis key prefix for journal response cache data.
-- `ASSISTANT_JOURNAL_CACHE_ENTRY_TTL_SECONDS=30`: TTL for single-entry payloads (`/api/journal/{reference}`, `/api/journal/today`).
-- `ASSISTANT_JOURNAL_CACHE_MESSAGES_TTL_SECONDS=20`: TTL for messages page payloads.
-- `ASSISTANT_JOURNAL_CACHE_LIST_TTL_SECONDS=20`: TTL for journal list payloads (`/api/journal`).
-- `ASSISTANT_JOURNAL_CACHE_NEGATIVE_TTL_SECONDS=8`: short negative-cache TTL for missing journal lookups.
-- `ASSISTANT_JOURNAL_CACHE_JITTER_MAX_SECONDS=5`: randomized TTL extension cap to avoid synchronized expiry stampedes.
-
-The fake model cycles through configured responses and wraps back to the first message after the last one.
-
-Session storage settings:
-
-- `ASSISTANT_CACHE_REDIS_URL=redis://localhost:16379/0`: Redis URL for auth sessions.
-- `ASSISTANT_CACHE_KEY_PREFIX=assistant:sessions`: key namespace used for session records.
-
-Job queue settings:
-
-- `EXOBRAIN_NATS_URL=nats://localhost:14222`: NATS URL used for async job publishing.
-- `JOBS_SUBJECT_PREFIX=jobs`: subject prefix used by queued job requests (for example `jobs.knowledge.ingest.requested`).
-
-Swagger/OpenAPI is environment-gated:
-
-- `APP_ENV=local` -> Swagger UI is enabled (`/docs`).
-- any non-local value (for example in Kubernetes) -> Swagger/OpenAPI is disabled.
-
-Logging behavior:
-
-- `LOG_LEVEL` can override runtime logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`).
-- If `LOG_LEVEL` is unset, backend defaults to `DEBUG` in `APP_ENV=local` and `INFO` otherwise.
-- Structured, security-conscious logs avoid token/session payload dumps while still emitting auth/chat lifecycle events.
-
-
-## Database and auth setup
-
-Assistant backend now uses a dedicated Postgres database (`assistant_db`) and user (`assistant_backend`).
-
-Apply database bootstrap, Reshape migrations, and seed data locally:
-
-```bash
-./scripts/local/assistant-db-setup.sh
-```
-
-This applies TOML-based Reshape migrations from `infra/metastore/assistant-backend/migrations/`, then inserts a test user:
-
-- email: `test.user@exobrain.local`
-- password: `password123`
-
-## Authentication
-
-- `POST /api/auth/login` authenticates a user and can issue:
-  - session cookie mode (`session_mode=web`, `issuance_policy=session`)
-  - token pair mode (`session_mode=api`, `issuance_policy=tokens`)
-- `POST /api/auth/token_refresh` accepts an API refresh token and returns a rotated access+refresh pair.
-- `POST /api/chat/message` now requires authentication and a `client_message_id` UUID for idempotency. It responds with a `stream_id` and persists user/assistant journal messages around the asynchronous stream processing lifecycle
-- `GET /api/chat/stream/{stream_id}` serves an SSE stream (`text/event-stream`) with `message_chunk`, `tool_call`, `tool_response`, `error`, and terminal `done` events for the pending assistant reply. `tool_call`/`tool_response` payloads include a shared `tool_call_id` for deterministic frontend correlation. See `docs/chat-stream-sse-contract.md`.
-- `POST /api/jobs/knowledge` queues knowledge jobs into NATS for asynchronous execution by `job-orchestrator` workers.
-- Journal APIs (`/api/journal`, `/api/journal/today`, `/api/journal/{reference}`, `/api/journal/{reference}/messages`, `/api/journal/search`) provide authenticated access to persisted conversation history.
-- Journal read endpoints (`GET /api/journal`, `GET /api/journal/today`, `GET /api/journal/today/messages`, `GET /api/journal/{reference}`, `GET /api/journal/{reference}/messages`) use Redis-backed cache-aside reads with targeted invalidation on journal/message writes.
-- Message endpoints paginate with a `sequence` cursor and return newest-first results by default.
-- Journal message endpoints (`GET /api/journal/today/messages`, `GET /api/journal/{reference}/messages`) include persisted `tool_calls` arrays with SSE-correlated fields: `tool_call_id`, `title`, `description`, `response`, and `error`.
-
-## Local build and run
-
-From the repository root:
+Service-only run:
 
 ```bash
 ./scripts/local/build-assistant-backend.sh
 ./scripts/local/run-assistant-backend.sh
 ```
 
-Notes:
-- The build script keeps `.venv` in sync via `uv sync` and only updates dependencies when needed.
-- Python is interpreted at runtime; rebuild is mainly needed when dependencies or packaging metadata change.
+## Common commands
 
-
-## Running unit tests
-
-From `apps/assistant-backend` run:
+Database setup:
 
 ```bash
-uv sync --extra dev
-uv run python -m pytest -m "not integration"
+./scripts/local/assistant-db-setup.sh
 ```
 
-This runs the backend unit suite (service/auth/dependency behavior) without requiring live infrastructure services.
-
-> Why this exact flow? In some Codex environments, `python3`/`pytest` on `PATH` can resolve to a pyenv-managed Python 3.10 shim. Syncing dev dependencies and invoking `pytest` via `uv run python -m pytest` ensures the project `.venv` interpreter (Python 3.12 here) is used consistently.
-
-## Running integration tests
-
-Integration tests are intentionally separate and target a running backend URL configured in an env file.
-
-1. Create integration env config:
+Unit tests:
 
 ```bash
-cp tests/integration/.env.integration.example tests/integration/.env.integration
+cd apps/assistant-backend && uv run --with pytest --with pytest-asyncio pytest
 ```
 
-2. Set `ASSISTANT_BACKEND_BASE_URL` in that file. Examples:
-   - local backend process: `http://localhost:8000`
-   - k3d ingress: `http://localhost:8080`
-
-3. Run integration tests:
+Integration tests:
 
 ```bash
+cd apps/assistant-backend
 ASSISTANT_BACKEND_INTEGRATION_ENV_FILE=tests/integration/.env.integration \
   uv run --with pytest --with pytest-asyncio --with httpx pytest -m integration
 ```
 
-The suite expects seeded auth user data to exist on the target backend:
+## Configuration
 
-- email: `test.user@exobrain.local`
-- password: `password123`
+Core runtime vars:
 
-If chat/journal integration tests fail with missing-table errors, re-run database setup (`./scripts/agent/assistant-db-setup-native.sh` or `./scripts/local/assistant-db-setup.sh`) so Reshape migrations are fully applied before starting the backend.
+- `ASSISTANT_DB_DSN` (Postgres metastore)
+- `ASSISTANT_CACHE_REDIS_URL` (session store)
+- `EXOBRAIN_NATS_URL` (job publishing)
+- `EXOBRAIN_QDRANT_URL`, `EXOBRAIN_MEMGRAPH_URL` (knowledge dependencies)
+- `RESHAPE_SCHEMA_QUERY` (migration introspection)
 
-For coding agents in Codex/cloud environments, use this flow:
+Model/tool vars:
 
-```bash
-./scripts/agent/assistant-offline-up.sh
-./scripts/agent/run-assistant-backend-offline.sh
+- `MAIN_AGENT_USE_MOCK=true|false`
+- `MAIN_AGENT_MOCK_MESSAGES_FILE`
+- `OPENAI_API_KEY` (required for real model)
+- `TAVILY_API_KEY` (required for real web tools)
+- `WEB_TOOLS_USE_MOCK=true|false`
 
-cd apps/assistant-backend
-cp tests/integration/.env.integration.example tests/integration/.env.integration
-uv run --with pytest --with pytest-asyncio --with httpx pytest -m integration
-```
+OpenAPI and logging:
 
-`run-assistant-backend-offline.sh` defaults both `MAIN_AGENT_USE_MOCK=true` and `WEB_TOOLS_USE_MOCK=true`, so chat works without OpenAI or Tavily access.
+- `APP_ENV=local` enables `/docs`; non-local disables OpenAPI docs.
+- `LOG_LEVEL` overrides defaults (`DEBUG` local, `INFO` otherwise).
 
-## Local environment endpoints
+## Troubleshooting
 
-### Application endpoint
-
-- Assistant backend API: `http://localhost:8000/api`
-- Health check: `http://localhost:8000/healthz`
-- Auth login endpoint: `POST http://localhost:8000/api/auth/login`
-- Chat endpoint: `POST http://localhost:8000/api/chat/message` (authenticated; include `client_message_id`)
-- Token refresh endpoint: `POST http://localhost:8000/api/auth/token_refresh`
-- Journal endpoints: `GET http://localhost:8000/api/journal*`
-- Swagger UI (local only): `http://localhost:8000/docs`
-
-### Infrastructure dependencies (default script wiring)
-
-- PostgreSQL: `localhost:15432`
-- Qdrant: `localhost:16333` (HTTP), `localhost:16334` (gRPC)
-- Memgraph: `localhost:17687` (Bolt), `localhost:17444` (HTTP)
-- NATS: `localhost:14222` (client), `localhost:18222` (monitoring)
-- Redis (assistant-cache): `localhost:16379`
-
-## Kubernetes baseline
-
-The project local cluster helper (`scripts/k3d-up.sh`) defaults to:
-
-- Kubernetes image: `rancher/k3s:v1.35.1-k3s1`
-- Local LoadBalancer mapping: `localhost:8080 -> :80`, `localhost:8443 -> :443`
-- Ingress routing: `http://localhost:8080/` -> assistant frontend, `http://localhost:8080/api` -> assistant backend
-
+- If chat/journal integration tests fail with missing-table errors, rerun `./scripts/local/assistant-db-setup.sh`.
+- In Codex containers, prefer `uv run python -m pytest` after `uv sync --extra dev` to avoid pyenv interpreter mismatch.
 
 ## Related docs
 
-- Repository docs hub: [`../../docs/README.md`](../../docs/README.md)
-- Local setup workflow: [`../../docs/development/local-setup.md`](../../docs/development/local-setup.md)
-- Engineering standards: [`../../docs/standards/engineering-standards.md`](../../docs/standards/engineering-standards.md)
-- Architecture overview: [`../../docs/architecture/architecture-overview.md`](../../docs/architecture/architecture-overview.md)
+- Docs hub: [`../../docs/README.md`](../../docs/README.md)
+- Local setup: [`../../docs/development/local-setup.md`](../../docs/development/local-setup.md)
+- Agent runbook: [`../../docs/agents/codex-runbook.agent.md`](../../docs/agents/codex-runbook.agent.md)
+- Metastore docs: [`../../infra/metastore/assistant-backend/README.md`](../../infra/metastore/assistant-backend/README.md)

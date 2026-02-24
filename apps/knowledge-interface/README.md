@@ -2,85 +2,53 @@
 
 Rust + tonic gRPC service for GraphRAG ingestion and canonical KG schema registry access.
 
-## API status
+## What this service is
 
-This API is **breaking-change friendly** right now (pre-launch). It is optimized for clean schema-driven ingestion rather than compatibility shims.
+- Provides schema introspection (`GetSchema`) and schema type upsert (`UpsertSchemaType`).
+- Accepts schema-driven graph writes through `IngestGraphDelta`.
+- Uses typed property payloads instead of hardcoded event/task fields.
 
-## What this service provides
+## Quick start
 
-- Canonical knowledge schema registry in PostgreSQL (`knowledge_graph_schema`), including:
-  - schema types (node/edge)
-  - type inheritance/subtyping
-  - per-type property contracts
-  - edge endpoint rules (domain/range guidance)
-- gRPC API for:
-  - schema introspection (`GetSchema`) with hydrated node/edge type payloads (per-type properties plus parents/rules)
-  - schema type upsert (`UpsertSchemaType`) with parent + additive property updates
-  - schema-driven graph delta ingestion (`IngestGraphDelta`) using typed property values
+Use shared startup docs for infra and multi-service runs:
 
-## Key protocol design choices
+- [`../../docs/development/local-setup.md`](../../docs/development/local-setup.md)
+- [`../../docs/development/process-orchestration.md`](../../docs/development/process-orchestration.md)
 
-- No separate `block_types` surface in schema response.
-- `IngestGraphDelta` uses generic typed properties on entities, blocks, and edges.
-- Event/task fields like `start`, `end`, `due` are modeled as schema properties, not hardcoded proto fields.
-
-## gRPC inspection tips (grpcui)
-
-The service listens with **plaintext gRPC** in local development (no TLS).
-
-```bash
-grpcui -plaintext localhost:50051
-```
-
-## Environment configuration
-
-Create local env file:
-
-```bash
-cp apps/knowledge-interface/.env.example apps/knowledge-interface/.env
-```
-
-## Schema migrations and seed
-
-```bash
-./scripts/local/knowledge-schema-migrate.sh
-./scripts/local/knowledge-schema-seed.sh
-```
-
-## Local build and run
+Service-only build/run:
 
 ```bash
 ./scripts/local/build-knowledge-interface.sh
 ./scripts/local/run-knowledge-interface.sh
 ```
 
-## Related docs
+## Common commands
 
-- Service implementation notes: [`./docs/implementation.md`](./docs/implementation.md)
-- System-wide graph schema: [`../../docs/knowledge/graph-schema.md`](../../docs/knowledge/graph-schema.md)
-- Repository docs hub: [`../../docs/README.md`](../../docs/README.md)
+```bash
+./scripts/local/knowledge-schema-migrate.sh
+./scripts/local/knowledge-schema-seed.sh
+```
 
-## Upsert rules enforced by service
+Inspect gRPC APIs locally:
 
-- upserted node types must inherit from `node.entity` (directly or transitively)
-- a node can have only one parent
-- edge inheritance is rejected
-- properties are additive/upsert-only via request payload (no delete operation)
+```bash
+grpcui -plaintext localhost:50051
+```
 
+## Configuration
 
-## Logging
-
-- `LOG_LEVEL` controls runtime log verbosity.
-- Defaults to `DEBUG` when `APP_ENV=local`.
-- Defaults to `INFO` for non-local environments (cluster/docker/k8s).
+- Copy env template: `cp apps/knowledge-interface/.env.example apps/knowledge-interface/.env`
+- `APP_ENV=local` enables local gRPC reflection.
+- `LOG_LEVEL` defaults to `DEBUG` for local and `INFO` otherwise.
 
 ## Ingestion semantics and current limitations
 
-- `IngestGraphDelta` writes to the graph first, then computes/upserts vectors to Qdrant.
-- Block IDs are intended to be globally unique across universes.
-- Cross-universe graph relationships are valid by design; universes are primarily filtering/context semantics.
-- `labels` on `EntityNode`/`BlockNode` are currently accepted as forward-compatible fields, but are not yet applied in Memgraph writes.
+- Graph writes happen before vector upserts to Qdrant.
+- IDs are globally unique across universes; cross-universe graph edges are intentional.
+- `labels` are forward-compatible inputs and currently not applied in Memgraph writes.
 
-### Mild tech debt
+## Related docs
 
-- Cross-store graph/vector writes are not yet orchestrated with durable retry/outbox semantics. A partial failure after graph write and before vector upsert can temporarily leave vectors missing for some blocks.
+- Service notes: [`./docs/implementation.md`](./docs/implementation.md)
+- Graph schema reference: [`../../docs/knowledge/graph-schema.md`](../../docs/knowledge/graph-schema.md)
+- Docs hub: [`../../docs/README.md`](../../docs/README.md)

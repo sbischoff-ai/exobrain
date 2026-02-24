@@ -2,16 +2,20 @@
 
 Use this page as the index for Exobrain documentation.
 
+## Start here
+
+| Goal | Primary doc |
+| --- | --- |
+| Local app-native setup (Docker infra + mprocs apps) | [Local development setup](development/local-setup.md) |
+| Understand startup script ownership and orchestration boundaries | [Local process orchestration](development/process-orchestration.md) |
+| Local cluster validation (k3d + Helm) | [k3d + Helm workflow](development/k3d-workflow.md) |
+| Codex/cloud-agent workflow | [Codex runbook](agents/codex-runbook.agent.md) |
+
 ## Architecture
 
 - [Architecture overview](architecture/architecture-overview.md)
 - [Architecture intent](architecture/architecture-intent.md)
 - [Knowledge graph schema](knowledge/graph-schema.md)
-
-## Development workflows
-
-- [Local development setup](development/local-setup.md)
-- [k3d + Helm workflow](development/k3d-workflow.md)
 
 ## Standards and conventions
 

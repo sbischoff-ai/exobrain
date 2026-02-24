@@ -1,133 +1,54 @@
 # Exobrain Assistant Frontend
 
-SvelteKit + Skeleton frontend for the Exobrain chatbot UI.
+SvelteKit application for intro/login gating, journal navigation, and streaming chat UI.
 
-## Local build and run
+## What this service is
 
-From the repository root:
+- Cookie-authenticated intro/login flow.
+- Journal-focused chat UX with `sessionStorage` snapshots (`exobrain.assistant.session`).
+- SSE-driven streaming message rendering with tool call/response cards.
+
+## Quick start
+
+Shared local startup and process orchestration docs:
+
+- [`../../docs/development/local-setup.md`](../../docs/development/local-setup.md)
+- [`../../docs/development/process-orchestration.md`](../../docs/development/process-orchestration.md)
+
+Service-only commands:
 
 ```bash
 ./scripts/local/build-assistant-frontend.sh
 ./scripts/local/run-assistant-frontend.sh
 ```
 
-Notes:
-- Re-run `build-assistant-frontend.sh` after changing frontend source.
-- Dependency installation is skipped unless `node_modules` is missing or `package-lock.json` changed.
-
-
-## Frontend-only mock mode (no backend required)
-
-For lightweight UI/UX iteration in coding-agent runtimes, run the frontend with an in-memory mock API:
+Frontend-only mock mode:
 
 ```bash
 ./scripts/agent/run-assistant-frontend-mock.sh
 ```
 
-This enables `ASSISTANT_FRONTEND_MOCK_API=true`, which serves `/api/*` endpoints directly from Vite middleware so you can:
-- login with `test.user@exobrain.local` / `password123`
-- open the main workspace after intro/login
-- switch journals, send chat messages, and exercise stream/loading UX without backend infra
-
-When mock mode is enabled, backend proxying is disabled automatically.
-
-## E2E tests (Playwright)
-
-From repository root:
+## Common commands
 
 ```bash
-cd e2e
-npm install
-npm test
+cd apps/assistant-frontend && npm test
+./scripts/agent/run-assistant-frontend-e2e.sh
 ```
 
-Notes:
-- The Playwright config starts `./scripts/agent/run-assistant-frontend-mock.sh` automatically unless `E2E_USE_EXISTING_SERVER=true` is set.
-- These E2E specs validate login/logout, journal switching, chat auto-scroll behavior, and Streamdown code-block rendering.
+## Configuration
 
-## Running unit tests
+- App endpoint: `http://localhost:5173`
+- Backend API base (dev proxy target): `http://localhost:8000`
+- Logging: keep production runtime logs conservative (`warn` or higher unless explicitly needed).
 
-From `apps/assistant-frontend` run:
+## Behavior guarantees
 
-```bash
-npm test
-```
-
-This runs the Vitest component suite for chat and authentication UI flows in a JSDOM environment.
-
-
-## Frontend architecture conventions
-
-For repository-wide layering standards, use [`docs/standards/engineering-standards.md`](../../docs/standards/engineering-standards.md).
-
-Frontend-specific structure in this app:
-
-- `src/lib/models/`: shared domain and API data contracts.
-- `src/lib/services/`: API adapters and business workflows.
-- `src/lib/stores/`: local state persistence helpers.
-- `src/lib/utils/`: reusable helper utilities.
-
-## Logging
-
-Frontend logging is implemented through a small console logger wrapper (`src/lib/utils/logging.ts`) with environment-aware defaults:
-
-- Local dev (`npm run dev`): default level is `debug`.
-- Non-local/prod builds (Docker/Kubernetes): default level is `warn`.
-- Override with `PUBLIC_LOG_LEVEL` (`debug`, `info`, `warn`, `error`).
-
-## Local environment endpoints
-
-### Application endpoint
-
-- Assistant frontend UI: `http://localhost:5173`
-
-### Upstream dependency endpoint
-
-- Assistant backend API (default local run): `http://localhost:8000`
-
-### Shared infrastructure endpoints
-
-- PostgreSQL: `localhost:15432`
-- Qdrant: `localhost:16333` (HTTP), `localhost:16334` (gRPC)
-- Memgraph: `localhost:17687` (Bolt), `localhost:17444` (HTTP)
-- NATS: `localhost:14222` (client), `localhost:18222` (monitoring)
-
-## Kubernetes baseline
-
-The project local cluster helper (`scripts/k3d-up.sh`) defaults to:
-
-- Kubernetes image: `rancher/k3s:v1.35.1-k3s1`
-- Local LoadBalancer mapping: `localhost:8080 -> :80`, `localhost:8443 -> :443`
-- Ingress routing: `http://localhost:8080/` -> assistant frontend, `http://localhost:8080/api` -> assistant backend
-
-## API routing behavior
-
-The frontend calls `POST /api/chat/message` to start a reply and then opens `GET /api/chat/stream/{stream_id}` via `EventSource` for SSE events.
-
-- **Local development (`npm run dev`)**: Vite proxies `/api/*` to `http://localhost:8000` by default. Override with `ASSISTANT_BACKEND_URL` if needed.
-- **Cluster/nonlocal deployments**: the browser keeps calling relative `/api/*`; ingress routes these requests to the assistant backend service.
-
-## Authentication + journal session behavior
-
-- The app now opens on an intro/login screen when there is no active backend session.
-- On successful login (cookie-backed web session), the main assistant workspace is shown. Logging out clears local sessionStorage state and returns to the intro screen.
-- The workspace stores user identity, current journal reference, and journal messages (including per-message client ids and persisted `tool_calls`) in `sessionStorage` under `exobrain.assistant.session`.
-- On page load, the client re-syncs stored journal state by comparing stored message count with `/api/journal/{reference}` `message_count`; mismatches trigger a refetch of only the latest 50 messages.
-- The frontend stores backend `message_count` in session state and increments it client-side as chat messages are added, so pagination controls remain consistent between syncs.
-- Message APIs return newest-first (`sequence` descending) for cursor paging; the frontend reorders each page to chronological display and prepends older pages via a "Load older messages" control when total count exceeds 50.
-- Loading older messages keeps the current viewport anchored so the user remains at the same visible position and can continue scrolling upward into newly prepended history.
-- Chat UI is modularized into focused components (`ChatView`, `ChatMessages`, `ChatComposer`, `AssistantWorkspace`, `IntroLoginPanel`) to keep route files thin and UI logic locally owned.
-- Chat view auto-scrolling follows a state machine tailored for streamed assistant responses (continuous follow, suspension, and post-stream catch-up). See [`docs/chat-autoscroll.md`](./docs/chat-autoscroll.md).
-- If no stored state exists, the client initializes state from `/api/journal/today?create=true` and `/api/journal/today/messages`.
-- The journal sidebar is collapsed by default and allows switching between journal references. Only today's journal keeps chat input enabled; past journals disable input/send and show a tooltip explaining that chat is unavailable for historical entries.
-- The chat composer supports multiline drafting via `Shift+Enter`, auto-grows with content up to 3 lines, and then becomes internally scrollable for longer drafts.
-- In portrait mobile viewports (`max-width: 600px`), the UI scales down for denser layouts: base typography is reduced to 70% and key chrome elements (header title, logo, user icon, and journal sidebar flag) scale to 80%.
-
-- Chat requests use the backend idempotency contract and send `client_message_id` with each `/api/chat/message` request, then consume SSE event types (`message_chunk`, `tool_call`, `tool_response`, `error`, `done`) from `/api/chat/stream/{stream_id}`. Tool lifecycle events include `tool_call_id` so responses can map to the correct in-flight info box even when multiple tool calls overlap, and persisted journal `tool_calls` are rehydrated into those same info boxes when loading existing journals. Tool cards keep the original call description, render the response beneath it, and collapse into a three-card offset stack (latest call on top while collapsed). Expanding the stack lists cards in chronological order from top to bottom with animated expand/collapse controls.
-
+- Message APIs are newest-first for pagination; client normalizes to chronological rendering.
+- Auto-scroll responds to all message updates, including streaming chunk updates.
+- Logout clears `sessionStorage` snapshot state and returns users to intro gate.
 
 ## Related docs
 
-- Repository docs hub: [`../../docs/README.md`](../../docs/README.md)
-- Local setup workflow: [`../../docs/development/local-setup.md`](../../docs/development/local-setup.md)
+- Docs hub: [`../../docs/README.md`](../../docs/README.md)
 - Engineering standards: [`../../docs/standards/engineering-standards.md`](../../docs/standards/engineering-standards.md)
+- Agent runbook: [`../../docs/agents/codex-runbook.agent.md`](../../docs/agents/codex-runbook.agent.md)

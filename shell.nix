@@ -12,6 +12,7 @@ pkgs.mkShell {
     kubectl
     kubernetes-helm
     k3d
+    mprocs
 
     # Assistant backend (Python + uv)
     python312
@@ -54,6 +55,7 @@ pkgs.mkShell {
 
     echo "Exobrain development shell ready"
     echo "- Kubernetes: kubectl, helm, k3d"
+    echo "- Process orchestration: mprocs"
     echo "- Backend: python, uv"
     echo "- Frontend: node"
     echo "- E2E: playwright (nix-provided browsers)"
