@@ -98,11 +98,19 @@ message PropertyValue {
   }
 }
 
+enum Visibility {
+  VISIBILITY_UNSPECIFIED = 0;
+  PRIVATE = 1;
+  SHARED = 2;
+}
+
 message EntityNode {
   string id = 1;
   repeated string labels = 2;
   string universe_id = 3;
   repeated PropertyValue properties = 4;
+  string user_id = 5;
+  Visibility visibility = 6;
 }
 
 message BlockNode {
@@ -110,6 +118,8 @@ message BlockNode {
   repeated string labels = 2;
   string root_entity_id = 3;
   repeated PropertyValue properties = 4;
+  string user_id = 5;
+  Visibility visibility = 6;
 }
 
 message GraphEdge {
@@ -117,6 +127,8 @@ message GraphEdge {
   string to_id = 2;
   string edge_type = 3;
   repeated PropertyValue properties = 4;
+  string user_id = 5;
+  Visibility visibility = 6;
 }
 
 message IngestGraphDeltaRequest {
@@ -124,6 +136,8 @@ message IngestGraphDeltaRequest {
   repeated EntityNode entities = 2;
   repeated BlockNode blocks = 3;
   repeated GraphEdge edges = 4;
+  string user_id = 5;
+  Visibility visibility = 6;
 }
 
 message IngestGraphDeltaReply {
