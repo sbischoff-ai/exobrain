@@ -446,7 +446,9 @@
         const item = processInfos[index];
         if (item.state === 'pending' && item.toolCallId === toolCallId) {
           return processInfos.map((entry, entryIndex) =>
-            entryIndex === index ? { ...entry, state: 'resolved', description: message } : entry
+            entryIndex === index
+              ? { ...entry, state: 'resolved', response: message }
+              : entry
           );
         }
       }
@@ -456,14 +458,23 @@
       const item = processInfos[index];
       if (item.state === 'pending') {
         return processInfos.map((entry, entryIndex) =>
-          entryIndex === index ? { ...entry, state: 'resolved', description: message } : entry
+          entryIndex === index
+              ? { ...entry, state: 'resolved', response: message }
+              : entry
         );
       }
     }
 
     return [
       ...processInfos,
-      { id: makeClientMessageId(), toolCallId, title: 'Tool result', description: message, state: 'resolved' }
+      {
+        id: makeClientMessageId(),
+        toolCallId,
+        title: 'Tool result',
+        description: 'Completed',
+        response: message,
+        state: 'resolved'
+      }
     ];
   }
 

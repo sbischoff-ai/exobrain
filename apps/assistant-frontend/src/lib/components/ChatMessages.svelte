@@ -12,6 +12,7 @@
   export let containerElement: HTMLDivElement | undefined;
 
   const dispatch = createEventDispatcher<{ scroll: Event; wheel: WheelEvent }>();
+  let expandedProcessStacks: Record<string, boolean> = {};
 
   const streamdownTheme = {
     h1: { base: 'exo-md-heading' },
@@ -40,6 +41,12 @@
       popover: 'exo-md-control-popover'
     }
   };
+
+  const isExpanded = (messageId: string): boolean => Boolean(expandedProcessStacks[messageId]);
+
+  const toggleStack = (messageId: string): void => {
+    expandedProcessStacks = { ...expandedProcessStacks, [messageId]: !expandedProcessStacks[messageId] };
+  };
 </script>
 
 <div
@@ -65,13 +72,54 @@
     >
       <div class="assistant-markdown" class:user-markdown={message.role === 'user'}>
         {#if message.role === 'assistant' && message.processInfos?.length}
-          <div class="process-info-list">
-            {#each message.processInfos as info (info.id)}
-              <div class="process-info" class:animated={info.state === 'pending'} class:error={info.state === 'error'}>
-                <p class="process-title">{info.title}</p>
-                <p class="process-description">{info.description}{info.state === 'pending' ? '...' : ''}</p>
+          {@const stackExpanded = isExpanded(message.clientMessageId)}
+          <div class="process-info-stack" class:expanded={stackExpanded}>
+            {#if message.processInfos.length > 1}
+              <button
+                type="button"
+                class="process-stack-toggle"
+                aria-label={stackExpanded ? 'Fold tool call cards' : 'Unfold tool call cards'}
+                on:click={() => toggleStack(message.clientMessageId)}
+              >
+                {stackExpanded ? '−' : '+'}
+              </button>
+            {/if}
+
+            {#if stackExpanded}
+              <div class="process-info-list">
+                {#each [...message.processInfos].reverse() as info (info.id)}
+                  <section class="process-info-card" class:error={info.state === 'error'}>
+                    <p class="process-title">{info.title}</p>
+                    <p class="process-description" class:muted={info.state !== 'pending'}>
+                      {info.description}
+                      {#if info.state === 'pending'}
+                        <span class="loading-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span>
+                      {/if}
+                    </p>
+                    {#if info.response}
+                      <p class="process-response">{info.response}</p>
+                    {/if}
+                  </section>
+                {/each}
               </div>
-            {/each}
+            {:else}
+              <div class="process-info-collapsed" style={`--stack-size:${Math.min(message.processInfos.length, 3)}`}>
+                {#each [...message.processInfos].reverse() as info, stackIndex (info.id)}
+                  <section class="process-info-card collapsed" class:error={info.state === 'error'} style={`--stack-index:${stackIndex}`}>
+                    <p class="process-title">{info.title}</p>
+                    <p class="process-description" class:muted={info.state !== 'pending'}>
+                      {info.description}
+                      {#if info.state === 'pending'}
+                        <span class="loading-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span>
+                      {/if}
+                    </p>
+                    {#if info.response}
+                      <p class="process-response">{info.response}</p>
+                    {/if}
+                  </section>
+                {/each}
+              </div>
+            {/if}
           </div>
         {/if}
         <Streamdown

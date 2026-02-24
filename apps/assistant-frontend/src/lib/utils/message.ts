@@ -17,7 +17,8 @@ const toProcessInfo = (toolCall: JournalToolCall): ProcessInfo => {
       id: makeClientMessageId(),
       toolCallId: toolCall.tool_call_id,
       title: toolCall.title,
-      description: toolCall.response,
+      description: toolCall.description,
+      response: toolCall.response,
       state: 'resolved'
     };
   }
