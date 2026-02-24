@@ -33,6 +33,7 @@ struct AppConfig {
     log_level: String,
     metastore_dsn: String,
     memgraph_addr: String,
+    memgraph_database: String,
     qdrant_addr: String,
     openai_api_key: String,
     embedding_model: String,
@@ -58,6 +59,7 @@ impl AppConfig {
             log_level,
             metastore_dsn,
             memgraph_addr: env::var("MEMGRAPH_BOLT_ADDR")?,
+            memgraph_database: env::var("MEMGRAPH_DB").unwrap_or_else(|_| "memgraph".to_string()),
             qdrant_addr: env::var("QDRANT_ADDR")?,
             openai_api_key: env::var("OPENAI_API_KEY")?,
             embedding_model: env::var("OPENAI_EMBEDDING_MODEL")
@@ -356,7 +358,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "0.0.0.0:50051".parse()?;
 
     let schema_repo = Arc::new(PostgresSchemaRepository::new(&cfg.metastore_dsn).await?);
-    let graph_store = Arc::new(Neo4jGraphStore::new(&cfg.memgraph_addr).await?);
+    let graph_store =
+        Arc::new(Neo4jGraphStore::new(&cfg.memgraph_addr, &cfg.memgraph_database).await?);
     let embedder = Arc::new(OpenAiEmbedder::new(
         cfg.openai_api_key.clone(),
         cfg.embedding_model.clone(),
@@ -402,6 +405,7 @@ mod tests {
             log_level: "DEBUG".to_string(),
             metastore_dsn: "postgresql://example".to_string(),
             memgraph_addr: "bolt://example".to_string(),
+            memgraph_database: "memgraph".to_string(),
             qdrant_addr: "http://example".to_string(),
             openai_api_key: "x".to_string(),
             embedding_model: "text-embedding-3-large".to_string(),
@@ -411,12 +415,27 @@ mod tests {
     }
 
     #[test]
+    fn defaults_memgraph_database_to_memgraph() {
+        std::env::set_var("APP_ENV", "local");
+        std::env::set_var("KNOWLEDGE_SCHEMA_DSN", "postgresql://example");
+        std::env::set_var("MEMGRAPH_BOLT_ADDR", "bolt://example");
+        std::env::remove_var("MEMGRAPH_DB");
+        std::env::set_var("QDRANT_ADDR", "http://example");
+        std::env::set_var("OPENAI_API_KEY", "x");
+
+        let cfg = AppConfig::from_env().expect("config should load");
+
+        assert_eq!(cfg.memgraph_database, "memgraph");
+    }
+
+    #[test]
     fn reflection_disabled_for_non_local() {
         let cfg = AppConfig {
             app_env: "cluster".to_string(),
             log_level: "INFO".to_string(),
             metastore_dsn: "postgresql://example".to_string(),
             memgraph_addr: "bolt://example".to_string(),
+            memgraph_database: "memgraph".to_string(),
             qdrant_addr: "http://example".to_string(),
             openai_api_key: "x".to_string(),
             embedding_model: "text-embedding-3-large".to_string(),
