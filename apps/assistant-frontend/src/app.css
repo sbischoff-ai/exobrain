@@ -361,11 +361,7 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
   position: relative;
   display: grid;
   gap: 0.45rem;
-}
-
-.process-info-list:not(.expanded) {
-  display: block;
-  padding-bottom: calc(var(--stack-offset) * 2);
+  min-height: 7rem;
 }
 
 .process-info-card {
@@ -380,14 +376,11 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
 }
 
 .process-info-list:not(.expanded) .process-info-card.collapsed {
-  pointer-events: none;
-}
-
-.process-info-list:not(.expanded) .process-info-card.collapsed:not(:first-child) {
   position: absolute;
   inset: 0;
   z-index: calc(6 - var(--stack-index));
   transform: translate(calc(var(--stack-index) * var(--stack-offset)), calc(var(--stack-index) * var(--stack-offset)));
+  pointer-events: none;
   box-shadow: 0 2px 8px rgb(0 0 0 / 8%);
 }
 
