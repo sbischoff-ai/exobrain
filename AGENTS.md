@@ -146,3 +146,5 @@ A skill is a set of local instructions in a `SKILL.md` file.
 - Knowledge-interface universe semantics: IDs are globally unique across universes and cross-universe graph edges are intentional; treat universes primarily as filtering/context semantics, and keep ingestion `labels` documented as currently unused forward-compat fields unless explicitly implementing label-aware writes.
 
 - Local workstation startup now defaults to Docker Compose infra plus `mprocs` app orchestration; keep `.mprocs/*.yml` and `scripts/local/run-*-suite.sh` aligned when adding/removing services.
+
+- In job-orchestrator, avoid broad `JOB_QUEUE_SUBJECT` patterns that also match result/DLQ subjects; keep request subscription scoped (for example `jobs.*.*.requested`) to prevent self-consumption loops.

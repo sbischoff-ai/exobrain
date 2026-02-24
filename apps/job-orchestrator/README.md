@@ -36,10 +36,12 @@ Apply local migrations:
 
 - `JOB_ORCHESTRATOR_DB_DSN` (default: `postgresql://job_orchestrator:job_orchestrator@localhost:15432/job_orchestrator_db`)
 - `EXOBRAIN_NATS_URL` (default: `nats://localhost:14222`)
-- `JOB_QUEUE_SUBJECT` (default: `jobs.>`)
+- `JOB_QUEUE_SUBJECT` (default: `jobs.*.*.requested`)
 - `JOB_EVENTS_SUBJECT_PREFIX` (default: `jobs.events`)
 - `JOB_DLQ_SUBJECT` (default: `jobs.dlq`, dead-letter queue subject)
 - `JOB_MAX_ATTEMPTS` (default: `3`, max delivery attempts before DLQ)
+
+Keep request subject patterns narrow enough that they do not also match events/DLQ subjects.
 - `WORKER_REPLICA_COUNT` (default: `1`, max concurrent worker processes)
 - `KNOWLEDGE_INTERFACE_GRPC_TARGET` (default: `localhost:15051`)
 - `KNOWLEDGE_INTERFACE_CONNECT_TIMEOUT_SECONDS` (default: `5.0`)
