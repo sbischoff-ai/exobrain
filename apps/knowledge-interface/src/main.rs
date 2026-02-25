@@ -5,7 +5,10 @@ mod service;
 
 use std::{env, sync::Arc};
 
-use adapters::{Neo4jGraphStore, OpenAiEmbedder, PostgresSchemaRepository, QdrantVectorStore};
+use adapters::{
+    MemgraphQdrantGraphRepository, MockEmbedder, Neo4jGraphStore, OpenAiEmbedder,
+    PostgresSchemaRepository, QdrantVectorStore,
+};
 use domain::{
     BlockNode, EntityNode, GraphDelta, GraphEdge, PropertyScalar, PropertyValue, SchemaType,
     UpsertSchemaTypeCommand, UpsertSchemaTypePropertyInput, Visibility,
@@ -35,8 +38,9 @@ struct AppConfig {
     memgraph_addr: String,
     memgraph_database: String,
     qdrant_addr: String,
-    openai_api_key: String,
+    openai_api_key: Option<String>,
     embedding_model: String,
+    use_mock_embedder: bool,
 }
 
 impl AppConfig {
@@ -61,9 +65,12 @@ impl AppConfig {
             memgraph_addr: env::var("MEMGRAPH_BOLT_ADDR")?,
             memgraph_database: env::var("MEMGRAPH_DB").unwrap_or_else(|_| "memgraph".to_string()),
             qdrant_addr: env::var("QDRANT_ADDR")?,
-            openai_api_key: env::var("OPENAI_API_KEY")?,
+            openai_api_key: env::var("OPENAI_API_KEY").ok(),
             embedding_model: env::var("OPENAI_EMBEDDING_MODEL")
                 .unwrap_or_else(|_| "text-embedding-3-large".to_string()),
+            use_mock_embedder: env::var("MAIN_AGENT_USE_MOCK")
+                .map(|v| v.eq_ignore_ascii_case("true") || v == "1")
+                .unwrap_or(false),
         })
     }
 
@@ -91,11 +98,7 @@ impl KnowledgeInterface for KnowledgeGrpcService {
         &self,
         _request: Request<GetSchemaRequest>,
     ) -> Result<Response<GetSchemaReply>, Status> {
-        let schema = self
-            .app
-            .get_schema()
-            .await
-            .map_err(|e| Status::internal(e.to_string()))?;
+        let schema = self.app.get_schema().await.map_err(map_ingest_error)?;
 
         let map_type = |s: SchemaType| proto::SchemaType {
             id: s.id,
@@ -308,7 +311,7 @@ impl KnowledgeInterface for KnowledgeGrpcService {
                 edges: edges.clone(),
             })
             .await
-            .map_err(|e| Status::internal(e.to_string()))?;
+            .map_err(map_ingest_error)?;
 
         Ok(Response::new(IngestGraphDeltaReply {
             entities_upserted: entities.len() as u32,
@@ -348,6 +351,18 @@ fn map_visibility(value: i32) -> Result<Visibility, Status> {
     }
 }
 
+fn map_ingest_error(error: anyhow::Error) -> Status {
+    let message = error.to_string();
+    if message.contains("validation failed")
+        || message.contains("is required")
+        || message.contains("must")
+        || message.contains("unknown schema type")
+    {
+        return Status::invalid_argument(message);
+    }
+    Status::internal(message)
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cfg = AppConfig::from_env()?;
@@ -358,19 +373,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "0.0.0.0:50051".parse()?;
 
     let schema_repo = Arc::new(PostgresSchemaRepository::new(&cfg.metastore_dsn).await?);
-    let graph_store =
-        Arc::new(Neo4jGraphStore::new(&cfg.memgraph_addr, &cfg.memgraph_database).await?);
-    let embedder = Arc::new(OpenAiEmbedder::new(
-        cfg.openai_api_key.clone(),
-        cfg.embedding_model.clone(),
+    let graph_store = Neo4jGraphStore::new(&cfg.memgraph_addr, &cfg.memgraph_database).await?;
+    let vector_store = QdrantVectorStore::new(&cfg.qdrant_addr, "blocks")?;
+    let graph_repository = Arc::new(MemgraphQdrantGraphRepository::new(
+        graph_store,
+        vector_store,
     ));
-    let vector_store = Arc::new(QdrantVectorStore::new(&cfg.qdrant_addr, "blocks")?);
+
+    let embedder: Arc<dyn ports::Embedder> =
+        if cfg.use_mock_embedder || cfg.openai_api_key.is_none() {
+            Arc::new(MockEmbedder)
+        } else {
+            Arc::new(OpenAiEmbedder::new(
+                cfg.openai_api_key.clone().expect("checked api key"),
+                cfg.embedding_model.clone(),
+            ))
+        };
 
     let app = Arc::new(KnowledgeApplication::new(
         schema_repo,
-        graph_store,
+        graph_repository,
         embedder,
-        vector_store,
     ));
 
     app.ensure_common_root_graph().await?;
@@ -407,8 +430,9 @@ mod tests {
             memgraph_addr: "bolt://example".to_string(),
             memgraph_database: "memgraph".to_string(),
             qdrant_addr: "http://example".to_string(),
-            openai_api_key: "x".to_string(),
+            openai_api_key: Some("x".to_string()),
             embedding_model: "text-embedding-3-large".to_string(),
+            use_mock_embedder: false,
         };
 
         assert!(cfg.enable_reflection());
@@ -437,8 +461,9 @@ mod tests {
             memgraph_addr: "bolt://example".to_string(),
             memgraph_database: "memgraph".to_string(),
             qdrant_addr: "http://example".to_string(),
-            openai_api_key: "x".to_string(),
+            openai_api_key: Some("x".to_string()),
             embedding_model: "text-embedding-3-large".to_string(),
+            use_mock_embedder: false,
         };
 
         assert!(!cfg.enable_reflection());

@@ -35,11 +35,26 @@ flowchart TD
 - `SUMMARIZES` forms a DAG (no cycles).
 - World semantics should prefer explicit edge types over excess properties.
 
+## Entity subtype constraints
+
+The direct children of `node.entity` are intentionally fixed:
+
+- `node.person`
+- `node.group`
+- `node.institution`
+- `node.place`
+- `node.object`
+- `node.concept`
+- `node.species`
+- `node.event`
+
+`node.task` remains a subtype of `node.event` (not a direct child of `node.entity`).
+
 ## Starter node labels
 
 - `Universe`
 - `Entity` (+ starter sublabels like `Person`, `Group`, `Institution`, `Place`, `Object`, `Concept`, `Species`, `Event`, `Task`)
-- `Block` (+ optional `Quote`, `Image`)
+- `Block` (+ optional `Quote`)
 
 ## Starter edge set
 
@@ -87,3 +102,10 @@ Required payload fields:
 
 - `labels` exist on ingestion payloads for forward compatibility with richer label-aware graph writes.
 - Current implementation does not project payload labels into dynamic Memgraph labels yet; writes currently use stable base labels (`Entity`, `Block`).
+
+
+## Client ID conventions
+
+- IDs are client-provided domain IDs (not Memgraph internal IDs).
+- Use lowercase dot-separated IDs such as `person.alex` and `block.note.1`.
+- Allowed characters: `a-z`, `0-9`, `.`, `_`, `-`.

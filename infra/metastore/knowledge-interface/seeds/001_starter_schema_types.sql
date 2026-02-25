@@ -114,7 +114,8 @@ VALUES
   ('edge.participated_in', 'node.person', 'node.event', TRUE, 'People may participate in events.', NULL),
   ('edge.member_of', 'node.person', 'node.group', TRUE, 'People may belong to groups.', NULL),
   ('edge.affiliated_with', 'node.person', 'node.institution', TRUE, 'People may affiliate with institutions.', NULL),
-  ('edge.depends_on', 'node.task', 'node.task', TRUE, 'Tasks may depend on other tasks.', NULL)
+  ('edge.depends_on', 'node.task', 'node.task', TRUE, 'Tasks may depend on other tasks.', NULL),
+  ('edge.related_to', 'node.entity', 'node.entity', TRUE, 'Generic relation between any two entity subtypes.', NULL)
 ON CONFLICT (edge_type_id, from_node_type_id, to_node_type_id) DO UPDATE
 SET
   active = EXCLUDED.active,

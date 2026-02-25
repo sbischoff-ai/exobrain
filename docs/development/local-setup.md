@@ -34,7 +34,7 @@ Use this path for fast feature iteration with Docker Compose for infra and `mpro
 ./scripts/local/infra-up.sh
 ```
 
-This starts PostgreSQL, Redis, NATS, Qdrant, and Memgraph.
+This starts PostgreSQL, Redis, NATS, Qdrant, Memgraph, and Memgraph Lab.
 
 ### 2) Apply required schema setup
 
@@ -42,6 +42,9 @@ This starts PostgreSQL, Redis, NATS, Qdrant, and Memgraph.
 ./scripts/local/assistant-db-setup.sh
 ./scripts/local/job-orchestrator-db-setup.sh
 ./scripts/local/knowledge-schema-setup.sh
+# optional full reset helpers:
+./scripts/local/knowledge-schema-reset-and-seed.sh
+./scripts/local/knowledge-graph-reset.sh
 ```
 
 ### 3) Build applications (when dependencies or source changed)
@@ -79,6 +82,8 @@ Default local endpoints:
 - Backend API: `http://localhost:8000`
 - Frontend: `http://localhost:5173`
 - Knowledge interface gRPC: `localhost:50051`
+- Memgraph Lab UI: `http://localhost:13000`
+- Qdrant dashboard: `http://localhost:16333/dashboard`
 
 ### 6) Stop everything
 
