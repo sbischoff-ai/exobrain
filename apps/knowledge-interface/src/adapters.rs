@@ -371,11 +371,7 @@ pub struct QdrantVectorStore {
 
 impl QdrantVectorStore {
     pub fn new(url: &str, collection: &str) -> Result<Self> {
-        let normalized = if url.starts_with("http://") || url.starts_with("https://") {
-            url.to_string()
-        } else {
-            format!("http://{url}")
-        };
+        let normalized = normalize_qdrant_grpc_url(url);
         let client = Qdrant::from_url(&normalized).build()?;
         Ok(Self {
             client,
@@ -635,6 +631,22 @@ impl Embedder for MockEmbedder {
     }
 }
 
+fn normalize_qdrant_grpc_url(url: &str) -> String {
+    let mut normalized = if url.starts_with("http://") || url.starts_with("https://") {
+        url.to_string()
+    } else {
+        format!("http://{url}")
+    };
+
+    if normalized.ends_with(":6333") {
+        normalized = format!("{}:6334", &normalized[..normalized.len() - 5]);
+    } else if normalized.ends_with(":16333") {
+        normalized = format!("{}:16334", &normalized[..normalized.len() - 6]);
+    }
+
+    normalized
+}
+
 fn visibility_as_str(visibility: Visibility) -> &'static str {
     match visibility {
         Visibility::Private => "PRIVATE",
@@ -657,7 +669,23 @@ fn validate_edge_type(edge_type: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::validate_edge_type;
+    use super::{normalize_qdrant_grpc_url, validate_edge_type};
+
+    #[test]
+    fn normalizes_qdrant_rest_port_to_grpc_port() {
+        assert_eq!(
+            normalize_qdrant_grpc_url("http://localhost:6333"),
+            "http://localhost:6334"
+        );
+        assert_eq!(
+            normalize_qdrant_grpc_url("http://localhost:16333"),
+            "http://localhost:16334"
+        );
+        assert_eq!(
+            normalize_qdrant_grpc_url("localhost:6333"),
+            "http://localhost:6334"
+        );
+    }
 
     #[test]
     fn validates_good_edge_type() {
