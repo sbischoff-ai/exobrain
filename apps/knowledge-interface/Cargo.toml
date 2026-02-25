@@ -9,7 +9,7 @@ async-trait = "0.1"
 dotenvy = "0.15"
 neo4rs = "0.8"
 prost = "0.12"
-qdrant-client = "1.12"
+qdrant-client = "=1.10.1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
 sqlx = { version = "0.8", default-features = false, features = ["postgres", "runtime-tokio-rustls"] }
