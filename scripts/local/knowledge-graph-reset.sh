@@ -2,7 +2,10 @@
 set -euo pipefail
 
 COMPOSE_FILE=${COMPOSE_FILE:-infra/docker-compose/local-infra.yml}
-PROJECT=${COMPOSE_PROJECT_NAME:-exobrain}
+DEFAULT_PROJECT=$(basename "$(dirname "$COMPOSE_FILE")")
+PROJECT=${COMPOSE_PROJECT_NAME:-$DEFAULT_PROJECT}
+
+echo "[knowledge-graph-reset] using compose project: ${PROJECT}"
 
 echo "[knowledge-graph-reset] stopping memgraph + qdrant + memgraph-lab"
 docker compose -f "$COMPOSE_FILE" stop memgraph qdrant memgraph-lab >/dev/null 2>&1 || true
