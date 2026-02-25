@@ -47,6 +47,8 @@ This starts PostgreSQL, Redis, NATS, Qdrant, Memgraph, and Memgraph Lab.
 ./scripts/local/knowledge-graph-reset.sh
 ```
 
+`knowledge-graph-reset.sh` preserves prior running state for memgraph/qdrant/memgraph-lab (does not auto-start if they were down).
+
 ### 3) Build applications (when dependencies or source changed)
 
 ```bash

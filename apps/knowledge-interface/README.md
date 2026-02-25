@@ -32,6 +32,8 @@ Service-only build/run:
 ./scripts/local/knowledge-graph-reset.sh
 ```
 
+`knowledge-graph-reset.sh` now restores graph services only if they were running before reset; if infra was down, it stays down.
+
 Inspect gRPC APIs locally:
 
 ```bash
