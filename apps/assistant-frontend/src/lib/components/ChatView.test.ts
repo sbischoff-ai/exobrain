@@ -73,6 +73,32 @@ describe('ChatView', () => {
 
 
 
+
+  it('renders KaTeX math and Mermaid diagram blocks', async () => {
+    const markdown = [
+      'Inline math $a^2 + b^2 = c^2$.',
+      '',
+      '$$\\int_0^1 x^2 dx = \\frac{1}{3}$$',
+      '',
+      '```mermaid',
+      'flowchart TD',
+      'A[Start] --> B[Done]',
+      '```'
+    ].join('\n');
+
+    const { container } = render(ChatView, {
+      props: {
+        reference: '2026/02/19',
+        messages: [{ role: 'assistant', content: markdown, clientMessageId: 'a-math-mermaid-1' }]
+      }
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector('.katex')).toBeTruthy();
+      expect(container.querySelector('[data-streamdown-mermaid]')).toBeTruthy();
+    });
+  });
+
   it('preserves line breaks in fenced code blocks', async () => {
     const codeBlockMessage = '```ts\nconst status = "ready";\nconsole.log(status);\n```';
 

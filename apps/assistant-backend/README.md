@@ -61,6 +61,7 @@ Core runtime vars:
 
 Model/tool vars:
 
+- Main agent prompt includes markdown rendering guidance for math and diagrams (`$...$`, `$$...$$`, and ```mermaid fenced blocks).
 - `MAIN_AGENT_USE_MOCK=true|false`
 - `MAIN_AGENT_MOCK_MESSAGES_FILE`
 - `OPENAI_API_KEY` (required for real model)

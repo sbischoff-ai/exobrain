@@ -2,6 +2,8 @@
   import { createEventDispatcher } from 'svelte';
   import { Streamdown } from 'svelte-streamdown';
   import StreamdownCode from 'svelte-streamdown/code';
+  import StreamdownMath from 'svelte-streamdown/math';
+  import StreamdownMermaid from 'svelte-streamdown/mermaid';
   import gruvboxDarkMedium from '@shikijs/themes/gruvbox-dark-medium';
   import type { StoredMessage } from '$lib/models/journal';
 
@@ -120,7 +122,7 @@
           theme={streamdownTheme}
           shikiTheme="gruvbox-dark-medium"
           shikiThemes={{ 'gruvbox-dark-medium': gruvboxDarkMedium }}
-          components={{ code: StreamdownCode }}
+          components={{ code: StreamdownCode, math: StreamdownMath, mermaid: StreamdownMermaid }}
         />
       </div>
     </article>

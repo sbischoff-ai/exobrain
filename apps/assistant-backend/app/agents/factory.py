@@ -25,6 +25,15 @@ Web research tool policy:
 - Prefer fetching only the top 1-3 sources to control latency and context size.
 - Never fabricate quotes. Only quote text that appears in web_fetch output.
 """
+
+_FORMATTING_INSTRUCTIONS = """
+
+Response formatting policy:
+- When writing inline math, use KaTeX delimiters: $...$.
+- When writing display math, use KaTeX delimiters: $$...$$.
+- When drawing a diagram, output a fenced Mermaid code block with the `mermaid` language tag (for example: ```mermaid).
+- Prefer concise Mermaid diagrams when explaining processes, flows, systems, or relationships.
+"""
 _DEFAULT_WEB_TOOLS_MOCK_DATA = {
     "search": {
         "results": [
@@ -118,7 +127,13 @@ async def build_main_agent(settings: Settings) -> ChatAgent:
 
     model = _build_agent_model(settings)
     web_tools_dependency = _build_web_tools_dependency(settings)
-    system_prompt = f"{settings.main_agent_system_prompt.strip()}\n{_WEB_TOOL_INSTRUCTIONS.strip()}"
+    system_prompt = "\n".join(
+        [
+            settings.main_agent_system_prompt.strip(),
+            _FORMATTING_INSTRUCTIONS.strip(),
+            _WEB_TOOL_INSTRUCTIONS.strip(),
+        ]
+    )
     return await MainAssistantAgent.create(
         model=model,
         system_prompt=system_prompt,
