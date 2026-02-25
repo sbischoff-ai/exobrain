@@ -7,6 +7,7 @@ SvelteKit application for intro/login gating, journal navigation, and streaming 
 - Cookie-authenticated intro/login flow.
 - Journal-focused chat UX with `sessionStorage` snapshots (`exobrain.assistant.session`).
 - SSE-driven streaming message rendering with tool call/response cards.
+- Mermaid diagram blocks and KaTeX math expressions render in assistant messages.
 
 ## Quick start
 
