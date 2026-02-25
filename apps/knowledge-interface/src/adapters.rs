@@ -400,6 +400,23 @@ impl QdrantVectorStore {
             return Ok(());
         }
 
+        for block in blocks {
+            if block.vector.is_empty() {
+                anyhow::bail!(
+                    "block {} produced an empty embedding vector; cannot upsert to qdrant",
+                    block.block.id
+                );
+            }
+            if block.vector.len() as u64 != self.vector_size {
+                anyhow::bail!(
+                    "block {} embedding dimension {} does not match configured qdrant dimension {}",
+                    block.block.id,
+                    block.vector.len(),
+                    self.vector_size
+                );
+            }
+        }
+
         self.ensure_collection().await?;
 
         let points: Vec<PointStruct> = blocks.iter().map(to_point).collect();
@@ -621,9 +638,9 @@ impl Embedder for MockEmbedder {
         Ok(texts
             .iter()
             .map(|text| {
-                let mut v = vec![0.0_f32; 8];
+                let mut v = vec![0.0_f32; 3072];
                 for (idx, byte) in text.as_bytes().iter().enumerate() {
-                    v[idx % 8] += (*byte as f32) / 255.0;
+                    v[idx % 3072] += (*byte as f32) / 255.0;
                 }
                 v
             })
@@ -669,7 +686,8 @@ fn validate_edge_type(edge_type: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_qdrant_grpc_url, validate_edge_type};
+    use super::{normalize_qdrant_grpc_url, validate_edge_type, MockEmbedder};
+    use crate::ports::Embedder;
 
     #[test]
     fn normalizes_qdrant_rest_port_to_grpc_port() {
@@ -685,6 +703,17 @@ mod tests {
             normalize_qdrant_grpc_url("localhost:6333"),
             "http://localhost:6334"
         );
+    }
+
+    #[tokio::test]
+    async fn mock_embedder_matches_qdrant_dimension() {
+        let embedder = MockEmbedder;
+        let vectors = embedder
+            .embed_texts(&["hello".to_string()])
+            .await
+            .expect("mock embedding should succeed");
+        assert_eq!(vectors.len(), 1);
+        assert_eq!(vectors[0].len(), 3072);
     }
 
     #[test]
