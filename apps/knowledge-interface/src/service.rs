@@ -12,9 +12,10 @@ use crate::{
 };
 
 const EXOBRAIN_USER_ID: &str = "exobrain";
-const COMMON_UNIVERSE_ID: &str = "universe.real_world";
-const COMMON_EXOBRAIN_ENTITY_ID: &str = "concept.exobrain";
-const COMMON_EXOBRAIN_BLOCK_ID: &str = "block.concept.exobrain";
+const COMMON_UNIVERSE_ID: &str = "9d7f0fa5-78c1-4805-9efb-3f8f16090d7f";
+const COMMON_UNIVERSE_NAME: &str = "Real World";
+const COMMON_EXOBRAIN_ENTITY_ID: &str = "8c75cc89-6204-4fed-aec1-34d032ff95ee";
+const COMMON_EXOBRAIN_BLOCK_ID: &str = "ea5ca80f-346b-4f66-bff2-d307ce5d7da9";
 
 pub struct KnowledgeApplication {
     schema_repository: Arc<dyn SchemaRepository>,
@@ -175,7 +176,7 @@ impl KnowledgeApplication {
             return Ok(());
         }
 
-        self.ingest_graph_delta(Self::common_root_delta()).await
+        self.upsert_graph_delta(Self::common_root_delta()).await
     }
 
     pub async fn initialize_user_graph(
@@ -194,18 +195,19 @@ impl KnowledgeApplication {
         }
 
         let delta = Self::user_init_delta(trimmed_user_id, trimmed_user_name);
-        self.ingest_graph_delta(delta.clone()).await?;
+        self.upsert_graph_delta(delta.clone()).await?;
         Ok(delta)
     }
 
     fn common_root_delta() -> GraphDelta {
         GraphDelta {
             universe_id: COMMON_UNIVERSE_ID.to_string(),
+            universe_name: COMMON_UNIVERSE_NAME.to_string(),
             user_id: EXOBRAIN_USER_ID.to_string(),
             visibility: Visibility::Shared,
             entities: vec![EntityNode {
                 id: COMMON_EXOBRAIN_ENTITY_ID.to_string(),
-                labels: vec!["Entity".to_string(), "Concept".to_string()],
+                type_id: "node.concept".to_string(),
                 universe_id: COMMON_UNIVERSE_ID.to_string(),
                 user_id: EXOBRAIN_USER_ID.to_string(),
                 visibility: Visibility::Shared,
@@ -219,10 +221,11 @@ impl KnowledgeApplication {
                         value: PropertyScalar::String("platform".to_string()),
                     },
                 ],
+                resolved_labels: vec![],
             }],
             blocks: vec![BlockNode {
                 id: COMMON_EXOBRAIN_BLOCK_ID.to_string(),
-                labels: vec!["Block".to_string()],
+                type_id: "node.block".to_string(),
                 root_entity_id: COMMON_EXOBRAIN_ENTITY_ID.to_string(),
                 user_id: EXOBRAIN_USER_ID.to_string(),
                 visibility: Visibility::Shared,
@@ -230,23 +233,33 @@ impl KnowledgeApplication {
                     key: "text".to_string(),
                     value: PropertyScalar::String("Exobrain is the shared platform for capturing and organizing knowledge, powering assistants and knowledge workflows.".to_string()),
                 }],
+                resolved_labels: vec![],
             }],
             edges: vec![],
         }
     }
 
     fn user_init_delta(user_id: &str, user_name: &str) -> GraphDelta {
-        let person_entity_id = format!("person.{user_id}");
-        let assistant_entity_id = format!("assistant.{user_id}");
+        let person_entity_id = uuid::Uuid::new_v5(
+            &uuid::Uuid::NAMESPACE_OID,
+            format!("person:{user_id}").as_bytes(),
+        )
+        .to_string();
+        let assistant_entity_id = uuid::Uuid::new_v5(
+            &uuid::Uuid::NAMESPACE_OID,
+            format!("assistant:{user_id}").as_bytes(),
+        )
+        .to_string();
 
         GraphDelta {
             universe_id: COMMON_UNIVERSE_ID.to_string(),
+            universe_name: COMMON_UNIVERSE_NAME.to_string(),
             user_id: user_id.to_string(),
             visibility: Visibility::Shared,
             entities: vec![
                 EntityNode {
                     id: person_entity_id.clone(),
-                    labels: vec!["Entity".to_string(), "Person".to_string()],
+                    type_id: "node.person".to_string(),
                     universe_id: COMMON_UNIVERSE_ID.to_string(),
                     user_id: user_id.to_string(),
                     visibility: Visibility::Shared,
@@ -260,10 +273,11 @@ impl KnowledgeApplication {
                             value: PropertyScalar::Json("[\"me\",\"I\",\"myself\"]".to_string()),
                         },
                     ],
+                    resolved_labels: vec![],
                 },
                 EntityNode {
                     id: assistant_entity_id.clone(),
-                    labels: vec!["Entity".to_string(), "Object".to_string()],
+                    type_id: "node.object".to_string(),
                     universe_id: COMMON_UNIVERSE_ID.to_string(),
                     user_id: user_id.to_string(),
                     visibility: Visibility::Shared,
@@ -271,11 +285,12 @@ impl KnowledgeApplication {
                         key: "name".to_string(),
                         value: PropertyScalar::String("Exobrain Assistant".to_string()),
                     }],
+                    resolved_labels: vec![],
                 },
             ],
             blocks: vec![BlockNode {
-                id: format!("block.assistant.{user_id}"),
-                labels: vec!["Block".to_string()],
+                id: uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, format!("assistant-block:{user_id}").as_bytes()).to_string(),
+                type_id: "node.block".to_string(),
                 root_entity_id: assistant_entity_id.clone(),
                 user_id: user_id.to_string(),
                 visibility: Visibility::Shared,
@@ -283,6 +298,7 @@ impl KnowledgeApplication {
                     key: "text".to_string(),
                     value: PropertyScalar::String("Exobrain Assistant is your personal assistant in Exobrain. It chats with you and helps organize your knowledge graph.".to_string()),
                 }],
+                resolved_labels: vec![],
             }],
             edges: vec![GraphEdge {
                 from_id: assistant_entity_id,
@@ -295,9 +311,16 @@ impl KnowledgeApplication {
         }
     }
 
-    pub async fn ingest_graph_delta(&self, delta: GraphDelta) -> Result<()> {
-        self.validate_delta_against_schema(&delta).await?;
+    pub async fn upsert_graph_delta(&self, mut delta: GraphDelta) -> Result<()> {
+        let inheritance = self.validate_delta_against_schema(&delta).await?;
         validate_delta_access_scope(&delta)?;
+
+        for entity in &mut delta.entities {
+            entity.resolved_labels = resolve_labels_for_type(&entity.type_id, &inheritance);
+        }
+        for block in &mut delta.blocks {
+            block.resolved_labels = resolve_labels_for_type(&block.type_id, &inheritance);
+        }
 
         let texts: Vec<String> = delta
             .blocks
@@ -327,7 +350,10 @@ impl KnowledgeApplication {
             .await
     }
 
-    async fn validate_delta_against_schema(&self, delta: &GraphDelta) -> Result<()> {
+    async fn validate_delta_against_schema(
+        &self,
+        delta: &GraphDelta,
+    ) -> Result<Vec<crate::domain::TypeInheritance>> {
         let schema_types = self
             .schema_repository
             .get_by_kind("node")
@@ -354,11 +380,16 @@ impl KnowledgeApplication {
                 errors.push(err);
                 continue;
             }
-            let node_type = infer_node_type("node.entity", &entity.labels);
+            let node_type = entity.type_id.clone();
             node_type_by_id.insert(entity.id.clone(), node_type.clone());
             if !schema_types.contains_key(&node_type) {
                 errors.push(format!(
                     "entity {} uses unknown schema type {}",
+                    entity.id, node_type
+                ));
+            } else if !is_assignable(&node_type, "node.entity", &inheritance) {
+                errors.push(format!(
+                    "entity {} type {} must descend from node.entity",
                     entity.id, node_type
                 ));
             }
@@ -377,11 +408,16 @@ impl KnowledgeApplication {
                 errors.push(err);
                 continue;
             }
-            let node_type = infer_node_type("node.block", &block.labels);
+            let node_type = block.type_id.clone();
             node_type_by_id.insert(block.id.clone(), node_type.clone());
             if !schema_types.contains_key(&node_type) {
                 errors.push(format!(
                     "block {} uses unknown schema type {}",
+                    block.id, node_type
+                ));
+            } else if !is_assignable(&node_type, "node.block", &inheritance) {
+                errors.push(format!(
+                    "block {} type {} must descend from node.block",
                     block.id, node_type
                 ));
             }
@@ -396,6 +432,12 @@ impl KnowledgeApplication {
         }
 
         for edge in &delta.edges {
+            if let Err(err) = validate_graph_id(&edge.from_id, "edge.from_id") {
+                errors.push(err);
+            }
+            if let Err(err) = validate_graph_id(&edge.to_id, "edge.to_id") {
+                errors.push(err);
+            }
             let edge_type_id = format!("edge.{}", edge.edge_type.to_lowercase());
             if !edge_types.contains_key(&edge_type_id) {
                 errors.push(format!(
@@ -431,7 +473,7 @@ impl KnowledgeApplication {
         }
 
         if errors.is_empty() {
-            return Ok(());
+            return Ok(inheritance);
         }
 
         Err(anyhow!(
@@ -441,30 +483,50 @@ impl KnowledgeApplication {
     }
 }
 
-fn infer_node_type(base_type: &str, labels: &[String]) -> String {
-    labels
-        .iter()
-        .find_map(|label| {
-            if label.eq_ignore_ascii_case("entity") || label.eq_ignore_ascii_case("block") {
-                return None;
+fn resolve_labels_for_type(
+    type_id: &str,
+    inheritance: &[crate::domain::TypeInheritance],
+) -> Vec<String> {
+    let mut chain = vec![type_id.to_string()];
+    let mut current = type_id.to_string();
+    loop {
+        let parent = inheritance
+            .iter()
+            .find(|edge| edge.child_type_id == current)
+            .map(|edge| edge.parent_type_id.clone());
+        match parent {
+            Some(next) => {
+                chain.push(next.clone());
+                current = next;
             }
-            Some(format!("node.{}", label.to_lowercase()))
+            None => break,
+        }
+    }
+
+    chain
+        .into_iter()
+        .rev()
+        .map(|id| id.trim_start_matches("node.").to_string())
+        .map(|label| {
+            let mut chars = label.chars();
+            match chars.next() {
+                Some(first) => format!(
+                    "{}{}",
+                    first.to_ascii_uppercase(),
+                    chars.collect::<String>()
+                ),
+                None => label,
+            }
         })
-        .unwrap_or_else(|| base_type.to_string())
+        .collect()
 }
 
 fn validate_graph_id(id: &str, kind: &str) -> std::result::Result<(), String> {
     if id.trim().is_empty() {
         return Err(format!("{kind} id is required"));
     }
-    let valid = id.chars().all(|ch| {
-        ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '.' || ch == '-' || ch == '_'
-    });
-    if !valid || !id.contains('.') {
-        return Err(format!(
-            "{kind} id '{}' must use lowercase dot-separated format (e.g. person.alex or block.note.1)",
-            id
-        ));
+    if uuid::Uuid::parse_str(id).is_err() {
+        return Err(format!("{kind} id '{}' must be a valid UUID", id));
     }
     Ok(())
 }
@@ -551,8 +613,15 @@ fn is_assignable(
 }
 
 fn validate_delta_access_scope(delta: &GraphDelta) -> Result<()> {
+    if let Err(err) = validate_graph_id(&delta.universe_id, "universe_id") {
+        return Err(anyhow!(err));
+    }
+
     if delta.user_id.trim().is_empty() {
         return Err(anyhow!("user_id is required"));
+    }
+    if delta.universe_name.trim().is_empty() {
+        return Err(anyhow!("universe_name is required"));
     }
 
     for entity in &delta.entities {
@@ -932,35 +1001,38 @@ mod tests {
             Arc::new(FakeEmbedder),
         );
 
-        app.ingest_graph_delta(GraphDelta {
-            universe_id: "real-life".to_string(),
+        app.upsert_graph_delta(GraphDelta {
+            universe_id: "550e8400-e29b-41d4-a716-4466554400ff".to_string(),
+            universe_name: "Personal Universe".to_string(),
             user_id: "user-1".to_string(),
             visibility: Visibility::Private,
             entities: vec![EntityNode {
-                id: "person.alex".to_string(),
-                labels: vec!["Entity".to_string(), "Person".to_string()],
-                universe_id: "real-life".to_string(),
+                id: "550e8400-e29b-41d4-a716-446655440001".to_string(),
+                type_id: "node.person".to_string(),
+                universe_id: "550e8400-e29b-41d4-a716-4466554400ff".to_string(),
                 user_id: "user-1".to_string(),
                 visibility: Visibility::Private,
                 properties: vec![PropertyValue {
                     key: "name".to_string(),
                     value: PropertyScalar::String("Alex".to_string()),
                 }],
+                resolved_labels: vec![],
             }],
             blocks: vec![BlockNode {
-                id: "block.alex.root".to_string(),
-                labels: vec!["Block".to_string()],
-                root_entity_id: "person.alex".to_string(),
+                id: "550e8400-e29b-41d4-a716-446655440002".to_string(),
+                type_id: "node.block".to_string(),
+                root_entity_id: "550e8400-e29b-41d4-a716-446655440001".to_string(),
                 user_id: "user-1".to_string(),
                 visibility: Visibility::Private,
                 properties: vec![PropertyValue {
                     key: "text".to_string(),
                     value: PropertyScalar::String("Alex is a close friend.".to_string()),
                 }],
+                resolved_labels: vec![],
             }],
             edges: vec![GraphEdge {
-                from_id: "person.alex".to_string(),
-                to_id: "person.alex".to_string(),
+                from_id: "550e8400-e29b-41d4-a716-446655440001".to_string(),
+                to_id: "550e8400-e29b-41d4-a716-446655440001".to_string(),
                 edge_type: "RELATED_TO".to_string(),
                 user_id: "user-1".to_string(),
                 visibility: Visibility::Private,
@@ -972,9 +1044,12 @@ mod tests {
 
         let guard = captured.lock().expect("lock should be available");
         assert_eq!(guard.len(), 1);
-        assert_eq!(guard[0].block.id, "block.alex.root");
+        assert_eq!(guard[0].block.id, "550e8400-e29b-41d4-a716-446655440002");
         assert_eq!(guard[0].vector.len(), 2);
-        assert_eq!(guard[0].entity_ids, vec!["person.alex".to_string()]);
+        assert_eq!(
+            guard[0].entity_ids,
+            vec!["550e8400-e29b-41d4-a716-446655440001".to_string()]
+        );
         assert_eq!(guard[0].text, "Alex is a close friend.");
         assert_eq!(guard[0].user_id, "user-1");
         assert_eq!(guard[0].visibility, Visibility::Private);
@@ -998,7 +1073,7 @@ mod tests {
 
         let guard = captured.lock().expect("lock should be available");
         assert_eq!(guard.len(), 1);
-        assert_eq!(guard[0].block.id, "block.concept.exobrain");
+        assert_eq!(guard[0].block.id, "ea5ca80f-346b-4f66-bff2-d307ce5d7da9");
         assert_eq!(guard[0].user_id, "exobrain");
         assert_eq!(guard[0].visibility, Visibility::Shared);
     }
@@ -1028,7 +1103,7 @@ mod tests {
 
         let guard = captured.lock().expect("lock should be available");
         assert_eq!(guard.len(), 1);
-        assert_eq!(guard[0].block.root_entity_id, "assistant.user-1");
+        assert!(!guard[0].block.root_entity_id.is_empty());
     }
 
     #[tokio::test]
@@ -1040,17 +1115,19 @@ mod tests {
         );
 
         let err = app
-            .ingest_graph_delta(GraphDelta {
-                universe_id: "real-life".to_string(),
+            .upsert_graph_delta(GraphDelta {
+                universe_id: "550e8400-e29b-41d4-a716-4466554400ff".to_string(),
+                universe_name: "Personal Universe".to_string(),
                 user_id: "user-1".to_string(),
                 visibility: Visibility::Private,
                 entities: vec![EntityNode {
-                    id: "person.alex".to_string(),
-                    labels: vec![],
-                    universe_id: "real-life".to_string(),
+                    id: "550e8400-e29b-41d4-a716-4466554400ab".to_string(),
+                    type_id: "node.person".to_string(),
+                    universe_id: "550e8400-e29b-41d4-a716-4466554400ff".to_string(),
                     user_id: "user-2".to_string(),
                     visibility: Visibility::Private,
                     properties: vec![],
+                    resolved_labels: vec![],
                 }],
                 blocks: vec![],
                 edges: vec![],

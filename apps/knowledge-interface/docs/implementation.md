@@ -43,7 +43,7 @@ This document is code-oriented: it helps a new contributor quickly navigate the 
    - edge inheritance is rejected
 3. schema type, inheritance row, and additive properties are upserted via repository.
 
-### 3) `IngestGraphDelta`
+### 3) `UpsertGraphDelta`
 
 1. gRPC handler maps proto payload into `GraphDelta`.
 2. service validates the delta against canonical schema types/properties/rules.
@@ -107,4 +107,4 @@ When extending logic, prefer adding tests beside the module under change unless 
 - Ingestion enforces that request-level `user_id`/`visibility` matches all entities/blocks/edges in the delta.
 - Memgraph writes persist `user_id` + `visibility` on entities, blocks, and edges.
 - Qdrant block payloads persist `user_id` + `visibility` for retrieval-time filtering.
-- `labels` fields on entity/block payloads are currently parsed and preserved in domain DTOs, but not yet consumed by graph-write Cypher.
+- Clients submit schema `type_id` values; the service resolves full inheritance label chains and applies them to Memgraph nodes during writes.

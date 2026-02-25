@@ -100,12 +100,12 @@ Required payload fields:
 
 ## Label fields in ingestion payloads
 
-- `labels` exist on ingestion payloads for forward compatibility with richer label-aware graph writes.
-- Current implementation does not project payload labels into dynamic Memgraph labels yet; writes currently use stable base labels (`Entity`, `Block`).
+- Clients provide `type_id` values for entities/blocks in graph upserts.
+- The knowledge-interface resolves inheritance chains from schema and applies full Memgraph label sets internally (for example `:Entity:Person:Friend`).
 
 
 ## Client ID conventions
 
 - IDs are client-provided domain IDs (not Memgraph internal IDs).
-- Use lowercase dot-separated IDs such as `person.alex` and `block.note.1`.
+- Use RFC 4122 UUIDs for all node IDs (including Universe, Entity, and Block).
 - Allowed characters: `a-z`, `0-9`, `.`, `_`, `-`.

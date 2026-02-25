@@ -74,8 +74,10 @@ INSERT INTO knowledge_graph_schema_type_properties (
 VALUES
   ('node.entity', 'id', 'string', TRUE, TRUE, FALSE, TRUE, 'Stable global identifier for the entity; should never be rewritten by ingestion clients.', NULL, NULL, NULL, NULL, NULL),
   ('node.entity', 'name', 'string', TRUE, TRUE, TRUE, TRUE, 'Human-readable canonical display name for the entity.', NULL, NULL, NULL, NULL, NULL),
+  ('node.entity', 'aliases', 'json', FALSE, TRUE, TRUE, TRUE, 'Optional array of alternative names for the entity.', NULL, NULL, NULL, NULL, NULL),
   ('node.universe', 'id', 'string', TRUE, TRUE, FALSE, TRUE, 'Stable global identifier for the universe scope.', NULL, NULL, NULL, NULL, NULL),
   ('node.universe', 'name', 'string', TRUE, TRUE, TRUE, TRUE, 'Human-readable name of the universe scope.', NULL, NULL, NULL, NULL, NULL),
+  ('node.universe', 'aliases', 'json', FALSE, TRUE, TRUE, TRUE, 'Optional array of alternative human-readable names for the universe.', NULL, NULL, NULL, NULL, NULL),
   ('node.event', 'start', 'datetime', FALSE, TRUE, TRUE, TRUE, 'Optional event start time used for chronology and temporal filtering.', NULL, NULL, NULL, NULL, NULL),
   ('node.event', 'end', 'datetime', FALSE, TRUE, TRUE, TRUE, 'Optional event end time used for duration and sequencing hints.', NULL, NULL, NULL, NULL, NULL),
   ('node.task', 'due', 'datetime', FALSE, TRUE, TRUE, TRUE, 'Optional task due timestamp indicating intended completion time.', NULL, NULL, NULL, NULL, NULL),

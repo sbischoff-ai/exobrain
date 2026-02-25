@@ -263,56 +263,63 @@ impl Neo4jGraphStore {
     }
 
     async fn apply_delta_in_tx(&self, txn: &mut Txn, delta: &GraphDelta) -> Result<()> {
-        let entity_rows: Vec<HashMap<&str, String>> = delta
-            .entities
-            .iter()
-            .map(|entity| {
-                let mut row = HashMap::new();
-                row.insert("id", entity.id.clone());
-                row.insert(
-                    "name",
-                    prop_as_string(&entity.properties, "name").unwrap_or_default(),
-                );
-                row.insert("universe_id", entity.universe_id.clone());
-                row.insert("user_id", entity.user_id.clone());
-                row.insert(
-                    "aliases",
-                    prop_as_string(&entity.properties, "aliases").unwrap_or_default(),
-                );
-                row.insert(
-                    "visibility",
-                    visibility_as_str(entity.visibility).to_string(),
-                );
-                row
-            })
-            .collect();
+        let universe_aliases = "[]".to_string();
+        txn.run(
+            query("MERGE (u:Universe {id: $id}) SET u.name = $name, u.aliases = $aliases")
+                .param("id", delta.universe_id.clone())
+                .param("name", delta.universe_name.clone())
+                .param("aliases", universe_aliases),
+        )
+        .await
+        .context("failed to upsert universe")?;
 
-        if !entity_rows.is_empty() {
-            txn.run(query("UNWIND $rows AS row MERGE (e:Entity {id: row.id}) SET e.name = row.name, e.aliases = row.aliases, e.user_id = row.user_id, e.visibility = row.visibility MERGE (u:Universe {id: row.universe_id}) MERGE (e)-[:IS_PART_OF]->(u)").param("rows", entity_rows)).await.context("failed to upsert entities")?;
+        for entity in &delta.entities {
+            let labels = sanitize_labels(&entity.resolved_labels)?;
+            let cypher = format!(
+                "MERGE (e:{} {{id: $id}}) SET e.type_id = $type_id, e.name = $name, e.aliases = $aliases, e.user_id = $user_id, e.visibility = $visibility WITH e MATCH (u:Universe {{id: $universe_id}}) MERGE (e)-[:IS_PART_OF]->(u)",
+                labels.join(":"),
+            );
+            txn.run(
+                query(&cypher)
+                    .param("id", entity.id.clone())
+                    .param("type_id", entity.type_id.clone())
+                    .param(
+                        "name",
+                        prop_as_string(&entity.properties, "name").unwrap_or_default(),
+                    )
+                    .param(
+                        "aliases",
+                        prop_as_string(&entity.properties, "aliases")
+                            .unwrap_or_else(|| "[]".to_string()),
+                    )
+                    .param("user_id", entity.user_id.clone())
+                    .param("visibility", visibility_as_str(entity.visibility))
+                    .param("universe_id", entity.universe_id.clone()),
+            )
+            .await
+            .context("failed to upsert entity")?;
         }
 
-        let block_rows: Vec<HashMap<&str, String>> = delta
-            .blocks
-            .iter()
-            .map(|block| {
-                let mut row = HashMap::new();
-                row.insert("id", block.id.clone());
-                row.insert(
-                    "text",
-                    prop_as_string(&block.properties, "text").unwrap_or_default(),
-                );
-                row.insert("root_entity_id", block.root_entity_id.clone());
-                row.insert("user_id", block.user_id.clone());
-                row.insert(
-                    "visibility",
-                    visibility_as_str(block.visibility).to_string(),
-                );
-                row
-            })
-            .collect();
-
-        if !block_rows.is_empty() {
-            txn.run(query("UNWIND $rows AS row MERGE (b:Block {id: row.id}) SET b.text = row.text, b.user_id = row.user_id, b.visibility = row.visibility WITH row, b MATCH (e:Entity {id: row.root_entity_id}) WHERE e.user_id = row.user_id AND e.visibility = row.visibility MERGE (e)-[:DESCRIBED_BY]->(b)").param("rows", block_rows)).await.context("failed to upsert blocks")?;
+        for block in &delta.blocks {
+            let labels = sanitize_labels(&block.resolved_labels)?;
+            let cypher = format!(
+                "MERGE (b:{} {{id: $id}}) SET b.type_id = $type_id, b.text = $text, b.user_id = $user_id, b.visibility = $visibility WITH b MATCH (e:Entity {{id: $root_entity_id}}) WHERE e.user_id = $user_id AND e.visibility = $visibility MERGE (e)-[:DESCRIBED_BY]->(b)",
+                labels.join(":"),
+            );
+            txn.run(
+                query(&cypher)
+                    .param("id", block.id.clone())
+                    .param("type_id", block.type_id.clone())
+                    .param(
+                        "text",
+                        prop_as_string(&block.properties, "text").unwrap_or_default(),
+                    )
+                    .param("root_entity_id", block.root_entity_id.clone())
+                    .param("user_id", block.user_id.clone())
+                    .param("visibility", visibility_as_str(block.visibility)),
+            )
+            .await
+            .context("failed to upsert block")?;
         }
 
         for edge in &delta.edges {
@@ -348,7 +355,7 @@ impl Neo4jGraphStore {
     async fn common_root_graph_exists(&self) -> Result<bool> {
         let mut result = self
             .graph
-            .execute(query("MATCH (e:Entity {id: 'concept.exobrain', user_id: 'exobrain', visibility: 'SHARED'})-[:IS_PART_OF]->(:Universe {id: 'universe.real_world'}) MATCH (e)-[:DESCRIBED_BY]->(:Block {id: 'block.concept.exobrain', user_id: 'exobrain', visibility: 'SHARED'}) RETURN 1 AS present LIMIT 1"))
+            .execute(query("MATCH (e:Entity {id: '8c75cc89-6204-4fed-aec1-34d032ff95ee', user_id: 'exobrain', visibility: 'SHARED'})-[:IS_PART_OF]->(:Universe {id: '9d7f0fa5-78c1-4805-9efb-3f8f16090d7f'}) MATCH (e)-[:DESCRIBED_BY]->(:Block {id: 'ea5ca80f-346b-4f66-bff2-d307ce5d7da9', user_id: 'exobrain', visibility: 'SHARED'}) RETURN 1 AS present LIMIT 1"))
             .await
             .context("failed to query common root graph")?;
 
@@ -503,6 +510,26 @@ fn to_point(embedded: &EmbeddedBlock) -> PointStruct {
         Value::from(embedded.entity_ids.clone()),
     );
     PointStruct::new(embedded.block.id.clone(), embedded.vector.clone(), payload)
+}
+
+fn sanitize_labels(labels: &[String]) -> Result<Vec<String>> {
+    let cleaned: Vec<String> = labels
+        .iter()
+        .map(|label| label.trim().to_string())
+        .filter(|label| !label.is_empty())
+        .collect();
+    if cleaned.is_empty() {
+        anyhow::bail!("resolved labels cannot be empty");
+    }
+    for label in &cleaned {
+        if !label
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+        {
+            anyhow::bail!("invalid label '{}'", label);
+        }
+    }
+    Ok(cleaned)
 }
 
 fn prop_as_string(props: &[PropertyValue], key: &str) -> Option<String> {

@@ -145,8 +145,9 @@ A skill is a set of local instructions in a `SKILL.md` file.
 - Knowledge-interface startup now ensures a shared Exobrain root graph (`universe.real_world` + `concept.exobrain`) through the Rust ingestion flow; keep bootstrap IDs/user ownership (`exobrain`, `SHARED`) stable to avoid duplicate seed variants across environments.
 - For Memgraph-backed knowledge-interface runs, set `MEMGRAPH_DB=memgraph` (or the deployed DB name); neo4rs defaults to `neo4j`, which can break startup bootstrap checks against Memgraph.
 - For knowledge-interface Qdrant runs, use an HTTP(S) URL in `QDRANT_ADDR` (for example `http://localhost:6333`); bare host:port values can break HTTP parsing in local setups.
+- For knowledge-interface offline embedding runs, set `EMBEDDING_USE_MOCK=true` to bypass external embedding providers without using assistant-backend specific env names.
 - For assistant-frontend E2E validation in agent environments, use `scripts/agent/run-assistant-frontend-e2e.sh` (Playwright against mock API mode) before finalizing UI/UX changes.
-- Knowledge-interface universe semantics: IDs are globally unique across universes and universes remain semantic/context signals (not ownership scope); enforce ownership via `user_id` plus `visibility` (`PRIVATE`/`SHARED`) across ingestion payloads and storage metadata, and keep ingestion `labels` documented as currently unused forward-compat fields unless explicitly implementing label-aware writes.
+- Knowledge-interface universe semantics: IDs are globally unique across universes and universes remain semantic/context signals (not ownership scope); enforce ownership via `user_id` plus `visibility` (`PRIVATE`/`SHARED`) across ingestion payloads and storage metadata, and keep ingestion inputs centered on schema `type_id` fields while server-side inheritance resolution sets all persisted node labels.
 
 - Local workstation startup now defaults to Docker Compose infra plus `mprocs` app orchestration; keep `.mprocs/*.yml` and `scripts/local/run-*-suite.sh` aligned when adding/removing services.
 

@@ -1,6 +1,6 @@
 # Knowledge Interface gRPC API and Graph Delta Contract
 
-This document describes what clients must send to `IngestGraphDelta` and `InitializeUserGraph`.
+This document describes what clients must send to `UpsertGraphDelta` and `InitializeUserGraph`.
 
 ## Core rule
 
@@ -14,24 +14,18 @@ A graph delta is accepted only when it is schema-valid:
 
 Client-provided IDs are **domain IDs**, not Memgraph-internal IDs.
 
-- IDs must be lowercase and dot-separated
-- Allowed chars: `a-z`, `0-9`, `.`, `_`, `-`
+- IDs must be RFC 4122 UUID strings
+- Example: `550e8400-e29b-41d4-a716-446655440000`
 - Examples:
-  - `person.alex`
-  - `block.note.2026-02-25`
-  - `assistant.user-17`
+  - `550e8400-e29b-41d4-a716-446655440001`
+  - `550e8400-e29b-41d4-a716-446655440002`
 
 Invalid IDs return `InvalidArgument` with detailed messages.
 
-## Type mapping from payload labels
+## Type mapping
 
-`EntityNode.labels` and `BlockNode.labels` are interpreted as schema node type hints.
-
-- Entity with labels `Entity`, `Person` -> `node.person`
-- Entity with labels `Entity`, `Object` -> `node.object`
-- Block with label `Block` -> `node.block`
-
-If only base label is sent, base type is used (`node.entity` / `node.block`).
+Clients provide `type_id` (for example `node.person` or `node.block`).
+The server resolves and writes the full label chain from schema inheritance (for example `:Entity:Person:Friend`).
 
 ## Required/allowed properties
 
@@ -77,14 +71,15 @@ Failure behavior:
 - If steps 1-3 fail: Memgraph is rolled back
 - If step 4 fails: newly upserted Qdrant points are deleted as compensation
 
-## Example `IngestGraphDelta` payload shape
+## Example `UpsertGraphDelta` payload shape
 
 Minimal valid delta for one person + one block + one edge:
 
-- `entities[0].id = person.alex`
-- `entities[0].labels = ["Entity", "Person"]`
+- `entities[0].id = 550e8400-e29b-41d4-a716-446655440001`
+- `entities[0].type_id = node.person`
 - `entities[0].properties` contains `name`
-- `blocks[0].id = block.alex.root`
+- `blocks[0].id = 550e8400-e29b-41d4-a716-446655440002`
+- `blocks[0].type_id = node.block`
 - `blocks[0].properties` contains `text`
 - `edges[0].edge_type = RELATED_TO`
 

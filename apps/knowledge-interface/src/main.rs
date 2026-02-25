@@ -23,8 +23,8 @@ pub mod proto {
 
 use proto::knowledge_interface_server::{KnowledgeInterface, KnowledgeInterfaceServer};
 use proto::{
-    GetSchemaReply, GetSchemaRequest, HealthReply, HealthRequest, IngestGraphDeltaReply,
-    IngestGraphDeltaRequest, InitializeUserGraphReply, InitializeUserGraphRequest,
+    GetSchemaReply, GetSchemaRequest, HealthReply, HealthRequest, InitializeUserGraphReply,
+    InitializeUserGraphRequest, UpsertGraphDeltaReply, UpsertGraphDeltaRequest,
     UpsertSchemaTypeReply, UpsertSchemaTypeRequest,
 };
 
@@ -68,7 +68,7 @@ impl AppConfig {
             openai_api_key: env::var("OPENAI_API_KEY").ok(),
             embedding_model: env::var("OPENAI_EMBEDDING_MODEL")
                 .unwrap_or_else(|_| "text-embedding-3-large".to_string()),
-            use_mock_embedder: env::var("MAIN_AGENT_USE_MOCK")
+            use_mock_embedder: env::var("EMBEDDING_USE_MOCK")
                 .map(|v| v.eq_ignore_ascii_case("true") || v == "1")
                 .unwrap_or(false),
         })
@@ -98,7 +98,11 @@ impl KnowledgeInterface for KnowledgeGrpcService {
         &self,
         _request: Request<GetSchemaRequest>,
     ) -> Result<Response<GetSchemaReply>, Status> {
-        let schema = self.app.get_schema().await.map_err(map_ingest_error)?;
+        let schema = self
+            .app
+            .get_schema()
+            .await
+            .map_err(|e| Status::internal(e.to_string()))?;
 
         let map_type = |s: SchemaType| proto::SchemaType {
             id: s.id,
@@ -238,10 +242,10 @@ impl KnowledgeInterface for KnowledgeGrpcService {
         }))
     }
 
-    async fn ingest_graph_delta(
+    async fn upsert_graph_delta(
         &self,
-        request: Request<IngestGraphDeltaRequest>,
-    ) -> Result<Response<IngestGraphDeltaReply>, Status> {
+        request: Request<UpsertGraphDeltaRequest>,
+    ) -> Result<Response<UpsertGraphDeltaReply>, Status> {
         let payload = request.into_inner();
 
         let entities: Vec<EntityNode> = payload
@@ -250,7 +254,7 @@ impl KnowledgeInterface for KnowledgeGrpcService {
             .map(|entity| {
                 Ok(EntityNode {
                     id: entity.id,
-                    labels: entity.labels,
+                    type_id: entity.type_id,
                     universe_id: entity.universe_id,
                     user_id: entity.user_id,
                     visibility: map_visibility(entity.visibility)?,
@@ -259,6 +263,7 @@ impl KnowledgeInterface for KnowledgeGrpcService {
                         .into_iter()
                         .map(map_property_value)
                         .collect::<Result<Vec<_>, _>>()?,
+                    resolved_labels: vec![],
                 })
             })
             .collect::<Result<Vec<_>, Status>>()?;
@@ -269,7 +274,7 @@ impl KnowledgeInterface for KnowledgeGrpcService {
             .map(|block| {
                 Ok(BlockNode {
                     id: block.id,
-                    labels: block.labels,
+                    type_id: block.type_id,
                     root_entity_id: block.root_entity_id,
                     user_id: block.user_id,
                     visibility: map_visibility(block.visibility)?,
@@ -278,6 +283,7 @@ impl KnowledgeInterface for KnowledgeGrpcService {
                         .into_iter()
                         .map(map_property_value)
                         .collect::<Result<Vec<_>, _>>()?,
+                    resolved_labels: vec![],
                 })
             })
             .collect::<Result<Vec<_>, Status>>()?;
@@ -302,8 +308,9 @@ impl KnowledgeInterface for KnowledgeGrpcService {
             .collect::<Result<Vec<_>, Status>>()?;
 
         self.app
-            .ingest_graph_delta(GraphDelta {
+            .upsert_graph_delta(GraphDelta {
                 universe_id: payload.universe_id,
+                universe_name: payload.universe_name,
                 user_id: payload.user_id,
                 visibility: map_visibility(payload.visibility)?,
                 entities: entities.clone(),
@@ -313,7 +320,7 @@ impl KnowledgeInterface for KnowledgeGrpcService {
             .await
             .map_err(map_ingest_error)?;
 
-        Ok(Response::new(IngestGraphDeltaReply {
+        Ok(Response::new(UpsertGraphDeltaReply {
             entities_upserted: entities.len() as u32,
             blocks_upserted: blocks.len() as u32,
             edges_upserted: edges.len() as u32,

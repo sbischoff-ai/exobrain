@@ -75,21 +75,23 @@ pub struct PropertyValue {
 #[derive(Debug, Clone)]
 pub struct EntityNode {
     pub id: String,
-    pub labels: Vec<String>,
+    pub type_id: String,
     pub universe_id: String,
     pub user_id: String,
     pub visibility: Visibility,
     pub properties: Vec<PropertyValue>,
+    pub resolved_labels: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct BlockNode {
     pub id: String,
-    pub labels: Vec<String>,
+    pub type_id: String,
     pub root_entity_id: String,
     pub user_id: String,
     pub visibility: Visibility,
     pub properties: Vec<PropertyValue>,
+    pub resolved_labels: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -111,6 +113,7 @@ pub enum Visibility {
 #[derive(Debug, Clone)]
 pub struct GraphDelta {
     pub universe_id: String,
+    pub universe_name: String,
     pub user_id: String,
     pub visibility: Visibility,
     pub entities: Vec<EntityNode>,
