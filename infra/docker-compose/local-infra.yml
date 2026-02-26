@@ -57,6 +57,21 @@ services:
     networks:
       - exobrain-local
 
+  memgraph-lab:
+    image: memgraph/lab:latest
+    container_name: exobrain-local-memgraph-lab
+    restart: unless-stopped
+    environment:
+      QUICK_CONNECT_MG_HOST: memgraph
+      QUICK_CONNECT_MG_PORT: 7687
+    ports:
+      - "13000:3000"
+    depends_on:
+      memgraph:
+        condition: service_healthy
+    networks:
+      - exobrain-local
+
   nats:
     image: nats:2.10-alpine
     container_name: exobrain-local-nats

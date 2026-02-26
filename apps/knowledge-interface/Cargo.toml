@@ -9,7 +9,7 @@ async-trait = "0.1"
 dotenvy = "0.15"
 neo4rs = "0.8"
 prost = "0.12"
-qdrant-client = "1.12"
+qdrant-client = "=1.10.1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
 sqlx = { version = "0.8", default-features = false, features = ["postgres", "runtime-tokio-rustls"] }
@@ -18,6 +18,7 @@ tonic = { version = "0.11", features = ["transport"] }
 tonic-reflection = "0.11"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+uuid = { version = "1", features = ["v4", "v5"] }
 
 [build-dependencies]
 tonic-build = "0.11"

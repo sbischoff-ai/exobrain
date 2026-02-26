@@ -31,17 +31,16 @@ pub trait SchemaRepository: Send + Sync {
 }
 
 #[async_trait]
-pub trait GraphStore: Send + Sync {
-    async fn apply_delta(&self, delta: &GraphDelta) -> Result<()>;
+pub trait GraphRepository: Send + Sync {
+    async fn apply_delta_with_blocks(
+        &self,
+        delta: &GraphDelta,
+        blocks: &[EmbeddedBlock],
+    ) -> Result<()>;
     async fn common_root_graph_exists(&self) -> Result<bool>;
 }
 
 #[async_trait]
 pub trait Embedder: Send + Sync {
     async fn embed_texts(&self, texts: &[String]) -> Result<Vec<Vec<f32>>>;
-}
-
-#[async_trait]
-pub trait VectorStore: Send + Sync {
-    async fn upsert_blocks(&self, blocks: &[EmbeddedBlock]) -> Result<()>;
 }

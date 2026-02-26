@@ -17,9 +17,9 @@ This document is code-oriented: it helps a new contributor quickly navigate the 
 - `src/adapters.rs`
   - infrastructure integrations:
     - Postgres schema registry repository (`sqlx`)
-    - Memgraph writer (`neo4rs`)
+    - Memgraph + Qdrant coordinated graph repository (`neo4rs` + `qdrant-client`)
     - OpenAI embedding client (`reqwest`)
-    - Qdrant upsert client (`qdrant-client`)
+    - deterministic mock embedder for offline dev
 - `src/ports.rs`
   - service-facing trait contracts for repositories/stores/providers
 - `src/domain.rs`
@@ -43,13 +43,13 @@ This document is code-oriented: it helps a new contributor quickly navigate the 
    - edge inheritance is rejected
 3. schema type, inheritance row, and additive properties are upserted via repository.
 
-### 3) `IngestGraphDelta`
+### 3) `UpsertGraphDelta`
 
 1. gRPC handler maps proto payload into `GraphDelta`.
-2. service writes entities/blocks/edges to graph store.
+2. service validates the delta against canonical schema types/properties/rules.
 3. service extracts block text from typed properties (`text`) and generates embeddings.
-4. service writes block vectors + payload metadata to Qdrant.
-5. note: this is currently sequential (graph then vectors), not yet outbox-orchestrated.
+4. service hands both graph delta and embedded blocks to one repository call.
+5. adapter layer writes Memgraph + Qdrant with transaction/rollback behavior.
 
 ### 4) `InitializeUserGraph`
 
@@ -67,7 +67,7 @@ The service follows a ports-and-adapters style:
 
 - `KnowledgeApplication` has no direct DB/network code.
 - all side effects occur behind traits in `ports.rs`.
-- adapter implementations are swappable without changing orchestration logic.
+- `GraphRepository` is now the single write boundary for Memgraph + Qdrant consistency.
 
 This keeps business logic testable and isolates integration-specific concerns.
 
@@ -107,4 +107,4 @@ When extending logic, prefer adding tests beside the module under change unless 
 - Ingestion enforces that request-level `user_id`/`visibility` matches all entities/blocks/edges in the delta.
 - Memgraph writes persist `user_id` + `visibility` on entities, blocks, and edges.
 - Qdrant block payloads persist `user_id` + `visibility` for retrieval-time filtering.
-- `labels` fields on entity/block payloads are currently parsed and preserved in domain DTOs, but not yet consumed by graph-write Cypher.
+- Clients submit schema `type_id` values; the service resolves full inheritance label chains and applies them to Memgraph nodes during writes.
