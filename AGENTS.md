@@ -144,6 +144,7 @@ A skill is a set of local instructions in a `SKILL.md` file.
 - Knowledge-interface gRPC is pre-launch and may use clean breaking changes; prefer schema-driven property payloads over hard-coded entity/event fields when evolving ingestion contracts.
 - UpsertGraphDelta now treats block/entity linkage as explicit edges: `BlockNode` no longer carries `root_entity_id`; clients must send `DESCRIBED_BY` edges when needed (for example root blocks), and higher-level summary blocks can omit that edge.
 - Qdrant block payload metadata should use `block_level` (0 for `DESCRIBED_BY` root blocks, +1 per `SUMMARIZES` hop) and must not include legacy relationship ID arrays.
+- Knowledge-interface edge writes allow `PRIVATE` relationships to target `SHARED` nodes for the same user; keep node matching semantics aligned with this when adjusting Memgraph queries.
 - Knowledge-interface startup now ensures a shared Exobrain root graph (`universe.real_world` + `concept.exobrain`) through the Rust ingestion flow; keep bootstrap IDs/user ownership (`exobrain`, `SHARED`) stable to avoid duplicate seed variants across environments.
 - For Memgraph-backed knowledge-interface runs, set `MEMGRAPH_DB=memgraph` (or the deployed DB name); neo4rs defaults to `neo4j`, which can break startup bootstrap checks against Memgraph.
 - For knowledge-interface Qdrant runs, use the gRPC endpoint URL in `QDRANT_ADDR` (for example `http://localhost:6334` or local mapped `http://localhost:16334`); bare host:port values can break HTTP parsing and REST ports (6333/16333) can trigger protocol errors.
