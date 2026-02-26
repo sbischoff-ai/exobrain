@@ -105,10 +105,17 @@ enum Visibility {
   SHARED = 2;
 }
 
+message UniverseNode {
+  string id = 1;
+  string name = 2;
+  string user_id = 3;
+  Visibility visibility = 4;
+}
+
 message EntityNode {
   string id = 1;
   string type_id = 2;
-  string universe_id = 3;
+  optional string universe_id = 3;
   repeated PropertyValue properties = 4;
   string user_id = 5;
   Visibility visibility = 6;
@@ -132,13 +139,12 @@ message GraphEdge {
 }
 
 message UpsertGraphDeltaRequest {
-  string universe_id = 1;
-  string universe_name = 2;
-  repeated EntityNode entities = 3;
-  repeated BlockNode blocks = 4;
-  repeated GraphEdge edges = 5;
-  string user_id = 6;
-  Visibility visibility = 7;
+  repeated UniverseNode universes = 1;
+  repeated EntityNode entities = 2;
+  repeated BlockNode blocks = 3;
+  repeated GraphEdge edges = 4;
+  string user_id = 5;
+  Visibility visibility = 6;
 }
 
 message UpsertGraphDeltaReply {

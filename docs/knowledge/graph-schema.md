@@ -84,12 +84,12 @@ Blocks may include editorial trust hints:
 flowchart LR
   MG[Memgraph Block node] --> EMB[Embedding model]
   EMB --> Q[(Qdrant blocks collection)]
-  MG --> META[Payload metadata\nuniverse_id/block_level]
+  MG --> META[Payload metadata\nuniverse_id/root_entity_id/block_level]
   META --> Q
 ```
 
 Required payload fields:
-- `block_id`, `universe_id`, `text`, `block_level`
+- `block_id`, `universe_id`, `root_entity_id`, `text`, `block_level`
 
 ## Universe semantics
 

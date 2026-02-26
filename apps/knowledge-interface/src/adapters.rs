@@ -264,14 +264,18 @@ impl Neo4jGraphStore {
 
     async fn apply_delta_in_tx(&self, txn: &mut Txn, delta: &GraphDelta) -> Result<()> {
         let universe_aliases = "[]".to_string();
-        txn.run(
-            query("MERGE (u:Universe {id: $id}) SET u.name = $name, u.aliases = $aliases")
-                .param("id", delta.universe_id.clone())
-                .param("name", delta.universe_name.clone())
-                .param("aliases", universe_aliases),
-        )
-        .await
-        .context("failed to upsert universe")?;
+        for universe in &delta.universes {
+            txn.run(
+                query("MERGE (u:Universe {id: $id}) SET u.name = $name, u.aliases = $aliases, u.user_id = $user_id, u.visibility = $visibility")
+                    .param("id", universe.id.clone())
+                    .param("name", universe.name.clone())
+                    .param("aliases", universe_aliases.clone())
+                    .param("user_id", universe.user_id.clone())
+                    .param("visibility", visibility_as_str(universe.visibility)),
+            )
+            .await
+            .context("failed to upsert universe")?;
+        }
 
         for entity in &delta.entities {
             let labels = sanitize_labels(&entity.resolved_labels)?;
@@ -294,7 +298,13 @@ impl Neo4jGraphStore {
                     )
                     .param("user_id", entity.user_id.clone())
                     .param("visibility", visibility_as_str(entity.visibility))
-                    .param("universe_id", entity.universe_id.clone()),
+                    .param(
+                        "universe_id",
+                        entity
+                            .universe_id
+                            .clone()
+                            .unwrap_or_else(|| "9d7f0fa5-78c1-4805-9efb-3f8f16090d7f".to_string()),
+                    ),
             )
             .await
             .context("failed to upsert entity")?;
@@ -539,6 +549,10 @@ fn to_point(embedded: &EmbeddedBlock) -> PointStruct {
         Value::from(visibility_as_str(embedded.visibility).to_string()),
     );
     payload.insert("text".to_string(), Value::from(embedded.text.clone()));
+    payload.insert(
+        "root_entity_id".to_string(),
+        Value::from(embedded.root_entity_id.clone()),
+    );
     payload.insert("block_level".to_string(), Value::from(embedded.block_level));
     PointStruct::new(embedded.block.id.clone(), embedded.vector.clone(), payload)
 }
