@@ -383,7 +383,16 @@
     }
 
     const resumeAssistantMessageId = makeClientMessageId();
-    messages = [...messages, { role: 'assistant', content: '', clientMessageId: resumeAssistantMessageId, processInfos: [] }];
+    messages = [
+      ...messages,
+      {
+        role: 'assistant',
+        content: '',
+        clientMessageId: resumeAssistantMessageId,
+        createdAt: new Date().toISOString(),
+        processInfos: []
+      }
+    ];
     awaitingAssistant = true;
 
     try {
@@ -429,12 +438,14 @@
     accumulatedContent: string,
     processInfos: ProcessInfo[]
   ): void {
+    const existingMessage = messages.at(-1);
     messages = [
       ...messages.slice(0, -1),
       {
         role: 'assistant',
         content: accumulatedContent,
         clientMessageId: assistantClientMessageId,
+        createdAt: existingMessage?.createdAt ?? new Date().toISOString(),
         processInfos
       }
     ];
@@ -496,10 +507,17 @@
     const userClientMessageId = makeClientMessageId();
     const assistantClientMessageId = makeClientMessageId();
 
+    const createdAt = new Date().toISOString();
     messages = [
       ...messages,
-      { role: 'user', content: text, clientMessageId: userClientMessageId },
-      { role: 'assistant', content: '', clientMessageId: assistantClientMessageId, processInfos: [] }
+      { role: 'user', content: text, clientMessageId: userClientMessageId, createdAt },
+      {
+        role: 'assistant',
+        content: '',
+        clientMessageId: assistantClientMessageId,
+        createdAt,
+        processInfos: []
+      }
     ];
     awaitingAssistant = true;
 

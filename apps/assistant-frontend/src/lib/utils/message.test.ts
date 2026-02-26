@@ -14,6 +14,15 @@ describe('message utils', () => {
   });
 
 
+
+  it('maps created_at to createdAt for UI timestamp labels', () => {
+    const [message] = toChronologicalStoredMessages([
+      { id: 'm1', role: 'assistant', content: 'timed', sequence: 1, created_at: '2026-01-02T03:04:05Z' }
+    ]);
+
+    expect(message.createdAt).toBe('2026-01-02T03:04:05Z');
+  });
+
   it('maps persisted tool_calls into process info boxes', () => {
     const [assistantMessage] = toChronologicalStoredMessages([
       {

@@ -41,6 +41,7 @@ export interface StoredMessage {
   role: MessageRole;
   content: string;
   clientMessageId: string;
+  createdAt?: string;
   sequence?: number;
   toolCalls?: JournalToolCall[];
   processInfos?: ProcessInfo[];

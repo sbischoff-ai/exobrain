@@ -47,6 +47,7 @@ cd apps/assistant-frontend && npm test
 
 - Message APIs are newest-first for pagination; client normalizes to chronological rendering.
 - Auto-scroll responds to all message updates, including streaming chunk updates.
+- Chat bubbles show per-message `hh:mm` timestamps sourced from message `created_at` values.
 - Logout clears `sessionStorage` snapshot state and returns users to intro gate.
 
 ## Related docs
