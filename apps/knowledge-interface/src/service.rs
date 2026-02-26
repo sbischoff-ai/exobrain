@@ -6,7 +6,7 @@ use anyhow::{anyhow, Result};
 use crate::{
     domain::{
         BlockNode, EmbeddedBlock, EntityNode, FullSchema, GraphDelta, GraphEdge, PropertyScalar,
-        PropertyValue, SchemaType, UpsertSchemaTypeCommand, Visibility,
+        PropertyValue, SchemaType, UniverseNode, UpsertSchemaTypeCommand, Visibility,
     },
     ports::{Embedder, GraphRepository, SchemaRepository},
 };
@@ -201,22 +201,24 @@ impl KnowledgeApplication {
 
     fn common_root_delta() -> GraphDelta {
         GraphDelta {
-            universe_id: COMMON_UNIVERSE_ID.to_string(),
-            universe_name: COMMON_UNIVERSE_NAME.to_string(),
             user_id: EXOBRAIN_USER_ID.to_string(),
             visibility: Visibility::Shared,
+            universes: vec![UniverseNode {
+                id: COMMON_UNIVERSE_ID.to_string(),
+                name: COMMON_UNIVERSE_NAME.to_string(),
+                user_id: EXOBRAIN_USER_ID.to_string(),
+                visibility: Visibility::Shared,
+            }],
             entities: vec![EntityNode {
                 id: COMMON_EXOBRAIN_ENTITY_ID.to_string(),
                 type_id: "node.concept".to_string(),
-                universe_id: COMMON_UNIVERSE_ID.to_string(),
+                universe_id: Some(COMMON_UNIVERSE_ID.to_string()),
                 user_id: EXOBRAIN_USER_ID.to_string(),
                 visibility: Visibility::Shared,
-                properties: vec![
-                    PropertyValue {
-                        key: "name".to_string(),
-                        value: PropertyScalar::String("Exobrain".to_string()),
-                    },
-                ],
+                properties: vec![PropertyValue {
+                    key: "name".to_string(),
+                    value: PropertyScalar::String("Exobrain".to_string()),
+                }],
                 resolved_labels: vec![],
             }],
             blocks: vec![BlockNode {
@@ -230,14 +232,24 @@ impl KnowledgeApplication {
                 }],
                 resolved_labels: vec![],
             }],
-            edges: vec![GraphEdge {
-                from_id: COMMON_EXOBRAIN_ENTITY_ID.to_string(),
-                to_id: COMMON_EXOBRAIN_BLOCK_ID.to_string(),
-                edge_type: "DESCRIBED_BY".to_string(),
-                user_id: EXOBRAIN_USER_ID.to_string(),
-                visibility: Visibility::Shared,
-                properties: vec![],
-            }],
+            edges: vec![
+                GraphEdge {
+                    from_id: COMMON_EXOBRAIN_ENTITY_ID.to_string(),
+                    to_id: COMMON_UNIVERSE_ID.to_string(),
+                    edge_type: "IS_PART_OF".to_string(),
+                    user_id: EXOBRAIN_USER_ID.to_string(),
+                    visibility: Visibility::Shared,
+                    properties: vec![],
+                },
+                GraphEdge {
+                    from_id: COMMON_EXOBRAIN_ENTITY_ID.to_string(),
+                    to_id: COMMON_EXOBRAIN_BLOCK_ID.to_string(),
+                    edge_type: "DESCRIBED_BY".to_string(),
+                    user_id: EXOBRAIN_USER_ID.to_string(),
+                    visibility: Visibility::Shared,
+                    properties: vec![],
+                },
+            ],
         }
     }
 
@@ -252,17 +264,21 @@ impl KnowledgeApplication {
             format!("assistant:{user_id}").as_bytes(),
         )
         .to_string();
+        let assistant_block_id = uuid::Uuid::new_v5(
+            &uuid::Uuid::NAMESPACE_OID,
+            format!("assistant-block:{user_id}").as_bytes(),
+        )
+        .to_string();
 
         GraphDelta {
-            universe_id: COMMON_UNIVERSE_ID.to_string(),
-            universe_name: COMMON_UNIVERSE_NAME.to_string(),
             user_id: user_id.to_string(),
             visibility: Visibility::Shared,
+            universes: vec![],
             entities: vec![
                 EntityNode {
                     id: person_entity_id.clone(),
                     type_id: "node.person".to_string(),
-                    universe_id: COMMON_UNIVERSE_ID.to_string(),
+                    universe_id: Some(COMMON_UNIVERSE_ID.to_string()),
                     user_id: user_id.to_string(),
                     visibility: Visibility::Shared,
                     properties: vec![
@@ -280,7 +296,7 @@ impl KnowledgeApplication {
                 EntityNode {
                     id: assistant_entity_id.clone(),
                     type_id: "node.object".to_string(),
-                    universe_id: COMMON_UNIVERSE_ID.to_string(),
+                    universe_id: Some(COMMON_UNIVERSE_ID.to_string()),
                     user_id: user_id.to_string(),
                     visibility: Visibility::Shared,
                     properties: vec![PropertyValue {
@@ -291,7 +307,7 @@ impl KnowledgeApplication {
                 },
             ],
             blocks: vec![BlockNode {
-                id: uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, format!("assistant-block:{user_id}").as_bytes()).to_string(),
+                id: assistant_block_id.clone(),
                 type_id: "node.block".to_string(),
                 user_id: user_id.to_string(),
                 visibility: Visibility::Shared,
@@ -303,6 +319,22 @@ impl KnowledgeApplication {
             }],
             edges: vec![
                 GraphEdge {
+                    from_id: person_entity_id.clone(),
+                    to_id: COMMON_UNIVERSE_ID.to_string(),
+                    edge_type: "IS_PART_OF".to_string(),
+                    user_id: user_id.to_string(),
+                    visibility: Visibility::Shared,
+                    properties: vec![],
+                },
+                GraphEdge {
+                    from_id: assistant_entity_id.clone(),
+                    to_id: COMMON_UNIVERSE_ID.to_string(),
+                    edge_type: "IS_PART_OF".to_string(),
+                    user_id: user_id.to_string(),
+                    visibility: Visibility::Shared,
+                    properties: vec![],
+                },
+                GraphEdge {
                     from_id: assistant_entity_id.clone(),
                     to_id: person_entity_id,
                     edge_type: "RELATED_TO".to_string(),
@@ -312,7 +344,7 @@ impl KnowledgeApplication {
                 },
                 GraphEdge {
                     from_id: assistant_entity_id,
-                    to_id: uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, format!("assistant-block:{user_id}").as_bytes()).to_string(),
+                    to_id: assistant_block_id,
                     edge_type: "DESCRIBED_BY".to_string(),
                     user_id: user_id.to_string(),
                     visibility: Visibility::Shared,
@@ -341,6 +373,7 @@ impl KnowledgeApplication {
         let vectors = self.embedder.embed_texts(&texts).await?;
 
         let block_levels = block_levels_for_blocks(&delta.blocks, &delta.edges);
+        let root_entity_ids = root_entity_ids_for_blocks(&delta.blocks, &delta.edges)?;
 
         let blocks: Vec<EmbeddedBlock> = delta
             .blocks
@@ -349,7 +382,9 @@ impl KnowledgeApplication {
             .zip(texts.into_iter())
             .map(|((block, vector), text)| EmbeddedBlock {
                 block: block.clone(),
-                universe_id: delta.universe_id.clone(),
+                root_entity_id: root_entity_ids.get(&block.id).cloned().unwrap_or_default(),
+                universe_id: resolve_block_universe_id(&root_entity_ids, block, &delta.entities)
+                    .to_string(),
                 user_id: delta.user_id.clone(),
                 visibility: delta.visibility,
                 vector,
@@ -388,6 +423,17 @@ impl KnowledgeApplication {
         let mut node_type_by_id = HashMap::new();
         let mut errors = vec![];
 
+        for universe in &delta.universes {
+            if let Err(err) = validate_graph_id(&universe.id, "universe") {
+                errors.push(err);
+                continue;
+            }
+            if universe.name.trim().is_empty() {
+                errors.push(format!("universe {} name is required", universe.id));
+            }
+            node_type_by_id.insert(universe.id.clone(), "node.universe".to_string());
+        }
+
         for entity in &delta.entities {
             if let Err(err) = validate_graph_id(&entity.id, "entity") {
                 errors.push(err);
@@ -395,6 +441,17 @@ impl KnowledgeApplication {
             }
             let node_type = entity.type_id.clone();
             node_type_by_id.insert(entity.id.clone(), node_type.clone());
+            if let Some(universe_id) = &entity.universe_id {
+                if !node_type_by_id.contains_key(universe_id)
+                    && !delta.universes.iter().any(|u| &u.id == universe_id)
+                    && universe_id != COMMON_UNIVERSE_ID
+                {
+                    errors.push(format!(
+                        "entity {} references unknown universe {}",
+                        entity.id, universe_id
+                    ));
+                }
+            }
             if !schema_types.contains_key(&node_type) {
                 errors.push(format!(
                     "entity {} uses unknown schema type {}",
@@ -471,11 +528,13 @@ impl KnowledgeApplication {
                 node_type_by_id.get(&edge.from_id),
                 node_type_by_id.get(&edge.to_id),
             ) {
-                let valid_rule = edge_rules.iter().any(|rule| {
-                    rule.edge_type_id == edge_type_id
-                        && is_assignable(from_type, &rule.from_node_type_id, &inheritance)
-                        && is_assignable(to_type, &rule.to_node_type_id, &inheritance)
-                });
+                let involves_universe = from_type == "node.universe" || to_type == "node.universe";
+                let valid_rule = involves_universe
+                    || edge_rules.iter().any(|rule| {
+                        rule.edge_type_id == edge_type_id
+                            && is_assignable(from_type, &rule.from_node_type_id, &inheritance)
+                            && is_assignable(to_type, &rule.to_node_type_id, &inheritance)
+                    });
                 if !valid_rule {
                     errors.push(format!(
                         "edge {} ({}) violates schema endpoint rules for {} -> {}",
@@ -484,6 +543,8 @@ impl KnowledgeApplication {
                 }
             }
         }
+
+        enforce_relationship_rules(delta, &mut errors);
 
         if errors.is_empty() {
             return Ok(inheritance);
@@ -626,23 +687,19 @@ fn is_assignable(
 }
 
 fn validate_delta_access_scope(delta: &GraphDelta) -> Result<()> {
-    if let Err(err) = validate_graph_id(&delta.universe_id, "universe_id") {
-        return Err(anyhow!(err));
-    }
-
     if delta.user_id.trim().is_empty() {
         return Err(anyhow!("user_id is required"));
     }
-    if delta.universe_name.trim().is_empty() {
-        return Err(anyhow!("universe_name is required"));
+
+    for universe in &delta.universes {
+        if universe.user_id != delta.user_id {
+            return Err(anyhow!("universe user_id must match request user_id"));
+        }
     }
 
     for entity in &delta.entities {
         if entity.user_id != delta.user_id {
             return Err(anyhow!("entity user_id must match request user_id"));
-        }
-        if entity.visibility != delta.visibility {
-            return Err(anyhow!("entity visibility must match request visibility"));
         }
     }
 
@@ -650,21 +707,108 @@ fn validate_delta_access_scope(delta: &GraphDelta) -> Result<()> {
         if block.user_id != delta.user_id {
             return Err(anyhow!("block user_id must match request user_id"));
         }
-        if block.visibility != delta.visibility {
-            return Err(anyhow!("block visibility must match request visibility"));
-        }
     }
 
     for edge in &delta.edges {
         if edge.user_id != delta.user_id {
             return Err(anyhow!("edge user_id must match request user_id"));
         }
-        if edge.visibility != delta.visibility {
-            return Err(anyhow!("edge visibility must match request visibility"));
-        }
     }
 
     Ok(())
+}
+
+fn enforce_relationship_rules(delta: &GraphDelta, errors: &mut Vec<String>) {
+    let mut incoming_by_node: HashMap<&str, usize> = HashMap::new();
+    let mut outgoing_by_node: HashMap<&str, usize> = HashMap::new();
+    let mut entity_is_part_of: HashMap<&str, usize> = HashMap::new();
+    let mut block_parent_edges: HashMap<&str, usize> = HashMap::new();
+
+    for edge in &delta.edges {
+        *incoming_by_node.entry(edge.to_id.as_str()).or_insert(0) += 1;
+        *outgoing_by_node.entry(edge.from_id.as_str()).or_insert(0) += 1;
+
+        if edge.edge_type.eq_ignore_ascii_case("IS_PART_OF") {
+            *entity_is_part_of.entry(edge.from_id.as_str()).or_insert(0) += 1;
+        }
+        if edge.edge_type.eq_ignore_ascii_case("DESCRIBED_BY")
+            || edge.edge_type.eq_ignore_ascii_case("SUMMARIZES")
+        {
+            *block_parent_edges.entry(edge.to_id.as_str()).or_insert(0) += 1;
+        }
+    }
+
+    for universe in &delta.universes {
+        let total = incoming_by_node
+            .get(universe.id.as_str())
+            .copied()
+            .unwrap_or(0)
+            + outgoing_by_node
+                .get(universe.id.as_str())
+                .copied()
+                .unwrap_or(0);
+        if total == 0 {
+            errors.push(format!(
+                "universe {} must have at least one relationship",
+                universe.id
+            ));
+        }
+    }
+
+    for entity in &delta.entities {
+        let total = incoming_by_node
+            .get(entity.id.as_str())
+            .copied()
+            .unwrap_or(0)
+            + outgoing_by_node
+                .get(entity.id.as_str())
+                .copied()
+                .unwrap_or(0);
+        if total == 0 {
+            errors.push(format!(
+                "entity {} must have at least one relationship",
+                entity.id
+            ));
+        }
+        if entity_is_part_of
+            .get(entity.id.as_str())
+            .copied()
+            .unwrap_or(0)
+            == 0
+        {
+            errors.push(format!(
+                "entity {} must have IS_PART_OF edge to a universe",
+                entity.id
+            ));
+        }
+    }
+
+    for block in &delta.blocks {
+        let total = incoming_by_node
+            .get(block.id.as_str())
+            .copied()
+            .unwrap_or(0)
+            + outgoing_by_node
+                .get(block.id.as_str())
+                .copied()
+                .unwrap_or(0);
+        if total == 0 {
+            errors.push(format!(
+                "block {} must have at least one relationship",
+                block.id
+            ));
+        }
+        let count = block_parent_edges
+            .get(block.id.as_str())
+            .copied()
+            .unwrap_or(0);
+        if count != 1 {
+            errors.push(format!(
+                "block {} must have exactly one incoming DESCRIBED_BY or SUMMARIZES edge",
+                block.id
+            ));
+        }
+    }
 }
 
 fn extract_text(properties: &[crate::domain::PropertyValue]) -> String {
@@ -715,6 +859,70 @@ fn block_levels_for_blocks(blocks: &[BlockNode], edges: &[GraphEdge]) -> HashMap
     }
 
     levels
+}
+
+fn root_entity_ids_for_blocks(
+    blocks: &[BlockNode],
+    edges: &[GraphEdge],
+) -> Result<HashMap<String, String>> {
+    let block_ids: HashSet<&str> = blocks.iter().map(|b| b.id.as_str()).collect();
+    let described_by_parents: HashMap<&str, &str> = edges
+        .iter()
+        .filter(|e| {
+            e.edge_type.eq_ignore_ascii_case("DESCRIBED_BY") && block_ids.contains(e.to_id.as_str())
+        })
+        .map(|e| (e.to_id.as_str(), e.from_id.as_str()))
+        .collect();
+    let summarize_parents: HashMap<&str, &str> = edges
+        .iter()
+        .filter(|e| {
+            e.edge_type.eq_ignore_ascii_case("SUMMARIZES")
+                && block_ids.contains(e.to_id.as_str())
+                && block_ids.contains(e.from_id.as_str())
+        })
+        .map(|e| (e.to_id.as_str(), e.from_id.as_str()))
+        .collect();
+
+    let mut out = HashMap::new();
+    for block in blocks {
+        let mut current = block.id.as_str();
+        let mut seen = HashSet::new();
+        loop {
+            if !seen.insert(current) {
+                return Err(anyhow!(
+                    "cycle detected while resolving root_entity_id for block {}",
+                    block.id
+                ));
+            }
+            if let Some(root_entity) = described_by_parents.get(current) {
+                out.insert(block.id.clone(), (*root_entity).to_string());
+                break;
+            }
+            if let Some(parent_block) = summarize_parents.get(current) {
+                current = parent_block;
+                continue;
+            }
+            return Err(anyhow!(
+                "unable to resolve root_entity_id for block {} from DESCRIBED_BY/SUMMARIZES edges",
+                block.id
+            ));
+        }
+    }
+    Ok(out)
+}
+
+fn resolve_block_universe_id<'a>(
+    root_entity_ids: &HashMap<String, String>,
+    block: &BlockNode,
+    entities: &'a [EntityNode],
+) -> &'a str {
+    if let Some(root_entity_id) = root_entity_ids.get(&block.id) {
+        if let Some(entity) = entities.iter().find(|entity| &entity.id == root_entity_id) {
+            return entity.universe_id.as_deref().unwrap_or(COMMON_UNIVERSE_ID);
+        }
+    }
+
+    COMMON_UNIVERSE_ID
 }
 
 #[cfg(test)]
@@ -814,6 +1022,13 @@ mod tests {
                         description: String::new(),
                         active: true,
                     },
+                    SchemaType {
+                        id: "edge.is_part_of".to_string(),
+                        kind: "edge".to_string(),
+                        name: "IS_PART_OF".to_string(),
+                        description: String::new(),
+                        active: true,
+                    },
                 ],
                 _ => vec![],
             };
@@ -899,6 +1114,13 @@ mod tests {
                     edge_type_id: "edge.described_by".to_string(),
                     from_node_type_id: "node.entity".to_string(),
                     to_node_type_id: "node.block".to_string(),
+                    active: true,
+                    description: String::new(),
+                },
+                EdgeEndpointRule {
+                    edge_type_id: "edge.is_part_of".to_string(),
+                    from_node_type_id: "node.entity".to_string(),
+                    to_node_type_id: "node.universe".to_string(),
                     active: true,
                     description: String::new(),
                 },
@@ -1063,16 +1285,15 @@ mod tests {
         );
 
         app.upsert_graph_delta(GraphDelta {
-            universe_id: "550e8400-e29b-41d4-a716-4466554400ff".to_string(),
-            universe_name: "Personal Universe".to_string(),
             user_id: "user-1".to_string(),
             visibility: Visibility::Private,
+            universes: vec![],
             entities: vec![EntityNode {
                 id: "550e8400-e29b-41d4-a716-446655440001".to_string(),
                 type_id: "node.person".to_string(),
-                universe_id: "550e8400-e29b-41d4-a716-4466554400ff".to_string(),
                 user_id: "user-1".to_string(),
                 visibility: Visibility::Private,
+                universe_id: None,
                 properties: vec![PropertyValue {
                     key: "name".to_string(),
                     value: PropertyScalar::String("Alex".to_string()),
@@ -1090,14 +1311,24 @@ mod tests {
                 }],
                 resolved_labels: vec![],
             }],
-            edges: vec![GraphEdge {
-                from_id: "550e8400-e29b-41d4-a716-446655440001".to_string(),
-                to_id: "550e8400-e29b-41d4-a716-446655440001".to_string(),
-                edge_type: "RELATED_TO".to_string(),
-                user_id: "user-1".to_string(),
-                visibility: Visibility::Private,
-                properties: vec![],
-            }],
+            edges: vec![
+                GraphEdge {
+                    from_id: "550e8400-e29b-41d4-a716-446655440001".to_string(),
+                    to_id: "9d7f0fa5-78c1-4805-9efb-3f8f16090d7f".to_string(),
+                    edge_type: "IS_PART_OF".to_string(),
+                    user_id: "user-1".to_string(),
+                    visibility: Visibility::Private,
+                    properties: vec![],
+                },
+                GraphEdge {
+                    from_id: "550e8400-e29b-41d4-a716-446655440001".to_string(),
+                    to_id: "550e8400-e29b-41d4-a716-446655440002".to_string(),
+                    edge_type: "DESCRIBED_BY".to_string(),
+                    user_id: "user-1".to_string(),
+                    visibility: Visibility::Private,
+                    properties: vec![],
+                },
+            ],
         })
         .await
         .expect("ingestion should succeed");
@@ -1156,7 +1387,7 @@ mod tests {
         assert_eq!(delta.visibility, Visibility::Shared);
         assert_eq!(delta.entities.len(), 2);
         assert_eq!(delta.blocks.len(), 1);
-        assert_eq!(delta.edges.len(), 2);
+        assert_eq!(delta.edges.len(), 4);
 
         let guard = captured.lock().expect("lock should be available");
         assert_eq!(guard.len(), 1);
@@ -1219,14 +1450,13 @@ mod tests {
 
         let err = app
             .upsert_graph_delta(GraphDelta {
-                universe_id: "550e8400-e29b-41d4-a716-4466554400ff".to_string(),
-                universe_name: "Personal Universe".to_string(),
                 user_id: "user-1".to_string(),
                 visibility: Visibility::Private,
+                universes: vec![],
                 entities: vec![EntityNode {
                     id: "550e8400-e29b-41d4-a716-4466554400ab".to_string(),
                     type_id: "node.person".to_string(),
-                    universe_id: "550e8400-e29b-41d4-a716-4466554400ff".to_string(),
+                    universe_id: Some("550e8400-e29b-41d4-a716-4466554400ff".to_string()),
                     user_id: "user-2".to_string(),
                     visibility: Visibility::Private,
                     properties: vec![],

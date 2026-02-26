@@ -11,7 +11,7 @@ use adapters::{
 };
 use domain::{
     BlockNode, EntityNode, GraphDelta, GraphEdge, PropertyScalar, PropertyValue, SchemaType,
-    UpsertSchemaTypeCommand, UpsertSchemaTypePropertyInput, Visibility,
+    UniverseNode, UpsertSchemaTypeCommand, UpsertSchemaTypePropertyInput, Visibility,
 };
 use service::KnowledgeApplication;
 use tonic::{transport::Server, Request, Response, Status};
@@ -236,7 +236,7 @@ impl KnowledgeInterface for KnowledgeGrpcService {
             .map_err(|e| Status::invalid_argument(e.to_string()))?;
 
         Ok(Response::new(InitializeUserGraphReply {
-            universe_id: delta.universe_id,
+            universe_id: "9d7f0fa5-78c1-4805-9efb-3f8f16090d7f".to_string(),
             entities_upserted: delta.entities.len() as u32,
             blocks_upserted: delta.blocks.len() as u32,
             edges_upserted: delta.edges.len() as u32,
@@ -248,6 +248,19 @@ impl KnowledgeInterface for KnowledgeGrpcService {
         request: Request<UpsertGraphDeltaRequest>,
     ) -> Result<Response<UpsertGraphDeltaReply>, Status> {
         let payload = request.into_inner();
+
+        let universes: Vec<UniverseNode> = payload
+            .universes
+            .into_iter()
+            .map(|universe| {
+                Ok(UniverseNode {
+                    id: universe.id,
+                    name: universe.name,
+                    user_id: universe.user_id,
+                    visibility: map_visibility(universe.visibility)?,
+                })
+            })
+            .collect::<Result<Vec<_>, Status>>()?;
 
         let entities: Vec<EntityNode> = payload
             .entities
@@ -309,10 +322,9 @@ impl KnowledgeInterface for KnowledgeGrpcService {
 
         self.app
             .upsert_graph_delta(GraphDelta {
-                universe_id: payload.universe_id,
-                universe_name: payload.universe_name,
                 user_id: payload.user_id,
                 visibility: map_visibility(payload.visibility)?,
+                universes,
                 entities: entities.clone(),
                 blocks: blocks.clone(),
                 edges: edges.clone(),

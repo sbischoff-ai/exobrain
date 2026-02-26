@@ -152,6 +152,7 @@ A skill is a set of local instructions in a `SKILL.md` file.
 - For knowledge-interface offline embedding runs, set `EMBEDDING_USE_MOCK=true` to bypass external embedding providers without using assistant-backend specific env names.
 - For assistant-frontend E2E validation in agent environments, use `scripts/agent/run-assistant-frontend-e2e.sh` (Playwright against mock API mode) before finalizing UI/UX changes.
 - Knowledge-interface universe semantics: IDs are globally unique across universes and universes remain semantic/context signals (not ownership scope); enforce ownership via `user_id` plus `visibility` (`PRIVATE`/`SHARED`) across ingestion payloads and storage metadata, and keep ingestion inputs centered on schema `type_id` fields while server-side inheritance resolution sets all persisted node labels.
+- UpsertGraphDelta now carries `universes[]`; entities may omit `universe_id` and default to Real World UUID `9d7f0fa5-78c1-4805-9efb-3f8f16090d7f`; keep validation/inference logic and docs synchronized.
 
 - Local workstation startup now defaults to Docker Compose infra plus `mprocs` app orchestration; keep `.mprocs/*.yml` and `scripts/local/run-*-suite.sh` aligned when adding/removing services.
 

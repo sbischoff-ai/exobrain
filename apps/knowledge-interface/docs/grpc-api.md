@@ -24,6 +24,10 @@ Invalid IDs return `InvalidArgument` with detailed messages.
 
 ## Type mapping
 
+Request now includes `universes[]` (id + name) at the top level; `universe_id`/`universe_name` are no longer root fields.
+Entities may omit `universe_id`, in which case the service defaults to the Real World universe (`9d7f0fa5-78c1-4805-9efb-3f8f16090d7f`).
+
+
 Clients provide `type_id` (for example `node.person` or `node.block`).
 The server resolves and writes the full label chain from schema inheritance (for example `:Entity:Person:Friend`).
 
@@ -56,7 +60,7 @@ flowchart LR
 Qdrant stores a projection of all `node.block` nodes.
 
 - point id = block id
-- payload includes `block_id`, `universe_id`, `user_id`, `visibility`, `text`, `block_level`
+- payload includes `block_id`, `universe_id`, `root_entity_id`, `user_id`, `visibility`, `text`, `block_level`
 - updating a block rewrites the corresponding point (new embedding + payload)
 
 ## Transaction behavior
@@ -87,3 +91,6 @@ Minimal valid delta for one person + one block + explicit edges:
 - `edges[1].edge_type = RELATED_TO` (optional semantic edge)
 
 For interactive request prototyping use `grpcui -plaintext localhost:50051`.
+
+
+Visibility values are accepted as provided per node/edge; ingestion does not enforce request-level visibility equality across all records.
