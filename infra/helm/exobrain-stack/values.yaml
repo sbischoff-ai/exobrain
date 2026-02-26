@@ -39,8 +39,7 @@ assistantBackend:
     EXOBRAIN_NATS_URL: nats://exobrain-message-broker:4222
     JOBS_SUBJECT_PREFIX: jobs
     MAIN_AGENT_MODEL: agent
-    MAIN_AGENT_MODEL_PROVIDER_BASE_URL: http://exobrain-model-provider:8010/v1
-    MAIN_AGENT_MODEL_PROVIDER_API_KEY: cluster-internal
+    MODEL_PROVIDER_BASE_URL: http://exobrain-model-provider:8010/v1
   resources:
     requests:
       cpu: 100m
@@ -67,7 +66,6 @@ knowledgeInterface:
     KNOWLEDGE_SCHEMA_DSN: postgresql://knowledge_schema:knowledge_schema@exobrain-metastore:5432/knowledge_graph_schema
     ASSISTANT_DB_DSN: postgresql://assistant_backend:assistant_backend@exobrain-metastore:5432/assistant_db
     MODEL_PROVIDER_BASE_URL: http://exobrain-model-provider:8010/v1
-    MODEL_PROVIDER_API_KEY: cluster-internal
     MODEL_PROVIDER_EMBEDDING_ALIAS: all-purpose
   resources:
     requests:
