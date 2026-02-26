@@ -1,7 +1,14 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import Any, AsyncIterator
+
+
+@dataclass
+class ProviderClientError(Exception):
+    status_code: int
+    message: str
 
 
 class ProviderClient(ABC):

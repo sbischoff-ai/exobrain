@@ -1,19 +1,17 @@
 from __future__ import annotations
 
-import json
 import logging
 import time
 import uuid
 from collections.abc import AsyncIterator
 from typing import Any
 
-import httpx
 from fastapi import FastAPI, Header, HTTPException, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.config import AliasConfig, ModelsConfig, load_models_config
 from app.providers.anthropic_client import AnthropicProviderClient
-from app.providers.base import ProviderClient
+from app.providers.base import ProviderClient, ProviderClientError
 from app.providers.openai_client import OpenAIProviderClient
 from app.settings import Settings, get_settings
 
@@ -52,17 +50,11 @@ def merge_payload(alias_config: AliasConfig, payload: dict[str, Any]) -> dict[st
 
 
 def map_provider_error(exc: Exception, *, alias: str, provider: str) -> HTTPException:
-    if isinstance(exc, httpx.TimeoutException):
-        return HTTPException(status_code=504, detail=f"Timeout from provider={provider} alias={alias}")
-    if isinstance(exc, httpx.HTTPStatusError):
-        status = exc.response.status_code
-        if status == 429:
-            code = 429
-        elif 500 <= status <= 599:
-            code = 502
-        else:
-            code = status
-        return HTTPException(status_code=code, detail=f"Provider error provider={provider} alias={alias}: {status}")
+    if isinstance(exc, ProviderClientError):
+        return HTTPException(
+            status_code=exc.status_code,
+            detail=f"Provider error provider={provider} alias={alias}: {exc.message}",
+        )
     return HTTPException(status_code=502, detail=f"Unexpected provider error provider={provider} alias={alias}")
 
 

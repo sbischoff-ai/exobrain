@@ -16,3 +16,6 @@ OpenAI-compatible gateway that maps internal model aliases to upstream providers
 ```
 
 Set env vars from `.env.example`.
+
+
+Provider adapters use the official provider SDKs (`openai`, `anthropic`) for request/response schema compatibility.
