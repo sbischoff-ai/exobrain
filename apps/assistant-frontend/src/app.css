@@ -637,7 +637,13 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
   overflow: hidden;
 }
 
+.assistant-markdown [data-streamdown-mermaid] [data-expanded] > div:first-child {
+  z-index: 6;
+}
+
 .assistant-markdown [data-streamdown-mermaid] [data-mermaid-svg] {
+  position: relative;
+  z-index: 1;
   width: 100%;
   max-width: 100%;
   display: block;
