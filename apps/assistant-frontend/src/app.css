@@ -628,17 +628,22 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
 .assistant-markdown [data-streamdown-mermaid] {
   width: 90%;
   margin: 0.85rem auto;
+}
+
+.assistant-markdown [data-streamdown-mermaid] > [data-expanded] {
   border-radius: 0.55rem;
   background: #a89984;
   padding: 0.45rem;
+  overflow: hidden;
 }
 
-.assistant-markdown [data-streamdown-mermaid] > svg {
+.assistant-markdown [data-streamdown-mermaid] [data-mermaid-svg] {
   width: 100%;
   max-width: 100%;
   display: block;
   margin: 0 auto;
   background: #a89984;
+  overflow: hidden;
 }
 
 .assistant-markdown [data-streamdown-mermaid] button svg {
