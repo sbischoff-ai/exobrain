@@ -202,8 +202,6 @@ impl KnowledgeApplication {
 
     fn common_root_delta() -> GraphDelta {
         GraphDelta {
-            user_id: EXOBRAIN_USER_ID.to_string(),
-            visibility: Visibility::Shared,
             universes: vec![UniverseNode {
                 id: COMMON_UNIVERSE_ID.to_string(),
                 name: COMMON_UNIVERSE_NAME.to_string(),
@@ -272,8 +270,6 @@ impl KnowledgeApplication {
         .to_string();
 
         GraphDelta {
-            user_id: user_id.to_string(),
-            visibility: Visibility::Shared,
             universes: vec![],
             entities: vec![
                 EntityNode {
@@ -398,8 +394,8 @@ impl KnowledgeApplication {
                 root_entity_id: root_entity_ids.get(&block.id).cloned().unwrap_or_default(),
                 universe_id: resolve_block_universe_id(&root_entity_ids, block, &delta.entities)
                     .to_string(),
-                user_id: delta.user_id.clone(),
-                visibility: delta.visibility,
+                user_id: block.user_id.clone(),
+                visibility: block.visibility,
                 vector,
                 block_level: block_levels.get(&block.id).copied().unwrap_or(0),
                 text,
@@ -700,31 +696,27 @@ fn is_assignable(
 }
 
 fn validate_delta_access_scope(delta: &GraphDelta) -> Result<()> {
-    if delta.user_id.trim().is_empty() {
-        return Err(anyhow!("user_id is required"));
-    }
-
     for universe in &delta.universes {
-        if universe.user_id != delta.user_id {
-            return Err(anyhow!("universe user_id must match request user_id"));
+        if universe.user_id.trim().is_empty() {
+            return Err(anyhow!("universe user_id is required"));
         }
     }
 
     for entity in &delta.entities {
-        if entity.user_id != delta.user_id {
-            return Err(anyhow!("entity user_id must match request user_id"));
+        if entity.user_id.trim().is_empty() {
+            return Err(anyhow!("entity user_id is required"));
         }
     }
 
     for block in &delta.blocks {
-        if block.user_id != delta.user_id {
-            return Err(anyhow!("block user_id must match request user_id"));
+        if block.user_id.trim().is_empty() {
+            return Err(anyhow!("block user_id is required"));
         }
     }
 
     for edge in &delta.edges {
-        if edge.user_id != delta.user_id {
-            return Err(anyhow!("edge user_id must match request user_id"));
+        if edge.user_id.trim().is_empty() {
+            return Err(anyhow!("edge user_id is required"));
         }
     }
 
@@ -975,23 +967,28 @@ async fn existing_block_context_for_referenced_summarize_parents(
     blocks: &[BlockNode],
     edges: &[GraphEdge],
     graph_repository: &dyn GraphRepository,
-    delta: &GraphDelta,
+    _delta: &GraphDelta,
 ) -> Result<HashMap<String, ExistingBlockContext>> {
     let block_ids: HashSet<&str> = blocks.iter().map(|b| b.id.as_str()).collect();
-    let parent_ids: HashSet<&str> = edges
+    let parent_scopes: HashMap<&str, (&str, Visibility)> = edges
         .iter()
         .filter(|edge| {
             edge.edge_type.eq_ignore_ascii_case("SUMMARIZES")
                 && block_ids.contains(edge.to_id.as_str())
                 && !block_ids.contains(edge.from_id.as_str())
         })
-        .map(|edge| edge.from_id.as_str())
+        .map(|edge| {
+            (
+                edge.from_id.as_str(),
+                (edge.user_id.as_str(), edge.visibility),
+            )
+        })
         .collect();
 
     let mut contexts = HashMap::new();
-    for parent_id in parent_ids {
+    for (parent_id, (user_id, visibility)) in parent_scopes {
         let context = graph_repository
-            .get_existing_block_context(parent_id, &delta.user_id, delta.visibility)
+            .get_existing_block_context(parent_id, user_id, visibility)
             .await?
             .ok_or_else(|| {
                 anyhow!(
@@ -1399,8 +1396,6 @@ mod tests {
         );
 
         app.upsert_graph_delta(GraphDelta {
-            user_id: "user-1".to_string(),
-            visibility: Visibility::Private,
             universes: vec![],
             entities: vec![EntityNode {
                 id: "550e8400-e29b-41d4-a716-446655440001".to_string(),
@@ -1499,8 +1494,6 @@ mod tests {
             .await
             .expect("user graph init should succeed");
 
-        assert_eq!(delta.user_id, "user-1");
-        assert_eq!(delta.visibility, Visibility::Shared);
         assert_eq!(delta.entities.len(), 2);
         assert_eq!(delta.blocks.len(), 1);
         assert_eq!(delta.edges.len(), 4);
@@ -1552,8 +1545,6 @@ mod tests {
         ];
 
         let delta = GraphDelta {
-            user_id: "user-1".to_string(),
-            visibility: Visibility::Private,
             universes: vec![],
             entities: vec![],
             blocks: blocks.clone(),
@@ -1595,8 +1586,6 @@ mod tests {
             properties: vec![],
         }];
         let delta = GraphDelta {
-            user_id: "exobrain".to_string(),
-            visibility: Visibility::Shared,
             universes: vec![],
             entities: vec![],
             blocks: blocks.clone(),
@@ -1637,8 +1626,6 @@ mod tests {
         );
 
         app.upsert_graph_delta(GraphDelta {
-            user_id: "exobrain".to_string(),
-            visibility: Visibility::Shared,
             universes: vec![UniverseNode {
                 id: "26bcdef7-41ce-4dc5-81e2-d2ba786270c1".to_string(),
                 name: "Fake World".to_string(),
@@ -1679,7 +1666,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn rejects_mismatched_scope_on_entities() {
+    async fn rejects_empty_entity_user_id() {
         let app = KnowledgeApplication::new(
             Arc::new(FakeSchemaRepo::new()),
             Arc::new(FakeGraphRepository { root_exists: false }),
@@ -1688,14 +1675,12 @@ mod tests {
 
         let err = app
             .upsert_graph_delta(GraphDelta {
-                user_id: "user-1".to_string(),
-                visibility: Visibility::Private,
                 universes: vec![],
                 entities: vec![EntityNode {
                     id: "550e8400-e29b-41d4-a716-4466554400ab".to_string(),
                     type_id: "node.person".to_string(),
                     universe_id: Some("550e8400-e29b-41d4-a716-4466554400ff".to_string()),
-                    user_id: "user-2".to_string(),
+                    user_id: "   ".to_string(),
                     visibility: Visibility::Private,
                     properties: vec![],
                     resolved_labels: vec![],
@@ -1704,11 +1689,10 @@ mod tests {
                 edges: vec![],
             })
             .await
-            .expect_err("mismatched user_id should fail");
+            .expect_err("empty entity user_id should fail");
 
         assert!(
-            err.to_string()
-                .contains("entity user_id must match request user_id")
+            err.to_string().contains("entity user_id is required")
                 || err.to_string().contains("validation failed")
         );
     }

@@ -323,8 +323,6 @@ impl KnowledgeInterface for KnowledgeGrpcService {
 
         self.app
             .upsert_graph_delta(GraphDelta {
-                user_id: payload.user_id,
-                visibility: map_visibility(payload.visibility)?,
                 universes,
                 entities: entities.clone(),
                 blocks: blocks.clone(),

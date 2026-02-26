@@ -104,7 +104,7 @@ When extending logic, prefer adding tests beside the module under change unless 
 - IDs are expected to be globally unique (not universe-scoped IDs).
 - Universes are semantic/contextual only and do not determine access scope.
 - Access scope is modeled via `user_id` ownership and `visibility` (`PRIVATE`/`SHARED`).
-- Ingestion enforces that request-level `user_id`/`visibility` matches all entities/blocks/edges in the delta.
+- Ingestion requires `user_id`/`visibility` on each universe/entity/block/edge in the delta (no request-level scope fields).
 - Memgraph writes persist `user_id` + `visibility` on entities, blocks, and edges.
 - Qdrant block payloads persist `user_id` + `visibility` for retrieval-time filtering.
 - Clients submit schema `type_id` values; the service resolves full inheritance label chains and applies them to Memgraph nodes during writes.
