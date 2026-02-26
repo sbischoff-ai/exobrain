@@ -29,9 +29,12 @@ Web research tool policy:
 _FORMATTING_INSTRUCTIONS = """
 
 Response formatting policy:
-- When writing inline math, use KaTeX delimiters: $...$.
-- When writing display math, use KaTeX delimiters: $$...$$.
-- When drawing a diagram, output a fenced Mermaid code block with the `mermaid` language tag (for example: ```mermaid).
+- Use markdown that renders correctly in Streamdown.
+- Inline math must use KaTeX delimiters: $...$.
+- Display math must use KaTeX delimiters: $$...$$.
+- Never place $$...$$ inside a sentence. Display math must be on its own lines with a blank line before and after.
+- For multi-step equations, prefer display math over inline math.
+- When drawing a diagram, output a fenced Mermaid code block with the `mermaid` language tag.
 - Prefer concise Mermaid diagrams when explaining processes, flows, systems, or relationships.
 """
 _DEFAULT_WEB_TOOLS_MOCK_DATA = {

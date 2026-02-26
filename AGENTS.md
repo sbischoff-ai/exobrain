@@ -130,6 +130,8 @@ A skill is a set of local instructions in a `SKILL.md` file.
 - Assistant frontend message APIs are newest-first for pagination; normalize fetched message lists to chronological order before rendering so chat always grows downward.
 - Chat view auto-scroll should react to every message update (not just loading state), including streamed assistant chunk updates, so the viewport continuously follows long replies.
 
+- For assistant-backend formatting prompts, explicitly require display math (`$$...$$`) on separate lines with surrounding blank lines; otherwise some model outputs collapse block math into inline text and break KaTeX rendering.
+
 - In assistant-frontend, logout should clear `sessionStorage` journal snapshots and send users back to the intro gate; user-menu dropdowns in the main shell should stay logout-focused (no duplicate login UX there).
 
 - Journal overlay UX should behave as a non-layout-shifting drawer (chat stays centered), with compact chevron controls and an explicitly button-like highlighted today entry for quick orientation.
