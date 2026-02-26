@@ -16,7 +16,6 @@ export KNOWLEDGE_SCHEMA_DSN=${KNOWLEDGE_SCHEMA_DSN:-postgresql://knowledge_schem
 export QDRANT_ADDR=${QDRANT_ADDR:-http://localhost:16333}
 export MEMGRAPH_BOLT_ADDR=${MEMGRAPH_BOLT_ADDR:-bolt://localhost:17687}
 export MODEL_PROVIDER_BASE_URL=${MODEL_PROVIDER_BASE_URL:-http://localhost:8010/v1}
-export MODEL_PROVIDER_API_KEY=${MODEL_PROVIDER_API_KEY:-model-provider-local}
 export MODEL_PROVIDER_EMBEDDING_ALIAS=${MODEL_PROVIDER_EMBEDDING_ALIAS:-all-purpose}
 
 cargo run

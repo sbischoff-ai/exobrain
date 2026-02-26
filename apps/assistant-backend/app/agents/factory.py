@@ -105,8 +105,8 @@ def _build_agent_model(settings: Settings) -> BaseChatModel:
     logger.info("using model-provider assistant agent", extra={"model_alias": settings.main_agent_model})
     return ChatOpenAI(
         model=settings.main_agent_model,
-        base_url=settings.main_agent_model_provider_base_url,
-        api_key=settings.main_agent_model_provider_api_key,
+        base_url=settings.model_provider_base_url,
+        api_key="model-provider",
         temperature=settings.main_agent_temperature,
         streaming=True,
     )

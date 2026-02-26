@@ -10,7 +10,7 @@ use qdrant_client::{
     },
     Qdrant,
 };
-use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
+use reqwest::header::CONTENT_TYPE;
 use serde::{Deserialize, Serialize};
 use sqlx::{postgres::PgPoolOptions, PgPool, Row};
 use tracing::warn;
@@ -623,16 +623,14 @@ struct EmbeddingDatum {
 pub struct OpenAiCompatibleEmbedder {
     client: reqwest::Client,
     base_url: String,
-    api_key: String,
     model_alias: String,
 }
 
 impl OpenAiCompatibleEmbedder {
-    pub fn new(base_url: String, api_key: String, model_alias: String) -> Self {
+    pub fn new(base_url: String, model_alias: String) -> Self {
         Self {
             client: reqwest::Client::new(),
             base_url,
-            api_key,
             model_alias,
         }
     }
@@ -649,7 +647,6 @@ impl Embedder for OpenAiCompatibleEmbedder {
         let response: EmbeddingResponse = self
             .client
             .post(url)
-            .header(AUTHORIZATION, format!("Bearer {}", self.api_key))
             .header(CONTENT_TYPE, "application/json")
             .json(&EmbeddingRequest {
                 input: texts,

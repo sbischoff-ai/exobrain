@@ -40,7 +40,6 @@ struct AppConfig {
     memgraph_database: String,
     qdrant_addr: String,
     model_provider_base_url: String,
-    model_provider_api_key: String,
     embedding_model_alias: String,
     use_mock_embedder: bool,
 }
@@ -69,8 +68,6 @@ impl AppConfig {
             qdrant_addr: env::var("QDRANT_ADDR")?,
             model_provider_base_url: env::var("MODEL_PROVIDER_BASE_URL")
                 .unwrap_or_else(|_| "http://localhost:8010/v1".to_string()),
-            model_provider_api_key: env::var("MODEL_PROVIDER_API_KEY")
-                .unwrap_or_else(|_| "model-provider-local".to_string()),
             embedding_model_alias: env::var("MODEL_PROVIDER_EMBEDDING_ALIAS")
                 .unwrap_or_else(|_| "all-purpose".to_string()),
             use_mock_embedder: env::var("EMBEDDING_USE_MOCK")
@@ -412,7 +409,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         Arc::new(OpenAiCompatibleEmbedder::new(
             cfg.model_provider_base_url.clone(),
-            cfg.model_provider_api_key.clone(),
             cfg.embedding_model_alias.clone(),
         ))
     };
@@ -458,7 +454,6 @@ mod tests {
             memgraph_database: "memgraph".to_string(),
             qdrant_addr: "http://example".to_string(),
             model_provider_base_url: "http://localhost:8010/v1".to_string(),
-            model_provider_api_key: "x".to_string(),
             embedding_model_alias: "all-purpose".to_string(),
             use_mock_embedder: false,
         };
@@ -489,7 +484,6 @@ mod tests {
             memgraph_database: "memgraph".to_string(),
             qdrant_addr: "http://example".to_string(),
             model_provider_base_url: "http://localhost:8010/v1".to_string(),
-            model_provider_api_key: "x".to_string(),
             embedding_model_alias: "all-purpose".to_string(),
             use_mock_embedder: false,
         };

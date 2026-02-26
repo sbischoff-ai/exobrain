@@ -21,13 +21,9 @@ class Settings(BaseSettings):
     app_env: str = Field(default="local", alias="APP_ENV")
     log_level: str | None = Field(default=None, alias="LOG_LEVEL")
     main_agent_model: str = Field(default="agent", alias="MAIN_AGENT_MODEL")
-    main_agent_model_provider_base_url: str = Field(
+    model_provider_base_url: str = Field(
         default="http://localhost:8010/v1",
-        alias="MAIN_AGENT_MODEL_PROVIDER_BASE_URL",
-    )
-    main_agent_model_provider_api_key: str = Field(
-        default="model-provider-local",
-        alias="MAIN_AGENT_MODEL_PROVIDER_API_KEY",
+        alias="MODEL_PROVIDER_BASE_URL",
     )
     main_agent_temperature: float = Field(default=0.0, alias="MAIN_AGENT_TEMPERATURE")
     main_agent_system_prompt: str = Field(

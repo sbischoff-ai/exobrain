@@ -51,8 +51,7 @@ def test_build_agent_model_uses_openai_client_for_model_provider_when_mock_disab
         MAIN_AGENT_USE_MOCK=False,
         MAIN_AGENT_MODEL="agent",
         MAIN_AGENT_TEMPERATURE=0.2,
-        MAIN_AGENT_MODEL_PROVIDER_BASE_URL="http://localhost:8010/v1",
-        MAIN_AGENT_MODEL_PROVIDER_API_KEY="model-provider-local",
+        MODEL_PROVIDER_BASE_URL="http://localhost:8010/v1",
     )
 
     model = _build_agent_model(settings)
