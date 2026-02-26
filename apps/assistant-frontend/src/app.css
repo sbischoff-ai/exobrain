@@ -631,6 +631,8 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
 }
 
 .assistant-markdown [data-streamdown-mermaid] > [data-expanded] {
+  position: relative;
+  isolation: isolate;
   border-radius: 0.55rem;
   background: #a89984;
   padding: 0.45rem;
@@ -638,7 +640,13 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
 }
 
 .assistant-markdown [data-streamdown-mermaid] [data-expanded] > div:first-child {
-  z-index: 6;
+  position: relative;
+  z-index: 20;
+}
+
+.assistant-markdown [data-streamdown-mermaid] [data-expanded] .exo-md-control-button {
+  position: relative;
+  z-index: 21;
 }
 
 .assistant-markdown [data-streamdown-mermaid] [data-mermaid-svg] {
@@ -650,6 +658,13 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
   margin: 0 auto;
   background: #a89984;
   overflow: hidden;
+}
+
+
+.assistant-markdown [data-streamdown-mermaid] [data-mermaid-svg] > svg,
+.assistant-markdown [data-streamdown-mermaid] svg.flowchart {
+  position: relative;
+  z-index: 1;
 }
 
 .assistant-markdown [data-streamdown-mermaid] button svg {

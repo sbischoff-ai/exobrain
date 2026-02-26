@@ -132,7 +132,7 @@ A skill is a set of local instructions in a `SKILL.md` file.
 
 - For assistant-backend formatting prompts, explicitly require display math (`$$...$$`) on separate lines with surrounding blank lines; otherwise some model outputs collapse block math into inline text and break KaTeX rendering.
 
-- Mermaid pan/zoom controls should remain above diagram content; keep a higher z-index on the control strip than the SVG layer so panned nodes never hide action buttons.
+- Mermaid pan/zoom controls should remain above diagram content; keep a higher z-index on the control strip than the SVG/`.flowchart` layer so panned nodes never hide action buttons.
 
 - In assistant-frontend, logout should clear `sessionStorage` journal snapshots and send users back to the intro gate; user-menu dropdowns in the main shell should stay logout-focused (no duplicate login UX there).
 
