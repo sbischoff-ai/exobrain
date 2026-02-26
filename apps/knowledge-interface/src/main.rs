@@ -15,6 +15,7 @@ use domain::{
 };
 use service::KnowledgeApplication;
 use tonic::{transport::Server, Request, Response, Status};
+use tracing::warn;
 use tracing_subscriber::EnvFilter;
 
 pub mod proto {
@@ -359,13 +360,17 @@ fn map_visibility(value: i32) -> Result<Visibility, Status> {
 
 fn map_ingest_error(error: anyhow::Error) -> Status {
     let message = error.to_string();
+    warn!(error = %message, "upsert graph delta failed");
+
     if message.contains("validation failed")
         || message.contains("is required")
         || message.contains("must")
         || message.contains("unknown schema type")
+        || message.contains("failed to upsert edge")
     {
         return Status::invalid_argument(message);
     }
+
     Status::internal(message)
 }
 

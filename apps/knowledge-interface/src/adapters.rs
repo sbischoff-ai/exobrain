@@ -323,7 +323,8 @@ impl Neo4jGraphStore {
 
         for edge in &delta.edges {
             validate_edge_type(&edge.edge_type)?;
-            let cypher = format!("MATCH (a {{id: $from_id}}), (b {{id: $to_id}}) WHERE a.user_id = $user_id AND b.user_id = $user_id AND a.visibility = $visibility AND b.visibility = $visibility MERGE (a)-[r:{}]->(b) SET r.confidence = $confidence, r.status = $status, r.context = $context, r.user_id = $user_id, r.visibility = $visibility RETURN COUNT(r) AS upserted_count", edge.edge_type);
+            let allowed_node_visibilities = allowed_node_visibilities(edge.visibility);
+            let cypher = format!("MATCH (a {{id: $from_id}}), (b {{id: $to_id}}) WHERE a.user_id = $user_id AND b.user_id = $user_id AND a.visibility IN $allowed_node_visibilities AND b.visibility IN $allowed_node_visibilities MERGE (a)-[r:{}]->(b) SET r.confidence = $confidence, r.status = $status, r.context = $context, r.user_id = $user_id, r.visibility = $visibility RETURN COUNT(r) AS upserted_count", edge.edge_type);
             let mut result = txn
                 .execute(
                     query(&cypher)
@@ -331,6 +332,7 @@ impl Neo4jGraphStore {
                         .param("to_id", edge.to_id.clone())
                         .param("user_id", edge.user_id.clone())
                         .param("visibility", visibility_as_str(edge.visibility))
+                        .param("allowed_node_visibilities", allowed_node_visibilities)
                         .param(
                             "confidence",
                             prop_as_float(&edge.properties, "confidence").unwrap_or(1.0),
@@ -376,6 +378,13 @@ impl Neo4jGraphStore {
             .context("failed to query common root graph")?;
 
         Ok(result.next().await?.is_some())
+    }
+}
+
+fn allowed_node_visibilities(edge_visibility: Visibility) -> Vec<String> {
+    match edge_visibility {
+        Visibility::Private => vec!["PRIVATE".to_string(), "SHARED".to_string()],
+        Visibility::Shared => vec!["SHARED".to_string()],
     }
 }
 
@@ -695,7 +704,10 @@ fn validate_edge_type(edge_type: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_qdrant_grpc_url, validate_edge_type, MockEmbedder};
+    use super::{
+        allowed_node_visibilities, normalize_qdrant_grpc_url, validate_edge_type, MockEmbedder,
+    };
+    use crate::domain::Visibility;
     use crate::ports::Embedder;
 
     #[test]
@@ -711,6 +723,18 @@ mod tests {
         assert_eq!(
             normalize_qdrant_grpc_url("localhost:6333"),
             "http://localhost:6334"
+        );
+    }
+
+    #[test]
+    fn allows_private_edges_to_connect_shared_or_private_nodes() {
+        assert_eq!(
+            allowed_node_visibilities(Visibility::Private),
+            vec!["PRIVATE".to_string(), "SHARED".to_string()]
+        );
+        assert_eq!(
+            allowed_node_visibilities(Visibility::Shared),
+            vec!["SHARED".to_string()]
         );
     }
 
