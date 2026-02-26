@@ -140,6 +140,13 @@ pub struct EmbeddedBlock {
 }
 
 #[derive(Debug, Clone)]
+pub struct ExistingBlockContext {
+    pub root_entity_id: String,
+    pub universe_id: String,
+    pub block_level: i64,
+}
+
+#[derive(Debug, Clone)]
 pub struct SchemaNodeTypeHydrated {
     pub schema_type: SchemaType,
     pub properties: Vec<TypeProperty>,

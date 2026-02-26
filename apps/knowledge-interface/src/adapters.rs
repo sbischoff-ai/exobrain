@@ -17,8 +17,9 @@ use tracing::warn;
 
 use crate::{
     domain::{
-        EdgeEndpointRule, EmbeddedBlock, GraphDelta, PropertyScalar, PropertyValue, SchemaType,
-        TypeInheritance, TypeProperty, UpsertSchemaTypePropertyInput, Visibility,
+        EdgeEndpointRule, EmbeddedBlock, ExistingBlockContext, GraphDelta, PropertyScalar,
+        PropertyValue, SchemaType, TypeInheritance, TypeProperty, UpsertSchemaTypePropertyInput,
+        Visibility,
     },
     ports::{Embedder, GraphRepository, SchemaRepository},
 };
@@ -389,6 +390,38 @@ impl Neo4jGraphStore {
 
         Ok(result.next().await?.is_some())
     }
+
+    async fn get_existing_block_context(
+        &self,
+        block_id: &str,
+        user_id: &str,
+        visibility: Visibility,
+    ) -> Result<Option<ExistingBlockContext>> {
+        let allowed_node_visibilities = allowed_node_visibilities(visibility);
+        let mut result = self
+            .graph
+            .execute(
+                query(
+                    "MATCH (e:Entity)-[:DESCRIBED_BY]->(root:Block)                      MATCH p=(root)-[:SUMMARIZES*0..]->(b:Block {id: $block_id})                      WHERE e.user_id = $user_id AND root.user_id = $user_id AND b.user_id = $user_id                      AND e.visibility IN $allowed_node_visibilities                      AND root.visibility IN $allowed_node_visibilities                      AND b.visibility IN $allowed_node_visibilities                      OPTIONAL MATCH (e)-[:IS_PART_OF]->(u:Universe)                      RETURN e.id AS root_entity_id, COALESCE(u.id, $default_universe_id) AS universe_id, length(p) AS block_level                      ORDER BY block_level ASC LIMIT 1",
+                )
+                .param("block_id", block_id.to_string())
+                .param("user_id", user_id.to_string())
+                .param("allowed_node_visibilities", allowed_node_visibilities)
+                .param("default_universe_id", "9d7f0fa5-78c1-4805-9efb-3f8f16090d7f".to_string()),
+            )
+            .await
+            .context("failed to query existing block context")?;
+
+        let Some(row) = result.next().await? else {
+            return Ok(None);
+        };
+
+        Ok(Some(ExistingBlockContext {
+            root_entity_id: row.get("root_entity_id")?,
+            universe_id: row.get("universe_id")?,
+            block_level: row.get("block_level")?,
+        }))
+    }
 }
 
 fn allowed_node_visibilities(edge_visibility: Visibility) -> Vec<String> {
@@ -530,6 +563,17 @@ impl GraphRepository for MemgraphQdrantGraphRepository {
 
     async fn common_root_graph_exists(&self) -> Result<bool> {
         self.graph_store.common_root_graph_exists().await
+    }
+
+    async fn get_existing_block_context(
+        &self,
+        block_id: &str,
+        user_id: &str,
+        visibility: Visibility,
+    ) -> Result<Option<ExistingBlockContext>> {
+        self.graph_store
+            .get_existing_block_context(block_id, user_id, visibility)
+            .await
     }
 }
 
