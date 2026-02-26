@@ -11,9 +11,8 @@ OpenAI-compatible gateway that maps internal model aliases to upstream providers
 ## Local run
 
 ```bash
-cd apps/model-provider
-uv sync --extra dev
-uv run uvicorn app.main:app --reload --port 8010
+./scripts/local/build-model-provider.sh
+./scripts/local/run-model-provider.sh
 ```
 
 Set env vars from `.env.example`.
