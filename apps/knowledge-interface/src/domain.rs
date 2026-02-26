@@ -119,8 +119,6 @@ pub enum Visibility {
 
 #[derive(Debug, Clone)]
 pub struct GraphDelta {
-    pub user_id: String,
-    pub visibility: Visibility,
     pub universes: Vec<UniverseNode>,
     pub entities: Vec<EntityNode>,
     pub blocks: Vec<BlockNode>,
