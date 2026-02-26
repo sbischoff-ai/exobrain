@@ -624,6 +624,23 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
   padding: 0.25rem !important;
 }
 
+
+.assistant-markdown [data-streamdown-mermaid] {
+  width: 90%;
+  margin: 0.85rem auto;
+  border-radius: 0.55rem;
+  background: #a89984;
+  padding: 0.45rem;
+}
+
+.assistant-markdown [data-streamdown-mermaid] svg {
+  width: 100%;
+  max-width: 100%;
+  display: block;
+  margin: 0 auto;
+  background: #a89984;
+}
+
 .assistant-markdown [data-streamdown-table-download] {
   width: fit-content;
   display: flex !important;

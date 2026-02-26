@@ -102,7 +102,9 @@ async def test_build_main_agent_passes_tools_and_web_instructions(monkeypatch, t
     assert "Never fabricate quotes" in str(captured["system_prompt"])
     assert "KaTeX delimiters: $...$" in str(captured["system_prompt"])
     assert "KaTeX delimiters: $$...$$" in str(captured["system_prompt"])
-    assert "```mermaid" in str(captured["system_prompt"])
+    assert "Never place $$...$$ inside a sentence" in str(captured["system_prompt"])
+    assert "blank line before and after" in str(captured["system_prompt"])
+    assert "`mermaid` language tag" in str(captured["system_prompt"])
     assert len(captured["tools"]) == 2
 
 
