@@ -6,7 +6,7 @@ mod service;
 use std::{env, sync::Arc};
 
 use adapters::{
-    MemgraphQdrantGraphRepository, MockEmbedder, Neo4jGraphStore, OpenAiEmbedder,
+    MemgraphQdrantGraphRepository, MockEmbedder, Neo4jGraphStore, OpenAiCompatibleEmbedder,
     PostgresSchemaRepository, QdrantVectorStore,
 };
 use domain::{
@@ -39,8 +39,9 @@ struct AppConfig {
     memgraph_addr: String,
     memgraph_database: String,
     qdrant_addr: String,
-    openai_api_key: Option<String>,
-    embedding_model: String,
+    model_provider_base_url: String,
+    model_provider_api_key: String,
+    embedding_model_alias: String,
     use_mock_embedder: bool,
 }
 
@@ -66,9 +67,12 @@ impl AppConfig {
             memgraph_addr: env::var("MEMGRAPH_BOLT_ADDR")?,
             memgraph_database: env::var("MEMGRAPH_DB").unwrap_or_else(|_| "memgraph".to_string()),
             qdrant_addr: env::var("QDRANT_ADDR")?,
-            openai_api_key: env::var("OPENAI_API_KEY").ok(),
-            embedding_model: env::var("OPENAI_EMBEDDING_MODEL")
-                .unwrap_or_else(|_| "text-embedding-3-large".to_string()),
+            model_provider_base_url: env::var("MODEL_PROVIDER_BASE_URL")
+                .unwrap_or_else(|_| "http://localhost:8010/v1".to_string()),
+            model_provider_api_key: env::var("MODEL_PROVIDER_API_KEY")
+                .unwrap_or_else(|_| "model-provider-local".to_string()),
+            embedding_model_alias: env::var("MODEL_PROVIDER_EMBEDDING_ALIAS")
+                .unwrap_or_else(|_| "all-purpose".to_string()),
             use_mock_embedder: env::var("EMBEDDING_USE_MOCK")
                 .map(|v| v.eq_ignore_ascii_case("true") || v == "1")
                 .unwrap_or(false),
@@ -403,15 +407,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         vector_store,
     ));
 
-    let embedder: Arc<dyn ports::Embedder> =
-        if cfg.use_mock_embedder || cfg.openai_api_key.is_none() {
-            Arc::new(MockEmbedder)
-        } else {
-            Arc::new(OpenAiEmbedder::new(
-                cfg.openai_api_key.clone().expect("checked api key"),
-                cfg.embedding_model.clone(),
-            ))
-        };
+    let embedder: Arc<dyn ports::Embedder> = if cfg.use_mock_embedder {
+        Arc::new(MockEmbedder)
+    } else {
+        Arc::new(OpenAiCompatibleEmbedder::new(
+            cfg.model_provider_base_url.clone(),
+            cfg.model_provider_api_key.clone(),
+            cfg.embedding_model_alias.clone(),
+        ))
+    };
 
     let app = Arc::new(KnowledgeApplication::new(
         schema_repo,
@@ -453,8 +457,9 @@ mod tests {
             memgraph_addr: "bolt://example".to_string(),
             memgraph_database: "memgraph".to_string(),
             qdrant_addr: "http://example".to_string(),
-            openai_api_key: Some("x".to_string()),
-            embedding_model: "text-embedding-3-large".to_string(),
+            model_provider_base_url: "http://localhost:8010/v1".to_string(),
+            model_provider_api_key: "x".to_string(),
+            embedding_model_alias: "all-purpose".to_string(),
             use_mock_embedder: false,
         };
 
@@ -468,7 +473,6 @@ mod tests {
         std::env::set_var("MEMGRAPH_BOLT_ADDR", "bolt://example");
         std::env::remove_var("MEMGRAPH_DB");
         std::env::set_var("QDRANT_ADDR", "http://example");
-        std::env::set_var("OPENAI_API_KEY", "x");
 
         let cfg = AppConfig::from_env().expect("config should load");
 
@@ -484,8 +488,9 @@ mod tests {
             memgraph_addr: "bolt://example".to_string(),
             memgraph_database: "memgraph".to_string(),
             qdrant_addr: "http://example".to_string(),
-            openai_api_key: Some("x".to_string()),
-            embedding_model: "text-embedding-3-large".to_string(),
+            model_provider_base_url: "http://localhost:8010/v1".to_string(),
+            model_provider_api_key: "x".to_string(),
+            embedding_model_alias: "all-purpose".to_string(),
             use_mock_embedder: false,
         };
 

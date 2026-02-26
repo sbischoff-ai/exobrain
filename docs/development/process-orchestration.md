@@ -20,9 +20,9 @@ This guide defines the canonical way to start Exobrain processes for local devel
 
 ### mprocs config files
 
-- `.mprocs/backend.yml`: assistant-backend + job-orchestrator
-- `.mprocs/backend-knowledge.yml`: assistant-backend + knowledge-interface + job-orchestrator
-- `.mprocs/fullstack.yml`: assistant-backend + knowledge-interface + job-orchestrator + assistant-frontend
+- `.mprocs/backend.yml`: model-provider + assistant-backend + job-orchestrator
+- `.mprocs/backend-knowledge.yml`: model-provider + assistant-backend + knowledge-interface + job-orchestrator
+- `.mprocs/fullstack.yml`: model-provider + assistant-backend + knowledge-interface + job-orchestrator + assistant-frontend
 
 ## Script ownership matrix
 
@@ -45,7 +45,7 @@ This guide defines the canonical way to start Exobrain processes for local devel
 - **`mprocs: command not found`**: run via `nix-shell` so `shell.nix` tooling is loaded.
 - **Port in use**: stop previous local processes on `8000`, `50051`, `5173`, or update script env vars.
 - **Backend integration errors about missing tables**: rerun `./scripts/local/assistant-db-setup.sh`.
-- **Knowledge interface startup fails for missing API key**: set `OPENAI_API_KEY` or skip that service profile.
+- **Knowledge interface embedding errors**: ensure `model-provider` is running and `MODEL_PROVIDER_BASE_URL` points to it.
 
 ## References
 

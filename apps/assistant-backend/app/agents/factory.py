@@ -102,9 +102,11 @@ def _build_agent_model(settings: Settings) -> BaseChatModel:
         logger.info("using FakeListChatModel assistant agent", extra={"responses_count": len(fake_responses)})
         return FakeListChatModel(responses=fake_responses)
 
-    logger.info("using OpenAI assistant agent", extra={"model": settings.main_agent_model})
+    logger.info("using model-provider assistant agent", extra={"model_alias": settings.main_agent_model})
     return ChatOpenAI(
         model=settings.main_agent_model,
+        base_url=settings.main_agent_model_provider_base_url,
+        api_key=settings.main_agent_model_provider_api_key,
         temperature=settings.main_agent_temperature,
         streaming=True,
     )
