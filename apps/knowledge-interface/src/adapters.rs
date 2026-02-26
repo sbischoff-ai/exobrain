@@ -303,50 +303,83 @@ impl Neo4jGraphStore {
         for block in &delta.blocks {
             let labels = sanitize_labels(&block.resolved_labels)?;
             let cypher = format!(
-                "MERGE (b:{} {{id: $id}}) SET b.type_id = $type_id, b.text = $text, b.user_id = $user_id, b.visibility = $visibility WITH b MATCH (e:Entity {{id: $root_entity_id}}) WHERE e.user_id = $user_id AND e.visibility = $visibility MERGE (e)-[:DESCRIBED_BY]->(b)",
+                "MERGE (b:{} {{id: $id}}) SET b.type_id = $type_id, b.text = $text, b.user_id = $user_id, b.visibility = $visibility WITH b MATCH (e:Entity {{id: $root_entity_id}}) WHERE e.user_id = $user_id AND e.visibility = $visibility MERGE (e)-[:DESCRIBED_BY]->(b) RETURN COUNT(e) AS linked_count",
                 labels.join(":"),
             );
-            txn.run(
-                query(&cypher)
-                    .param("id", block.id.clone())
-                    .param("type_id", block.type_id.clone())
-                    .param(
-                        "text",
-                        prop_as_string(&block.properties, "text").unwrap_or_default(),
-                    )
-                    .param("root_entity_id", block.root_entity_id.clone())
-                    .param("user_id", block.user_id.clone())
-                    .param("visibility", visibility_as_str(block.visibility)),
-            )
-            .await
-            .context("failed to upsert block")?;
+            let mut result = txn
+                .execute(
+                    query(&cypher)
+                        .param("id", block.id.clone())
+                        .param("type_id", block.type_id.clone())
+                        .param(
+                            "text",
+                            prop_as_string(&block.properties, "text").unwrap_or_default(),
+                        )
+                        .param("root_entity_id", block.root_entity_id.clone())
+                        .param("user_id", block.user_id.clone())
+                        .param("visibility", visibility_as_str(block.visibility)),
+                )
+                .await
+                .context("failed to upsert block")?;
+
+            let linked_count = result
+                .next(&mut *txn)
+                .await?
+                .and_then(|row| row.get::<i64>("linked_count").ok())
+                .unwrap_or(0);
+            if linked_count == 0 {
+                return Err(anyhow::anyhow!(
+                    "failed to link block {} to root entity {} with user_id={} visibility={}",
+                    block.id,
+                    block.root_entity_id,
+                    block.user_id,
+                    visibility_as_str(block.visibility),
+                ));
+            }
         }
 
         for edge in &delta.edges {
             validate_edge_type(&edge.edge_type)?;
-            let cypher = format!("MATCH (a {{id: $from_id}}), (b {{id: $to_id}}) WHERE a.user_id = $user_id AND b.user_id = $user_id AND a.visibility = $visibility AND b.visibility = $visibility MERGE (a)-[r:{}]->(b) SET r.confidence = $confidence, r.status = $status, r.context = $context, r.user_id = $user_id, r.visibility = $visibility", edge.edge_type);
-            txn.run(
-                query(&cypher)
-                    .param("from_id", edge.from_id.clone())
-                    .param("to_id", edge.to_id.clone())
-                    .param("user_id", edge.user_id.clone())
-                    .param("visibility", visibility_as_str(edge.visibility))
-                    .param(
-                        "confidence",
-                        prop_as_float(&edge.properties, "confidence").unwrap_or(1.0),
-                    )
-                    .param(
-                        "status",
-                        prop_as_string(&edge.properties, "status")
-                            .unwrap_or_else(|| "asserted".to_string()),
-                    )
-                    .param(
-                        "context",
-                        prop_as_string(&edge.properties, "context").unwrap_or_default(),
-                    ),
-            )
-            .await
-            .context("failed to upsert edge")?;
+            let cypher = format!("MATCH (a {{id: $from_id}}), (b {{id: $to_id}}) WHERE a.user_id = $user_id AND b.user_id = $user_id AND a.visibility = $visibility AND b.visibility = $visibility MERGE (a)-[r:{}]->(b) SET r.confidence = $confidence, r.status = $status, r.context = $context, r.user_id = $user_id, r.visibility = $visibility RETURN COUNT(r) AS upserted_count", edge.edge_type);
+            let mut result = txn
+                .execute(
+                    query(&cypher)
+                        .param("from_id", edge.from_id.clone())
+                        .param("to_id", edge.to_id.clone())
+                        .param("user_id", edge.user_id.clone())
+                        .param("visibility", visibility_as_str(edge.visibility))
+                        .param(
+                            "confidence",
+                            prop_as_float(&edge.properties, "confidence").unwrap_or(1.0),
+                        )
+                        .param(
+                            "status",
+                            prop_as_string(&edge.properties, "status")
+                                .unwrap_or_else(|| "asserted".to_string()),
+                        )
+                        .param(
+                            "context",
+                            prop_as_string(&edge.properties, "context").unwrap_or_default(),
+                        ),
+                )
+                .await
+                .context("failed to upsert edge")?;
+
+            let upserted_count = result
+                .next(&mut *txn)
+                .await?
+                .and_then(|row| row.get::<i64>("upserted_count").ok())
+                .unwrap_or(0);
+            if upserted_count == 0 {
+                return Err(anyhow::anyhow!(
+                    "failed to upsert edge {} from {} to {} with user_id={} visibility={}",
+                    edge.edge_type,
+                    edge.from_id,
+                    edge.to_id,
+                    edge.user_id,
+                    visibility_as_str(edge.visibility),
+                ));
+            }
         }
 
         Ok(())
