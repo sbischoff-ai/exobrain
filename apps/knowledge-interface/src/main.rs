@@ -5,7 +5,10 @@ mod service;
 
 use std::{env, sync::Arc};
 
-use adapters::{Neo4jGraphStore, OpenAiEmbedder, PostgresSchemaRepository, QdrantVectorStore};
+use adapters::{
+    MemgraphQdrantGraphRepository, MockEmbedder, Neo4jGraphStore, OpenAiEmbedder,
+    PostgresSchemaRepository, QdrantVectorStore,
+};
 use domain::{
     BlockNode, EntityNode, GraphDelta, GraphEdge, PropertyScalar, PropertyValue, SchemaType,
     UpsertSchemaTypeCommand, UpsertSchemaTypePropertyInput, Visibility,
@@ -20,8 +23,8 @@ pub mod proto {
 
 use proto::knowledge_interface_server::{KnowledgeInterface, KnowledgeInterfaceServer};
 use proto::{
-    GetSchemaReply, GetSchemaRequest, HealthReply, HealthRequest, IngestGraphDeltaReply,
-    IngestGraphDeltaRequest, InitializeUserGraphReply, InitializeUserGraphRequest,
+    GetSchemaReply, GetSchemaRequest, HealthReply, HealthRequest, InitializeUserGraphReply,
+    InitializeUserGraphRequest, UpsertGraphDeltaReply, UpsertGraphDeltaRequest,
     UpsertSchemaTypeReply, UpsertSchemaTypeRequest,
 };
 
@@ -35,8 +38,9 @@ struct AppConfig {
     memgraph_addr: String,
     memgraph_database: String,
     qdrant_addr: String,
-    openai_api_key: String,
+    openai_api_key: Option<String>,
     embedding_model: String,
+    use_mock_embedder: bool,
 }
 
 impl AppConfig {
@@ -61,9 +65,12 @@ impl AppConfig {
             memgraph_addr: env::var("MEMGRAPH_BOLT_ADDR")?,
             memgraph_database: env::var("MEMGRAPH_DB").unwrap_or_else(|_| "memgraph".to_string()),
             qdrant_addr: env::var("QDRANT_ADDR")?,
-            openai_api_key: env::var("OPENAI_API_KEY")?,
+            openai_api_key: env::var("OPENAI_API_KEY").ok(),
             embedding_model: env::var("OPENAI_EMBEDDING_MODEL")
                 .unwrap_or_else(|_| "text-embedding-3-large".to_string()),
+            use_mock_embedder: env::var("EMBEDDING_USE_MOCK")
+                .map(|v| v.eq_ignore_ascii_case("true") || v == "1")
+                .unwrap_or(false),
         })
     }
 
@@ -235,10 +242,10 @@ impl KnowledgeInterface for KnowledgeGrpcService {
         }))
     }
 
-    async fn ingest_graph_delta(
+    async fn upsert_graph_delta(
         &self,
-        request: Request<IngestGraphDeltaRequest>,
-    ) -> Result<Response<IngestGraphDeltaReply>, Status> {
+        request: Request<UpsertGraphDeltaRequest>,
+    ) -> Result<Response<UpsertGraphDeltaReply>, Status> {
         let payload = request.into_inner();
 
         let entities: Vec<EntityNode> = payload
@@ -247,7 +254,7 @@ impl KnowledgeInterface for KnowledgeGrpcService {
             .map(|entity| {
                 Ok(EntityNode {
                     id: entity.id,
-                    labels: entity.labels,
+                    type_id: entity.type_id,
                     universe_id: entity.universe_id,
                     user_id: entity.user_id,
                     visibility: map_visibility(entity.visibility)?,
@@ -256,6 +263,7 @@ impl KnowledgeInterface for KnowledgeGrpcService {
                         .into_iter()
                         .map(map_property_value)
                         .collect::<Result<Vec<_>, _>>()?,
+                    resolved_labels: vec![],
                 })
             })
             .collect::<Result<Vec<_>, Status>>()?;
@@ -266,8 +274,7 @@ impl KnowledgeInterface for KnowledgeGrpcService {
             .map(|block| {
                 Ok(BlockNode {
                     id: block.id,
-                    labels: block.labels,
-                    root_entity_id: block.root_entity_id,
+                    type_id: block.type_id,
                     user_id: block.user_id,
                     visibility: map_visibility(block.visibility)?,
                     properties: block
@@ -275,6 +282,7 @@ impl KnowledgeInterface for KnowledgeGrpcService {
                         .into_iter()
                         .map(map_property_value)
                         .collect::<Result<Vec<_>, _>>()?,
+                    resolved_labels: vec![],
                 })
             })
             .collect::<Result<Vec<_>, Status>>()?;
@@ -299,8 +307,9 @@ impl KnowledgeInterface for KnowledgeGrpcService {
             .collect::<Result<Vec<_>, Status>>()?;
 
         self.app
-            .ingest_graph_delta(GraphDelta {
+            .upsert_graph_delta(GraphDelta {
                 universe_id: payload.universe_id,
+                universe_name: payload.universe_name,
                 user_id: payload.user_id,
                 visibility: map_visibility(payload.visibility)?,
                 entities: entities.clone(),
@@ -308,9 +317,9 @@ impl KnowledgeInterface for KnowledgeGrpcService {
                 edges: edges.clone(),
             })
             .await
-            .map_err(|e| Status::internal(e.to_string()))?;
+            .map_err(map_ingest_error)?;
 
-        Ok(Response::new(IngestGraphDeltaReply {
+        Ok(Response::new(UpsertGraphDeltaReply {
             entities_upserted: entities.len() as u32,
             blocks_upserted: blocks.len() as u32,
             edges_upserted: edges.len() as u32,
@@ -348,6 +357,18 @@ fn map_visibility(value: i32) -> Result<Visibility, Status> {
     }
 }
 
+fn map_ingest_error(error: anyhow::Error) -> Status {
+    let message = error.to_string();
+    if message.contains("validation failed")
+        || message.contains("is required")
+        || message.contains("must")
+        || message.contains("unknown schema type")
+    {
+        return Status::invalid_argument(message);
+    }
+    Status::internal(message)
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cfg = AppConfig::from_env()?;
@@ -358,19 +379,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "0.0.0.0:50051".parse()?;
 
     let schema_repo = Arc::new(PostgresSchemaRepository::new(&cfg.metastore_dsn).await?);
-    let graph_store =
-        Arc::new(Neo4jGraphStore::new(&cfg.memgraph_addr, &cfg.memgraph_database).await?);
-    let embedder = Arc::new(OpenAiEmbedder::new(
-        cfg.openai_api_key.clone(),
-        cfg.embedding_model.clone(),
+    let graph_store = Neo4jGraphStore::new(&cfg.memgraph_addr, &cfg.memgraph_database).await?;
+    let vector_store = QdrantVectorStore::new(&cfg.qdrant_addr, "blocks")?;
+    let graph_repository = Arc::new(MemgraphQdrantGraphRepository::new(
+        graph_store,
+        vector_store,
     ));
-    let vector_store = Arc::new(QdrantVectorStore::new(&cfg.qdrant_addr, "blocks")?);
+
+    let embedder: Arc<dyn ports::Embedder> =
+        if cfg.use_mock_embedder || cfg.openai_api_key.is_none() {
+            Arc::new(MockEmbedder)
+        } else {
+            Arc::new(OpenAiEmbedder::new(
+                cfg.openai_api_key.clone().expect("checked api key"),
+                cfg.embedding_model.clone(),
+            ))
+        };
 
     let app = Arc::new(KnowledgeApplication::new(
         schema_repo,
-        graph_store,
+        graph_repository,
         embedder,
-        vector_store,
     ));
 
     app.ensure_common_root_graph().await?;
@@ -407,8 +436,9 @@ mod tests {
             memgraph_addr: "bolt://example".to_string(),
             memgraph_database: "memgraph".to_string(),
             qdrant_addr: "http://example".to_string(),
-            openai_api_key: "x".to_string(),
+            openai_api_key: Some("x".to_string()),
             embedding_model: "text-embedding-3-large".to_string(),
+            use_mock_embedder: false,
         };
 
         assert!(cfg.enable_reflection());
@@ -437,8 +467,9 @@ mod tests {
             memgraph_addr: "bolt://example".to_string(),
             memgraph_database: "memgraph".to_string(),
             qdrant_addr: "http://example".to_string(),
-            openai_api_key: "x".to_string(),
+            openai_api_key: Some("x".to_string()),
             embedding_model: "text-embedding-3-large".to_string(),
+            use_mock_embedder: false,
         };
 
         assert!(!cfg.enable_reflection());

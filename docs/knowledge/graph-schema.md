@@ -6,7 +6,7 @@ This document defines the shared world-model schema used across Exobrain service
 
 - Entities are lightweight world objects (`Entity` + sublabels).
 - Blocks are the narrative surface (`Block` nodes with text).
-- Each entity has a single root block (`DESCRIBED_BY`).
+- `DESCRIBED_BY` edges are explicit graph edges from `Entity` to `Block` (client-specified).
 - Root blocks can fan out into deeper details (`SUMMARIZES`) as a DAG.
 - Blocks cross-link entities (`MENTIONS`) to support retrieval + backlinks.
 
@@ -31,15 +31,30 @@ flowchart TD
 ## Invariants
 
 - Every `Entity` has exactly one `IS_PART_OF` edge to `Universe`.
-- Every `Entity` has exactly one `DESCRIBED_BY` root block.
+- `DESCRIBED_BY` is used when a block directly describes an entity; higher-level summary blocks can omit it.
 - `SUMMARIZES` forms a DAG (no cycles).
 - World semantics should prefer explicit edge types over excess properties.
+
+## Entity subtype constraints
+
+The direct children of `node.entity` are intentionally fixed:
+
+- `node.person`
+- `node.group`
+- `node.institution`
+- `node.place`
+- `node.object`
+- `node.concept`
+- `node.species`
+- `node.event`
+
+`node.task` remains a subtype of `node.event` (not a direct child of `node.entity`).
 
 ## Starter node labels
 
 - `Universe`
 - `Entity` (+ starter sublabels like `Person`, `Group`, `Institution`, `Place`, `Object`, `Concept`, `Species`, `Event`, `Task`)
-- `Block` (+ optional `Quote`, `Image`)
+- `Block` (+ optional `Quote`)
 
 ## Starter edge set
 
@@ -69,12 +84,12 @@ Blocks may include editorial trust hints:
 flowchart LR
   MG[Memgraph Block node] --> EMB[Embedding model]
   EMB --> Q[(Qdrant blocks collection)]
-  MG --> META[Payload metadata\nuniverse_id/root_entity_id/entity_ids]
+  MG --> META[Payload metadata\nuniverse_id/block_level]
   META --> Q
 ```
 
 Required payload fields:
-- `block_id`, `universe_id`, `text`, `root_entity_id`, `entity_ids`
+- `block_id`, `universe_id`, `text`, `block_level`
 
 ## Universe semantics
 
@@ -85,5 +100,12 @@ Required payload fields:
 
 ## Label fields in ingestion payloads
 
-- `labels` exist on ingestion payloads for forward compatibility with richer label-aware graph writes.
-- Current implementation does not project payload labels into dynamic Memgraph labels yet; writes currently use stable base labels (`Entity`, `Block`).
+- Clients provide `type_id` values for entities/blocks in graph upserts.
+- The knowledge-interface resolves inheritance chains from schema and applies full Memgraph label sets internally (for example `:Entity:Person:Friend`).
+
+
+## Client ID conventions
+
+- IDs are client-provided domain IDs (not Memgraph internal IDs).
+- Use RFC 4122 UUIDs for all node IDs (including Universe, Entity, and Block).
+- Allowed characters: `a-z`, `0-9`, `.`, `_`, `-`.

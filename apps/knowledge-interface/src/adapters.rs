@@ -2,21 +2,25 @@ use std::collections::HashMap;
 
 use anyhow::{Context, Result};
 use async_trait::async_trait;
-use neo4rs::{query, ConfigBuilder, Graph};
+use neo4rs::{query, ConfigBuilder, Graph, Txn};
 use qdrant_client::{
-    qdrant::{PointStruct, UpsertPointsBuilder, Value},
+    qdrant::{
+        CreateCollectionBuilder, DeletePointsBuilder, Distance, PointId, PointStruct,
+        UpsertPointsBuilder, Value, VectorParamsBuilder,
+    },
     Qdrant,
 };
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
 use serde::{Deserialize, Serialize};
 use sqlx::{postgres::PgPoolOptions, PgPool, Row};
+use tracing::warn;
 
 use crate::{
     domain::{
         EdgeEndpointRule, EmbeddedBlock, GraphDelta, PropertyScalar, PropertyValue, SchemaType,
         TypeInheritance, TypeProperty, UpsertSchemaTypePropertyInput, Visibility,
     },
-    ports::{Embedder, GraphStore, SchemaRepository, VectorStore},
+    ports::{Embedder, GraphRepository, SchemaRepository},
 };
 
 pub struct PostgresSchemaRepository {
@@ -257,87 +261,71 @@ impl Neo4jGraphStore {
         let graph = Graph::connect(config).await?;
         Ok(Self { graph })
     }
-}
 
-#[async_trait]
-impl GraphStore for Neo4jGraphStore {
-    async fn apply_delta(&self, delta: &GraphDelta) -> Result<()> {
-        let entity_rows: Vec<HashMap<&str, String>> = delta
-            .entities
-            .iter()
-            .map(|entity| {
-                let mut row = HashMap::new();
-                row.insert("id", entity.id.clone());
-                row.insert(
-                    "name",
-                    prop_as_string(&entity.properties, "name").unwrap_or_default(),
-                );
-                row.insert("universe_id", entity.universe_id.clone());
-                row.insert("user_id", entity.user_id.clone());
-                row.insert(
-                    "aliases",
-                    prop_as_string(&entity.properties, "aliases").unwrap_or_default(),
-                );
-                row.insert(
-                    "visibility",
-                    visibility_as_str(entity.visibility).to_string(),
-                );
-                row
-            })
-            .collect();
+    async fn apply_delta_in_tx(&self, txn: &mut Txn, delta: &GraphDelta) -> Result<()> {
+        let universe_aliases = "[]".to_string();
+        txn.run(
+            query("MERGE (u:Universe {id: $id}) SET u.name = $name, u.aliases = $aliases")
+                .param("id", delta.universe_id.clone())
+                .param("name", delta.universe_name.clone())
+                .param("aliases", universe_aliases),
+        )
+        .await
+        .context("failed to upsert universe")?;
 
-        if !entity_rows.is_empty() {
-            self.graph
-                .run(
-                    query(
-                        "UNWIND $rows AS row MERGE (e:Entity {id: row.id}) SET e.name = row.name, e.aliases = row.aliases, e.user_id = row.user_id, e.visibility = row.visibility MERGE (u:Universe {id: row.universe_id}) MERGE (e)-[:IS_PART_OF]->(u)",
+        for entity in &delta.entities {
+            let labels = sanitize_labels(&entity.resolved_labels)?;
+            let cypher = format!(
+                "MERGE (e:{} {{id: $id}}) SET e.type_id = $type_id, e.name = $name, e.aliases = $aliases, e.user_id = $user_id, e.visibility = $visibility WITH e MATCH (u:Universe {{id: $universe_id}}) MERGE (e)-[:IS_PART_OF]->(u)",
+                labels.join(":"),
+            );
+            txn.run(
+                query(&cypher)
+                    .param("id", entity.id.clone())
+                    .param("type_id", entity.type_id.clone())
+                    .param(
+                        "name",
+                        prop_as_string(&entity.properties, "name").unwrap_or_default(),
                     )
-                    .param("rows", entity_rows),
-                )
-                .await
-                .context("failed to upsert entities")?;
+                    .param(
+                        "aliases",
+                        prop_as_string(&entity.properties, "aliases")
+                            .unwrap_or_else(|| "[]".to_string()),
+                    )
+                    .param("user_id", entity.user_id.clone())
+                    .param("visibility", visibility_as_str(entity.visibility))
+                    .param("universe_id", entity.universe_id.clone()),
+            )
+            .await
+            .context("failed to upsert entity")?;
         }
 
-        let block_rows: Vec<HashMap<&str, String>> = delta
-            .blocks
-            .iter()
-            .map(|block| {
-                let mut row = HashMap::new();
-                row.insert("id", block.id.clone());
-                row.insert(
-                    "text",
-                    prop_as_string(&block.properties, "text").unwrap_or_default(),
-                );
-                row.insert("root_entity_id", block.root_entity_id.clone());
-                row.insert("user_id", block.user_id.clone());
-                row.insert(
-                    "visibility",
-                    visibility_as_str(block.visibility).to_string(),
-                );
-                row
-            })
-            .collect();
-
-        if !block_rows.is_empty() {
-            self.graph
-                .run(
-                    query(
-                        "UNWIND $rows AS row MERGE (b:Block {id: row.id}) SET b.text = row.text, b.user_id = row.user_id, b.visibility = row.visibility WITH row, b MATCH (e:Entity {id: row.root_entity_id}) WHERE e.user_id = row.user_id AND e.visibility = row.visibility MERGE (e)-[:DESCRIBED_BY]->(b)",
+        for block in &delta.blocks {
+            let labels = sanitize_labels(&block.resolved_labels)?;
+            let cypher = format!(
+                "MERGE (b:{} {{id: $id}}) SET b.type_id = $type_id, b.text = $text, b.user_id = $user_id, b.visibility = $visibility",
+                labels.join(":"),
+            );
+            txn.run(
+                query(&cypher)
+                    .param("id", block.id.clone())
+                    .param("type_id", block.type_id.clone())
+                    .param(
+                        "text",
+                        prop_as_string(&block.properties, "text").unwrap_or_default(),
                     )
-                    .param("rows", block_rows),
-                )
-                .await
-                .context("failed to upsert blocks")?;
+                    .param("user_id", block.user_id.clone())
+                    .param("visibility", visibility_as_str(block.visibility)),
+            )
+            .await
+            .context("failed to upsert block")?;
         }
 
         for edge in &delta.edges {
             validate_edge_type(&edge.edge_type)?;
-            let cypher = format!(
-                "MATCH (a {{id: $from_id}}), (b {{id: $to_id}}) WHERE a.user_id = $user_id AND b.user_id = $user_id AND a.visibility = $visibility AND b.visibility = $visibility MERGE (a)-[r:{}]->(b) SET r.confidence = $confidence, r.status = $status, r.context = $context, r.user_id = $user_id, r.visibility = $visibility",
-                edge.edge_type
-            );
-            self.graph
-                .run(
+            let cypher = format!("MATCH (a {{id: $from_id}}), (b {{id: $to_id}}) WHERE a.user_id = $user_id AND b.user_id = $user_id AND a.visibility = $visibility AND b.visibility = $visibility MERGE (a)-[r:{}]->(b) SET r.confidence = $confidence, r.status = $status, r.context = $context, r.user_id = $user_id, r.visibility = $visibility RETURN COUNT(r) AS upserted_count", edge.edge_type);
+            let mut result = txn
+                .execute(
                     query(&cypher)
                         .param("from_id", edge.from_id.clone())
                         .param("to_id", edge.to_id.clone())
@@ -359,6 +347,22 @@ impl GraphStore for Neo4jGraphStore {
                 )
                 .await
                 .context("failed to upsert edge")?;
+
+            let upserted_count = result
+                .next(&mut *txn)
+                .await?
+                .and_then(|row| row.get::<i64>("upserted_count").ok())
+                .unwrap_or(0);
+            if upserted_count == 0 {
+                return Err(anyhow::anyhow!(
+                    "failed to upsert edge {} from {} to {} with user_id={} visibility={}",
+                    edge.edge_type,
+                    edge.from_id,
+                    edge.to_id,
+                    edge.user_id,
+                    visibility_as_str(edge.visibility),
+                ));
+            }
         }
 
         Ok(())
@@ -367,14 +371,187 @@ impl GraphStore for Neo4jGraphStore {
     async fn common_root_graph_exists(&self) -> Result<bool> {
         let mut result = self
             .graph
-            .execute(query(
-                "MATCH (e:Entity {id: 'concept.exobrain', user_id: 'exobrain', visibility: 'SHARED'})-[:IS_PART_OF]->(:Universe {id: 'universe.real_world'}) MATCH (e)-[:DESCRIBED_BY]->(:Block {id: 'block.concept.exobrain', user_id: 'exobrain', visibility: 'SHARED'}) RETURN 1 AS present LIMIT 1",
-            ))
+            .execute(query("MATCH (e:Entity {id: '8c75cc89-6204-4fed-aec1-34d032ff95ee', user_id: 'exobrain', visibility: 'SHARED'})-[:IS_PART_OF]->(:Universe {id: '9d7f0fa5-78c1-4805-9efb-3f8f16090d7f'}) MATCH (e)-[:DESCRIBED_BY]->(:Block {id: 'ea5ca80f-346b-4f66-bff2-d307ce5d7da9', user_id: 'exobrain', visibility: 'SHARED'}) RETURN 1 AS present LIMIT 1"))
             .await
             .context("failed to query common root graph")?;
 
         Ok(result.next().await?.is_some())
     }
+}
+
+pub struct QdrantVectorStore {
+    client: Qdrant,
+    collection: String,
+    vector_size: u64,
+}
+
+impl QdrantVectorStore {
+    pub fn new(url: &str, collection: &str) -> Result<Self> {
+        let normalized = normalize_qdrant_grpc_url(url);
+        let client = Qdrant::from_url(&normalized).build()?;
+        Ok(Self {
+            client,
+            collection: collection.to_string(),
+            vector_size: 3072,
+        })
+    }
+
+    async fn ensure_collection(&self) -> Result<()> {
+        if self.client.collection_exists(&self.collection).await? {
+            return Ok(());
+        }
+
+        self.client
+            .create_collection(
+                CreateCollectionBuilder::new(&self.collection)
+                    .vectors_config(VectorParamsBuilder::new(self.vector_size, Distance::Cosine)),
+            )
+            .await
+            .with_context(|| format!("failed to create qdrant collection {}", self.collection))?;
+        Ok(())
+    }
+
+    async fn upsert_blocks(&self, blocks: &[EmbeddedBlock]) -> Result<()> {
+        if blocks.is_empty() {
+            return Ok(());
+        }
+
+        for block in blocks {
+            if block.vector.is_empty() {
+                anyhow::bail!(
+                    "block {} produced an empty embedding vector; cannot upsert to qdrant",
+                    block.block.id
+                );
+            }
+            if block.vector.len() as u64 != self.vector_size {
+                anyhow::bail!(
+                    "block {} embedding dimension {} does not match configured qdrant dimension {}",
+                    block.block.id,
+                    block.vector.len(),
+                    self.vector_size
+                );
+            }
+        }
+
+        self.ensure_collection().await?;
+
+        let points: Vec<PointStruct> = blocks.iter().map(to_point).collect();
+        self.client
+            .upsert_points(UpsertPointsBuilder::new(&self.collection, points).wait(true))
+            .await?;
+
+        Ok(())
+    }
+
+    async fn rollback_points(&self, blocks: &[EmbeddedBlock]) -> Result<()> {
+        if blocks.is_empty() {
+            return Ok(());
+        }
+
+        let ids: Vec<PointId> = blocks
+            .iter()
+            .map(|b| PointId::from(b.block.id.clone()))
+            .collect();
+        self.client
+            .delete_points(
+                DeletePointsBuilder::new(&self.collection)
+                    .points(ids)
+                    .wait(true),
+            )
+            .await?;
+        Ok(())
+    }
+}
+
+pub struct MemgraphQdrantGraphRepository {
+    graph_store: Neo4jGraphStore,
+    vector_store: QdrantVectorStore,
+}
+
+impl MemgraphQdrantGraphRepository {
+    pub fn new(graph_store: Neo4jGraphStore, vector_store: QdrantVectorStore) -> Self {
+        Self {
+            graph_store,
+            vector_store,
+        }
+    }
+}
+
+#[async_trait]
+impl GraphRepository for MemgraphQdrantGraphRepository {
+    async fn apply_delta_with_blocks(
+        &self,
+        delta: &GraphDelta,
+        blocks: &[EmbeddedBlock],
+    ) -> Result<()> {
+        let mut txn = self
+            .graph_store
+            .graph
+            .start_txn()
+            .await
+            .context("failed to start memgraph transaction")?;
+        if let Err(err) = self.graph_store.apply_delta_in_tx(&mut txn, delta).await {
+            let _ = txn.rollback().await;
+            return Err(err);
+        }
+
+        if let Err(err) = self.vector_store.upsert_blocks(blocks).await {
+            let _ = txn.rollback().await;
+            return Err(err.context("qdrant upsert failed; memgraph transaction rolled back"));
+        }
+
+        if let Err(err) = txn.commit().await {
+            warn!(error = ?err, "memgraph commit failed after qdrant upsert; reverting qdrant points");
+            let _ = self.vector_store.rollback_points(blocks).await;
+            return Err(err.into());
+        }
+
+        Ok(())
+    }
+
+    async fn common_root_graph_exists(&self) -> Result<bool> {
+        self.graph_store.common_root_graph_exists().await
+    }
+}
+
+fn to_point(embedded: &EmbeddedBlock) -> PointStruct {
+    let mut payload = HashMap::new();
+    payload.insert(
+        "block_id".to_string(),
+        Value::from(embedded.block.id.clone()),
+    );
+    payload.insert(
+        "universe_id".to_string(),
+        Value::from(embedded.universe_id.clone()),
+    );
+    payload.insert("user_id".to_string(), Value::from(embedded.user_id.clone()));
+    payload.insert(
+        "visibility".to_string(),
+        Value::from(visibility_as_str(embedded.visibility).to_string()),
+    );
+    payload.insert("text".to_string(), Value::from(embedded.text.clone()));
+    payload.insert("block_level".to_string(), Value::from(embedded.block_level));
+    PointStruct::new(embedded.block.id.clone(), embedded.vector.clone(), payload)
+}
+
+fn sanitize_labels(labels: &[String]) -> Result<Vec<String>> {
+    let cleaned: Vec<String> = labels
+        .iter()
+        .map(|label| label.trim().to_string())
+        .filter(|label| !label.is_empty())
+        .collect();
+    if cleaned.is_empty() {
+        anyhow::bail!("resolved labels cannot be empty");
+    }
+    for label in &cleaned {
+        if !label
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+        {
+            anyhow::bail!("invalid label '{}'", label);
+        }
+    }
+    Ok(cleaned)
 }
 
 fn prop_as_string(props: &[PropertyValue], key: &str) -> Option<String> {
@@ -462,64 +639,38 @@ impl Embedder for OpenAiEmbedder {
     }
 }
 
-pub struct QdrantVectorStore {
-    client: Qdrant,
-    collection: String,
-}
-
-impl QdrantVectorStore {
-    pub fn new(url: &str, collection: &str) -> Result<Self> {
-        let client = Qdrant::from_url(url).build()?;
-        Ok(Self {
-            client,
-            collection: collection.to_string(),
-        })
-    }
-}
+pub struct MockEmbedder;
 
 #[async_trait]
-impl VectorStore for QdrantVectorStore {
-    async fn upsert_blocks(&self, blocks: &[EmbeddedBlock]) -> Result<()> {
-        if blocks.is_empty() {
-            return Ok(());
-        }
-
-        let points: Vec<PointStruct> = blocks
+impl Embedder for MockEmbedder {
+    async fn embed_texts(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
+        Ok(texts
             .iter()
-            .map(|embedded| {
-                let mut payload = HashMap::new();
-                payload.insert(
-                    "block_id".to_string(),
-                    Value::from(embedded.block.id.clone()),
-                );
-                payload.insert(
-                    "universe_id".to_string(),
-                    Value::from(embedded.universe_id.clone()),
-                );
-                payload.insert("user_id".to_string(), Value::from(embedded.user_id.clone()));
-                payload.insert(
-                    "visibility".to_string(),
-                    Value::from(visibility_as_str(embedded.visibility).to_string()),
-                );
-                payload.insert("text".to_string(), Value::from(embedded.text.clone()));
-                payload.insert(
-                    "root_entity_id".to_string(),
-                    Value::from(embedded.block.root_entity_id.clone()),
-                );
-                payload.insert(
-                    "entity_ids".to_string(),
-                    Value::from(embedded.entity_ids.clone()),
-                );
-
-                PointStruct::new(embedded.block.id.clone(), embedded.vector.clone(), payload)
+            .map(|text| {
+                let mut v = vec![0.0_f32; 3072];
+                for (idx, byte) in text.as_bytes().iter().enumerate() {
+                    v[idx % 3072] += (*byte as f32) / 255.0;
+                }
+                v
             })
-            .collect();
-
-        self.client
-            .upsert_points(UpsertPointsBuilder::new(&self.collection, points).wait(true))
-            .await?;
-        Ok(())
+            .collect())
     }
+}
+
+fn normalize_qdrant_grpc_url(url: &str) -> String {
+    let mut normalized = if url.starts_with("http://") || url.starts_with("https://") {
+        url.to_string()
+    } else {
+        format!("http://{url}")
+    };
+
+    if normalized.ends_with(":6333") {
+        normalized = format!("{}:6334", &normalized[..normalized.len() - 5]);
+    } else if normalized.ends_with(":16333") {
+        normalized = format!("{}:16334", &normalized[..normalized.len() - 6]);
+    }
+
+    normalized
 }
 
 fn visibility_as_str(visibility: Visibility) -> &'static str {
@@ -544,7 +695,35 @@ fn validate_edge_type(edge_type: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::validate_edge_type;
+    use super::{normalize_qdrant_grpc_url, validate_edge_type, MockEmbedder};
+    use crate::ports::Embedder;
+
+    #[test]
+    fn normalizes_qdrant_rest_port_to_grpc_port() {
+        assert_eq!(
+            normalize_qdrant_grpc_url("http://localhost:6333"),
+            "http://localhost:6334"
+        );
+        assert_eq!(
+            normalize_qdrant_grpc_url("http://localhost:16333"),
+            "http://localhost:16334"
+        );
+        assert_eq!(
+            normalize_qdrant_grpc_url("localhost:6333"),
+            "http://localhost:6334"
+        );
+    }
+
+    #[tokio::test]
+    async fn mock_embedder_matches_qdrant_dimension() {
+        let embedder = MockEmbedder;
+        let vectors = embedder
+            .embed_texts(&["hello".to_string()])
+            .await
+            .expect("mock embedding should succeed");
+        assert_eq!(vectors.len(), 1);
+        assert_eq!(vectors[0].len(), 3072);
+    }
 
     #[test]
     fn validates_good_edge_type() {
