@@ -70,6 +70,7 @@ export const toStoredMessage = (message: Partial<JournalMessage> & { clientMessa
     (message.client_message_id as string | undefined) ??
     (message.id as string | undefined) ??
     makeClientMessageId(),
+  createdAt: typeof message.created_at === 'string' ? message.created_at : undefined,
   sequence: typeof message.sequence === 'number' ? message.sequence : undefined,
   toolCalls: Array.isArray(message.tool_calls) ? message.tool_calls : undefined,
   processInfos: toProcessInfos(message.tool_calls)

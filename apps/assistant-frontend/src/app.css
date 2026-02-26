@@ -83,6 +83,18 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
   gap: 1.25rem;
 }
 .message { width: 100%; color: var(--muted); line-height: 1.45; margin: 0.1rem 0; }
+.message-time {
+  margin: 0 0 0.25rem;
+  font-size: 0.72rem;
+  color: var(--text);
+  opacity: 0.8;
+  text-align: left;
+}
+
+.message-time.user-time {
+  text-align: right;
+}
+
 .load-older-wrap {
   display: flex;
   justify-content: center;

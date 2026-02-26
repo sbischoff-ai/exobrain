@@ -44,6 +44,20 @@
     }
   };
 
+
+  const formatMessageTime = (createdAt?: string): string => {
+    if (!createdAt) {
+      return '';
+    }
+
+    const parsedDate = new Date(createdAt);
+    if (Number.isNaN(parsedDate.getTime())) {
+      return '';
+    }
+
+    return parsedDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+  };
+
   const toggleStack = (messageId: string): void => {
     const next = new Set(expandedProcessStacks);
     if (next.has(messageId)) {
@@ -76,6 +90,9 @@
       data-message-id={message.clientMessageId}
       data-message-role={message.role}
     >
+      {#if formatMessageTime(message.createdAt)}
+        <p class="message-time" class:user-time={message.role === 'user'}>{formatMessageTime(message.createdAt)}</p>
+      {/if}
       <div class="assistant-markdown" class:user-markdown={message.role === 'user'}>
         {#if message.role === 'assistant' && message.processInfos?.length}
           {@const stackExpanded = expandedProcessStacks.has(message.clientMessageId)}

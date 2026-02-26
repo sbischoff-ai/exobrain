@@ -41,13 +41,18 @@ describe('ChatView', () => {
     expect(screen.getByRole('button', { name: 'Unfold tool call cards' })).toBeInTheDocument();
   });
 
-  it('renders journal reference and messages', () => {
-    render(ChatView, {
+  it('renders journal reference, messages, and message timestamps', () => {
+    const { container } = render(ChatView, {
       props: {
         reference: '2026/02/19',
         messages: [
-          { role: 'assistant', content: 'Hello there', clientMessageId: 'a-1' },
-          { role: 'user', content: 'Hi', clientMessageId: 'u-1' }
+          {
+            role: 'assistant',
+            content: 'Hello there',
+            clientMessageId: 'a-1',
+            createdAt: '2026-02-19T08:07:00Z'
+          },
+          { role: 'user', content: 'Hi', clientMessageId: 'u-1', createdAt: '2026-02-19T08:09:00Z' }
         ]
       }
     });
@@ -56,6 +61,12 @@ describe('ChatView', () => {
     expect(screen.getByText('2026/02/19')).toBeInTheDocument();
     expect(screen.getByText('Hello there')).toBeInTheDocument();
     expect(screen.getByText('Hi')).toBeInTheDocument();
+
+    const timeLabels = Array.from(container.querySelectorAll('.message-time')).map((node) => node.textContent?.trim());
+    expect(timeLabels).toHaveLength(2);
+    expect(timeLabels[0]).toMatch(/^\d{2}:\d{2}$/);
+    expect(timeLabels[1]).toMatch(/^\d{2}:\d{2}$/);
+    expect(container.querySelector('.message-time.user-time')).toBeTruthy();
   });
 
 
