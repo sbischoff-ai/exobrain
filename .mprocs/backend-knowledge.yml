@@ -1,4 +1,6 @@
 procs:
+  model-provider:
+    shell: ./scripts/local/run-model-provider.sh
   assistant-backend:
     shell: ./scripts/local/run-assistant-backend.sh
   knowledge-interface:

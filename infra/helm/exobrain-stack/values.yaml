@@ -38,10 +38,9 @@ assistantBackend:
     ASSISTANT_CACHE_REDIS_URL: redis://exobrain-assistant-cache:6379/0
     EXOBRAIN_NATS_URL: nats://exobrain-message-broker:4222
     JOBS_SUBJECT_PREFIX: jobs
-  secrets:
-    openaiApiKey:
-      name: exobrain-secrets
-      key: OPENAI_API_KEY
+    MAIN_AGENT_MODEL: agent
+    MAIN_AGENT_MODEL_PROVIDER_BASE_URL: http://exobrain-model-provider:8010/v1
+    MAIN_AGENT_MODEL_PROVIDER_API_KEY: cluster-internal
   resources:
     requests:
       cpu: 100m
@@ -67,11 +66,9 @@ knowledgeInterface:
     METASTORE_DSN: postgresql://exobrain:exobrain@exobrain-metastore:5432/exobrain
     KNOWLEDGE_SCHEMA_DSN: postgresql://knowledge_schema:knowledge_schema@exobrain-metastore:5432/knowledge_graph_schema
     ASSISTANT_DB_DSN: postgresql://assistant_backend:assistant_backend@exobrain-metastore:5432/assistant_db
-    OPENAI_EMBEDDING_MODEL: text-embedding-3-small
-  secrets:
-    openaiApiKey:
-      name: exobrain-secrets
-      key: OPENAI_API_KEY
+    MODEL_PROVIDER_BASE_URL: http://exobrain-model-provider:8010/v1
+    MODEL_PROVIDER_API_KEY: cluster-internal
+    MODEL_PROVIDER_EMBEDDING_ALIAS: all-purpose
   resources:
     requests:
       cpu: 100m
@@ -79,6 +76,77 @@ knowledgeInterface:
     limits:
       cpu: 500m
       memory: 512Mi
+
+
+modelProvider:
+  replicaCount: 1
+  image:
+    repository: exobrain/model-provider
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8010
+  env:
+    APP_ENV: cluster
+    LOG_LEVEL: INFO
+  secrets:
+    openaiApiKey:
+      name: exobrain-secrets
+      key: OPENAI_API_KEY
+    anthropicApiKey:
+      name: exobrain-secrets
+      key: ANTHROPIC_API_KEY
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  config:
+    modelsYaml: |
+      aliases:
+        router:
+          provider: openai
+          mode: chat
+          upstream_model: gpt-5-mini
+          defaults:
+            temperature: 0.1
+            max_tokens: 1200
+        worker:
+          provider: openai
+          mode: chat
+          upstream_model: gpt-5-mini
+          defaults:
+            temperature: 0.2
+            max_tokens: 1800
+        reasoner:
+          provider: anthropic
+          mode: chat
+          upstream_model: claude-sonnet-4-6
+          defaults:
+            temperature: 0.1
+            max_tokens: 2400
+        agent:
+          provider: openai
+          mode: chat
+          upstream_model: gpt-5.2
+          defaults:
+            temperature: 0.0
+            max_tokens: 1800
+        architect:
+          provider: anthropic
+          mode: chat
+          upstream_model: claude-opus-4-6
+          defaults:
+            temperature: 0.1
+            max_tokens: 3200
+        all-purpose:
+          provider: openai
+          mode: embeddings
+          upstream_model: text-embedding-3-large
+          defaults: {}
 
 metastore:
   replicaCount: 1

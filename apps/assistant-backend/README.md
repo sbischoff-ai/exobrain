@@ -64,7 +64,9 @@ Model/tool vars:
 - Main agent prompt includes markdown rendering guidance for math and diagrams (`$...$`, `$$...$$`, and ```mermaid fenced blocks; display math is expected on its own lines).
 - `MAIN_AGENT_USE_MOCK=true|false`
 - `MAIN_AGENT_MOCK_MESSAGES_FILE`
-- `OPENAI_API_KEY` (required for real model)
+- `MAIN_AGENT_MODEL_PROVIDER_BASE_URL` (default `http://localhost:8010/v1`)
+- `MAIN_AGENT_MODEL_PROVIDER_API_KEY` (shared internal auth token for model-provider)
+- `MAIN_AGENT_MODEL` (alias, default `agent`)
 - `TAVILY_API_KEY` (required for real web tools)
 - `WEB_TOOLS_USE_MOCK=true|false`
 

@@ -46,13 +46,19 @@ def test_build_agent_model_uses_fake_list_model_when_mock_enabled(tmp_path) -> N
     assert isinstance(model, FakeListChatModel)
 
 
-def test_build_agent_model_uses_openai_model_when_mock_disabled(monkeypatch) -> None:
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    settings = Settings(MAIN_AGENT_USE_MOCK=False, MAIN_AGENT_MODEL="gpt-5.2", MAIN_AGENT_TEMPERATURE=0.2)
+def test_build_agent_model_uses_openai_client_for_model_provider_when_mock_disabled() -> None:
+    settings = Settings(
+        MAIN_AGENT_USE_MOCK=False,
+        MAIN_AGENT_MODEL="agent",
+        MAIN_AGENT_TEMPERATURE=0.2,
+        MAIN_AGENT_MODEL_PROVIDER_BASE_URL="http://localhost:8010/v1",
+        MAIN_AGENT_MODEL_PROVIDER_API_KEY="model-provider-local",
+    )
 
     model = _build_agent_model(settings)
 
     assert isinstance(model, ChatOpenAI)
+    assert model.model_name == "agent"
 
 
 def test_build_web_tools_dependency_uses_tavily_by_default() -> None:

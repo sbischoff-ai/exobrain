@@ -604,22 +604,6 @@ fn prop_as_float(props: &[PropertyValue], key: &str) -> Option<f64> {
     })
 }
 
-pub struct OpenAiEmbedder {
-    client: reqwest::Client,
-    api_key: String,
-    model: String,
-}
-
-impl OpenAiEmbedder {
-    pub fn new(api_key: String, model: String) -> Self {
-        Self {
-            client: reqwest::Client::new(),
-            api_key,
-            model,
-        }
-    }
-}
-
 #[derive(Debug, Serialize)]
 struct EmbeddingRequest<'a> {
     input: &'a [String],
@@ -636,21 +620,40 @@ struct EmbeddingDatum {
     embedding: Vec<f32>,
 }
 
+pub struct OpenAiCompatibleEmbedder {
+    client: reqwest::Client,
+    base_url: String,
+    api_key: String,
+    model_alias: String,
+}
+
+impl OpenAiCompatibleEmbedder {
+    pub fn new(base_url: String, api_key: String, model_alias: String) -> Self {
+        Self {
+            client: reqwest::Client::new(),
+            base_url,
+            api_key,
+            model_alias,
+        }
+    }
+}
+
 #[async_trait]
-impl Embedder for OpenAiEmbedder {
+impl Embedder for OpenAiCompatibleEmbedder {
     async fn embed_texts(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
         if texts.is_empty() {
             return Ok(vec![]);
         }
 
+        let url = format!("{}/embeddings", self.base_url.trim_end_matches('/'));
         let response: EmbeddingResponse = self
             .client
-            .post("https://api.openai.com/v1/embeddings")
+            .post(url)
             .header(AUTHORIZATION, format!("Bearer {}", self.api_key))
             .header(CONTENT_TYPE, "application/json")
             .json(&EmbeddingRequest {
                 input: texts,
-                model: &self.model,
+                model: &self.model_alias,
             })
             .send()
             .await?
