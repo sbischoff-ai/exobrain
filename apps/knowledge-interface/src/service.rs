@@ -724,6 +724,7 @@ fn enforce_relationship_rules(delta: &GraphDelta, errors: &mut Vec<String>) {
     let mut entity_is_part_of: HashMap<&str, usize> = HashMap::new();
     let mut block_parent_edges: HashMap<&str, usize> = HashMap::new();
 
+    // Explicit relationships in edges[]
     for edge in &delta.edges {
         *incoming_by_node.entry(edge.to_id.as_str()).or_insert(0) += 1;
         *outgoing_by_node.entry(edge.from_id.as_str()).or_insert(0) += 1;
@@ -736,6 +737,14 @@ fn enforce_relationship_rules(delta: &GraphDelta, errors: &mut Vec<String>) {
         {
             *block_parent_edges.entry(edge.to_id.as_str()).or_insert(0) += 1;
         }
+    }
+
+    // Implicit IS_PART_OF relationships from EntityNode.universe_id (or Real World default).
+    for entity in &delta.entities {
+        let target_universe_id = entity.universe_id.as_deref().unwrap_or(COMMON_UNIVERSE_ID);
+        *outgoing_by_node.entry(entity.id.as_str()).or_insert(0) += 1;
+        *incoming_by_node.entry(target_universe_id).or_insert(0) += 1;
+        *entity_is_part_of.entry(entity.id.as_str()).or_insert(0) += 1;
     }
 
     for universe in &delta.universes {
@@ -1438,6 +1447,56 @@ mod tests {
         let levels = block_levels_for_blocks(&blocks, &edges);
         assert_eq!(levels.get(root_block_id).copied(), Some(0));
         assert_eq!(levels.get(child_block_id).copied(), Some(1));
+    }
+
+    #[tokio::test]
+    async fn accepts_implicit_is_part_of_from_entity_universe_assignment() {
+        let app = KnowledgeApplication::new(
+            Arc::new(FakeSchemaRepo::new()),
+            Arc::new(FakeGraphRepository { root_exists: false }),
+            Arc::new(FakeEmbedder),
+        );
+
+        app.upsert_graph_delta(GraphDelta {
+            user_id: "exobrain".to_string(),
+            visibility: Visibility::Shared,
+            universes: vec![UniverseNode {
+                id: "26bcdef7-41ce-4dc5-81e2-d2ba786270c1".to_string(),
+                name: "Fake World".to_string(),
+                user_id: "exobrain".to_string(),
+                visibility: Visibility::Shared,
+            }],
+            entities: vec![
+                EntityNode {
+                    id: "7ca59d34-ec3f-42a5-9500-0342f1690680".to_string(),
+                    type_id: "node.person".to_string(),
+                    universe_id: Some("26bcdef7-41ce-4dc5-81e2-d2ba786270c1".to_string()),
+                    user_id: "exobrain".to_string(),
+                    visibility: Visibility::Shared,
+                    properties: vec![PropertyValue {
+                        key: "name".to_string(),
+                        value: PropertyScalar::String("Fake Person".to_string()),
+                    }],
+                    resolved_labels: vec![],
+                },
+                EntityNode {
+                    id: "f78e0747-8948-4a2b-9540-06dc46a868f8".to_string(),
+                    type_id: "node.object".to_string(),
+                    universe_id: None,
+                    user_id: "exobrain".to_string(),
+                    visibility: Visibility::Shared,
+                    properties: vec![PropertyValue {
+                        key: "name".to_string(),
+                        value: PropertyScalar::String("Real Object".to_string()),
+                    }],
+                    resolved_labels: vec![],
+                },
+            ],
+            blocks: vec![],
+            edges: vec![],
+        })
+        .await
+        .expect("implicit IS_PART_OF relationships should satisfy topology rules");
     }
 
     #[tokio::test]
