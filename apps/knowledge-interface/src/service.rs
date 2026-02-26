@@ -5,8 +5,9 @@ use anyhow::{anyhow, Result};
 
 use crate::{
     domain::{
-        BlockNode, EmbeddedBlock, EntityNode, FullSchema, GraphDelta, GraphEdge, PropertyScalar,
-        PropertyValue, SchemaType, UniverseNode, UpsertSchemaTypeCommand, Visibility,
+        BlockNode, EmbeddedBlock, EntityNode, ExistingBlockContext, FullSchema, GraphDelta,
+        GraphEdge, PropertyScalar, PropertyValue, SchemaType, UniverseNode,
+        UpsertSchemaTypeCommand, Visibility,
     },
     ports::{Embedder, GraphRepository, SchemaRepository},
 };
@@ -372,8 +373,20 @@ impl KnowledgeApplication {
             .collect();
         let vectors = self.embedder.embed_texts(&texts).await?;
 
-        let block_levels = block_levels_for_blocks(&delta.blocks, &delta.edges);
-        let root_entity_ids = root_entity_ids_for_blocks(&delta.blocks, &delta.edges)?;
+        let block_levels = block_levels_for_blocks(
+            &delta.blocks,
+            &delta.edges,
+            self.graph_repository.as_ref(),
+            &delta,
+        )
+        .await?;
+        let root_entity_ids = root_entity_ids_for_blocks(
+            &delta.blocks,
+            &delta.edges,
+            self.graph_repository.as_ref(),
+            &delta,
+        )
+        .await?;
 
         let blocks: Vec<EmbeddedBlock> = delta
             .blocks
@@ -830,7 +843,20 @@ fn extract_text(properties: &[crate::domain::PropertyValue]) -> String {
         .unwrap_or_default()
 }
 
-fn block_levels_for_blocks(blocks: &[BlockNode], edges: &[GraphEdge]) -> HashMap<String, i64> {
+async fn block_levels_for_blocks(
+    blocks: &[BlockNode],
+    edges: &[GraphEdge],
+    graph_repository: &dyn GraphRepository,
+    delta: &GraphDelta,
+) -> Result<HashMap<String, i64>> {
+    let contexts = existing_block_context_for_referenced_summarize_parents(
+        blocks,
+        edges,
+        graph_repository,
+        delta,
+    )
+    .await?;
+
     let block_ids: HashSet<&str> = blocks.iter().map(|b| b.id.as_str()).collect();
     let mut levels: HashMap<String, i64> = HashMap::new();
 
@@ -842,11 +868,18 @@ fn block_levels_for_blocks(blocks: &[BlockNode], edges: &[GraphEdge]) -> HashMap
         }
     }
 
+    for (block_id, context) in &contexts {
+        levels
+            .entry(block_id.clone())
+            .or_insert(context.block_level);
+    }
+
     let summarize_edges: Vec<(&str, &str)> = edges
         .iter()
         .filter(|edge| {
             edge.edge_type.eq_ignore_ascii_case("SUMMARIZES")
-                && block_ids.contains(edge.from_id.as_str())
+                && (block_ids.contains(edge.from_id.as_str())
+                    || contexts.contains_key(edge.from_id.as_str()))
                 && block_ids.contains(edge.to_id.as_str())
         })
         .map(|edge| (edge.from_id.as_str(), edge.to_id.as_str()))
@@ -867,13 +900,25 @@ fn block_levels_for_blocks(blocks: &[BlockNode], edges: &[GraphEdge]) -> HashMap
         }
     }
 
-    levels
+    levels.retain(|id, _| block_ids.contains(id.as_str()));
+
+    Ok(levels)
 }
 
-fn root_entity_ids_for_blocks(
+async fn root_entity_ids_for_blocks(
     blocks: &[BlockNode],
     edges: &[GraphEdge],
+    graph_repository: &dyn GraphRepository,
+    delta: &GraphDelta,
 ) -> Result<HashMap<String, String>> {
+    let contexts = existing_block_context_for_referenced_summarize_parents(
+        blocks,
+        edges,
+        graph_repository,
+        delta,
+    )
+    .await?;
+
     let block_ids: HashSet<&str> = blocks.iter().map(|b| b.id.as_str()).collect();
     let described_by_parents: HashMap<&str, &str> = edges
         .iter()
@@ -885,9 +930,7 @@ fn root_entity_ids_for_blocks(
     let summarize_parents: HashMap<&str, &str> = edges
         .iter()
         .filter(|e| {
-            e.edge_type.eq_ignore_ascii_case("SUMMARIZES")
-                && block_ids.contains(e.to_id.as_str())
-                && block_ids.contains(e.from_id.as_str())
+            e.edge_type.eq_ignore_ascii_case("SUMMARIZES") && block_ids.contains(e.to_id.as_str())
         })
         .map(|e| (e.to_id.as_str(), e.from_id.as_str()))
         .collect();
@@ -908,8 +951,16 @@ fn root_entity_ids_for_blocks(
                 break;
             }
             if let Some(parent_block) = summarize_parents.get(current) {
+                if let Some(parent_context) = contexts.get(*parent_block) {
+                    out.insert(block.id.clone(), parent_context.root_entity_id.clone());
+                    break;
+                }
                 current = parent_block;
                 continue;
+            }
+            if let Some(context) = contexts.get(current) {
+                out.insert(block.id.clone(), context.root_entity_id.clone());
+                break;
             }
             return Err(anyhow!(
                 "unable to resolve root_entity_id for block {} from DESCRIBED_BY/SUMMARIZES edges",
@@ -918,6 +969,40 @@ fn root_entity_ids_for_blocks(
         }
     }
     Ok(out)
+}
+
+async fn existing_block_context_for_referenced_summarize_parents(
+    blocks: &[BlockNode],
+    edges: &[GraphEdge],
+    graph_repository: &dyn GraphRepository,
+    delta: &GraphDelta,
+) -> Result<HashMap<String, ExistingBlockContext>> {
+    let block_ids: HashSet<&str> = blocks.iter().map(|b| b.id.as_str()).collect();
+    let parent_ids: HashSet<&str> = edges
+        .iter()
+        .filter(|edge| {
+            edge.edge_type.eq_ignore_ascii_case("SUMMARIZES")
+                && block_ids.contains(edge.to_id.as_str())
+                && !block_ids.contains(edge.from_id.as_str())
+        })
+        .map(|edge| edge.from_id.as_str())
+        .collect();
+
+    let mut contexts = HashMap::new();
+    for parent_id in parent_ids {
+        let context = graph_repository
+            .get_existing_block_context(parent_id, &delta.user_id, delta.visibility)
+            .await?
+            .ok_or_else(|| {
+                anyhow!(
+                    "unable to resolve root_entity_id for block {} from DESCRIBED_BY/SUMMARIZES edges",
+                    parent_id
+                )
+            })?;
+        contexts.insert(parent_id.to_string(), context);
+    }
+
+    Ok(contexts)
 }
 
 fn resolve_block_universe_id<'a>(
@@ -1196,6 +1281,15 @@ mod tests {
         async fn common_root_graph_exists(&self) -> Result<bool> {
             Ok(self.root_exists)
         }
+
+        async fn get_existing_block_context(
+            &self,
+            _block_id: &str,
+            _user_id: &str,
+            _visibility: Visibility,
+        ) -> Result<Option<ExistingBlockContext>> {
+            Ok(None)
+        }
     }
 
     struct FakeEmbedder;
@@ -1210,6 +1304,7 @@ mod tests {
     struct CapturingGraphRepository {
         seen: Arc<Mutex<Vec<EmbeddedBlock>>>,
         root_exists: bool,
+        block_contexts: HashMap<String, ExistingBlockContext>,
     }
 
     #[async_trait]
@@ -1226,6 +1321,15 @@ mod tests {
 
         async fn common_root_graph_exists(&self) -> Result<bool> {
             Ok(self.root_exists)
+        }
+
+        async fn get_existing_block_context(
+            &self,
+            block_id: &str,
+            _user_id: &str,
+            _visibility: Visibility,
+        ) -> Result<Option<ExistingBlockContext>> {
+            Ok(self.block_contexts.get(block_id).cloned())
         }
     }
 
@@ -1289,6 +1393,7 @@ mod tests {
             Arc::new(CapturingGraphRepository {
                 seen: captured.clone(),
                 root_exists: false,
+                block_contexts: HashMap::new(),
             }),
             Arc::new(FakeEmbedder),
         );
@@ -1360,6 +1465,7 @@ mod tests {
             Arc::new(CapturingGraphRepository {
                 seen: captured.clone(),
                 root_exists: false,
+                block_contexts: HashMap::new(),
             }),
             Arc::new(FakeEmbedder),
         );
@@ -1383,6 +1489,7 @@ mod tests {
             Arc::new(CapturingGraphRepository {
                 seen: captured.clone(),
                 root_exists: true,
+                block_contexts: HashMap::new(),
             }),
             Arc::new(FakeEmbedder),
         );
@@ -1403,8 +1510,8 @@ mod tests {
         assert_eq!(guard[0].block_level, 0);
     }
 
-    #[test]
-    fn computes_block_levels_from_described_by_and_summarizes_edges() {
+    #[tokio::test]
+    async fn computes_block_levels_from_described_by_and_summarizes_edges() {
         let root_block_id = "550e8400-e29b-41d4-a716-446655440099";
         let child_block_id = "550e8400-e29b-41d4-a716-446655440098";
         let blocks = vec![
@@ -1444,11 +1551,83 @@ mod tests {
             },
         ];
 
-        let levels = block_levels_for_blocks(&blocks, &edges);
+        let delta = GraphDelta {
+            user_id: "user-1".to_string(),
+            visibility: Visibility::Private,
+            universes: vec![],
+            entities: vec![],
+            blocks: blocks.clone(),
+            edges: edges.clone(),
+        };
+        let levels = block_levels_for_blocks(
+            &blocks,
+            &edges,
+            &FakeGraphRepository { root_exists: false },
+            &delta,
+        )
+        .await
+        .expect("levels should be computed");
         assert_eq!(levels.get(root_block_id).copied(), Some(0));
         assert_eq!(levels.get(child_block_id).copied(), Some(1));
     }
 
+    #[tokio::test]
+    async fn resolves_root_entity_and_level_from_existing_summarize_parent_block() {
+        let existing_parent_block_id = "9a8c589c-51ea-4e36-b60e-505769f19b7a";
+        let new_block_id = "0fdfb642-1ec0-48c9-a8e1-3120e8da5d0f";
+        let blocks = vec![BlockNode {
+            id: new_block_id.to_string(),
+            type_id: "node.block".to_string(),
+            user_id: "exobrain".to_string(),
+            visibility: Visibility::Shared,
+            properties: vec![PropertyValue {
+                key: "text".to_string(),
+                value: PropertyScalar::String("child".to_string()),
+            }],
+            resolved_labels: vec![],
+        }];
+        let edges = vec![GraphEdge {
+            from_id: existing_parent_block_id.to_string(),
+            to_id: new_block_id.to_string(),
+            edge_type: "SUMMARIZES".to_string(),
+            user_id: "exobrain".to_string(),
+            visibility: Visibility::Shared,
+            properties: vec![],
+        }];
+        let delta = GraphDelta {
+            user_id: "exobrain".to_string(),
+            visibility: Visibility::Shared,
+            universes: vec![],
+            entities: vec![],
+            blocks: blocks.clone(),
+            edges: edges.clone(),
+        };
+        let graph_repo = CapturingGraphRepository {
+            seen: Arc::new(Mutex::new(vec![])),
+            root_exists: false,
+            block_contexts: HashMap::from([(
+                existing_parent_block_id.to_string(),
+                ExistingBlockContext {
+                    root_entity_id: "8c75cc89-6204-4fed-aec1-34d032ff95ee".to_string(),
+                    universe_id: COMMON_UNIVERSE_ID.to_string(),
+                    block_level: 0,
+                },
+            )]),
+        };
+
+        let root_ids = root_entity_ids_for_blocks(&blocks, &edges, &graph_repo, &delta)
+            .await
+            .expect("root entity id should resolve from existing summarize parent");
+        assert_eq!(
+            root_ids.get(new_block_id).map(String::as_str),
+            Some("8c75cc89-6204-4fed-aec1-34d032ff95ee")
+        );
+
+        let levels = block_levels_for_blocks(&blocks, &edges, &graph_repo, &delta)
+            .await
+            .expect("level should resolve from existing summarize parent");
+        assert_eq!(levels.get(new_block_id).copied(), Some(1));
+    }
     #[tokio::test]
     async fn accepts_implicit_is_part_of_from_entity_universe_assignment() {
         let app = KnowledgeApplication::new(

@@ -89,6 +89,7 @@ Minimal valid delta for one person + one block + explicit edges:
 - `blocks[0].type_id = node.block`
 - `blocks[0].properties` contains `text`
 - `edges[0].edge_type = DESCRIBED_BY` (for entity -> block relationship)
+- `SUMMARIZES` edges can target new blocks from existing parent blocks; root metadata resolves from the existing parent chain.
 - `edges[1].edge_type = RELATED_TO` (optional semantic edge)
 
 For interactive request prototyping use `grpcui -plaintext localhost:50051`.

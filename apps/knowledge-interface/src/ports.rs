@@ -2,8 +2,8 @@ use anyhow::Result;
 use async_trait::async_trait;
 
 use crate::domain::{
-    EdgeEndpointRule, EmbeddedBlock, GraphDelta, SchemaType, TypeInheritance, TypeProperty,
-    UpsertSchemaTypePropertyInput,
+    EdgeEndpointRule, EmbeddedBlock, ExistingBlockContext, GraphDelta, SchemaType, TypeInheritance,
+    TypeProperty, UpsertSchemaTypePropertyInput,
 };
 
 #[async_trait]
@@ -38,6 +38,12 @@ pub trait GraphRepository: Send + Sync {
         blocks: &[EmbeddedBlock],
     ) -> Result<()>;
     async fn common_root_graph_exists(&self) -> Result<bool>;
+    async fn get_existing_block_context(
+        &self,
+        block_id: &str,
+        user_id: &str,
+        visibility: crate::domain::Visibility,
+    ) -> Result<Option<ExistingBlockContext>>;
 }
 
 #[async_trait]
