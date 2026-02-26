@@ -16,9 +16,17 @@ class OpenAIProviderClient(ProviderClient):
     ) -> None:
         self._client = client or AsyncOpenAI(api_key=api_key, timeout=timeout_seconds)
 
+
+    def _normalize_chat_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
+        normalized = dict(payload)
+        max_tokens = normalized.pop("max_tokens", None)
+        if max_tokens is not None and "max_completion_tokens" not in normalized:
+            normalized["max_completion_tokens"] = max_tokens
+        return normalized
+
     async def chat_completions(self, payload: dict[str, Any]) -> dict[str, Any]:
         try:
-            response = await self._client.chat.completions.create(**payload)
+            response = await self._client.chat.completions.create(**self._normalize_chat_payload(payload))
             return response.model_dump(mode="json")
         except (APITimeoutError,) as exc:
             raise ProviderClientError(status_code=504, message=str(exc)) from exc
@@ -33,7 +41,7 @@ class OpenAIProviderClient(ProviderClient):
 
     async def chat_completions_stream(self, payload: dict[str, Any]) -> AsyncIterator[str]:
         try:
-            stream = await self._client.chat.completions.create(**payload)
+            stream = await self._client.chat.completions.create(**self._normalize_chat_payload(payload))
             async for chunk in stream:
                 yield f"data: {chunk.model_dump_json()}\n\n"
             yield "data: [DONE]\n\n"

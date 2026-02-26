@@ -19,3 +19,5 @@ Set env vars from `.env.example`.
 
 
 Provider adapters use the official provider SDKs (`openai`, `anthropic`) for request/response schema compatibility.
+
+OpenAI chat aliases should use `max_completion_tokens` defaults (not `max_tokens`) for GPT-5 compatibility.

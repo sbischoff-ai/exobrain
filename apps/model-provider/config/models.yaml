@@ -5,14 +5,14 @@ aliases:
     upstream_model: gpt-5-mini
     defaults:
       temperature: 0.1
-      max_tokens: 1200
+      max_completion_tokens: 1200
   worker:
     provider: openai
     mode: chat
     upstream_model: gpt-5-mini
     defaults:
       temperature: 0.2
-      max_tokens: 1800
+      max_completion_tokens: 1800
   reasoner:
     provider: anthropic
     mode: chat
@@ -26,7 +26,7 @@ aliases:
     upstream_model: gpt-5.2
     defaults:
       temperature: 0.0
-      max_tokens: 1800
+      max_completion_tokens: 1800
   architect:
     provider: anthropic
     mode: chat

@@ -49,6 +49,15 @@ def merge_payload(alias_config: AliasConfig, payload: dict[str, Any]) -> dict[st
     return merged
 
 
+def _format_stream_error(exc: Exception, *, alias: str, provider: str) -> str:
+    mapped = map_provider_error(exc, alias=alias, provider=provider)
+    detail = mapped.detail if isinstance(mapped.detail, str) else "streaming error"
+    payload = {"error": {"message": detail, "type": "provider_error", "code": mapped.status_code}}
+    import json
+
+    return f"data: {json.dumps(payload)}\n\n"
+
+
 def map_provider_error(exc: Exception, *, alias: str, provider: str) -> HTTPException:
     if isinstance(exc, ProviderClientError):
         return HTTPException(
@@ -96,8 +105,16 @@ async def chat_completions(request: Request, x_request_id: str | None = Header(d
     try:
         if stream:
             async def event_stream() -> AsyncIterator[str]:
-                async for chunk in provider_client.chat_completions_stream(merged_payload):
-                    yield chunk
+                try:
+                    async for chunk in provider_client.chat_completions_stream(merged_payload):
+                        yield chunk
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "chat completion stream provider error",
+                        extra={"request_id": request_id, "alias": alias, "provider": alias_config.provider},
+                    )
+                    yield _format_stream_error(exc, alias=alias, provider=alias_config.provider)
+                    yield "data: [DONE]\n\n"
 
             headers = {"x-request-id": request_id, "Cache-Control": "no-cache"}
             return StreamingResponse(event_stream(), media_type="text/event-stream", headers=headers)

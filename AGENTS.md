@@ -145,6 +145,7 @@ A skill is a set of local instructions in a `SKILL.md` file.
 
 - In coding-agent environments, prefer `scripts/agent/run-assistant-frontend-mock.sh` for frontend-only UI exploration and `scripts/agent/run-assistant-backend-offline.sh` for backend runs that must avoid OpenAI/Tavily network dependencies.
 - For local multi-service runs, start `model-provider` (mprocs profiles now include it) before assistant-backend/knowledge-interface when not using mock models; those apps should point at model aliases instead of direct provider keys.
+- For model-provider OpenAI chat aliases (especially GPT-5 family), prefer `max_completion_tokens` over deprecated `max_tokens` to avoid upstream 400 `unsupported_parameter` errors.
 - Knowledge-interface local dev should load `apps/knowledge-interface/.env`; keep gRPC reflection local-only (`APP_ENV=local`) so `grpcui` works in dev without exposing reflection in cluster/runtime manifests.
 - Knowledge-interface gRPC is pre-launch and may use clean breaking changes; prefer schema-driven property payloads over hard-coded entity/event fields when evolving ingestion contracts.
 - UpsertGraphDelta now treats block/entity linkage as explicit edges: `BlockNode` no longer carries `root_entity_id`; clients must send `DESCRIBED_BY` edges when needed (for example root blocks), and higher-level summary blocks can omit that edge.
