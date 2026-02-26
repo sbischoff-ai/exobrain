@@ -1,34 +1,64 @@
 from __future__ import annotations
 
-import json
 from typing import Any, AsyncIterator
 
-import httpx
+from openai import APIError, APIStatusError, AsyncOpenAI, APITimeoutError, RateLimitError
 
-from app.providers.base import ProviderClient
+from app.providers.base import ProviderClient, ProviderClientError
 
 
 class OpenAIProviderClient(ProviderClient):
-    def __init__(self, api_key: str, timeout_seconds: float = 60.0) -> None:
-        self._client = httpx.AsyncClient(
-            base_url="https://api.openai.com",
-            headers={"Authorization": f"Bearer {api_key}"},
-            timeout=timeout_seconds,
-        )
+    def __init__(
+        self,
+        api_key: str,
+        timeout_seconds: float = 60.0,
+        client: AsyncOpenAI | None = None,
+    ) -> None:
+        self._client = client or AsyncOpenAI(api_key=api_key, timeout=timeout_seconds)
 
     async def chat_completions(self, payload: dict[str, Any]) -> dict[str, Any]:
-        response = await self._client.post("/v1/chat/completions", json=payload)
-        response.raise_for_status()
-        return response.json()
+        try:
+            response = await self._client.chat.completions.create(**payload)
+            return response.model_dump(mode="json")
+        except (APITimeoutError,) as exc:
+            raise ProviderClientError(status_code=504, message=str(exc)) from exc
+        except (RateLimitError,) as exc:
+            raise ProviderClientError(status_code=429, message=str(exc)) from exc
+        except (APIStatusError,) as exc:
+            status = exc.status_code
+            mapped_status = 502 if status and status >= 500 else (status or 502)
+            raise ProviderClientError(status_code=mapped_status, message=str(exc)) from exc
+        except APIError as exc:
+            raise ProviderClientError(status_code=502, message=str(exc)) from exc
 
     async def chat_completions_stream(self, payload: dict[str, Any]) -> AsyncIterator[str]:
-        async with self._client.stream("POST", "/v1/chat/completions", json=payload) as response:
-            response.raise_for_status()
-            async for line in response.aiter_lines():
-                if line:
-                    yield f"{line}\n\n"
+        try:
+            stream = await self._client.chat.completions.create(**payload)
+            async for chunk in stream:
+                yield f"data: {chunk.model_dump_json()}\n\n"
+            yield "data: [DONE]\n\n"
+        except (APITimeoutError,) as exc:
+            raise ProviderClientError(status_code=504, message=str(exc)) from exc
+        except (RateLimitError,) as exc:
+            raise ProviderClientError(status_code=429, message=str(exc)) from exc
+        except (APIStatusError,) as exc:
+            status = exc.status_code
+            mapped_status = 502 if status and status >= 500 else (status or 502)
+            raise ProviderClientError(status_code=mapped_status, message=str(exc)) from exc
+        except APIError as exc:
+            raise ProviderClientError(status_code=502, message=str(exc)) from exc
 
     async def embeddings(self, payload: dict[str, Any]) -> dict[str, Any]:
-        response = await self._client.post("/v1/embeddings", json=payload)
-        response.raise_for_status()
-        return response.json()
+        try:
+            response = await self._client.embeddings.create(**payload)
+            return response.model_dump(mode="json")
+        except (APITimeoutError,) as exc:
+            raise ProviderClientError(status_code=504, message=str(exc)) from exc
+        except (RateLimitError,) as exc:
+            raise ProviderClientError(status_code=429, message=str(exc)) from exc
+        except (APIStatusError,) as exc:
+            status = exc.status_code
+            mapped_status = 502 if status and status >= 500 else (status or 502)
+            raise ProviderClientError(status_code=mapped_status, message=str(exc)) from exc
+        except APIError as exc:
+            raise ProviderClientError(status_code=502, message=str(exc)) from exc
