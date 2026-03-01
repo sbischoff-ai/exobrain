@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+const EXOBRAIN_USER_ID: &str = "exobrain";
+
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use neo4rs::{query, ConfigBuilder, Graph, Txn};
@@ -335,13 +337,14 @@ impl Neo4jGraphStore {
         for edge in &delta.edges {
             validate_edge_type(&edge.edge_type)?;
             let allowed_node_visibilities = allowed_node_visibilities(edge.visibility);
-            let cypher = format!("MATCH (a {{id: $from_id}}), (b {{id: $to_id}}) WHERE a.user_id = $user_id AND b.user_id = $user_id AND a.visibility IN $allowed_node_visibilities AND b.visibility IN $allowed_node_visibilities MERGE (a)-[r:{}]->(b) SET r.confidence = $confidence, r.status = $status, r.context = $context, r.user_id = $user_id, r.visibility = $visibility RETURN COUNT(r) AS upserted_count", edge.edge_type);
+            let cypher = format!("MATCH (a {{id: $from_id}}), (b {{id: $to_id}}) WHERE a.user_id = $user_id AND (b.user_id = $user_id OR (b.user_id = $shared_owner_user_id AND b.visibility = 'SHARED')) AND a.visibility IN $allowed_node_visibilities AND b.visibility IN $allowed_node_visibilities MERGE (a)-[r:{}]->(b) SET r.confidence = $confidence, r.status = $status, r.context = $context, r.user_id = $user_id, r.visibility = $visibility RETURN COUNT(r) AS upserted_count", edge.edge_type);
             let mut result = txn
                 .execute(
                     query(&cypher)
                         .param("from_id", edge.from_id.clone())
                         .param("to_id", edge.to_id.clone())
                         .param("user_id", edge.user_id.clone())
+                        .param("shared_owner_user_id", EXOBRAIN_USER_ID.to_string())
                         .param("visibility", visibility_as_str(edge.visibility))
                         .param("allowed_node_visibilities", allowed_node_visibilities)
                         .param(

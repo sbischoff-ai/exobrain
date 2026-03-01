@@ -50,6 +50,7 @@ Edges are validated with schema rules (`knowledge_graph_schema_edge_rules`).
 For example, a `RELATED_TO` edge is valid only if a matching rule exists for source and target node types (or their ancestors).
 
 - For `PRIVATE` edge writes, endpoint nodes may be either `PRIVATE` or `SHARED` (same `user_id` still required).
+- `IS_PART_OF` (and other shared-reference edges) may target shared bootstrap nodes owned by `exobrain` (for example the Real World universe).
 
 ```mermaid
 flowchart LR
