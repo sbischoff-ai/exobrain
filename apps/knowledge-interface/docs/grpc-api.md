@@ -51,7 +51,7 @@ For example, a `RELATED_TO` edge is valid only if a matching rule exists for sou
 
 ```mermaid
 flowchart LR
-  A[node.object]
+  A[node.person]
   B[node.person]
   A -->|edge.related_to| B
 ```

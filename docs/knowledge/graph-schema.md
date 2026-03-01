@@ -45,24 +45,23 @@ The direct children of `node.entity` are intentionally fixed:
 - `node.place`
 - `node.object`
 - `node.concept`
-- `node.species`
 - `node.event`
 
-`node.task` remains a subtype of `node.event` (not a direct child of `node.entity`).
+`node.task` and `node.message` remain subtypes of `node.event` (not direct children of `node.entity`), and `node.species` is a subtype of `node.concept`.
 
 ## Starter node labels
 
 - `Universe`
-- `Entity` (+ starter sublabels like `Person`, `Group`, `Institution`, `Place`, `Object`, `Concept`, `Species`, `Event`, `Task`)
+- `Entity` (+ starter sublabels like `Person`, `Group`, `Institution`, `Place`, `Object`, `Concept`, `Species`, `Event`, `Task`, `Message`)
 - `Block` (+ optional `Quote`)
 
 ## Starter edge set
 
 - Scoping/content: `IS_PART_OF`, `DESCRIBED_BY`, `SUMMARIZES`, `MENTIONS`
 - General fallback: `RELATED_TO`
-- Spatial/containment: `AT`, `LIES_IN`, `CONTAINS`
+- Spatial/containment: `LOCATED_AT`, `LIES_IN`, `CONTAINS`
 - Social: `KNOWS`, `MEMBER_OF`, `AFFILIATED_WITH`
-- Event/task: `PARTICIPATED_IN`, `INVOLVES`, `BEFORE`, `CAUSES`, `ASSIGNED_TO`, `DONE_FOR`, `DEPENDS_ON`
+- Event/task: `PARTICIPATED_IN`, `INVOLVES`, `CAUSES`, `ASSIGNED_TO`, `DONE_FOR`, `DEPENDS_ON`, `SENT_TO`, `SENT_BY`
 - Classification/identity: `ABOUT`, `INSTANCE_OF`, `ALSO_KNOWN_AS`, `SAME_AS`
 
 ## Trust metadata

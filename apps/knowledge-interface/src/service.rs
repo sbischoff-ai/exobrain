@@ -296,7 +296,7 @@ impl KnowledgeApplication {
                 },
                 EntityNode {
                     id: assistant_entity_id.clone(),
-                    type_id: "node.object".to_string(),
+                    type_id: "node.person".to_string(),
                     universe_id: Some(COMMON_UNIVERSE_ID.to_string()),
                     user_id: user_id.to_string(),
                     visibility: Visibility::Shared,
@@ -1094,6 +1094,34 @@ mod tests {
                         active: true,
                     },
                     SchemaType {
+                        id: "node.event".to_string(),
+                        kind: "node".to_string(),
+                        name: "Event".to_string(),
+                        description: String::new(),
+                        active: true,
+                    },
+                    SchemaType {
+                        id: "node.task".to_string(),
+                        kind: "node".to_string(),
+                        name: "Task".to_string(),
+                        description: String::new(),
+                        active: true,
+                    },
+                    SchemaType {
+                        id: "node.message".to_string(),
+                        kind: "node".to_string(),
+                        name: "Message".to_string(),
+                        description: String::new(),
+                        active: true,
+                    },
+                    SchemaType {
+                        id: "node.place".to_string(),
+                        kind: "node".to_string(),
+                        name: "Place".to_string(),
+                        description: String::new(),
+                        active: true,
+                    },
+                    SchemaType {
                         id: "node.block".to_string(),
                         kind: "node".to_string(),
                         name: "Block".to_string(),
@@ -1120,6 +1148,27 @@ mod tests {
                         id: "edge.is_part_of".to_string(),
                         kind: "edge".to_string(),
                         name: "IS_PART_OF".to_string(),
+                        description: String::new(),
+                        active: true,
+                    },
+                    SchemaType {
+                        id: "edge.located_at".to_string(),
+                        kind: "edge".to_string(),
+                        name: "LOCATED_AT".to_string(),
+                        description: String::new(),
+                        active: true,
+                    },
+                    SchemaType {
+                        id: "edge.sent_to".to_string(),
+                        kind: "edge".to_string(),
+                        name: "SENT_TO".to_string(),
+                        description: String::new(),
+                        active: true,
+                    },
+                    SchemaType {
+                        id: "edge.sent_by".to_string(),
+                        kind: "edge".to_string(),
+                        name: "SENT_BY".to_string(),
                         description: String::new(),
                         active: true,
                     },
@@ -1153,6 +1202,30 @@ mod tests {
                 },
                 TypeInheritance {
                     child_type_id: "node.concept".to_string(),
+                    parent_type_id: "node.entity".to_string(),
+                    description: String::new(),
+                    active: true,
+                },
+                TypeInheritance {
+                    child_type_id: "node.event".to_string(),
+                    parent_type_id: "node.entity".to_string(),
+                    description: String::new(),
+                    active: true,
+                },
+                TypeInheritance {
+                    child_type_id: "node.task".to_string(),
+                    parent_type_id: "node.event".to_string(),
+                    description: String::new(),
+                    active: true,
+                },
+                TypeInheritance {
+                    child_type_id: "node.message".to_string(),
+                    parent_type_id: "node.event".to_string(),
+                    description: String::new(),
+                    active: true,
+                },
+                TypeInheritance {
+                    child_type_id: "node.place".to_string(),
                     parent_type_id: "node.entity".to_string(),
                     description: String::new(),
                     active: true,
@@ -1215,6 +1288,27 @@ mod tests {
                     edge_type_id: "edge.is_part_of".to_string(),
                     from_node_type_id: "node.entity".to_string(),
                     to_node_type_id: "node.universe".to_string(),
+                    active: true,
+                    description: String::new(),
+                },
+                EdgeEndpointRule {
+                    edge_type_id: "edge.located_at".to_string(),
+                    from_node_type_id: "node.event".to_string(),
+                    to_node_type_id: "node.place".to_string(),
+                    active: true,
+                    description: String::new(),
+                },
+                EdgeEndpointRule {
+                    edge_type_id: "edge.sent_to".to_string(),
+                    from_node_type_id: "node.message".to_string(),
+                    to_node_type_id: "node.person".to_string(),
+                    active: true,
+                    description: String::new(),
+                },
+                EdgeEndpointRule {
+                    edge_type_id: "edge.sent_by".to_string(),
+                    from_node_type_id: "node.message".to_string(),
+                    to_node_type_id: "node.person".to_string(),
                     active: true,
                     description: String::new(),
                 },
@@ -1504,6 +1598,14 @@ mod tests {
         assert_eq!(delta.entities.len(), 2);
         assert_eq!(delta.blocks.len(), 1);
         assert_eq!(delta.edges.len(), 4);
+        assert!(delta
+            .entities
+            .iter()
+            .any(|entity| entity.type_id == "node.person"
+                && entity
+                    .properties
+                    .iter()
+                    .any(|prop| prop.key == "name" && matches!(&prop.value, PropertyScalar::String(name) if name == "Exobrain Assistant"))));
 
         let guard = captured.lock().expect("lock should be available");
         assert_eq!(guard.len(), 1);
@@ -1676,6 +1778,88 @@ mod tests {
         })
         .await
         .expect("implicit IS_PART_OF relationships should satisfy topology rules");
+    }
+
+    #[tokio::test]
+    async fn accepts_message_edges_and_located_at_rules() {
+        let app = KnowledgeApplication::new(
+            Arc::new(FakeSchemaRepo::new()),
+            Arc::new(FakeGraphRepository { root_exists: false }),
+            Arc::new(FakeEmbedder),
+        );
+
+        app.upsert_graph_delta(GraphDelta {
+            user_id: "exobrain".to_string(),
+            visibility: Visibility::Shared,
+            universes: vec![],
+            entities: vec![
+                EntityNode {
+                    id: "8fca4f08-c305-4d16-91b5-e283f5f723aa".to_string(),
+                    type_id: "node.message".to_string(),
+                    universe_id: None,
+                    user_id: "exobrain".to_string(),
+                    visibility: Visibility::Shared,
+                    properties: vec![PropertyValue {
+                        key: "name".to_string(),
+                        value: PropertyScalar::String("Update Message".to_string()),
+                    }],
+                    resolved_labels: vec![],
+                },
+                EntityNode {
+                    id: "46a0475f-76da-4f50-8875-844fd4cb1770".to_string(),
+                    type_id: "node.person".to_string(),
+                    universe_id: None,
+                    user_id: "exobrain".to_string(),
+                    visibility: Visibility::Shared,
+                    properties: vec![PropertyValue {
+                        key: "name".to_string(),
+                        value: PropertyScalar::String("Alex".to_string()),
+                    }],
+                    resolved_labels: vec![],
+                },
+                EntityNode {
+                    id: "a327877d-e8c4-4cd8-a889-a5251120cce5".to_string(),
+                    type_id: "node.place".to_string(),
+                    universe_id: None,
+                    user_id: "exobrain".to_string(),
+                    visibility: Visibility::Shared,
+                    properties: vec![PropertyValue {
+                        key: "name".to_string(),
+                        value: PropertyScalar::String("Workspace".to_string()),
+                    }],
+                    resolved_labels: vec![],
+                },
+            ],
+            blocks: vec![],
+            edges: vec![
+                GraphEdge {
+                    from_id: "8fca4f08-c305-4d16-91b5-e283f5f723aa".to_string(),
+                    to_id: "46a0475f-76da-4f50-8875-844fd4cb1770".to_string(),
+                    edge_type: "SENT_TO".to_string(),
+                    user_id: "exobrain".to_string(),
+                    visibility: Visibility::Shared,
+                    properties: vec![],
+                },
+                GraphEdge {
+                    from_id: "8fca4f08-c305-4d16-91b5-e283f5f723aa".to_string(),
+                    to_id: "46a0475f-76da-4f50-8875-844fd4cb1770".to_string(),
+                    edge_type: "SENT_BY".to_string(),
+                    user_id: "exobrain".to_string(),
+                    visibility: Visibility::Shared,
+                    properties: vec![],
+                },
+                GraphEdge {
+                    from_id: "8fca4f08-c305-4d16-91b5-e283f5f723aa".to_string(),
+                    to_id: "a327877d-e8c4-4cd8-a889-a5251120cce5".to_string(),
+                    edge_type: "LOCATED_AT".to_string(),
+                    user_id: "exobrain".to_string(),
+                    visibility: Visibility::Shared,
+                    properties: vec![],
+                },
+            ],
+        })
+        .await
+        .expect("message and located_at edge rules should be accepted");
     }
 
     #[tokio::test]

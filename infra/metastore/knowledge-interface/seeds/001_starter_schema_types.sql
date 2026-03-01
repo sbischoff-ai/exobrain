@@ -11,6 +11,7 @@ VALUES
   ('node.species', 'node', 'Species', 'A species or taxonomy-like concept used in fiction, games, or real-world biology.', TRUE, NULL),
   ('node.event', 'node', 'Event', 'A time-bound occurrence with optional start and end timestamps.', TRUE, NULL),
   ('node.task', 'node', 'Task', 'An intended or actionable event that may include a due time.', TRUE, NULL),
+  ('node.message', 'node', 'Message', 'A communication event exchanged between participants.', TRUE, NULL),
   ('node.block', 'node', 'Block', 'A content-bearing narrative block used to describe entities.', TRUE, NULL),
   ('node.quote', 'node', 'Quote', 'A block subtype representing quoted speech or text.', TRUE, NULL),
   ('edge.is_part_of', 'edge', 'IS_PART_OF', 'Connects an entity to the single universe it belongs to.', TRUE, NULL),
@@ -19,7 +20,7 @@ VALUES
   ('edge.mentions', 'edge', 'MENTIONS', 'Connects a block to an entity referenced in that block.', TRUE, NULL),
   ('edge.quoted_person', 'edge', 'QUOTED_PERSON', 'Connects a quote block to the person who is quoted.', TRUE, NULL),
   ('edge.related_to', 'edge', 'RELATED_TO', 'Generic relation fallback used when a specific edge type is unavailable.', TRUE, NULL),
-  ('edge.at', 'edge', 'AT', 'Connects an event or task to the place where it occurs.', TRUE, NULL),
+  ('edge.located_at', 'edge', 'LOCATED_AT', 'Connects an event, task, or message to the place where it occurs.', TRUE, NULL),
   ('edge.lies_in', 'edge', 'LIES_IN', 'Place hierarchy relation such as room in building or city in region.', TRUE, NULL),
   ('edge.contains', 'edge', 'CONTAINS', 'Containment relation for inventories, rooms, and nested objects.', TRUE, NULL),
   ('edge.knows', 'edge', 'KNOWS', 'Social relation indicating one person knows another.', TRUE, NULL),
@@ -27,11 +28,12 @@ VALUES
   ('edge.affiliated_with', 'edge', 'AFFILIATED_WITH', 'Affiliation relation connecting a person to an institution.', TRUE, NULL),
   ('edge.participated_in', 'edge', 'PARTICIPATED_IN', 'Participation relation connecting a person to an event.', TRUE, NULL),
   ('edge.involves', 'edge', 'INVOLVES', 'Relation connecting an event to any involved entity.', TRUE, NULL),
-  ('edge.before', 'edge', 'BEFORE', 'Temporal ordering relation between two events.', TRUE, NULL),
   ('edge.causes', 'edge', 'CAUSES', 'Causal relation between two events.', TRUE, NULL),
   ('edge.assigned_to', 'edge', 'ASSIGNED_TO', 'Task assignment relation from task to person.', TRUE, NULL),
   ('edge.done_for', 'edge', 'DONE_FOR', 'Task beneficiary relation from task to related entity.', TRUE, NULL),
   ('edge.depends_on', 'edge', 'DEPENDS_ON', 'Task dependency relation from task to prerequisite task.', TRUE, NULL),
+  ('edge.sent_to', 'edge', 'SENT_TO', 'Message recipient relation from message to person.', TRUE, NULL),
+  ('edge.sent_by', 'edge', 'SENT_BY', 'Message sender relation from message to person.', TRUE, NULL),
   ('edge.about', 'edge', 'ABOUT', 'Classification relation linking entities to concepts they are about.', TRUE, NULL),
   ('edge.instance_of', 'edge', 'INSTANCE_OF', 'Classification relation linking entities to concept classes.', TRUE, NULL),
   ('edge.also_known_as', 'edge', 'ALSO_KNOWN_AS', 'Alias relation for alternative names and identities.', TRUE, NULL),
@@ -47,8 +49,12 @@ SET
 
 UPDATE knowledge_graph_schema_types
 SET active = FALSE, updated_at = NOW()
-WHERE id IN ('node.image', 'block.image', 'block.default', 'block.quote')
+WHERE id IN ('node.image', 'block.image', 'block.default', 'block.quote', 'edge.at', 'edge.before')
    OR kind = 'block';
+
+UPDATE knowledge_graph_schema_type_inheritance
+SET active = FALSE
+WHERE child_type_id = 'node.species' AND parent_type_id = 'node.entity';
 
 INSERT INTO knowledge_graph_schema_type_inheritance (child_type_id, parent_type_id, active, description, universe_id)
 VALUES
@@ -58,9 +64,11 @@ VALUES
   ('node.place', 'node.entity', TRUE, 'Place is a subtype of Entity for location-like nodes.', NULL),
   ('node.object', 'node.entity', TRUE, 'Object is a subtype of Entity for physical items.', NULL),
   ('node.concept', 'node.entity', TRUE, 'Concept is a subtype of Entity for abstract topics.', NULL),
-  ('node.species', 'node.entity', TRUE, 'Species is a subtype of Entity for taxonomy-like classes.', NULL),
+  ('node.species', 'node.entity', FALSE, 'Species no longer directly inherits Entity; use Concept inheritance.', NULL),
   ('node.event', 'node.entity', TRUE, 'Event is a subtype of Entity for time-bound occurrences.', NULL),
   ('node.task', 'node.event', TRUE, 'Task is a subtype of Event that adds due-date intent.', NULL),
+  ('node.message', 'node.event', TRUE, 'Message is a subtype of Event for participant communication.', NULL),
+  ('node.species', 'node.concept', TRUE, 'Species is a subtype of Concept for taxonomy-like classes.', NULL),
   ('node.quote', 'node.block', TRUE, 'Quote is a subtype of Block for attributed quotations.', NULL)
 ON CONFLICT (child_type_id, parent_type_id) DO UPDATE
 SET
@@ -110,13 +118,26 @@ VALUES
   ('edge.summarizes', 'node.block', 'node.block', TRUE, 'Summary blocks point to deeper detail blocks; no cycles should be introduced.', NULL),
   ('edge.mentions', 'node.block', 'node.entity', TRUE, 'Blocks mention entities referenced in their text.', NULL),
   ('edge.quoted_person', 'node.quote', 'node.person', TRUE, 'Quote blocks can attribute quoted text to a person.', NULL),
-  ('edge.at', 'node.event', 'node.place', TRUE, 'Events can be located at places.', NULL),
-  ('edge.at', 'node.task', 'node.place', TRUE, 'Tasks can be located at places.', NULL),
+  ('edge.located_at', 'node.event', 'node.place', TRUE, 'Events can be located at places.', NULL),
+  ('edge.located_at', 'node.task', 'node.place', TRUE, 'Tasks can be located at places.', NULL),
+  ('edge.located_at', 'node.message', 'node.place', TRUE, 'Messages can be located at places.', NULL),
   ('edge.lies_in', 'node.place', 'node.place', TRUE, 'Places may nest within other places.', NULL),
+  ('edge.contains', 'node.entity', 'node.entity', TRUE, 'Containment relation between two entity subtypes.', NULL),
+  ('edge.knows', 'node.person', 'node.person', TRUE, 'People may know other people.', NULL),
   ('edge.participated_in', 'node.person', 'node.event', TRUE, 'People may participate in events.', NULL),
+  ('edge.involves', 'node.event', 'node.entity', TRUE, 'Events may involve any entity subtype.', NULL),
+  ('edge.causes', 'node.event', 'node.event', TRUE, 'Events may causally influence other events.', NULL),
+  ('edge.assigned_to', 'node.task', 'node.person', TRUE, 'Tasks may be assigned to people.', NULL),
+  ('edge.done_for', 'node.task', 'node.entity', TRUE, 'Tasks may be completed for an entity beneficiary.', NULL),
+  ('edge.sent_to', 'node.message', 'node.person', TRUE, 'Messages may target recipient people.', NULL),
+  ('edge.sent_by', 'node.message', 'node.person', TRUE, 'Messages may identify sender people.', NULL),
   ('edge.member_of', 'node.person', 'node.group', TRUE, 'People may belong to groups.', NULL),
   ('edge.affiliated_with', 'node.person', 'node.institution', TRUE, 'People may affiliate with institutions.', NULL),
   ('edge.depends_on', 'node.task', 'node.task', TRUE, 'Tasks may depend on other tasks.', NULL),
+  ('edge.about', 'node.entity', 'node.concept', TRUE, 'Entities may be about concepts.', NULL),
+  ('edge.instance_of', 'node.entity', 'node.concept', TRUE, 'Entities may be instances of concept classes.', NULL),
+  ('edge.also_known_as', 'node.entity', 'node.entity', TRUE, 'Entities may have alternative identities.', NULL),
+  ('edge.same_as', 'node.entity', 'node.entity', TRUE, 'Entities may have strong identity equivalence.', NULL),
   ('edge.related_to', 'node.entity', 'node.entity', TRUE, 'Generic relation between any two entity subtypes.', NULL)
 ON CONFLICT (edge_type_id, from_node_type_id, to_node_type_id) DO UPDATE
 SET
