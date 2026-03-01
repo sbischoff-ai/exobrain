@@ -975,21 +975,9 @@ async fn existing_block_context_for_referenced_summarize_parents(
         .collect();
 
     let mut contexts = HashMap::new();
-    for parent_id in parent_ids {
-        let lookup_edge = edges
-            .iter()
-            .find(|edge| {
-                edge.edge_type.eq_ignore_ascii_case("SUMMARIZES") && edge.from_id == parent_id
-            })
-            .ok_or_else(|| {
-                anyhow!(
-                    "missing SUMMARIZES edge context for parent block {}",
-                    parent_id
-                )
-            })?;
-
+    for (parent_id, (user_id, visibility)) in parent_scopes {
         let context = graph_repository
-            .get_existing_block_context(parent_id, &lookup_edge.user_id, lookup_edge.visibility)
+            .get_existing_block_context(parent_id, user_id, visibility)
             .await?
             .ok_or_else(|| {
                 anyhow!(
