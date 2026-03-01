@@ -26,6 +26,10 @@ For agent-focused helpers, use:
 
 For command walkthroughs, see `docs/agents/codex-runbook.agent.md`.
 
+### Workflow picker
+
+Need a fast start? Use the **"Choose your workflow in 30 seconds"** matrix in `docs/agents/codex-runbook.agent.md` as the source of truth for task-type-to-script/test mapping.
+
 For significant incident/fix history useful for debugging, use `docs/operations/major-changes.md`.
 
 ### Infra expectations

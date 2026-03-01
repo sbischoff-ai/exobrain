@@ -7,6 +7,19 @@ status: active
 
 Use this runbook when Docker/k3d flows are unavailable.
 
+## Choose your workflow in 30 seconds
+
+| Task type | Required services | Skill to invoke | Script entrypoint | Verification command |
+| --- | --- | --- | --- | --- |
+| Backend-only bugfix | Postgres, NATS, Qdrant | None (default agent workflow) | `./scripts/agent/assistant-offline-up.sh` then `./scripts/agent/run-assistant-backend-offline.sh` | `cd apps/assistant-backend && uv run python -m pytest -m "not integration"` |
+| Frontend UI tweak | None (mock API mode) | None (default agent workflow) | `./scripts/agent/run-assistant-frontend-mock.sh` | `cd apps/assistant-frontend && npm test` |
+| Frontend E2E validation | None (mock API mode) | None (default agent workflow) | `./scripts/agent/run-assistant-frontend-e2e.sh` | `./scripts/agent/run-assistant-frontend-e2e.sh` |
+| DB migration/schema changes | Postgres | None (default agent workflow) | `./scripts/agent/assistant-db-setup-native.sh` | `./scripts/agent/assistant-db-setup-native.sh` |
+| Knowledge-interface ingestion changes | Postgres, NATS, Qdrant | None (default agent workflow) | `./scripts/agent/native-infra-up.sh` then `./scripts/local/run-knowledge-interface.sh` | `./scripts/agent/native-infra-health.sh` |
+| Docs-only changes | None | None (default agent workflow) | N/A | `pnpm -s prettier --check docs/agents/codex-runbook.agent.md AGENTS.md` |
+
+Use this matrix to pick the fastest path; detailed instructions remain in the sections below.
+
 ## Quick start (tested)
 
 ```sh
