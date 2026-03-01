@@ -47,12 +47,12 @@ The direct children of `node.entity` are intentionally fixed:
 - `node.concept`
 - `node.event`
 
-`node.task` and `node.message` remain subtypes of `node.event` (not direct children of `node.entity`), and `node.species` is a subtype of `node.concept`.
+`node.task` and `node.message` remain subtypes of `node.event` (not direct children of `node.entity`), `node.chat_message` is a subtype of `node.message`, `node.ai_agent` is a subtype of `node.person`, and `node.species` is a subtype of `node.concept`.
 
 ## Starter node labels
 
 - `Universe`
-- `Entity` (+ starter sublabels like `Person`, `Group`, `Institution`, `Place`, `Object`, `Concept`, `Species`, `Event`, `Task`, `Message`)
+- `Entity` (+ starter sublabels like `Person`, `AI Agent`, `Group`, `Institution`, `Place`, `Object`, `Concept`, `Species`, `Event`, `Task`, `Message`, `Chat Message`)
 - `Block` (+ optional `Quote`)
 
 ## Starter edge set
@@ -62,11 +62,12 @@ The direct children of `node.entity` are intentionally fixed:
 - Spatial/containment: `LOCATED_AT`, `LIES_IN`, `CONTAINS`
 - Social: `KNOWS`, `MEMBER_OF`, `AFFILIATED_WITH`
 - Event/task: `PARTICIPATED_IN`, `INVOLVES`, `CAUSES`, `ASSIGNED_TO`, `DONE_FOR`, `DEPENDS_ON`, `SENT_TO`, `SENT_BY`
+- Block semantics: `CONTRADICTS`
 - Classification/identity: `ABOUT`, `INSTANCE_OF`, `ALSO_KNOWN_AS`, `SAME_AS`
 
 ## Trust metadata
 
-Edges may include:
+Edges must include:
 - `confidence: float`
 - `status: asserted | disputed | falsified`
 - `context: string`

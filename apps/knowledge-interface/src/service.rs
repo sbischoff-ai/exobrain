@@ -50,7 +50,10 @@ impl KnowledgeApplication {
                 let node_id = schema_type.id.clone();
                 let type_properties = properties
                     .iter()
-                    .filter(|p| p.owner_type_id == node_id)
+                    .filter(|p| {
+                        p.owner_type_id == node_id
+                            || is_global_property_owner(&node_id, &p.owner_type_id)
+                    })
                     .cloned()
                     .collect();
                 let parents = inheritance
@@ -73,7 +76,10 @@ impl KnowledgeApplication {
                 let edge_id = schema_type.id.clone();
                 let type_properties = properties
                     .iter()
-                    .filter(|p| p.owner_type_id == edge_id)
+                    .filter(|p| {
+                        p.owner_type_id == edge_id
+                            || is_global_property_owner(&edge_id, &p.owner_type_id)
+                    })
                     .cloned()
                     .collect();
                 let rules = edge_rules
@@ -240,7 +246,7 @@ impl KnowledgeApplication {
                     edge_type: "IS_PART_OF".to_string(),
                     user_id: EXOBRAIN_USER_ID.to_string(),
                     visibility: Visibility::Shared,
-                    properties: vec![],
+                    properties: default_edge_properties("bootstrap universe assignment"),
                 },
                 GraphEdge {
                     from_id: COMMON_EXOBRAIN_ENTITY_ID.to_string(),
@@ -248,7 +254,7 @@ impl KnowledgeApplication {
                     edge_type: "DESCRIBED_BY".to_string(),
                     user_id: EXOBRAIN_USER_ID.to_string(),
                     visibility: Visibility::Shared,
-                    properties: vec![],
+                    properties: default_edge_properties("bootstrap description link"),
                 },
             ],
         }
@@ -296,7 +302,7 @@ impl KnowledgeApplication {
                 },
                 EntityNode {
                     id: assistant_entity_id.clone(),
-                    type_id: "node.person".to_string(),
+                    type_id: "node.ai_agent".to_string(),
                     universe_id: Some(COMMON_UNIVERSE_ID.to_string()),
                     user_id: user_id.to_string(),
                     visibility: Visibility::Shared,
@@ -325,7 +331,7 @@ impl KnowledgeApplication {
                     edge_type: "IS_PART_OF".to_string(),
                     user_id: user_id.to_string(),
                     visibility: Visibility::Shared,
-                    properties: vec![],
+                    properties: default_edge_properties("user universe assignment"),
                 },
                 GraphEdge {
                     from_id: assistant_entity_id.clone(),
@@ -333,7 +339,7 @@ impl KnowledgeApplication {
                     edge_type: "IS_PART_OF".to_string(),
                     user_id: user_id.to_string(),
                     visibility: Visibility::Shared,
-                    properties: vec![],
+                    properties: default_edge_properties("assistant universe assignment"),
                 },
                 GraphEdge {
                     from_id: assistant_entity_id.clone(),
@@ -341,7 +347,7 @@ impl KnowledgeApplication {
                     edge_type: "RELATED_TO".to_string(),
                     user_id: user_id.to_string(),
                     visibility: Visibility::Shared,
-                    properties: vec![],
+                    properties: default_edge_properties("assistant relationship"),
                 },
                 GraphEdge {
                     from_id: assistant_entity_id,
@@ -349,7 +355,7 @@ impl KnowledgeApplication {
                     edge_type: "DESCRIBED_BY".to_string(),
                     user_id: user_id.to_string(),
                     visibility: Visibility::Shared,
-                    properties: vec![],
+                    properties: default_edge_properties("assistant description link"),
                 },
             ],
         }
@@ -608,6 +614,30 @@ fn resolve_labels_for_type(
         .collect()
 }
 
+fn default_edge_properties(context: &str) -> Vec<PropertyValue> {
+    vec![
+        PropertyValue {
+            key: "confidence".to_string(),
+            value: PropertyScalar::Float(1.0),
+        },
+        PropertyValue {
+            key: "status".to_string(),
+            value: PropertyScalar::String("asserted".to_string()),
+        },
+        PropertyValue {
+            key: "context".to_string(),
+            value: PropertyScalar::String(context.to_string()),
+        },
+    ]
+}
+
+fn is_global_property_owner(owner_type_id: &str, property_owner_type_id: &str) -> bool {
+    (property_owner_type_id == "node"
+        && (owner_type_id == "node" || owner_type_id.starts_with("node.")))
+        || (property_owner_type_id == "edge"
+            && (owner_type_id == "edge" || owner_type_id.starts_with("edge.")))
+}
+
 fn validate_graph_id(id: &str, kind: &str) -> std::result::Result<(), String> {
     if id.trim().is_empty() {
         return Err(format!("{kind} id is required"));
@@ -632,7 +662,8 @@ fn validate_properties(
         .filter(|p| {
             p.required
                 && (p.owner_type_id == owner_type_id
-                    || is_assignable(owner_type_id, &p.owner_type_id, inheritance))
+                    || is_assignable(owner_type_id, &p.owner_type_id, inheritance)
+                    || is_global_property_owner(owner_type_id, &p.owner_type_id))
         })
         .map(|p| p.prop_name.clone())
         .collect();
@@ -669,6 +700,7 @@ fn collect_allowed_properties(
         .filter(|prop| {
             prop.owner_type_id == owner_type_id
                 || is_assignable(owner_type_id, &prop.owner_type_id, inheritance)
+                || is_global_property_owner(owner_type_id, &prop.owner_type_id)
         })
         .map(|prop| (prop.prop_name.clone(), prop.value_type.clone()))
         .collect()
@@ -1115,6 +1147,20 @@ mod tests {
                         active: true,
                     },
                     SchemaType {
+                        id: "node.chat_message".to_string(),
+                        kind: "node".to_string(),
+                        name: "Chat Message".to_string(),
+                        description: String::new(),
+                        active: true,
+                    },
+                    SchemaType {
+                        id: "node.ai_agent".to_string(),
+                        kind: "node".to_string(),
+                        name: "AI Agent".to_string(),
+                        description: String::new(),
+                        active: true,
+                    },
+                    SchemaType {
                         id: "node.place".to_string(),
                         kind: "node".to_string(),
                         name: "Place".to_string(),
@@ -1172,6 +1218,13 @@ mod tests {
                         description: String::new(),
                         active: true,
                     },
+                    SchemaType {
+                        id: "edge.contradicts".to_string(),
+                        kind: "edge".to_string(),
+                        name: "CONTRADICTS".to_string(),
+                        description: String::new(),
+                        active: true,
+                    },
                 ],
                 _ => vec![],
             };
@@ -1225,6 +1278,18 @@ mod tests {
                     active: true,
                 },
                 TypeInheritance {
+                    child_type_id: "node.chat_message".to_string(),
+                    parent_type_id: "node.message".to_string(),
+                    description: String::new(),
+                    active: true,
+                },
+                TypeInheritance {
+                    child_type_id: "node.ai_agent".to_string(),
+                    parent_type_id: "node.person".to_string(),
+                    description: String::new(),
+                    active: true,
+                },
+                TypeInheritance {
                     child_type_id: "node.place".to_string(),
                     parent_type_id: "node.entity".to_string(),
                     description: String::new(),
@@ -1258,6 +1323,36 @@ mod tests {
                 TypeProperty {
                     owner_type_id: "node.block".to_string(),
                     prop_name: "text".to_string(),
+                    value_type: "string".to_string(),
+                    required: true,
+                    readable: true,
+                    writable: true,
+                    active: true,
+                    description: String::new(),
+                },
+                TypeProperty {
+                    owner_type_id: "edge".to_string(),
+                    prop_name: "confidence".to_string(),
+                    value_type: "float".to_string(),
+                    required: true,
+                    readable: true,
+                    writable: true,
+                    active: true,
+                    description: String::new(),
+                },
+                TypeProperty {
+                    owner_type_id: "edge".to_string(),
+                    prop_name: "status".to_string(),
+                    value_type: "string".to_string(),
+                    required: true,
+                    readable: true,
+                    writable: true,
+                    active: true,
+                    description: String::new(),
+                },
+                TypeProperty {
+                    owner_type_id: "edge".to_string(),
+                    prop_name: "context".to_string(),
                     value_type: "string".to_string(),
                     required: true,
                     readable: true,
@@ -1309,6 +1404,13 @@ mod tests {
                     edge_type_id: "edge.sent_by".to_string(),
                     from_node_type_id: "node.message".to_string(),
                     to_node_type_id: "node.person".to_string(),
+                    active: true,
+                    description: String::new(),
+                },
+                EdgeEndpointRule {
+                    edge_type_id: "edge.contradicts".to_string(),
+                    from_node_type_id: "node.block".to_string(),
+                    to_node_type_id: "node.block".to_string(),
                     active: true,
                     description: String::new(),
                 },
@@ -1526,7 +1628,7 @@ mod tests {
                     edge_type: "IS_PART_OF".to_string(),
                     user_id: "user-1".to_string(),
                     visibility: Visibility::Private,
-                    properties: vec![],
+                    properties: default_edge_properties("test universe assignment"),
                 },
                 GraphEdge {
                     from_id: "550e8400-e29b-41d4-a716-446655440001".to_string(),
@@ -1534,7 +1636,7 @@ mod tests {
                     edge_type: "DESCRIBED_BY".to_string(),
                     user_id: "user-1".to_string(),
                     visibility: Visibility::Private,
-                    properties: vec![],
+                    properties: default_edge_properties("test location"),
                 },
             ],
         })
@@ -1601,7 +1703,7 @@ mod tests {
         assert!(delta
             .entities
             .iter()
-            .any(|entity| entity.type_id == "node.person"
+            .any(|entity| entity.type_id == "node.ai_agent"
                 && entity
                     .properties
                     .iter()
@@ -1838,7 +1940,7 @@ mod tests {
                     edge_type: "SENT_TO".to_string(),
                     user_id: "exobrain".to_string(),
                     visibility: Visibility::Shared,
-                    properties: vec![],
+                    properties: default_edge_properties("test recipient"),
                 },
                 GraphEdge {
                     from_id: "8fca4f08-c305-4d16-91b5-e283f5f723aa".to_string(),
@@ -1846,7 +1948,7 @@ mod tests {
                     edge_type: "SENT_BY".to_string(),
                     user_id: "exobrain".to_string(),
                     visibility: Visibility::Shared,
-                    properties: vec![],
+                    properties: default_edge_properties("test sender"),
                 },
                 GraphEdge {
                     from_id: "8fca4f08-c305-4d16-91b5-e283f5f723aa".to_string(),
@@ -1854,12 +1956,149 @@ mod tests {
                     edge_type: "LOCATED_AT".to_string(),
                     user_id: "exobrain".to_string(),
                     visibility: Visibility::Shared,
-                    properties: vec![],
+                    properties: default_edge_properties("test location"),
                 },
             ],
         })
         .await
         .expect("message and located_at edge rules should be accepted");
+    }
+
+    #[tokio::test]
+    async fn rejects_edges_missing_required_global_metadata() {
+        let app = KnowledgeApplication::new(
+            Arc::new(FakeSchemaRepo::new()),
+            Arc::new(FakeGraphRepository { root_exists: false }),
+            Arc::new(FakeEmbedder),
+        );
+
+        let err = app
+            .upsert_graph_delta(GraphDelta {
+                user_id: "exobrain".to_string(),
+                visibility: Visibility::Shared,
+                universes: vec![],
+                entities: vec![
+                    EntityNode {
+                        id: "2b9bdcc4-2f4a-4b58-9097-8ab205d8d506".to_string(),
+                        type_id: "node.person".to_string(),
+                        universe_id: None,
+                        user_id: "exobrain".to_string(),
+                        visibility: Visibility::Shared,
+                        properties: vec![PropertyValue {
+                            key: "name".to_string(),
+                            value: PropertyScalar::String("Alex".to_string()),
+                        }],
+                        resolved_labels: vec![],
+                    },
+                    EntityNode {
+                        id: "f904fdb6-1770-4638-a2fd-65eae6553be8".to_string(),
+                        type_id: "node.person".to_string(),
+                        universe_id: None,
+                        user_id: "exobrain".to_string(),
+                        visibility: Visibility::Shared,
+                        properties: vec![PropertyValue {
+                            key: "name".to_string(),
+                            value: PropertyScalar::String("Morgan".to_string()),
+                        }],
+                        resolved_labels: vec![],
+                    },
+                ],
+                blocks: vec![],
+                edges: vec![GraphEdge {
+                    from_id: "2b9bdcc4-2f4a-4b58-9097-8ab205d8d506".to_string(),
+                    to_id: "f904fdb6-1770-4638-a2fd-65eae6553be8".to_string(),
+                    edge_type: "RELATED_TO".to_string(),
+                    user_id: "exobrain".to_string(),
+                    visibility: Visibility::Shared,
+                    properties: vec![],
+                }],
+            })
+            .await
+            .expect_err("edge metadata should be required for all edges");
+
+        let message = err.to_string();
+        assert!(message.contains("required property 'confidence'"));
+        assert!(message.contains("required property 'status'"));
+        assert!(message.contains("required property 'context'"));
+    }
+
+    #[tokio::test]
+    async fn accepts_block_contradicts_edge() {
+        let app = KnowledgeApplication::new(
+            Arc::new(FakeSchemaRepo::new()),
+            Arc::new(FakeGraphRepository { root_exists: false }),
+            Arc::new(FakeEmbedder),
+        );
+
+        app.upsert_graph_delta(GraphDelta {
+            user_id: "exobrain".to_string(),
+            visibility: Visibility::Shared,
+            universes: vec![],
+            entities: vec![EntityNode {
+                id: "64357dfa-389d-401e-a246-c7a97147f627".to_string(),
+                type_id: "node.person".to_string(),
+                universe_id: None,
+                user_id: "exobrain".to_string(),
+                visibility: Visibility::Shared,
+                properties: vec![PropertyValue {
+                    key: "name".to_string(),
+                    value: PropertyScalar::String("Witness".to_string()),
+                }],
+                resolved_labels: vec![],
+            }],
+            blocks: vec![
+                BlockNode {
+                    id: "352832a6-fe04-4697-9de0-dbec398adf13".to_string(),
+                    type_id: "node.block".to_string(),
+                    user_id: "exobrain".to_string(),
+                    visibility: Visibility::Shared,
+                    properties: vec![PropertyValue {
+                        key: "text".to_string(),
+                        value: PropertyScalar::String("Statement A".to_string()),
+                    }],
+                    resolved_labels: vec![],
+                },
+                BlockNode {
+                    id: "afc3bff2-2478-43f0-bb88-9199f960d0c1".to_string(),
+                    type_id: "node.block".to_string(),
+                    user_id: "exobrain".to_string(),
+                    visibility: Visibility::Shared,
+                    properties: vec![PropertyValue {
+                        key: "text".to_string(),
+                        value: PropertyScalar::String("Statement B".to_string()),
+                    }],
+                    resolved_labels: vec![],
+                },
+            ],
+            edges: vec![
+                GraphEdge {
+                    from_id: "64357dfa-389d-401e-a246-c7a97147f627".to_string(),
+                    to_id: "352832a6-fe04-4697-9de0-dbec398adf13".to_string(),
+                    edge_type: "DESCRIBED_BY".to_string(),
+                    user_id: "exobrain".to_string(),
+                    visibility: Visibility::Shared,
+                    properties: default_edge_properties("test root a"),
+                },
+                GraphEdge {
+                    from_id: "64357dfa-389d-401e-a246-c7a97147f627".to_string(),
+                    to_id: "afc3bff2-2478-43f0-bb88-9199f960d0c1".to_string(),
+                    edge_type: "DESCRIBED_BY".to_string(),
+                    user_id: "exobrain".to_string(),
+                    visibility: Visibility::Shared,
+                    properties: default_edge_properties("test root b"),
+                },
+                GraphEdge {
+                    from_id: "352832a6-fe04-4697-9de0-dbec398adf13".to_string(),
+                    to_id: "afc3bff2-2478-43f0-bb88-9199f960d0c1".to_string(),
+                    edge_type: "CONTRADICTS".to_string(),
+                    user_id: "exobrain".to_string(),
+                    visibility: Visibility::Shared,
+                    properties: default_edge_properties("test contradiction"),
+                },
+            ],
+        })
+        .await
+        .expect("block CONTRADICTS edge should be accepted");
     }
 
     #[tokio::test]

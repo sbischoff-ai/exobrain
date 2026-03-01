@@ -1,5 +1,6 @@
 INSERT INTO knowledge_graph_schema_types (id, kind, name, description, active, universe_id)
 VALUES
+  ('node', 'node', 'Node', 'Abstract base type whose properties apply to all node types.', TRUE, NULL),
   ('node.universe', 'node', 'Universe', 'Top-level world scope that groups entities into a coherent setting.', TRUE, NULL),
   ('node.entity', 'node', 'Entity', 'Base world-model node for people, places, things, events, and concepts.', TRUE, NULL),
   ('node.person', 'node', 'Person', 'A person entity representing an individual actor in the world model.', TRUE, NULL),
@@ -12,8 +13,11 @@ VALUES
   ('node.event', 'node', 'Event', 'A time-bound occurrence with optional start and end timestamps.', TRUE, NULL),
   ('node.task', 'node', 'Task', 'An intended or actionable event that may include a due time.', TRUE, NULL),
   ('node.message', 'node', 'Message', 'A communication event exchanged between participants.', TRUE, NULL),
+  ('node.chat_message', 'node', 'Chat Message', 'A conversational message event exchanged within a chat thread.', TRUE, NULL),
+  ('node.ai_agent', 'node', 'AI Agent', 'A person subtype representing a software-based autonomous agent.', TRUE, NULL),
   ('node.block', 'node', 'Block', 'A content-bearing narrative block used to describe entities.', TRUE, NULL),
   ('node.quote', 'node', 'Quote', 'A block subtype representing quoted speech or text.', TRUE, NULL),
+  ('edge', 'edge', 'Edge', 'Abstract base type whose properties apply to all edge types.', TRUE, NULL),
   ('edge.is_part_of', 'edge', 'IS_PART_OF', 'Connects an entity to the single universe it belongs to.', TRUE, NULL),
   ('edge.described_by', 'edge', 'DESCRIBED_BY', 'Connects an entity to its root intro block.', TRUE, NULL),
   ('edge.summarizes', 'edge', 'SUMMARIZES', 'Connects a summary block to a deeper detail block.', TRUE, NULL),
@@ -37,7 +41,8 @@ VALUES
   ('edge.about', 'edge', 'ABOUT', 'Classification relation linking entities to concepts they are about.', TRUE, NULL),
   ('edge.instance_of', 'edge', 'INSTANCE_OF', 'Classification relation linking entities to concept classes.', TRUE, NULL),
   ('edge.also_known_as', 'edge', 'ALSO_KNOWN_AS', 'Alias relation for alternative names and identities.', TRUE, NULL),
-  ('edge.same_as', 'edge', 'SAME_AS', 'Strong identity equivalence relation for deduplication.', TRUE, NULL)
+  ('edge.same_as', 'edge', 'SAME_AS', 'Strong identity equivalence relation for deduplication.', TRUE, NULL),
+  ('edge.contradicts', 'edge', 'CONTRADICTS', 'Connects one block to another block that it contradicts.', TRUE, NULL)
 ON CONFLICT (id) DO UPDATE
 SET
   kind = EXCLUDED.kind,
@@ -68,6 +73,8 @@ VALUES
   ('node.event', 'node.entity', TRUE, 'Event is a subtype of Entity for time-bound occurrences.', NULL),
   ('node.task', 'node.event', TRUE, 'Task is a subtype of Event that adds due-date intent.', NULL),
   ('node.message', 'node.event', TRUE, 'Message is a subtype of Event for participant communication.', NULL),
+  ('node.chat_message', 'node.message', TRUE, 'Chat Message is a subtype of Message for threaded conversations.', NULL),
+  ('node.ai_agent', 'node.person', TRUE, 'AI Agent is a subtype of Person for autonomous software actors.', NULL),
   ('node.species', 'node.concept', TRUE, 'Species is a subtype of Concept for taxonomy-like classes.', NULL),
   ('node.quote', 'node.block', TRUE, 'Quote is a subtype of Block for attributed quotations.', NULL)
 ON CONFLICT (child_type_id, parent_type_id) DO UPDATE
@@ -91,12 +98,9 @@ VALUES
   ('node.task', 'due', 'datetime', FALSE, TRUE, TRUE, TRUE, 'Optional task due timestamp indicating intended completion time.', NULL, NULL, NULL, NULL, NULL),
   ('node.block', 'id', 'string', TRUE, TRUE, FALSE, TRUE, 'Stable global identifier for the block node.', NULL, NULL, NULL, NULL, NULL),
   ('node.block', 'text', 'string', TRUE, TRUE, TRUE, TRUE, 'Primary content text for the block used for reading and embeddings.', NULL, NULL, NULL, NULL, NULL),
-  ('edge.is_part_of', 'confidence', 'float', FALSE, TRUE, TRUE, TRUE, 'Confidence score from 0.0 to 1.0 representing trust in this relation.', NULL, NULL, 0, 1, NULL),
-  ('edge.is_part_of', 'status', 'string', FALSE, TRUE, TRUE, TRUE, 'Truth status of the relation.', 'asserted|disputed|falsified', NULL, NULL, NULL, NULL),
-  ('edge.is_part_of', 'context', 'string', FALSE, TRUE, TRUE, TRUE, 'Short provenance hint describing where the relation came from.', NULL, NULL, NULL, NULL, NULL),
-  ('edge.related_to', 'confidence', 'float', FALSE, TRUE, TRUE, TRUE, 'Confidence score from 0.0 to 1.0 representing trust in this relation.', NULL, NULL, 0, 1, NULL),
-  ('edge.related_to', 'status', 'string', FALSE, TRUE, TRUE, TRUE, 'Truth status of the relation.', 'asserted|disputed|falsified', NULL, NULL, NULL, NULL),
-  ('edge.related_to', 'context', 'string', FALSE, TRUE, TRUE, TRUE, 'Short provenance hint describing where the relation came from.', NULL, NULL, NULL, NULL, NULL)
+  ('edge', 'confidence', 'float', TRUE, TRUE, TRUE, TRUE, 'Required confidence score from 0.0 to 1.0 representing trust in this relation.', NULL, NULL, 0, 1, NULL),
+  ('edge', 'status', 'string', TRUE, TRUE, TRUE, TRUE, 'Required truth status of the relation.', 'asserted|disputed|falsified', NULL, NULL, NULL, NULL),
+  ('edge', 'context', 'string', TRUE, TRUE, TRUE, TRUE, 'Required provenance hint describing where the relation came from.', NULL, NULL, NULL, NULL, NULL)
 ON CONFLICT (owner_type_id, prop_name) DO UPDATE
 SET
   value_type = EXCLUDED.value_type,
@@ -138,6 +142,7 @@ VALUES
   ('edge.instance_of', 'node.entity', 'node.concept', TRUE, 'Entities may be instances of concept classes.', NULL),
   ('edge.also_known_as', 'node.entity', 'node.entity', TRUE, 'Entities may have alternative identities.', NULL),
   ('edge.same_as', 'node.entity', 'node.entity', TRUE, 'Entities may have strong identity equivalence.', NULL),
+  ('edge.contradicts', 'node.block', 'node.block', TRUE, 'Blocks may contradict other blocks.', NULL),
   ('edge.related_to', 'node.entity', 'node.entity', TRUE, 'Generic relation between any two entity subtypes.', NULL)
 ON CONFLICT (edge_type_id, from_node_type_id, to_node_type_id) DO UPDATE
 SET

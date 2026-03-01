@@ -35,11 +35,13 @@ The server resolves and writes the full label chain from schema inheritance (for
 ## Required/allowed properties
 
 Properties are checked against schema property definitions including inheritance.
+Global `node`/`edge` property definitions also apply to every node/edge subtype without duplicating definitions per concrete type.
 
 Example:
 
 - `node.person` inherits `node.entity`
 - if `node.entity` defines `name`, then `node.person` can use `name`
+- if `edge` defines `confidence`/`status`/`context`, then every edge type (for example `RELATED_TO`, `LOCATED_AT`) must provide them
 
 ## Edge endpoint validation
 
