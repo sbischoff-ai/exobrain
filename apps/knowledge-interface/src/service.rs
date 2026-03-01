@@ -551,7 +551,7 @@ impl KnowledgeApplication {
             }
         }
 
-        enforce_relationship_rules(delta, &mut errors);
+        self.enforce_graph_state_rules(delta, &mut errors).await?;
 
         if errors.is_empty() {
             return Ok(inheritance);
@@ -561,6 +561,124 @@ impl KnowledgeApplication {
             "graph delta validation failed:\n- {}",
             errors.join("\n- ")
         ))
+    }
+
+    async fn enforce_graph_state_rules(
+        &self,
+        delta: &GraphDelta,
+        errors: &mut Vec<String>,
+    ) -> Result<()> {
+        let mut incoming_by_node: HashMap<&str, usize> = HashMap::new();
+        let mut outgoing_by_node: HashMap<&str, usize> = HashMap::new();
+        let mut entity_is_part_of: HashMap<&str, usize> = HashMap::new();
+        let mut block_parent_edges: HashMap<&str, usize> = HashMap::new();
+
+        for edge in &delta.edges {
+            *incoming_by_node.entry(edge.to_id.as_str()).or_insert(0) += 1;
+            *outgoing_by_node.entry(edge.from_id.as_str()).or_insert(0) += 1;
+
+            if edge.edge_type.eq_ignore_ascii_case("IS_PART_OF") {
+                *entity_is_part_of.entry(edge.from_id.as_str()).or_insert(0) += 1;
+            }
+            if edge.edge_type.eq_ignore_ascii_case("DESCRIBED_BY")
+                || edge.edge_type.eq_ignore_ascii_case("SUMMARIZES")
+            {
+                *block_parent_edges.entry(edge.to_id.as_str()).or_insert(0) += 1;
+            }
+        }
+
+        for entity in &delta.entities {
+            let target_universe_id = entity.universe_id.as_deref().unwrap_or(COMMON_UNIVERSE_ID);
+            *outgoing_by_node.entry(entity.id.as_str()).or_insert(0) += 1;
+            *incoming_by_node.entry(target_universe_id).or_insert(0) += 1;
+            *entity_is_part_of.entry(entity.id.as_str()).or_insert(0) += 1;
+        }
+
+        for universe in &delta.universes {
+            let existing = self
+                .graph_repository
+                .get_node_relationship_counts(&universe.id)
+                .await?;
+            let payload_total = incoming_by_node
+                .get(universe.id.as_str())
+                .copied()
+                .unwrap_or(0)
+                + outgoing_by_node
+                    .get(universe.id.as_str())
+                    .copied()
+                    .unwrap_or(0);
+            if existing.total + payload_total == 0 {
+                errors.push(format!(
+                    "universe {} must have at least one relationship",
+                    universe.id
+                ));
+            }
+        }
+
+        for entity in &delta.entities {
+            let existing = self
+                .graph_repository
+                .get_node_relationship_counts(&entity.id)
+                .await?;
+            let payload_total = incoming_by_node
+                .get(entity.id.as_str())
+                .copied()
+                .unwrap_or(0)
+                + outgoing_by_node
+                    .get(entity.id.as_str())
+                    .copied()
+                    .unwrap_or(0);
+            if existing.total + payload_total == 0 {
+                errors.push(format!(
+                    "entity {} must have at least one relationship",
+                    entity.id
+                ));
+            }
+            let payload_is_part_of = entity_is_part_of
+                .get(entity.id.as_str())
+                .copied()
+                .unwrap_or(0);
+            if existing.entity_is_part_of + payload_is_part_of == 0 {
+                errors.push(format!(
+                    "entity {} must have IS_PART_OF edge to a universe",
+                    entity.id
+                ));
+            }
+        }
+
+        for block in &delta.blocks {
+            let existing = self
+                .graph_repository
+                .get_node_relationship_counts(&block.id)
+                .await?;
+            let payload_total = incoming_by_node
+                .get(block.id.as_str())
+                .copied()
+                .unwrap_or(0)
+                + outgoing_by_node
+                    .get(block.id.as_str())
+                    .copied()
+                    .unwrap_or(0);
+            if existing.total + payload_total == 0 {
+                errors.push(format!(
+                    "block {} must have at least one relationship",
+                    block.id
+                ));
+            }
+            let payload_parent_count = block_parent_edges
+                .get(block.id.as_str())
+                .copied()
+                .unwrap_or(0);
+            let total_parent_count = existing.block_parent_edges + payload_parent_count;
+            if total_parent_count != 1 {
+                errors.push(format!(
+                    "block {} must have exactly one incoming DESCRIBED_BY or SUMMARIZES edge",
+                    block.id
+                ));
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -723,108 +841,6 @@ fn validate_delta_access_scope(_delta: &GraphDelta) -> Result<()> {
     Ok(())
 }
 
-fn enforce_relationship_rules(delta: &GraphDelta, errors: &mut Vec<String>) {
-    let mut incoming_by_node: HashMap<&str, usize> = HashMap::new();
-    let mut outgoing_by_node: HashMap<&str, usize> = HashMap::new();
-    let mut entity_is_part_of: HashMap<&str, usize> = HashMap::new();
-    let mut block_parent_edges: HashMap<&str, usize> = HashMap::new();
-
-    // Explicit relationships in edges[]
-    for edge in &delta.edges {
-        *incoming_by_node.entry(edge.to_id.as_str()).or_insert(0) += 1;
-        *outgoing_by_node.entry(edge.from_id.as_str()).or_insert(0) += 1;
-
-        if edge.edge_type.eq_ignore_ascii_case("IS_PART_OF") {
-            *entity_is_part_of.entry(edge.from_id.as_str()).or_insert(0) += 1;
-        }
-        if edge.edge_type.eq_ignore_ascii_case("DESCRIBED_BY")
-            || edge.edge_type.eq_ignore_ascii_case("SUMMARIZES")
-        {
-            *block_parent_edges.entry(edge.to_id.as_str()).or_insert(0) += 1;
-        }
-    }
-
-    // Implicit IS_PART_OF relationships from EntityNode.universe_id (or Real World default).
-    for entity in &delta.entities {
-        let target_universe_id = entity.universe_id.as_deref().unwrap_or(COMMON_UNIVERSE_ID);
-        *outgoing_by_node.entry(entity.id.as_str()).or_insert(0) += 1;
-        *incoming_by_node.entry(target_universe_id).or_insert(0) += 1;
-        *entity_is_part_of.entry(entity.id.as_str()).or_insert(0) += 1;
-    }
-
-    for universe in &delta.universes {
-        let total = incoming_by_node
-            .get(universe.id.as_str())
-            .copied()
-            .unwrap_or(0)
-            + outgoing_by_node
-                .get(universe.id.as_str())
-                .copied()
-                .unwrap_or(0);
-        if total == 0 {
-            errors.push(format!(
-                "universe {} must have at least one relationship",
-                universe.id
-            ));
-        }
-    }
-
-    for entity in &delta.entities {
-        let total = incoming_by_node
-            .get(entity.id.as_str())
-            .copied()
-            .unwrap_or(0)
-            + outgoing_by_node
-                .get(entity.id.as_str())
-                .copied()
-                .unwrap_or(0);
-        if total == 0 {
-            errors.push(format!(
-                "entity {} must have at least one relationship",
-                entity.id
-            ));
-        }
-        if entity_is_part_of
-            .get(entity.id.as_str())
-            .copied()
-            .unwrap_or(0)
-            == 0
-        {
-            errors.push(format!(
-                "entity {} must have IS_PART_OF edge to a universe",
-                entity.id
-            ));
-        }
-    }
-
-    for block in &delta.blocks {
-        let total = incoming_by_node
-            .get(block.id.as_str())
-            .copied()
-            .unwrap_or(0)
-            + outgoing_by_node
-                .get(block.id.as_str())
-                .copied()
-                .unwrap_or(0);
-        if total == 0 {
-            errors.push(format!(
-                "block {} must have at least one relationship",
-                block.id
-            ));
-        }
-        let count = block_parent_edges
-            .get(block.id.as_str())
-            .copied()
-            .unwrap_or(0);
-        if count != 1 {
-            errors.push(format!(
-                "block {} must have exactly one incoming DESCRIBED_BY or SUMMARIZES edge",
-                block.id
-            ));
-        }
-    }
-}
-
 fn extract_text(properties: &[crate::domain::PropertyValue]) -> String {
     properties
         .iter()
@@ -859,6 +875,18 @@ async fn block_levels_for_blocks(
         levels
             .entry(block_id.clone())
             .or_insert(context.block_level);
+    }
+
+    for block in blocks {
+        if levels.contains_key(&block.id) {
+            continue;
+        }
+        if let Some(existing) = graph_repository
+            .get_existing_block_context(&block.id, &block.user_id, block.visibility)
+            .await?
+        {
+            levels.insert(block.id.clone(), existing.block_level);
+        }
     }
 
     let summarize_edges: Vec<(&str, &str)> = edges
@@ -944,6 +972,13 @@ async fn root_entity_ids_for_blocks(
                 out.insert(block.id.clone(), context.root_entity_id.clone());
                 break;
             }
+            if let Some(existing) = graph_repository
+                .get_existing_block_context(current, &block.user_id, block.visibility)
+                .await?
+            {
+                out.insert(block.id.clone(), existing.root_entity_id);
+                break;
+            }
             return Err(anyhow!(
                 "unable to resolve root_entity_id for block {} from DESCRIBED_BY/SUMMARIZES edges",
                 block.id
@@ -1015,8 +1050,9 @@ mod tests {
 
     use crate::{
         domain::{
-            BlockNode, EdgeEndpointRule, EntityNode, GraphEdge, PropertyValue, TypeInheritance,
-            TypeProperty, UpsertSchemaTypePropertyInput, Visibility,
+            BlockNode, EdgeEndpointRule, EntityNode, GraphEdge, NodeRelationshipCounts,
+            PropertyValue, TypeInheritance, TypeProperty, UpsertSchemaTypePropertyInput,
+            Visibility,
         },
         ports::{Embedder, GraphRepository, SchemaRepository},
     };
@@ -1440,6 +1476,13 @@ mod tests {
         ) -> Result<Option<ExistingBlockContext>> {
             Ok(None)
         }
+
+        async fn get_node_relationship_counts(
+            &self,
+            _node_id: &str,
+        ) -> Result<NodeRelationshipCounts> {
+            Ok(NodeRelationshipCounts::default())
+        }
     }
 
     struct FakeEmbedder;
@@ -1481,6 +1524,136 @@ mod tests {
         ) -> Result<Option<ExistingBlockContext>> {
             Ok(self.block_contexts.get(block_id).cloned())
         }
+
+        async fn get_node_relationship_counts(
+            &self,
+            _node_id: &str,
+        ) -> Result<NodeRelationshipCounts> {
+            Ok(NodeRelationshipCounts::default())
+        }
+    }
+
+    struct CountingGraphRepository {
+        counts: HashMap<String, NodeRelationshipCounts>,
+        block_contexts: HashMap<String, ExistingBlockContext>,
+    }
+
+    #[async_trait]
+    impl GraphRepository for CountingGraphRepository {
+        async fn apply_delta_with_blocks(
+            &self,
+            _delta: &GraphDelta,
+            _blocks: &[EmbeddedBlock],
+        ) -> Result<()> {
+            Ok(())
+        }
+
+        async fn common_root_graph_exists(&self) -> Result<bool> {
+            Ok(false)
+        }
+
+        async fn get_existing_block_context(
+            &self,
+            block_id: &str,
+            _user_id: &str,
+            _visibility: Visibility,
+        ) -> Result<Option<ExistingBlockContext>> {
+            Ok(self.block_contexts.get(block_id).cloned())
+        }
+
+        async fn get_node_relationship_counts(
+            &self,
+            node_id: &str,
+        ) -> Result<NodeRelationshipCounts> {
+            Ok(self.counts.get(node_id).cloned().unwrap_or_default())
+        }
+    }
+
+    #[tokio::test]
+    async fn accepts_block_text_update_without_parent_edges_when_graph_state_is_valid() {
+        let block_id = "550e8400-e29b-41d4-a716-4466554400be".to_string();
+        let mut counts = HashMap::new();
+        counts.insert(
+            block_id.clone(),
+            NodeRelationshipCounts {
+                total: 1,
+                entity_is_part_of: 0,
+                block_parent_edges: 1,
+            },
+        );
+        let mut block_contexts = HashMap::new();
+        block_contexts.insert(
+            block_id.clone(),
+            ExistingBlockContext {
+                root_entity_id: "550e8400-e29b-41d4-a716-4466554400aa".to_string(),
+                universe_id: COMMON_UNIVERSE_ID.to_string(),
+                block_level: 0,
+            },
+        );
+
+        let app = KnowledgeApplication::new(
+            Arc::new(FakeSchemaRepo::new()),
+            Arc::new(CountingGraphRepository {
+                counts,
+                block_contexts,
+            }),
+            Arc::new(FakeEmbedder),
+        );
+
+        app.upsert_graph_delta(GraphDelta {
+            universes: vec![],
+            entities: vec![],
+            blocks: vec![BlockNode {
+                id: block_id,
+                type_id: "node.block".to_string(),
+                user_id: "user-1".to_string(),
+                visibility: Visibility::Private,
+                properties: vec![PropertyValue {
+                    key: "text".to_string(),
+                    value: PropertyScalar::String("updated block text".to_string()),
+                }],
+                resolved_labels: vec![],
+            }],
+            edges: vec![],
+        })
+        .await
+        .expect("existing graph relationships should satisfy block parent validation");
+    }
+
+    #[tokio::test]
+    async fn rejects_block_without_parent_edge_when_target_graph_state_is_invalid() {
+        let app = KnowledgeApplication::new(
+            Arc::new(FakeSchemaRepo::new()),
+            Arc::new(CountingGraphRepository {
+                counts: HashMap::new(),
+                block_contexts: HashMap::new(),
+            }),
+            Arc::new(FakeEmbedder),
+        );
+
+        let err = app
+            .upsert_graph_delta(GraphDelta {
+                universes: vec![],
+                entities: vec![],
+                blocks: vec![BlockNode {
+                    id: "550e8400-e29b-41d4-a716-4466554400bf".to_string(),
+                    type_id: "node.block".to_string(),
+                    user_id: "user-1".to_string(),
+                    visibility: Visibility::Private,
+                    properties: vec![PropertyValue {
+                        key: "text".to_string(),
+                        value: PropertyScalar::String("new block".to_string()),
+                    }],
+                    resolved_labels: vec![],
+                }],
+                edges: vec![],
+            })
+            .await
+            .expect_err("block without existing/payload parent edge should fail");
+
+        assert!(err
+            .to_string()
+            .contains("must have exactly one incoming DESCRIBED_BY or SUMMARIZES edge"));
     }
 
     #[tokio::test]

@@ -17,9 +17,9 @@ use tracing::warn;
 
 use crate::{
     domain::{
-        EdgeEndpointRule, EmbeddedBlock, ExistingBlockContext, GraphDelta, PropertyScalar,
-        PropertyValue, SchemaType, TypeInheritance, TypeProperty, UpsertSchemaTypePropertyInput,
-        Visibility,
+        EdgeEndpointRule, EmbeddedBlock, ExistingBlockContext, GraphDelta, NodeRelationshipCounts,
+        PropertyScalar, PropertyValue, SchemaType, TypeInheritance, TypeProperty,
+        UpsertSchemaTypePropertyInput, Visibility,
     },
     ports::{Embedder, GraphRepository, SchemaRepository},
 };
@@ -422,6 +422,26 @@ impl Neo4jGraphStore {
             block_level: row.get("block_level")?,
         }))
     }
+
+    async fn get_node_relationship_counts(&self, node_id: &str) -> Result<NodeRelationshipCounts> {
+        let mut result = self
+            .graph
+            .execute(query(
+                "MATCH (n {id: $node_id}) OPTIONAL MATCH (n)-[out]->() WITH n, COUNT(out) AS outgoing OPTIONAL MATCH ()-[incoming]->(n) WITH n, outgoing, COUNT(incoming) AS incoming OPTIONAL MATCH (n)-[is_part_of:IS_PART_OF]->(:Universe) WITH n, outgoing, incoming, COUNT(is_part_of) AS entity_is_part_of OPTIONAL MATCH ()-[parent:DESCRIBED_BY|SUMMARIZES]->(n) RETURN incoming + outgoing AS total, entity_is_part_of, COUNT(parent) AS block_parent_edges",
+            ).param("node_id", node_id.to_string()))
+            .await
+            .context("failed to query node relationship counts")?;
+
+        let Some(row) = result.next().await? else {
+            return Ok(NodeRelationshipCounts::default());
+        };
+
+        Ok(NodeRelationshipCounts {
+            total: row.get::<i64>("total")? as usize,
+            entity_is_part_of: row.get::<i64>("entity_is_part_of")? as usize,
+            block_parent_edges: row.get::<i64>("block_parent_edges")? as usize,
+        })
+    }
 }
 
 fn allowed_node_visibilities(edge_visibility: Visibility) -> Vec<String> {
@@ -574,6 +594,10 @@ impl GraphRepository for MemgraphQdrantGraphRepository {
         self.graph_store
             .get_existing_block_context(block_id, user_id, visibility)
             .await
+    }
+
+    async fn get_node_relationship_counts(&self, node_id: &str) -> Result<NodeRelationshipCounts> {
+        self.graph_store.get_node_relationship_counts(node_id).await
     }
 }
 
