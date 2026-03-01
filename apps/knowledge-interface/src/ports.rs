@@ -2,8 +2,8 @@ use anyhow::Result;
 use async_trait::async_trait;
 
 use crate::domain::{
-    EdgeEndpointRule, EmbeddedBlock, ExistingBlockContext, GraphDelta, SchemaType, TypeInheritance,
-    TypeProperty, UpsertSchemaTypePropertyInput,
+    EdgeEndpointRule, EmbeddedBlock, ExistingBlockContext, GraphDelta, NodeRelationshipCounts,
+    SchemaType, TypeInheritance, TypeProperty, UpsertSchemaTypePropertyInput,
 };
 
 #[async_trait]
@@ -44,6 +44,7 @@ pub trait GraphRepository: Send + Sync {
         user_id: &str,
         visibility: crate::domain::Visibility,
     ) -> Result<Option<ExistingBlockContext>>;
+    async fn get_node_relationship_counts(&self, node_id: &str) -> Result<NodeRelationshipCounts>;
 }
 
 #[async_trait]

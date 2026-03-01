@@ -137,6 +137,13 @@ pub struct EmbeddedBlock {
     pub text: String,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct NodeRelationshipCounts {
+    pub total: usize,
+    pub entity_is_part_of: usize,
+    pub block_parent_edges: usize,
+}
+
 #[derive(Debug, Clone)]
 pub struct ExistingBlockContext {
     pub root_entity_id: String,

@@ -10,6 +10,13 @@ A graph delta is accepted only when it is schema-valid:
 - node/edge properties must exist on the type or inherited parent type
 - edge endpoints must match one of the schema edge rules
 
+Validation is split into:
+
+- **request payload rules** (type/property/rule checks on records supplied in the request)
+- **target graph state rules** (relationship cardinality checks against the graph state after applying the upsert)
+
+This means block updates can rely on existing `DESCRIBED_BY`/`SUMMARIZES` parent edges already present in the graph; those edges do not need to be resubmitted unless they are changing.
+
 ## ID format requirements
 
 Client-provided IDs are **domain IDs**, not Memgraph-internal IDs.
