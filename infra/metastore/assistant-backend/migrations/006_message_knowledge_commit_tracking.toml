@@ -1,0 +1,17 @@
+[[actions]]
+type = "add_column"
+table = "messages"
+
+    [actions.column]
+    name = "committed_to_knowledge_base"
+    type = "BOOLEAN"
+    nullable = false
+    default = "FALSE"
+
+[[actions]]
+type = "add_index"
+table = "messages"
+
+    [actions.index]
+    name = "idx_messages_user_commit_status"
+    columns = ["user_id", "committed_to_knowledge_base"]
