@@ -23,6 +23,7 @@ Use this matrix to pick the fastest path; detailed instructions remain in the se
 ## Quick start (tested)
 
 ```sh
+./scripts/agent/doctor.sh --workflow assistant-offline-up
 ./scripts/agent/assistant-offline-up.sh
 ./scripts/agent/run-assistant-backend-offline.sh
 ```

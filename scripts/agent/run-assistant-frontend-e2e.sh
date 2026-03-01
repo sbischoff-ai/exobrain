@@ -2,6 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+"${ROOT_DIR}/scripts/agent/doctor.sh" --workflow run-assistant-frontend-e2e
+
 E2E_DIR="${ROOT_DIR}/e2e"
 
 FORCE_REINSTALL="${E2E_FORCE_REINSTALL:-false}"
