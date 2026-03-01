@@ -7,6 +7,8 @@ status: active
 
 Use this runbook when Docker/k3d flows are unavailable.
 
+Canonical workflow metadata is stored in `.agent/workflows.yaml`. Keep this document aligned with that manifest whenever workflows, commands, tooling, or service requirements change.
+
 ## Choose your workflow in 30 seconds
 
 | Task type | Required services | Skill to invoke | Script entrypoint | Verification command |
