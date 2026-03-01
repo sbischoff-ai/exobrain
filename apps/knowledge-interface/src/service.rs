@@ -736,30 +736,6 @@ fn validate_delta_access_scope(delta: &GraphDelta) -> Result<()> {
         return Err(anyhow!("user_id is required"));
     }
 
-    for universe in &delta.universes {
-        if universe.user_id != delta.user_id {
-            return Err(anyhow!("universe user_id must match request user_id"));
-        }
-    }
-
-    for entity in &delta.entities {
-        if entity.user_id != delta.user_id {
-            return Err(anyhow!("entity user_id must match request user_id"));
-        }
-    }
-
-    for block in &delta.blocks {
-        if block.user_id != delta.user_id {
-            return Err(anyhow!("block user_id must match request user_id"));
-        }
-    }
-
-    for edge in &delta.edges {
-        if edge.user_id != delta.user_id {
-            return Err(anyhow!("edge user_id must match request user_id"));
-        }
-    }
-
     Ok(())
 }
 
@@ -1593,7 +1569,6 @@ mod tests {
             }),
             Arc::new(FakeEmbedder),
         );
-
         app.upsert_graph_delta(GraphDelta {
             user_id: "user-1".to_string(),
             visibility: Visibility::Private,
@@ -2102,37 +2077,50 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn rejects_mismatched_scope_on_entities() {
+    async fn accepts_cross_user_scope_in_single_delta() {
         let app = KnowledgeApplication::new(
             Arc::new(FakeSchemaRepo::new()),
             Arc::new(FakeGraphRepository { root_exists: false }),
             Arc::new(FakeEmbedder),
         );
 
-        let err = app
-            .upsert_graph_delta(GraphDelta {
-                user_id: "user-1".to_string(),
+        app.upsert_graph_delta(GraphDelta {
+            user_id: "user-1".to_string(),
+            visibility: Visibility::Private,
+            universes: vec![],
+            entities: vec![EntityNode {
+                id: "550e8400-e29b-41d4-a716-4466554400ab".to_string(),
+                type_id: "node.person".to_string(),
+                universe_id: None,
+                user_id: "user-2".to_string(),
                 visibility: Visibility::Private,
-                universes: vec![],
-                entities: vec![EntityNode {
-                    id: "550e8400-e29b-41d4-a716-4466554400ab".to_string(),
-                    type_id: "node.person".to_string(),
-                    universe_id: Some("550e8400-e29b-41d4-a716-4466554400ff".to_string()),
-                    user_id: "user-2".to_string(),
-                    visibility: Visibility::Private,
-                    properties: vec![],
-                    resolved_labels: vec![],
+                properties: vec![PropertyValue {
+                    key: "name".to_string(),
+                    value: PropertyScalar::String("Cross User Person".to_string()),
                 }],
-                blocks: vec![],
-                edges: vec![],
-            })
-            .await
-            .expect_err("mismatched user_id should fail");
-
-        assert!(
-            err.to_string()
-                .contains("entity user_id must match request user_id")
-                || err.to_string().contains("validation failed")
-        );
+                resolved_labels: vec![],
+            }],
+            blocks: vec![BlockNode {
+                id: "d0e2ceb6-3daa-441f-a87b-2168ac723ca7".to_string(),
+                type_id: "node.block".to_string(),
+                user_id: "user-3".to_string(),
+                visibility: Visibility::Shared,
+                properties: vec![PropertyValue {
+                    key: "text".to_string(),
+                    value: PropertyScalar::String("cross-user block".to_string()),
+                }],
+                resolved_labels: vec![],
+            }],
+            edges: vec![GraphEdge {
+                from_id: "550e8400-e29b-41d4-a716-4466554400ab".to_string(),
+                to_id: "d0e2ceb6-3daa-441f-a87b-2168ac723ca7".to_string(),
+                edge_type: "DESCRIBED_BY".to_string(),
+                user_id: "user-4".to_string(),
+                visibility: Visibility::Shared,
+                properties: default_edge_properties("cross-user edge"),
+            }],
+        })
+        .await
+        .expect("cross-user records should be accepted in a single delta");
     }
 }
