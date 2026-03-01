@@ -25,6 +25,7 @@ Invalid IDs return `InvalidArgument` with detailed messages.
 ## Type mapping
 
 Request now includes `universes[]` (id + name) at the top level; `universe_id`/`universe_name` are no longer root fields.
+`UpsertGraphDeltaRequest` has no root-level `user_id` or `visibility`; those are provided per universe/entity/block/edge record.
 Entities may omit `universe_id`, in which case the service defaults to the Real World universe (`9d7f0fa5-78c1-4805-9efb-3f8f16090d7f`).
 This implicit universe assignment also satisfies the `IS_PART_OF` relationship rule during validation.
 

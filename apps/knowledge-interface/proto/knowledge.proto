@@ -143,8 +143,6 @@ message UpsertGraphDeltaRequest {
   repeated EntityNode entities = 2;
   repeated BlockNode blocks = 3;
   repeated GraphEdge edges = 4;
-  string user_id = 5;
-  Visibility visibility = 6;
 }
 
 message UpsertGraphDeltaReply {

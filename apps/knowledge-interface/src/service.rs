@@ -208,8 +208,6 @@ impl KnowledgeApplication {
 
     fn common_root_delta() -> GraphDelta {
         GraphDelta {
-            user_id: EXOBRAIN_USER_ID.to_string(),
-            visibility: Visibility::Shared,
             universes: vec![UniverseNode {
                 id: COMMON_UNIVERSE_ID.to_string(),
                 name: COMMON_UNIVERSE_NAME.to_string(),
@@ -278,8 +276,6 @@ impl KnowledgeApplication {
         .to_string();
 
         GraphDelta {
-            user_id: user_id.to_string(),
-            visibility: Visibility::Shared,
             universes: vec![],
             entities: vec![
                 EntityNode {
@@ -379,20 +375,12 @@ impl KnowledgeApplication {
             .collect();
         let vectors = self.embedder.embed_texts(&texts).await?;
 
-        let block_levels = block_levels_for_blocks(
-            &delta.blocks,
-            &delta.edges,
-            self.graph_repository.as_ref(),
-            &delta,
-        )
-        .await?;
-        let root_entity_ids = root_entity_ids_for_blocks(
-            &delta.blocks,
-            &delta.edges,
-            self.graph_repository.as_ref(),
-            &delta,
-        )
-        .await?;
+        let block_levels =
+            block_levels_for_blocks(&delta.blocks, &delta.edges, self.graph_repository.as_ref())
+                .await?;
+        let root_entity_ids =
+            root_entity_ids_for_blocks(&delta.blocks, &delta.edges, self.graph_repository.as_ref())
+                .await?;
 
         let blocks: Vec<EmbeddedBlock> = delta
             .blocks
@@ -404,8 +392,8 @@ impl KnowledgeApplication {
                 root_entity_id: root_entity_ids.get(&block.id).cloned().unwrap_or_default(),
                 universe_id: resolve_block_universe_id(&root_entity_ids, block, &delta.entities)
                     .to_string(),
-                user_id: delta.user_id.clone(),
-                visibility: delta.visibility,
+                user_id: block.user_id.clone(),
+                visibility: block.visibility,
                 vector,
                 block_level: block_levels.get(&block.id).copied().unwrap_or(0),
                 text,
@@ -731,11 +719,7 @@ fn is_assignable(
     false
 }
 
-fn validate_delta_access_scope(delta: &GraphDelta) -> Result<()> {
-    if delta.user_id.trim().is_empty() {
-        return Err(anyhow!("user_id is required"));
-    }
-
+fn validate_delta_access_scope(_delta: &GraphDelta) -> Result<()> {
     Ok(())
 }
 
@@ -855,15 +839,10 @@ async fn block_levels_for_blocks(
     blocks: &[BlockNode],
     edges: &[GraphEdge],
     graph_repository: &dyn GraphRepository,
-    delta: &GraphDelta,
 ) -> Result<HashMap<String, i64>> {
-    let contexts = existing_block_context_for_referenced_summarize_parents(
-        blocks,
-        edges,
-        graph_repository,
-        delta,
-    )
-    .await?;
+    let contexts =
+        existing_block_context_for_referenced_summarize_parents(blocks, edges, graph_repository)
+            .await?;
 
     let block_ids: HashSet<&str> = blocks.iter().map(|b| b.id.as_str()).collect();
     let mut levels: HashMap<String, i64> = HashMap::new();
@@ -917,15 +896,10 @@ async fn root_entity_ids_for_blocks(
     blocks: &[BlockNode],
     edges: &[GraphEdge],
     graph_repository: &dyn GraphRepository,
-    delta: &GraphDelta,
 ) -> Result<HashMap<String, String>> {
-    let contexts = existing_block_context_for_referenced_summarize_parents(
-        blocks,
-        edges,
-        graph_repository,
-        delta,
-    )
-    .await?;
+    let contexts =
+        existing_block_context_for_referenced_summarize_parents(blocks, edges, graph_repository)
+            .await?;
 
     let block_ids: HashSet<&str> = blocks.iter().map(|b| b.id.as_str()).collect();
     let described_by_parents: HashMap<&str, &str> = edges
@@ -983,7 +957,6 @@ async fn existing_block_context_for_referenced_summarize_parents(
     blocks: &[BlockNode],
     edges: &[GraphEdge],
     graph_repository: &dyn GraphRepository,
-    delta: &GraphDelta,
 ) -> Result<HashMap<String, ExistingBlockContext>> {
     let block_ids: HashSet<&str> = blocks.iter().map(|b| b.id.as_str()).collect();
     let parent_ids: HashSet<&str> = edges
@@ -998,8 +971,20 @@ async fn existing_block_context_for_referenced_summarize_parents(
 
     let mut contexts = HashMap::new();
     for parent_id in parent_ids {
+        let lookup_edge = edges
+            .iter()
+            .find(|edge| {
+                edge.edge_type.eq_ignore_ascii_case("SUMMARIZES") && edge.from_id == parent_id
+            })
+            .ok_or_else(|| {
+                anyhow!(
+                    "missing SUMMARIZES edge context for parent block {}",
+                    parent_id
+                )
+            })?;
+
         let context = graph_repository
-            .get_existing_block_context(parent_id, &delta.user_id, delta.visibility)
+            .get_existing_block_context(parent_id, &lookup_edge.user_id, lookup_edge.visibility)
             .await?
             .ok_or_else(|| {
                 anyhow!(
@@ -1570,8 +1555,6 @@ mod tests {
             Arc::new(FakeEmbedder),
         );
         app.upsert_graph_delta(GraphDelta {
-            user_id: "user-1".to_string(),
-            visibility: Visibility::Private,
             universes: vec![],
             entities: vec![EntityNode {
                 id: "550e8400-e29b-41d4-a716-446655440001".to_string(),
@@ -1670,8 +1653,6 @@ mod tests {
             .await
             .expect("user graph init should succeed");
 
-        assert_eq!(delta.user_id, "user-1");
-        assert_eq!(delta.visibility, Visibility::Shared);
         assert_eq!(delta.entities.len(), 2);
         assert_eq!(delta.blocks.len(), 1);
         assert_eq!(delta.edges.len(), 4);
@@ -1730,22 +1711,10 @@ mod tests {
             },
         ];
 
-        let delta = GraphDelta {
-            user_id: "user-1".to_string(),
-            visibility: Visibility::Private,
-            universes: vec![],
-            entities: vec![],
-            blocks: blocks.clone(),
-            edges: edges.clone(),
-        };
-        let levels = block_levels_for_blocks(
-            &blocks,
-            &edges,
-            &FakeGraphRepository { root_exists: false },
-            &delta,
-        )
-        .await
-        .expect("levels should be computed");
+        let levels =
+            block_levels_for_blocks(&blocks, &edges, &FakeGraphRepository { root_exists: false })
+                .await
+                .expect("levels should be computed");
         assert_eq!(levels.get(root_block_id).copied(), Some(0));
         assert_eq!(levels.get(child_block_id).copied(), Some(1));
     }
@@ -1771,16 +1740,8 @@ mod tests {
             edge_type: "SUMMARIZES".to_string(),
             user_id: "exobrain".to_string(),
             visibility: Visibility::Shared,
-            properties: vec![],
+            properties: default_edge_properties("existing summarize parent"),
         }];
-        let delta = GraphDelta {
-            user_id: "exobrain".to_string(),
-            visibility: Visibility::Shared,
-            universes: vec![],
-            entities: vec![],
-            blocks: blocks.clone(),
-            edges: edges.clone(),
-        };
         let graph_repo = CapturingGraphRepository {
             seen: Arc::new(Mutex::new(vec![])),
             root_exists: false,
@@ -1794,7 +1755,7 @@ mod tests {
             )]),
         };
 
-        let root_ids = root_entity_ids_for_blocks(&blocks, &edges, &graph_repo, &delta)
+        let root_ids = root_entity_ids_for_blocks(&blocks, &edges, &graph_repo)
             .await
             .expect("root entity id should resolve from existing summarize parent");
         assert_eq!(
@@ -1802,7 +1763,7 @@ mod tests {
             Some("8c75cc89-6204-4fed-aec1-34d032ff95ee")
         );
 
-        let levels = block_levels_for_blocks(&blocks, &edges, &graph_repo, &delta)
+        let levels = block_levels_for_blocks(&blocks, &edges, &graph_repo)
             .await
             .expect("level should resolve from existing summarize parent");
         assert_eq!(levels.get(new_block_id).copied(), Some(1));
@@ -1816,8 +1777,6 @@ mod tests {
         );
 
         app.upsert_graph_delta(GraphDelta {
-            user_id: "exobrain".to_string(),
-            visibility: Visibility::Shared,
             universes: vec![UniverseNode {
                 id: "26bcdef7-41ce-4dc5-81e2-d2ba786270c1".to_string(),
                 name: "Fake World".to_string(),
@@ -1866,8 +1825,6 @@ mod tests {
         );
 
         app.upsert_graph_delta(GraphDelta {
-            user_id: "exobrain".to_string(),
-            visibility: Visibility::Shared,
             universes: vec![],
             entities: vec![
                 EntityNode {
@@ -1949,8 +1906,6 @@ mod tests {
 
         let err = app
             .upsert_graph_delta(GraphDelta {
-                user_id: "exobrain".to_string(),
-                visibility: Visibility::Shared,
                 universes: vec![],
                 entities: vec![
                     EntityNode {
@@ -2006,8 +1961,6 @@ mod tests {
         );
 
         app.upsert_graph_delta(GraphDelta {
-            user_id: "exobrain".to_string(),
-            visibility: Visibility::Shared,
             universes: vec![],
             entities: vec![EntityNode {
                 id: "64357dfa-389d-401e-a246-c7a97147f627".to_string(),
@@ -2085,8 +2038,6 @@ mod tests {
         );
 
         app.upsert_graph_delta(GraphDelta {
-            user_id: "user-1".to_string(),
-            visibility: Visibility::Private,
             universes: vec![],
             entities: vec![EntityNode {
                 id: "550e8400-e29b-41d4-a716-4466554400ab".to_string(),
