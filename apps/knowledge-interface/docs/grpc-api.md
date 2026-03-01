@@ -25,6 +25,7 @@ Invalid IDs return `InvalidArgument` with detailed messages.
 ## Type mapping
 
 Request now includes `universes[]` (id + name) at the top level; `universe_id`/`universe_name` are no longer root fields.
+`UpsertGraphDeltaRequest` has no root-level `user_id` or `visibility`; those are provided per universe/entity/block/edge record.
 Entities may omit `universe_id`, in which case the service defaults to the Real World universe (`9d7f0fa5-78c1-4805-9efb-3f8f16090d7f`).
 This implicit universe assignment also satisfies the `IS_PART_OF` relationship rule during validation.
 
@@ -35,11 +36,13 @@ The server resolves and writes the full label chain from schema inheritance (for
 ## Required/allowed properties
 
 Properties are checked against schema property definitions including inheritance.
+Global `node`/`edge` property definitions also apply to every node/edge subtype without duplicating definitions per concrete type.
 
 Example:
 
 - `node.person` inherits `node.entity`
 - if `node.entity` defines `name`, then `node.person` can use `name`
+- if `edge` defines `confidence`/`status`/`context`, then every edge type (for example `RELATED_TO`, `LOCATED_AT`) must provide them
 
 ## Edge endpoint validation
 
@@ -47,11 +50,12 @@ Edges are validated with schema rules (`knowledge_graph_schema_edge_rules`).
 
 For example, a `RELATED_TO` edge is valid only if a matching rule exists for source and target node types (or their ancestors).
 
-- For `PRIVATE` edge writes, endpoint nodes may be either `PRIVATE` or `SHARED` (same `user_id` still required).
+- For `PRIVATE` edge writes, endpoint nodes may be either `PRIVATE` or `SHARED`; caller services enforce RBAC/user boundaries.
+- `UpsertGraphDelta` may include mixed-user node/edge records in a single request; ownership policies are enforced by upstream caller services.
 
 ```mermaid
 flowchart LR
-  A[node.object]
+  A[node.person]
   B[node.person]
   A -->|edge.related_to| B
 ```

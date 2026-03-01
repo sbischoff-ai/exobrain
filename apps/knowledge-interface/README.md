@@ -68,7 +68,7 @@ The Memgraph write is held in a transaction until Qdrant upserts complete. If Qd
 `InitializeUserGraph` accepts `user_id` + `user_name` and creates a shared starter subgraph for that user:
 
 - person entity (UUID id) with aliases `me`, `I`, `myself`
-- object entity (UUID id) named `Exobrain Assistant`
+- AI agent entity (`node.ai_agent`, UUID id) named `Exobrain Assistant`
 - one descriptive assistant block (embedded + upserted to Qdrant)
 - `RELATED_TO` edge from assistant -> person
 

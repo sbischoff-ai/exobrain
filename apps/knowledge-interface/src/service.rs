@@ -50,7 +50,10 @@ impl KnowledgeApplication {
                 let node_id = schema_type.id.clone();
                 let type_properties = properties
                     .iter()
-                    .filter(|p| p.owner_type_id == node_id)
+                    .filter(|p| {
+                        p.owner_type_id == node_id
+                            || is_global_property_owner(&node_id, &p.owner_type_id)
+                    })
                     .cloned()
                     .collect();
                 let parents = inheritance
@@ -73,7 +76,10 @@ impl KnowledgeApplication {
                 let edge_id = schema_type.id.clone();
                 let type_properties = properties
                     .iter()
-                    .filter(|p| p.owner_type_id == edge_id)
+                    .filter(|p| {
+                        p.owner_type_id == edge_id
+                            || is_global_property_owner(&edge_id, &p.owner_type_id)
+                    })
                     .cloned()
                     .collect();
                 let rules = edge_rules
@@ -238,7 +244,7 @@ impl KnowledgeApplication {
                     edge_type: "IS_PART_OF".to_string(),
                     user_id: EXOBRAIN_USER_ID.to_string(),
                     visibility: Visibility::Shared,
-                    properties: vec![],
+                    properties: default_edge_properties("bootstrap universe assignment"),
                 },
                 GraphEdge {
                     from_id: COMMON_EXOBRAIN_ENTITY_ID.to_string(),
@@ -246,7 +252,7 @@ impl KnowledgeApplication {
                     edge_type: "DESCRIBED_BY".to_string(),
                     user_id: EXOBRAIN_USER_ID.to_string(),
                     visibility: Visibility::Shared,
-                    properties: vec![],
+                    properties: default_edge_properties("bootstrap description link"),
                 },
             ],
         }
@@ -292,7 +298,7 @@ impl KnowledgeApplication {
                 },
                 EntityNode {
                     id: assistant_entity_id.clone(),
-                    type_id: "node.object".to_string(),
+                    type_id: "node.ai_agent".to_string(),
                     universe_id: Some(COMMON_UNIVERSE_ID.to_string()),
                     user_id: user_id.to_string(),
                     visibility: Visibility::Shared,
@@ -321,7 +327,7 @@ impl KnowledgeApplication {
                     edge_type: "IS_PART_OF".to_string(),
                     user_id: user_id.to_string(),
                     visibility: Visibility::Shared,
-                    properties: vec![],
+                    properties: default_edge_properties("user universe assignment"),
                 },
                 GraphEdge {
                     from_id: assistant_entity_id.clone(),
@@ -329,7 +335,7 @@ impl KnowledgeApplication {
                     edge_type: "IS_PART_OF".to_string(),
                     user_id: user_id.to_string(),
                     visibility: Visibility::Shared,
-                    properties: vec![],
+                    properties: default_edge_properties("assistant universe assignment"),
                 },
                 GraphEdge {
                     from_id: assistant_entity_id.clone(),
@@ -337,7 +343,7 @@ impl KnowledgeApplication {
                     edge_type: "RELATED_TO".to_string(),
                     user_id: user_id.to_string(),
                     visibility: Visibility::Shared,
-                    properties: vec![],
+                    properties: default_edge_properties("assistant relationship"),
                 },
                 GraphEdge {
                     from_id: assistant_entity_id,
@@ -345,7 +351,7 @@ impl KnowledgeApplication {
                     edge_type: "DESCRIBED_BY".to_string(),
                     user_id: user_id.to_string(),
                     visibility: Visibility::Shared,
-                    properties: vec![],
+                    properties: default_edge_properties("assistant description link"),
                 },
             ],
         }
@@ -369,20 +375,12 @@ impl KnowledgeApplication {
             .collect();
         let vectors = self.embedder.embed_texts(&texts).await?;
 
-        let block_levels = block_levels_for_blocks(
-            &delta.blocks,
-            &delta.edges,
-            self.graph_repository.as_ref(),
-            &delta,
-        )
-        .await?;
-        let root_entity_ids = root_entity_ids_for_blocks(
-            &delta.blocks,
-            &delta.edges,
-            self.graph_repository.as_ref(),
-            &delta,
-        )
-        .await?;
+        let block_levels =
+            block_levels_for_blocks(&delta.blocks, &delta.edges, self.graph_repository.as_ref())
+                .await?;
+        let root_entity_ids =
+            root_entity_ids_for_blocks(&delta.blocks, &delta.edges, self.graph_repository.as_ref())
+                .await?;
 
         let blocks: Vec<EmbeddedBlock> = delta
             .blocks
@@ -604,6 +602,30 @@ fn resolve_labels_for_type(
         .collect()
 }
 
+fn default_edge_properties(context: &str) -> Vec<PropertyValue> {
+    vec![
+        PropertyValue {
+            key: "confidence".to_string(),
+            value: PropertyScalar::Float(1.0),
+        },
+        PropertyValue {
+            key: "status".to_string(),
+            value: PropertyScalar::String("asserted".to_string()),
+        },
+        PropertyValue {
+            key: "context".to_string(),
+            value: PropertyScalar::String(context.to_string()),
+        },
+    ]
+}
+
+fn is_global_property_owner(owner_type_id: &str, property_owner_type_id: &str) -> bool {
+    (property_owner_type_id == "node"
+        && (owner_type_id == "node" || owner_type_id.starts_with("node.")))
+        || (property_owner_type_id == "edge"
+            && (owner_type_id == "edge" || owner_type_id.starts_with("edge.")))
+}
+
 fn validate_graph_id(id: &str, kind: &str) -> std::result::Result<(), String> {
     if id.trim().is_empty() {
         return Err(format!("{kind} id is required"));
@@ -628,7 +650,8 @@ fn validate_properties(
         .filter(|p| {
             p.required
                 && (p.owner_type_id == owner_type_id
-                    || is_assignable(owner_type_id, &p.owner_type_id, inheritance))
+                    || is_assignable(owner_type_id, &p.owner_type_id, inheritance)
+                    || is_global_property_owner(owner_type_id, &p.owner_type_id))
         })
         .map(|p| p.prop_name.clone())
         .collect();
@@ -665,6 +688,7 @@ fn collect_allowed_properties(
         .filter(|prop| {
             prop.owner_type_id == owner_type_id
                 || is_assignable(owner_type_id, &prop.owner_type_id, inheritance)
+                || is_global_property_owner(owner_type_id, &prop.owner_type_id)
         })
         .map(|prop| (prop.prop_name.clone(), prop.value_type.clone()))
         .collect()
@@ -695,31 +719,7 @@ fn is_assignable(
     false
 }
 
-fn validate_delta_access_scope(delta: &GraphDelta) -> Result<()> {
-    for universe in &delta.universes {
-        if universe.user_id.trim().is_empty() {
-            return Err(anyhow!("universe user_id is required"));
-        }
-    }
-
-    for entity in &delta.entities {
-        if entity.user_id.trim().is_empty() {
-            return Err(anyhow!("entity user_id is required"));
-        }
-    }
-
-    for block in &delta.blocks {
-        if block.user_id.trim().is_empty() {
-            return Err(anyhow!("block user_id is required"));
-        }
-    }
-
-    for edge in &delta.edges {
-        if edge.user_id.trim().is_empty() {
-            return Err(anyhow!("edge user_id is required"));
-        }
-    }
-
+fn validate_delta_access_scope(_delta: &GraphDelta) -> Result<()> {
     Ok(())
 }
 
@@ -839,15 +839,10 @@ async fn block_levels_for_blocks(
     blocks: &[BlockNode],
     edges: &[GraphEdge],
     graph_repository: &dyn GraphRepository,
-    delta: &GraphDelta,
 ) -> Result<HashMap<String, i64>> {
-    let contexts = existing_block_context_for_referenced_summarize_parents(
-        blocks,
-        edges,
-        graph_repository,
-        delta,
-    )
-    .await?;
+    let contexts =
+        existing_block_context_for_referenced_summarize_parents(blocks, edges, graph_repository)
+            .await?;
 
     let block_ids: HashSet<&str> = blocks.iter().map(|b| b.id.as_str()).collect();
     let mut levels: HashMap<String, i64> = HashMap::new();
@@ -901,15 +896,10 @@ async fn root_entity_ids_for_blocks(
     blocks: &[BlockNode],
     edges: &[GraphEdge],
     graph_repository: &dyn GraphRepository,
-    delta: &GraphDelta,
 ) -> Result<HashMap<String, String>> {
-    let contexts = existing_block_context_for_referenced_summarize_parents(
-        blocks,
-        edges,
-        graph_repository,
-        delta,
-    )
-    .await?;
+    let contexts =
+        existing_block_context_for_referenced_summarize_parents(blocks, edges, graph_repository)
+            .await?;
 
     let block_ids: HashSet<&str> = blocks.iter().map(|b| b.id.as_str()).collect();
     let described_by_parents: HashMap<&str, &str> = edges
@@ -967,7 +957,6 @@ async fn existing_block_context_for_referenced_summarize_parents(
     blocks: &[BlockNode],
     edges: &[GraphEdge],
     graph_repository: &dyn GraphRepository,
-    _delta: &GraphDelta,
 ) -> Result<HashMap<String, ExistingBlockContext>> {
     let block_ids: HashSet<&str> = blocks.iter().map(|b| b.id.as_str()).collect();
     let parent_scopes: HashMap<&str, (&str, Visibility)> = edges
@@ -986,9 +975,21 @@ async fn existing_block_context_for_referenced_summarize_parents(
         .collect();
 
     let mut contexts = HashMap::new();
-    for (parent_id, (user_id, visibility)) in parent_scopes {
+    for parent_id in parent_ids {
+        let lookup_edge = edges
+            .iter()
+            .find(|edge| {
+                edge.edge_type.eq_ignore_ascii_case("SUMMARIZES") && edge.from_id == parent_id
+            })
+            .ok_or_else(|| {
+                anyhow!(
+                    "missing SUMMARIZES edge context for parent block {}",
+                    parent_id
+                )
+            })?;
+
         let context = graph_repository
-            .get_existing_block_context(parent_id, user_id, visibility)
+            .get_existing_block_context(parent_id, &lookup_edge.user_id, lookup_edge.visibility)
             .await?
             .ok_or_else(|| {
                 anyhow!(
@@ -1091,6 +1092,48 @@ mod tests {
                         active: true,
                     },
                     SchemaType {
+                        id: "node.event".to_string(),
+                        kind: "node".to_string(),
+                        name: "Event".to_string(),
+                        description: String::new(),
+                        active: true,
+                    },
+                    SchemaType {
+                        id: "node.task".to_string(),
+                        kind: "node".to_string(),
+                        name: "Task".to_string(),
+                        description: String::new(),
+                        active: true,
+                    },
+                    SchemaType {
+                        id: "node.message".to_string(),
+                        kind: "node".to_string(),
+                        name: "Message".to_string(),
+                        description: String::new(),
+                        active: true,
+                    },
+                    SchemaType {
+                        id: "node.chat_message".to_string(),
+                        kind: "node".to_string(),
+                        name: "Chat Message".to_string(),
+                        description: String::new(),
+                        active: true,
+                    },
+                    SchemaType {
+                        id: "node.ai_agent".to_string(),
+                        kind: "node".to_string(),
+                        name: "AI Agent".to_string(),
+                        description: String::new(),
+                        active: true,
+                    },
+                    SchemaType {
+                        id: "node.place".to_string(),
+                        kind: "node".to_string(),
+                        name: "Place".to_string(),
+                        description: String::new(),
+                        active: true,
+                    },
+                    SchemaType {
                         id: "node.block".to_string(),
                         kind: "node".to_string(),
                         name: "Block".to_string(),
@@ -1117,6 +1160,34 @@ mod tests {
                         id: "edge.is_part_of".to_string(),
                         kind: "edge".to_string(),
                         name: "IS_PART_OF".to_string(),
+                        description: String::new(),
+                        active: true,
+                    },
+                    SchemaType {
+                        id: "edge.located_at".to_string(),
+                        kind: "edge".to_string(),
+                        name: "LOCATED_AT".to_string(),
+                        description: String::new(),
+                        active: true,
+                    },
+                    SchemaType {
+                        id: "edge.sent_to".to_string(),
+                        kind: "edge".to_string(),
+                        name: "SENT_TO".to_string(),
+                        description: String::new(),
+                        active: true,
+                    },
+                    SchemaType {
+                        id: "edge.sent_by".to_string(),
+                        kind: "edge".to_string(),
+                        name: "SENT_BY".to_string(),
+                        description: String::new(),
+                        active: true,
+                    },
+                    SchemaType {
+                        id: "edge.contradicts".to_string(),
+                        kind: "edge".to_string(),
+                        name: "CONTRADICTS".to_string(),
                         description: String::new(),
                         active: true,
                     },
@@ -1150,6 +1221,42 @@ mod tests {
                 },
                 TypeInheritance {
                     child_type_id: "node.concept".to_string(),
+                    parent_type_id: "node.entity".to_string(),
+                    description: String::new(),
+                    active: true,
+                },
+                TypeInheritance {
+                    child_type_id: "node.event".to_string(),
+                    parent_type_id: "node.entity".to_string(),
+                    description: String::new(),
+                    active: true,
+                },
+                TypeInheritance {
+                    child_type_id: "node.task".to_string(),
+                    parent_type_id: "node.event".to_string(),
+                    description: String::new(),
+                    active: true,
+                },
+                TypeInheritance {
+                    child_type_id: "node.message".to_string(),
+                    parent_type_id: "node.event".to_string(),
+                    description: String::new(),
+                    active: true,
+                },
+                TypeInheritance {
+                    child_type_id: "node.chat_message".to_string(),
+                    parent_type_id: "node.message".to_string(),
+                    description: String::new(),
+                    active: true,
+                },
+                TypeInheritance {
+                    child_type_id: "node.ai_agent".to_string(),
+                    parent_type_id: "node.person".to_string(),
+                    description: String::new(),
+                    active: true,
+                },
+                TypeInheritance {
+                    child_type_id: "node.place".to_string(),
                     parent_type_id: "node.entity".to_string(),
                     description: String::new(),
                     active: true,
@@ -1189,6 +1296,36 @@ mod tests {
                     active: true,
                     description: String::new(),
                 },
+                TypeProperty {
+                    owner_type_id: "edge".to_string(),
+                    prop_name: "confidence".to_string(),
+                    value_type: "float".to_string(),
+                    required: true,
+                    readable: true,
+                    writable: true,
+                    active: true,
+                    description: String::new(),
+                },
+                TypeProperty {
+                    owner_type_id: "edge".to_string(),
+                    prop_name: "status".to_string(),
+                    value_type: "string".to_string(),
+                    required: true,
+                    readable: true,
+                    writable: true,
+                    active: true,
+                    description: String::new(),
+                },
+                TypeProperty {
+                    owner_type_id: "edge".to_string(),
+                    prop_name: "context".to_string(),
+                    value_type: "string".to_string(),
+                    required: true,
+                    readable: true,
+                    writable: true,
+                    active: true,
+                    description: String::new(),
+                },
             ])
         }
 
@@ -1212,6 +1349,34 @@ mod tests {
                     edge_type_id: "edge.is_part_of".to_string(),
                     from_node_type_id: "node.entity".to_string(),
                     to_node_type_id: "node.universe".to_string(),
+                    active: true,
+                    description: String::new(),
+                },
+                EdgeEndpointRule {
+                    edge_type_id: "edge.located_at".to_string(),
+                    from_node_type_id: "node.event".to_string(),
+                    to_node_type_id: "node.place".to_string(),
+                    active: true,
+                    description: String::new(),
+                },
+                EdgeEndpointRule {
+                    edge_type_id: "edge.sent_to".to_string(),
+                    from_node_type_id: "node.message".to_string(),
+                    to_node_type_id: "node.person".to_string(),
+                    active: true,
+                    description: String::new(),
+                },
+                EdgeEndpointRule {
+                    edge_type_id: "edge.sent_by".to_string(),
+                    from_node_type_id: "node.message".to_string(),
+                    to_node_type_id: "node.person".to_string(),
+                    active: true,
+                    description: String::new(),
+                },
+                EdgeEndpointRule {
+                    edge_type_id: "edge.contradicts".to_string(),
+                    from_node_type_id: "node.block".to_string(),
+                    to_node_type_id: "node.block".to_string(),
                     active: true,
                     description: String::new(),
                 },
@@ -1394,7 +1559,6 @@ mod tests {
             }),
             Arc::new(FakeEmbedder),
         );
-
         app.upsert_graph_delta(GraphDelta {
             universes: vec![],
             entities: vec![EntityNode {
@@ -1427,7 +1591,7 @@ mod tests {
                     edge_type: "IS_PART_OF".to_string(),
                     user_id: "user-1".to_string(),
                     visibility: Visibility::Private,
-                    properties: vec![],
+                    properties: default_edge_properties("test universe assignment"),
                 },
                 GraphEdge {
                     from_id: "550e8400-e29b-41d4-a716-446655440001".to_string(),
@@ -1435,7 +1599,7 @@ mod tests {
                     edge_type: "DESCRIBED_BY".to_string(),
                     user_id: "user-1".to_string(),
                     visibility: Visibility::Private,
-                    properties: vec![],
+                    properties: default_edge_properties("test location"),
                 },
             ],
         })
@@ -1497,6 +1661,14 @@ mod tests {
         assert_eq!(delta.entities.len(), 2);
         assert_eq!(delta.blocks.len(), 1);
         assert_eq!(delta.edges.len(), 4);
+        assert!(delta
+            .entities
+            .iter()
+            .any(|entity| entity.type_id == "node.ai_agent"
+                && entity
+                    .properties
+                    .iter()
+                    .any(|prop| prop.key == "name" && matches!(&prop.value, PropertyScalar::String(name) if name == "Exobrain Assistant"))));
 
         let guard = captured.lock().expect("lock should be available");
         assert_eq!(guard.len(), 1);
@@ -1544,20 +1716,10 @@ mod tests {
             },
         ];
 
-        let delta = GraphDelta {
-            universes: vec![],
-            entities: vec![],
-            blocks: blocks.clone(),
-            edges: edges.clone(),
-        };
-        let levels = block_levels_for_blocks(
-            &blocks,
-            &edges,
-            &FakeGraphRepository { root_exists: false },
-            &delta,
-        )
-        .await
-        .expect("levels should be computed");
+        let levels =
+            block_levels_for_blocks(&blocks, &edges, &FakeGraphRepository { root_exists: false })
+                .await
+                .expect("levels should be computed");
         assert_eq!(levels.get(root_block_id).copied(), Some(0));
         assert_eq!(levels.get(child_block_id).copied(), Some(1));
     }
@@ -1583,14 +1745,8 @@ mod tests {
             edge_type: "SUMMARIZES".to_string(),
             user_id: "exobrain".to_string(),
             visibility: Visibility::Shared,
-            properties: vec![],
+            properties: default_edge_properties("existing summarize parent"),
         }];
-        let delta = GraphDelta {
-            universes: vec![],
-            entities: vec![],
-            blocks: blocks.clone(),
-            edges: edges.clone(),
-        };
         let graph_repo = CapturingGraphRepository {
             seen: Arc::new(Mutex::new(vec![])),
             root_exists: false,
@@ -1604,7 +1760,7 @@ mod tests {
             )]),
         };
 
-        let root_ids = root_entity_ids_for_blocks(&blocks, &edges, &graph_repo, &delta)
+        let root_ids = root_entity_ids_for_blocks(&blocks, &edges, &graph_repo)
             .await
             .expect("root entity id should resolve from existing summarize parent");
         assert_eq!(
@@ -1612,7 +1768,7 @@ mod tests {
             Some("8c75cc89-6204-4fed-aec1-34d032ff95ee")
         );
 
-        let levels = block_levels_for_blocks(&blocks, &edges, &graph_repo, &delta)
+        let levels = block_levels_for_blocks(&blocks, &edges, &graph_repo)
             .await
             .expect("level should resolve from existing summarize parent");
         assert_eq!(levels.get(new_block_id).copied(), Some(1));
@@ -1666,7 +1822,87 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn rejects_empty_entity_user_id() {
+    async fn accepts_message_edges_and_located_at_rules() {
+        let app = KnowledgeApplication::new(
+            Arc::new(FakeSchemaRepo::new()),
+            Arc::new(FakeGraphRepository { root_exists: false }),
+            Arc::new(FakeEmbedder),
+        );
+
+        app.upsert_graph_delta(GraphDelta {
+            universes: vec![],
+            entities: vec![
+                EntityNode {
+                    id: "8fca4f08-c305-4d16-91b5-e283f5f723aa".to_string(),
+                    type_id: "node.message".to_string(),
+                    universe_id: None,
+                    user_id: "exobrain".to_string(),
+                    visibility: Visibility::Shared,
+                    properties: vec![PropertyValue {
+                        key: "name".to_string(),
+                        value: PropertyScalar::String("Update Message".to_string()),
+                    }],
+                    resolved_labels: vec![],
+                },
+                EntityNode {
+                    id: "46a0475f-76da-4f50-8875-844fd4cb1770".to_string(),
+                    type_id: "node.person".to_string(),
+                    universe_id: None,
+                    user_id: "exobrain".to_string(),
+                    visibility: Visibility::Shared,
+                    properties: vec![PropertyValue {
+                        key: "name".to_string(),
+                        value: PropertyScalar::String("Alex".to_string()),
+                    }],
+                    resolved_labels: vec![],
+                },
+                EntityNode {
+                    id: "a327877d-e8c4-4cd8-a889-a5251120cce5".to_string(),
+                    type_id: "node.place".to_string(),
+                    universe_id: None,
+                    user_id: "exobrain".to_string(),
+                    visibility: Visibility::Shared,
+                    properties: vec![PropertyValue {
+                        key: "name".to_string(),
+                        value: PropertyScalar::String("Workspace".to_string()),
+                    }],
+                    resolved_labels: vec![],
+                },
+            ],
+            blocks: vec![],
+            edges: vec![
+                GraphEdge {
+                    from_id: "8fca4f08-c305-4d16-91b5-e283f5f723aa".to_string(),
+                    to_id: "46a0475f-76da-4f50-8875-844fd4cb1770".to_string(),
+                    edge_type: "SENT_TO".to_string(),
+                    user_id: "exobrain".to_string(),
+                    visibility: Visibility::Shared,
+                    properties: default_edge_properties("test recipient"),
+                },
+                GraphEdge {
+                    from_id: "8fca4f08-c305-4d16-91b5-e283f5f723aa".to_string(),
+                    to_id: "46a0475f-76da-4f50-8875-844fd4cb1770".to_string(),
+                    edge_type: "SENT_BY".to_string(),
+                    user_id: "exobrain".to_string(),
+                    visibility: Visibility::Shared,
+                    properties: default_edge_properties("test sender"),
+                },
+                GraphEdge {
+                    from_id: "8fca4f08-c305-4d16-91b5-e283f5f723aa".to_string(),
+                    to_id: "a327877d-e8c4-4cd8-a889-a5251120cce5".to_string(),
+                    edge_type: "LOCATED_AT".to_string(),
+                    user_id: "exobrain".to_string(),
+                    visibility: Visibility::Shared,
+                    properties: default_edge_properties("test location"),
+                },
+            ],
+        })
+        .await
+        .expect("message and located_at edge rules should be accepted");
+    }
+
+    #[tokio::test]
+    async fn rejects_edges_missing_required_global_metadata() {
         let app = KnowledgeApplication::new(
             Arc::new(FakeSchemaRepo::new()),
             Arc::new(FakeGraphRepository { root_exists: false }),
@@ -1676,24 +1912,171 @@ mod tests {
         let err = app
             .upsert_graph_delta(GraphDelta {
                 universes: vec![],
-                entities: vec![EntityNode {
-                    id: "550e8400-e29b-41d4-a716-4466554400ab".to_string(),
-                    type_id: "node.person".to_string(),
-                    universe_id: Some("550e8400-e29b-41d4-a716-4466554400ff".to_string()),
-                    user_id: "   ".to_string(),
-                    visibility: Visibility::Private,
-                    properties: vec![],
-                    resolved_labels: vec![],
-                }],
+                entities: vec![
+                    EntityNode {
+                        id: "2b9bdcc4-2f4a-4b58-9097-8ab205d8d506".to_string(),
+                        type_id: "node.person".to_string(),
+                        universe_id: None,
+                        user_id: "exobrain".to_string(),
+                        visibility: Visibility::Shared,
+                        properties: vec![PropertyValue {
+                            key: "name".to_string(),
+                            value: PropertyScalar::String("Alex".to_string()),
+                        }],
+                        resolved_labels: vec![],
+                    },
+                    EntityNode {
+                        id: "f904fdb6-1770-4638-a2fd-65eae6553be8".to_string(),
+                        type_id: "node.person".to_string(),
+                        universe_id: None,
+                        user_id: "exobrain".to_string(),
+                        visibility: Visibility::Shared,
+                        properties: vec![PropertyValue {
+                            key: "name".to_string(),
+                            value: PropertyScalar::String("Morgan".to_string()),
+                        }],
+                        resolved_labels: vec![],
+                    },
+                ],
                 blocks: vec![],
-                edges: vec![],
+                edges: vec![GraphEdge {
+                    from_id: "2b9bdcc4-2f4a-4b58-9097-8ab205d8d506".to_string(),
+                    to_id: "f904fdb6-1770-4638-a2fd-65eae6553be8".to_string(),
+                    edge_type: "RELATED_TO".to_string(),
+                    user_id: "exobrain".to_string(),
+                    visibility: Visibility::Shared,
+                    properties: vec![],
+                }],
             })
             .await
-            .expect_err("empty entity user_id should fail");
+            .expect_err("edge metadata should be required for all edges");
 
-        assert!(
-            err.to_string().contains("entity user_id is required")
-                || err.to_string().contains("validation failed")
+        let message = err.to_string();
+        assert!(message.contains("required property 'confidence'"));
+        assert!(message.contains("required property 'status'"));
+        assert!(message.contains("required property 'context'"));
+    }
+
+    #[tokio::test]
+    async fn accepts_block_contradicts_edge() {
+        let app = KnowledgeApplication::new(
+            Arc::new(FakeSchemaRepo::new()),
+            Arc::new(FakeGraphRepository { root_exists: false }),
+            Arc::new(FakeEmbedder),
         );
+
+        app.upsert_graph_delta(GraphDelta {
+            universes: vec![],
+            entities: vec![EntityNode {
+                id: "64357dfa-389d-401e-a246-c7a97147f627".to_string(),
+                type_id: "node.person".to_string(),
+                universe_id: None,
+                user_id: "exobrain".to_string(),
+                visibility: Visibility::Shared,
+                properties: vec![PropertyValue {
+                    key: "name".to_string(),
+                    value: PropertyScalar::String("Witness".to_string()),
+                }],
+                resolved_labels: vec![],
+            }],
+            blocks: vec![
+                BlockNode {
+                    id: "352832a6-fe04-4697-9de0-dbec398adf13".to_string(),
+                    type_id: "node.block".to_string(),
+                    user_id: "exobrain".to_string(),
+                    visibility: Visibility::Shared,
+                    properties: vec![PropertyValue {
+                        key: "text".to_string(),
+                        value: PropertyScalar::String("Statement A".to_string()),
+                    }],
+                    resolved_labels: vec![],
+                },
+                BlockNode {
+                    id: "afc3bff2-2478-43f0-bb88-9199f960d0c1".to_string(),
+                    type_id: "node.block".to_string(),
+                    user_id: "exobrain".to_string(),
+                    visibility: Visibility::Shared,
+                    properties: vec![PropertyValue {
+                        key: "text".to_string(),
+                        value: PropertyScalar::String("Statement B".to_string()),
+                    }],
+                    resolved_labels: vec![],
+                },
+            ],
+            edges: vec![
+                GraphEdge {
+                    from_id: "64357dfa-389d-401e-a246-c7a97147f627".to_string(),
+                    to_id: "352832a6-fe04-4697-9de0-dbec398adf13".to_string(),
+                    edge_type: "DESCRIBED_BY".to_string(),
+                    user_id: "exobrain".to_string(),
+                    visibility: Visibility::Shared,
+                    properties: default_edge_properties("test root a"),
+                },
+                GraphEdge {
+                    from_id: "64357dfa-389d-401e-a246-c7a97147f627".to_string(),
+                    to_id: "afc3bff2-2478-43f0-bb88-9199f960d0c1".to_string(),
+                    edge_type: "DESCRIBED_BY".to_string(),
+                    user_id: "exobrain".to_string(),
+                    visibility: Visibility::Shared,
+                    properties: default_edge_properties("test root b"),
+                },
+                GraphEdge {
+                    from_id: "352832a6-fe04-4697-9de0-dbec398adf13".to_string(),
+                    to_id: "afc3bff2-2478-43f0-bb88-9199f960d0c1".to_string(),
+                    edge_type: "CONTRADICTS".to_string(),
+                    user_id: "exobrain".to_string(),
+                    visibility: Visibility::Shared,
+                    properties: default_edge_properties("test contradiction"),
+                },
+            ],
+        })
+        .await
+        .expect("block CONTRADICTS edge should be accepted");
+    }
+
+    #[tokio::test]
+    async fn accepts_cross_user_scope_in_single_delta() {
+        let app = KnowledgeApplication::new(
+            Arc::new(FakeSchemaRepo::new()),
+            Arc::new(FakeGraphRepository { root_exists: false }),
+            Arc::new(FakeEmbedder),
+        );
+
+        app.upsert_graph_delta(GraphDelta {
+            universes: vec![],
+            entities: vec![EntityNode {
+                id: "550e8400-e29b-41d4-a716-4466554400ab".to_string(),
+                type_id: "node.person".to_string(),
+                universe_id: None,
+                user_id: "user-2".to_string(),
+                visibility: Visibility::Private,
+                properties: vec![PropertyValue {
+                    key: "name".to_string(),
+                    value: PropertyScalar::String("Cross User Person".to_string()),
+                }],
+                resolved_labels: vec![],
+            }],
+            blocks: vec![BlockNode {
+                id: "d0e2ceb6-3daa-441f-a87b-2168ac723ca7".to_string(),
+                type_id: "node.block".to_string(),
+                user_id: "user-3".to_string(),
+                visibility: Visibility::Shared,
+                properties: vec![PropertyValue {
+                    key: "text".to_string(),
+                    value: PropertyScalar::String("cross-user block".to_string()),
+                }],
+                resolved_labels: vec![],
+            }],
+            edges: vec![GraphEdge {
+                from_id: "550e8400-e29b-41d4-a716-4466554400ab".to_string(),
+                to_id: "d0e2ceb6-3daa-441f-a87b-2168ac723ca7".to_string(),
+                edge_type: "DESCRIBED_BY".to_string(),
+                user_id: "user-4".to_string(),
+                visibility: Visibility::Shared,
+                properties: default_edge_properties("cross-user edge"),
+            }],
+        })
+        .await
+        .expect("cross-user records should be accepted in a single delta");
     }
 }
