@@ -12,8 +12,8 @@ router = APIRouter(prefix="/knowledge", tags=["knowledge"])
 @router.post(
     "/update",
     response_model=KnowledgeUpdateResponse,
-    summary="Update the knowledge base using a journal",
-    description="Starts a knowledge-base update using the specified journal and its messages.",
+    summary="Update the knowledge base using uncommitted messages",
+    description="Starts one or more knowledge-base update jobs from uncommitted journal messages, optionally scoped to a journal reference.",
 )
 async def enqueue_knowledge_update(
     payload: KnowledgeUpdateRequest,

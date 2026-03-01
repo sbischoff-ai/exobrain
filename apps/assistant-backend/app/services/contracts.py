@@ -248,8 +248,8 @@ class JobPublisherProtocol(Protocol):
 class KnowledgeServiceProtocol(Protocol):
     """Service contract for knowledge-graph related asynchronous workflows."""
 
-    async def enqueue_update_job(self, *, user_id: str, journal_reference: str) -> str:
-        """Queue a knowledge graph update job based on journal messages."""
+    async def enqueue_update_job(self, *, user_id: str, journal_reference: str | None = None) -> str:
+        """Queue one or more knowledge update jobs from uncommitted journal messages."""
 
 
 class SessionStoreProtocol(Protocol):

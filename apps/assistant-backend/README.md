@@ -57,6 +57,7 @@ Core runtime vars:
 - `ASSISTANT_CACHE_REDIS_URL` (session store)
 - `EXOBRAIN_NATS_URL` (job publishing)
 - `EXOBRAIN_QDRANT_URL`, `EXOBRAIN_MEMGRAPH_URL` (knowledge dependencies)
+- `KNOWLEDGE_UPDATE_MAX_TOKENS` (max tokens per knowledge-update job payload, default `8000`)
 - `RESHAPE_SCHEMA_QUERY` (migration introspection)
 
 Model/tool vars:

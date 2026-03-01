@@ -4,44 +4,152 @@ from datetime import UTC, datetime
 
 import pytest
 
+from app.core.settings import Settings
 from app.services.knowledge_service import KnowledgeService
 
 
-class FakeJournalService:
-    async def list_messages(self, *, user_id: str, journal_reference: str, limit: int, before_sequence: int | None = None):
-        assert user_id == "user-1"
-        assert journal_reference == "2026/02/19"
-        assert limit == 500
-        assert before_sequence is None
-        return [
-            {
-                "role": "user",
-                "content": "hello",
-                "sequence": 1,
-                "created_at": datetime(2026, 2, 19, 10, 0, tzinfo=UTC),
-            }
-        ]
+class FakeDatabase:
+    def __init__(self, rows: list[dict[str, object]]) -> None:
+        self.rows = rows
+        self.fetch_calls: list[tuple[str, tuple[object, ...]]] = []
+        self.execute_calls: list[tuple[str, tuple[object, ...]]] = []
+
+    async def fetch(self, query: str, *args: object):
+        self.fetch_calls.append((query, args))
+        return self.rows
+
+    async def execute(self, query: str, *args: object):
+        self.execute_calls.append((query, args))
+        return "UPDATE 1"
 
 
 class FakeJobPublisher:
     def __init__(self) -> None:
-        self.called_payload: dict[str, object] | None = None
+        self.calls: list[dict[str, object]] = []
 
     async def enqueue_job(self, *, job_type: str, correlation_id: str, payload: dict[str, object]) -> str:
-        assert job_type == "knowledge.update"
-        assert correlation_id == "user-1"
-        self.called_payload = payload
-        return "job-1"
+        self.calls.append(
+            {
+                "job_type": job_type,
+                "correlation_id": correlation_id,
+                "payload": payload,
+            }
+        )
+        return f"job-{len(self.calls)}"
 
 
 @pytest.mark.asyncio
-async def test_enqueue_update_job_uses_journal_messages() -> None:
+async def test_enqueue_update_job_filters_and_splits_uncommitted_sequences() -> None:
+    rows = [
+        {
+            "id": "m-1",
+            "reference": "2026/02/19",
+            "role": "user",
+            "content": "abcd",
+            "sequence": 1,
+            "created_at": datetime(2026, 2, 19, 10, 0, tzinfo=UTC),
+            "committed_to_knowledge_base": False,
+            "previous_committed": None,
+        },
+        {
+            "id": "m-2",
+            "reference": "2026/02/19",
+            "role": "assistant",
+            "content": "abcd",
+            "sequence": 2,
+            "created_at": datetime(2026, 2, 19, 10, 1, tzinfo=UTC),
+            "committed_to_knowledge_base": True,
+            "previous_committed": False,
+        },
+        {
+            "id": "m-3",
+            "reference": "2026/02/19",
+            "role": "user",
+            "content": "abcd",
+            "sequence": 3,
+            "created_at": datetime(2026, 2, 19, 10, 2, tzinfo=UTC),
+            "committed_to_knowledge_base": False,
+            "previous_committed": True,
+        },
+        {
+            "id": "m-4",
+            "reference": "2026/02/20",
+            "role": "assistant",
+            "content": "abcd",
+            "sequence": 1,
+            "created_at": datetime(2026, 2, 20, 10, 0, tzinfo=UTC),
+            "committed_to_knowledge_base": False,
+            "previous_committed": None,
+        },
+    ]
+    database = FakeDatabase(rows)
     publisher = FakeJobPublisher()
-    service = KnowledgeService(FakeJournalService(), publisher)
+    settings = Settings()
+    settings.knowledge_update_max_tokens = 100
+    service = KnowledgeService(database=database, job_publisher=publisher, settings=settings)
+
+    job_id = await service.enqueue_update_job(user_id="user-1")
+
+    assert job_id == "job-1"
+    assert len(publisher.calls) == 3
+    assert publisher.calls[0]["payload"]["journal_reference"] == "2026/02/19"
+    assert [m["sequence"] for m in publisher.calls[0]["payload"]["messages"]] == [1]
+    assert [m["sequence"] for m in publisher.calls[1]["payload"]["messages"]] == [3]
+    assert publisher.calls[2]["payload"]["journal_reference"] == "2026/02/20"
+    assert database.fetch_calls[0][1] == ("user-1", None)
+    assert len(database.execute_calls) == 3
+
+
+@pytest.mark.asyncio
+async def test_enqueue_update_job_respects_token_limit() -> None:
+    rows = [
+        {
+            "id": "m-1",
+            "reference": "2026/02/19",
+            "role": "user",
+            "content": "a" * 24,
+            "sequence": 1,
+            "created_at": datetime(2026, 2, 19, 10, 0, tzinfo=UTC),
+            "committed_to_knowledge_base": False,
+            "previous_committed": None,
+        },
+        {
+            "id": "m-2",
+            "reference": "2026/02/19",
+            "role": "assistant",
+            "content": "b" * 24,
+            "sequence": 2,
+            "created_at": datetime(2026, 2, 19, 10, 1, tzinfo=UTC),
+            "committed_to_knowledge_base": False,
+            "previous_committed": False,
+        },
+    ]
+    database = FakeDatabase(rows)
+    publisher = FakeJobPublisher()
+    settings = Settings()
+    settings.knowledge_update_max_tokens = 10
+    service = KnowledgeService(database=database, job_publisher=publisher, settings=settings)
+
+    await service.enqueue_update_job(user_id="user-1", journal_reference="2026/02/19")
+
+    assert len(publisher.calls) == 2
+    assert database.fetch_calls[0][1] == ("user-1", "2026/02/19")
+
+
+@pytest.mark.asyncio
+async def test_enqueue_update_job_returns_empty_when_no_uncommitted_messages() -> None:
+    database = FakeDatabase([])
+    publisher = FakeJobPublisher()
+    service = KnowledgeService(database=database, job_publisher=publisher, settings=Settings())
 
     job_id = await service.enqueue_update_job(user_id="user-1", journal_reference="2026/02/19")
 
-    assert job_id == "job-1"
-    assert publisher.called_payload is not None
-    assert publisher.called_payload["journal_reference"] == "2026/02/19"
-    assert publisher.called_payload["messages"][0]["content"] == "hello"
+    assert job_id == ""
+    assert publisher.calls == []
+    assert database.execute_calls == []
+
+
+def test_count_text_tokens_rounds_character_division() -> None:
+    assert KnowledgeService._count_text_tokens("abcd") == 1
+    assert KnowledgeService._count_text_tokens("abcde") == 1
+    assert KnowledgeService._count_text_tokens("abcdef") == 2
