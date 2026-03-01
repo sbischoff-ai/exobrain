@@ -128,6 +128,25 @@ Run end-to-end coverage against mock API mode (recommended for agent workflows):
 ./scripts/agent/run-assistant-frontend-e2e.sh
 ```
 
+Script behavior:
+- Uses `npm ci` when `e2e/package-lock.json` is present (falls back to `npm install` only when no lockfile exists).
+- Reuses a valid `e2e/node_modules` install by default for faster reruns.
+- Reinstalls deps when `e2e/node_modules` is missing/invalid, or when forced via `--force-reinstall` or `E2E_FORCE_REINSTALL=true`.
+- Prints whether `E2E_USE_EXISTING_SERVER=true` is active before the test run.
+- Exits non-zero with concise hints for common failures (dependency install issues or missing Playwright browsers).
+
+Useful flags/env:
+
+```sh
+# force reinstall deps before running tests
+E2E_FORCE_REINSTALL=true ./scripts/agent/run-assistant-frontend-e2e.sh
+# or
+./scripts/agent/run-assistant-frontend-e2e.sh --force-reinstall
+
+# run tests against an already running frontend server
+E2E_USE_EXISTING_SERVER=true ./scripts/agent/run-assistant-frontend-e2e.sh
+```
+
 Manual flow (if you already have frontend running):
 
 ```sh
