@@ -53,6 +53,55 @@ impl AppConfig {
 #[cfg(test)]
 mod tests {
     use super::AppConfig;
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+
+    const ENV_KEYS: [&str; 7] = [
+        "APP_ENV",
+        "LOG_LEVEL",
+        "KNOWLEDGE_SCHEMA_DSN",
+        "METASTORE_DSN",
+        "MEMGRAPH_BOLT_ADDR",
+        "MEMGRAPH_DB",
+        "QDRANT_ADDR",
+    ];
+
+    fn env_mutex() -> &'static Mutex<()> {
+        static ENV_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
+        ENV_MUTEX.get_or_init(|| Mutex::new(()))
+    }
+
+    struct EnvSnapshot {
+        values: HashMap<&'static str, Option<String>>,
+    }
+
+    impl EnvSnapshot {
+        fn capture() -> Self {
+            let values = ENV_KEYS
+                .into_iter()
+                .map(|key| (key, std::env::var(key).ok()))
+                .collect();
+            Self { values }
+        }
+
+        fn clear_all(&self) {
+            for key in ENV_KEYS {
+                std::env::remove_var(key);
+            }
+        }
+    }
+
+    impl Drop for EnvSnapshot {
+        fn drop(&mut self) {
+            for key in ENV_KEYS {
+                if let Some(value) = self.values.get(key).and_then(Clone::clone) {
+                    std::env::set_var(key, value);
+                } else {
+                    std::env::remove_var(key);
+                }
+            }
+        }
+    }
 
     #[test]
     fn reflection_enabled_for_local() {
@@ -73,6 +122,10 @@ mod tests {
 
     #[test]
     fn defaults_memgraph_database_to_memgraph() {
+        let _guard = env_mutex().lock().expect("env mutex poisoned");
+        let snapshot = EnvSnapshot::capture();
+        snapshot.clear_all();
+
         std::env::set_var("APP_ENV", "local");
         std::env::set_var("KNOWLEDGE_SCHEMA_DSN", "postgresql://example");
         std::env::set_var("MEMGRAPH_BOLT_ADDR", "bolt://example");
@@ -82,6 +135,24 @@ mod tests {
         let cfg = AppConfig::from_env().expect("config should load");
 
         assert_eq!(cfg.memgraph_database, "memgraph");
+    }
+
+    #[test]
+    fn from_env_errors_when_no_metastore_dsn_is_present() {
+        let _guard = env_mutex().lock().expect("env mutex poisoned");
+        let snapshot = EnvSnapshot::capture();
+        snapshot.clear_all();
+
+        std::env::set_var("APP_ENV", "local");
+        std::env::set_var("MEMGRAPH_BOLT_ADDR", "bolt://example");
+        std::env::set_var("QDRANT_ADDR", "http://example");
+
+        let err = AppConfig::from_env().expect_err("config should fail without metastore DSN");
+
+        assert_eq!(
+            err.to_string(),
+            "KNOWLEDGE_SCHEMA_DSN or METASTORE_DSN is required"
+        );
     }
 
     #[test]
