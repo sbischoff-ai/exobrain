@@ -1,0 +1,128 @@
+version: 1
+workflows:
+  - name: assistant-offline-up
+    purpose: Start local native infra and prepare assistant database for offline backend work.
+    required_tools:
+      - bash
+      - psql
+      - reshape
+    required_services:
+      - postgresql
+      - nats-server
+      - qdrant
+    entry_commands:
+      - ./scripts/agent/assistant-offline-up.sh
+    health_check_commands:
+      - ./scripts/agent/native-infra-health.sh
+    teardown_commands:
+      - ./scripts/agent/native-infra-down.sh
+    offline_compatible: true
+
+  - name: assistant-backend-offline
+    purpose: Run assistant-backend against local infra with model/network mocks enabled.
+    required_tools:
+      - bash
+      - uv
+      - python3.12
+    required_services:
+      - postgresql
+      - nats-server
+      - qdrant
+    entry_commands:
+      - ./scripts/agent/assistant-offline-up.sh
+      - ./scripts/agent/run-assistant-backend-offline.sh
+    health_check_commands:
+      - ./scripts/agent/native-infra-health.sh
+      - "curl -fsS http://localhost:8000/api/health"
+    teardown_commands:
+      - ./scripts/agent/native-infra-down.sh
+    offline_compatible: true
+
+  - name: assistant-frontend-mock
+    purpose: Run assistant-frontend in mock API mode for UI-only development without backend services.
+    required_tools:
+      - bash
+      - npm
+    required_services: []
+    entry_commands:
+      - ./scripts/agent/run-assistant-frontend-mock.sh
+    health_check_commands:
+      - "curl -fsS http://localhost:5173"
+    teardown_commands:
+      - "pkill -f 'vite'"
+    offline_compatible: true
+
+  - name: assistant-frontend-e2e
+    purpose: Execute Playwright end-to-end coverage against assistant-frontend mock API mode.
+    required_tools:
+      - bash
+      - npm
+      - playwright
+    required_services: []
+    entry_commands:
+      - ./scripts/agent/run-assistant-frontend-e2e.sh
+    health_check_commands:
+      - ./scripts/agent/run-assistant-frontend-e2e.sh
+    teardown_commands: []
+    offline_compatible: true
+
+  - name: assistant-db-setup-native
+    purpose: Bootstrap, migrate, and seed assistant Postgres schema using native-process tooling.
+    required_tools:
+      - bash
+      - psql
+      - reshape
+    required_services:
+      - postgresql
+    entry_commands:
+      - ./scripts/agent/assistant-db-setup-native.sh
+    health_check_commands:
+      - ./scripts/agent/assistant-db-setup-native.sh
+    teardown_commands: []
+    offline_compatible: true
+
+  - name: assistant-db-reset-and-seed-native
+    purpose: Reset assistant database state and reseed deterministic datasets for repeatable tests.
+    required_tools:
+      - bash
+      - psql
+      - reshape
+    required_services:
+      - postgresql
+    entry_commands:
+      - ./scripts/agent/assistant-db-reset-and-seed-native.sh
+    health_check_commands:
+      - ./scripts/agent/assistant-db-reset-and-seed-native.sh
+    teardown_commands: []
+    offline_compatible: true
+
+
+  - name: assistant-db-setup-local
+    purpose: Bootstrap, migrate, and seed assistant Postgres schema in local workstation workflow.
+    required_tools:
+      - bash
+      - psql
+      - reshape
+    required_services:
+      - postgresql
+    entry_commands:
+      - ./scripts/local/assistant-db-setup.sh
+    health_check_commands:
+      - ./scripts/local/assistant-db-setup.sh
+    teardown_commands: []
+    offline_compatible: true
+
+  - name: assistant-db-reset-and-seed-local
+    purpose: Reset and reseed assistant database using local workstation helper scripts.
+    required_tools:
+      - bash
+      - psql
+      - reshape
+    required_services:
+      - postgresql
+    entry_commands:
+      - ./scripts/local/assistant-db-reset-and-seed.sh
+    health_check_commands:
+      - ./scripts/local/assistant-db-reset-and-seed.sh
+    teardown_commands: []
+    offline_compatible: true

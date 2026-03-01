@@ -26,6 +26,8 @@ For agent-focused helpers, use:
 
 For command walkthroughs, see `docs/agents/codex-runbook.agent.md`.
 
+Workflow metadata (names, commands, required services/tools, and offline compatibility) lives in `.agent/workflows.yaml`; keep that manifest in sync with runbook prose when scripts or service assumptions change.
+
 ### Workflow picker
 
 Need a fast start? Use the **"Choose your workflow in 30 seconds"** matrix in `docs/agents/codex-runbook.agent.md` as the source of truth for task-type-to-script/test mapping.
