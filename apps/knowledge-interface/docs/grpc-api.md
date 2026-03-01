@@ -99,4 +99,4 @@ Minimal valid delta for one person + one block + explicit edges:
 For interactive request prototyping use `grpcui -plaintext localhost:50051`.
 
 
-Visibility values are accepted as provided per node/edge; ingestion does not enforce request-level visibility equality across all records.
+Visibility values are accepted as provided per node/edge; scope is carried per universe/entity/block/edge (no top-level request scope fields).

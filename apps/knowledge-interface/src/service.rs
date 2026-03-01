@@ -959,14 +959,19 @@ async fn existing_block_context_for_referenced_summarize_parents(
     graph_repository: &dyn GraphRepository,
 ) -> Result<HashMap<String, ExistingBlockContext>> {
     let block_ids: HashSet<&str> = blocks.iter().map(|b| b.id.as_str()).collect();
-    let parent_ids: HashSet<&str> = edges
+    let parent_scopes: HashMap<&str, (&str, Visibility)> = edges
         .iter()
         .filter(|edge| {
             edge.edge_type.eq_ignore_ascii_case("SUMMARIZES")
                 && block_ids.contains(edge.to_id.as_str())
                 && !block_ids.contains(edge.from_id.as_str())
         })
-        .map(|edge| edge.from_id.as_str())
+        .map(|edge| {
+            (
+                edge.from_id.as_str(),
+                (edge.user_id.as_str(), edge.visibility),
+            )
+        })
         .collect();
 
     let mut contexts = HashMap::new();
