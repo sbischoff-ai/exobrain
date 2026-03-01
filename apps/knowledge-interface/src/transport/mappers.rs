@@ -1,12 +1,57 @@
 use tonic::Status;
 
 use crate::domain::{
-    BlockNode, EntityNode, GraphEdge, PropertyScalar, PropertyValue, UniverseNode, Visibility,
+    BlockNode, EdgeEndpointRule, EntityNode, GraphEdge, PropertyScalar, PropertyValue, SchemaType,
+    TypeInheritance, TypeProperty, UniverseNode, Visibility,
 };
 
 use super::proto;
 
-pub fn map_universe(universe: proto::UniverseNode) -> Result<UniverseNode, Status> {
+pub(crate) fn to_proto_schema_type(schema_type: SchemaType) -> proto::SchemaType {
+    proto::SchemaType {
+        id: schema_type.id,
+        kind: schema_type.kind,
+        name: schema_type.name,
+        description: schema_type.description,
+        active: schema_type.active,
+    }
+}
+
+pub(crate) fn to_proto_type_property(property: TypeProperty) -> proto::TypeProperty {
+    proto::TypeProperty {
+        owner_type_id: property.owner_type_id,
+        prop_name: property.prop_name,
+        value_type: property.value_type,
+        required: property.required,
+        readable: property.readable,
+        writable: property.writable,
+        active: property.active,
+        description: property.description,
+    }
+}
+
+pub(crate) fn to_proto_type_inheritance(inheritance: TypeInheritance) -> proto::TypeInheritance {
+    proto::TypeInheritance {
+        child_type_id: inheritance.child_type_id,
+        parent_type_id: inheritance.parent_type_id,
+        description: inheritance.description,
+        active: inheritance.active,
+    }
+}
+
+pub(crate) fn to_proto_edge_endpoint_rule(rule: EdgeEndpointRule) -> proto::EdgeEndpointRule {
+    proto::EdgeEndpointRule {
+        edge_type_id: rule.edge_type_id,
+        from_node_type_id: rule.from_node_type_id,
+        to_node_type_id: rule.to_node_type_id,
+        active: rule.active,
+        description: rule.description,
+    }
+}
+
+pub(crate) fn to_domain_universe_node(
+    universe: proto::UniverseNode,
+) -> Result<UniverseNode, Status> {
     Ok(UniverseNode {
         id: universe.id,
         name: universe.name,
@@ -15,7 +60,7 @@ pub fn map_universe(universe: proto::UniverseNode) -> Result<UniverseNode, Statu
     })
 }
 
-pub fn map_entity(entity: proto::EntityNode) -> Result<EntityNode, Status> {
+pub(crate) fn to_domain_entity_node(entity: proto::EntityNode) -> Result<EntityNode, Status> {
     Ok(EntityNode {
         id: entity.id,
         type_id: entity.type_id,
@@ -25,13 +70,13 @@ pub fn map_entity(entity: proto::EntityNode) -> Result<EntityNode, Status> {
         properties: entity
             .properties
             .into_iter()
-            .map(map_property_value)
+            .map(to_domain_property_value)
             .collect::<Result<Vec<_>, _>>()?,
         resolved_labels: vec![],
     })
 }
 
-pub fn map_block(block: proto::BlockNode) -> Result<BlockNode, Status> {
+pub(crate) fn to_domain_block_node(block: proto::BlockNode) -> Result<BlockNode, Status> {
     Ok(BlockNode {
         id: block.id,
         type_id: block.type_id,
@@ -40,13 +85,13 @@ pub fn map_block(block: proto::BlockNode) -> Result<BlockNode, Status> {
         properties: block
             .properties
             .into_iter()
-            .map(map_property_value)
+            .map(to_domain_property_value)
             .collect::<Result<Vec<_>, _>>()?,
         resolved_labels: vec![],
     })
 }
 
-pub fn map_edge(edge: proto::GraphEdge) -> Result<GraphEdge, Status> {
+pub(crate) fn to_domain_graph_edge(edge: proto::GraphEdge) -> Result<GraphEdge, Status> {
     Ok(GraphEdge {
         from_id: edge.from_id,
         to_id: edge.to_id,
@@ -56,12 +101,14 @@ pub fn map_edge(edge: proto::GraphEdge) -> Result<GraphEdge, Status> {
         properties: edge
             .properties
             .into_iter()
-            .map(map_property_value)
+            .map(to_domain_property_value)
             .collect::<Result<Vec<_>, _>>()?,
     })
 }
 
-pub fn map_property_value(value: proto::PropertyValue) -> Result<PropertyValue, Status> {
+pub(crate) fn to_domain_property_value(
+    value: proto::PropertyValue,
+) -> Result<PropertyValue, Status> {
     let scalar = match value
         .value
         .ok_or_else(|| Status::invalid_argument("property value is required"))?
@@ -80,7 +127,7 @@ pub fn map_property_value(value: proto::PropertyValue) -> Result<PropertyValue, 
     })
 }
 
-pub fn map_visibility(value: i32) -> Result<Visibility, Status> {
+pub(crate) fn map_visibility(value: i32) -> Result<Visibility, Status> {
     let visibility = proto::Visibility::try_from(value)
         .map_err(|_| Status::invalid_argument("visibility is invalid"))?;
 
@@ -88,5 +135,34 @@ pub fn map_visibility(value: i32) -> Result<Visibility, Status> {
         proto::Visibility::Private => Ok(Visibility::Private),
         proto::Visibility::Shared => Ok(Visibility::Shared),
         proto::Visibility::Unspecified => Err(Status::invalid_argument("visibility is required")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use tonic::Code;
+
+    use super::{map_visibility, to_domain_property_value};
+    use crate::transport::proto;
+
+    #[test]
+    fn to_domain_property_value_rejects_missing_value() {
+        let result = to_domain_property_value(proto::PropertyValue {
+            key: "name".to_string(),
+            value: None,
+        });
+
+        let error = result.expect_err("expected missing value to fail");
+        assert_eq!(error.code(), Code::InvalidArgument);
+        assert_eq!(error.message(), "property value is required");
+    }
+
+    #[test]
+    fn map_visibility_rejects_invalid_enum_value() {
+        let result = map_visibility(99);
+
+        let error = result.expect_err("expected invalid visibility enum to fail");
+        assert_eq!(error.code(), Code::InvalidArgument);
+        assert_eq!(error.message(), "visibility is invalid");
     }
 }

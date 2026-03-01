@@ -6,7 +6,11 @@ use crate::domain::{SchemaType, UpsertSchemaTypeCommand, UpsertSchemaTypePropert
 use crate::service::KnowledgeApplication;
 
 use super::errors::map_ingest_error;
-use super::mappers::{map_block, map_edge, map_entity, map_universe};
+use super::mappers::{
+    to_domain_block_node, to_domain_entity_node, to_domain_graph_edge, to_domain_universe_node,
+    to_proto_edge_endpoint_rule, to_proto_schema_type, to_proto_type_inheritance,
+    to_proto_type_property,
+};
 use super::proto::knowledge_interface_server::{KnowledgeInterface, KnowledgeInterfaceServer};
 use super::proto::{
     GetSchemaReply, GetSchemaRequest, HealthReply, HealthRequest, InitializeUserGraphReply,
@@ -40,43 +44,21 @@ impl KnowledgeInterface for KnowledgeGrpcService {
             .await
             .map_err(|e| Status::internal(e.to_string()))?;
 
-        let map_type = |s: SchemaType| super::proto::SchemaType {
-            id: s.id,
-            kind: s.kind,
-            name: s.name,
-            description: s.description,
-            active: s.active,
-        };
-
         Ok(Response::new(GetSchemaReply {
             node_types: schema
                 .node_types
                 .into_iter()
                 .map(|node| super::proto::SchemaNodeType {
-                    r#type: Some(map_type(node.schema_type)),
+                    r#type: Some(to_proto_schema_type(node.schema_type)),
                     properties: node
                         .properties
                         .into_iter()
-                        .map(|p| super::proto::TypeProperty {
-                            owner_type_id: p.owner_type_id,
-                            prop_name: p.prop_name,
-                            value_type: p.value_type,
-                            required: p.required,
-                            readable: p.readable,
-                            writable: p.writable,
-                            active: p.active,
-                            description: p.description,
-                        })
+                        .map(to_proto_type_property)
                         .collect(),
                     parents: node
                         .parents
                         .into_iter()
-                        .map(|i| super::proto::TypeInheritance {
-                            child_type_id: i.child_type_id,
-                            parent_type_id: i.parent_type_id,
-                            description: i.description,
-                            active: i.active,
-                        })
+                        .map(to_proto_type_inheritance)
                         .collect(),
                 })
                 .collect(),
@@ -84,31 +66,16 @@ impl KnowledgeInterface for KnowledgeGrpcService {
                 .edge_types
                 .into_iter()
                 .map(|edge| super::proto::SchemaEdgeType {
-                    r#type: Some(map_type(edge.schema_type)),
+                    r#type: Some(to_proto_schema_type(edge.schema_type)),
                     properties: edge
                         .properties
                         .into_iter()
-                        .map(|p| super::proto::TypeProperty {
-                            owner_type_id: p.owner_type_id,
-                            prop_name: p.prop_name,
-                            value_type: p.value_type,
-                            required: p.required,
-                            readable: p.readable,
-                            writable: p.writable,
-                            active: p.active,
-                            description: p.description,
-                        })
+                        .map(to_proto_type_property)
                         .collect(),
                     rules: edge
                         .rules
                         .into_iter()
-                        .map(|r| super::proto::EdgeEndpointRule {
-                            edge_type_id: r.edge_type_id,
-                            from_node_type_id: r.from_node_type_id,
-                            to_node_type_id: r.to_node_type_id,
-                            active: r.active,
-                            description: r.description,
-                        })
+                        .map(to_proto_edge_endpoint_rule)
                         .collect(),
                 })
                 .collect(),
@@ -187,25 +154,25 @@ impl KnowledgeInterface for KnowledgeGrpcService {
         let universes = payload
             .universes
             .into_iter()
-            .map(map_universe)
+            .map(to_domain_universe_node)
             .collect::<Result<Vec<_>, Status>>()?;
 
         let entities = payload
             .entities
             .into_iter()
-            .map(map_entity)
+            .map(to_domain_entity_node)
             .collect::<Result<Vec<_>, Status>>()?;
 
         let blocks = payload
             .blocks
             .into_iter()
-            .map(map_block)
+            .map(to_domain_block_node)
             .collect::<Result<Vec<_>, Status>>()?;
 
         let edges = payload
             .edges
             .into_iter()
-            .map(map_edge)
+            .map(to_domain_graph_edge)
             .collect::<Result<Vec<_>, Status>>()?;
 
         self.app
