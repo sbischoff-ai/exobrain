@@ -41,19 +41,53 @@ class JobRepository:
         await self._db.execute(
             """
             UPDATE orchestrator_jobs
-            SET status = 'completed', completed_at = NOW(), updated_at = NOW()
+            SET status = 'completed',
+                is_terminal = TRUE,
+                terminal_reason = NULL,
+                completed_at = NOW(),
+                updated_at = NOW()
             WHERE job_id = $1
             """,
             job_id,
         )
 
-    async def mark_failed(self, job_id: str, error_message: str) -> None:
+    async def mark_retrying_failure(self, job_id: str, error_message: str) -> None:
         await self._db.execute(
             """
             UPDATE orchestrator_jobs
-            SET status = 'failed', last_error = $2, updated_at = NOW()
+            SET status = 'failed',
+                last_error = $2,
+                is_terminal = FALSE,
+                terminal_reason = NULL,
+                updated_at = NOW()
             WHERE job_id = $1
             """,
             job_id,
             error_message,
+        )
+
+    async def mark_terminal_failure(self, job_id: str, error_message: str, terminal_reason: str) -> None:
+        await self._db.execute(
+            """
+            UPDATE orchestrator_jobs
+            SET status = 'failed',
+                last_error = $2,
+                is_terminal = TRUE,
+                terminal_reason = $3,
+                updated_at = NOW()
+            WHERE job_id = $1
+            """,
+            job_id,
+            error_message,
+            terminal_reason,
+        )
+
+    async def fetch_status_by_job_id(self, job_id: str):
+        return await self._db.fetchrow(
+            """
+            SELECT job_id, status, attempt, last_error, is_terminal, terminal_reason, updated_at
+            FROM orchestrator_jobs
+            WHERE job_id = $1
+            """,
+            job_id,
         )

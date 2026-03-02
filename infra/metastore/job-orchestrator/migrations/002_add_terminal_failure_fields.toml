@@ -1,0 +1,20 @@
+# Add terminal lifecycle metadata while preserving existing status values.
+
+[[actions]]
+type = "add_column"
+table = "orchestrator_jobs"
+
+    [actions.column]
+    name = "is_terminal"
+    type = "BOOLEAN"
+    nullable = false
+    default = "false"
+
+[[actions]]
+type = "add_column"
+table = "orchestrator_jobs"
+
+    [actions.column]
+    name = "terminal_reason"
+    type = "TEXT"
+

@@ -90,15 +90,15 @@ class JobOrchestrator:
                 "job processing failed",
                 extra={"job_id": run_job.job_id, "attempt": delivery_attempt, "max_attempts": self._max_attempts},
             )
-            await self._repository.mark_failed(run_job.job_id, str(exc))
-
             if delivery_attempt >= self._max_attempts:
+                await self._repository.mark_terminal_failure(run_job.job_id, str(exc), "max-attempts")
                 logger.error("max retries reached, sending to DLQ", extra={"job_id": run_job.job_id})
                 await self._emit_result(run_job, "failed", attempt=delivery_attempt, detail=str(exc))
                 await self._emit_dlq(reason="max-attempts", detail=str(exc), raw_message=msg.data)
                 await msg.ack()
                 return
 
+            await self._repository.mark_retrying_failure(run_job.job_id, str(exc))
             logger.warning("retrying job", extra={"job_id": run_job.job_id, "next_attempt": delivery_attempt + 1})
             await msg.nak()
 
