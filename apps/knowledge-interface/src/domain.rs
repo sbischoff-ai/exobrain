@@ -149,6 +149,7 @@ pub struct NodeRelationshipCounts {
     pub entity_is_part_of: usize,
     pub block_parent_edges: usize,
     pub entity_described_by_edges: usize,
+    pub universe_described_by_edges: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -176,6 +177,13 @@ pub struct SchemaEdgeTypeHydrated {
 pub struct FullSchema {
     pub node_types: Vec<SchemaNodeTypeHydrated>,
     pub edge_types: Vec<SchemaEdgeTypeHydrated>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExtractionUniverse {
+    pub id: String,
+    pub name: String,
+    pub described_by_text: Option<String>,
 }
 
 #[derive(Debug, Clone)]

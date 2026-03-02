@@ -6,7 +6,7 @@ use crate::domain::{SchemaType, UpsertSchemaTypeCommand, UpsertSchemaTypePropert
 use crate::service::{
     build_extraction_entity_types, ExtractionAllowedEdge as ServiceAllowedEdge,
     ExtractionEntityType as ServiceExtractionEntityType, ExtractionSchemaOptions,
-    KnowledgeApplication,
+    ExtractionUniverseContext as ServiceExtractionUniverseContext, KnowledgeApplication,
 };
 
 use super::errors::map_ingest_error;
@@ -18,11 +18,11 @@ use super::mappers::{
 };
 use super::proto::knowledge_interface_server::{KnowledgeInterface, KnowledgeInterfaceServer};
 use super::proto::{
-    AllowedEdge, ExtractionEntityType, FindEntityCandidatesReply, FindEntityCandidatesRequest,
-    GetEntityContextReply, GetEntityContextRequest, GetExtractionSchemaContextReply,
-    GetExtractionSchemaContextRequest, GetSchemaReply, GetSchemaRequest, GetUserInitGraphReply,
-    GetUserInitGraphRequest, HealthReply, HealthRequest, UpsertGraphDeltaReply,
-    UpsertGraphDeltaRequest, UpsertSchemaTypeReply, UpsertSchemaTypeRequest,
+    AllowedEdge, ExtractionEntityType, ExtractionUniverse, FindEntityCandidatesReply,
+    FindEntityCandidatesRequest, GetEntityContextReply, GetEntityContextRequest,
+    GetExtractionSchemaContextReply, GetExtractionSchemaContextRequest, GetSchemaReply,
+    GetSchemaRequest, GetUserInitGraphReply, GetUserInitGraphRequest, HealthReply, HealthRequest,
+    UpsertGraphDeltaReply, UpsertGraphDeltaRequest, UpsertSchemaTypeReply, UpsertSchemaTypeRequest,
 };
 use super::FILE_DESCRIPTOR_SET;
 
@@ -67,6 +67,14 @@ fn to_proto_extraction_entity_type(entity: ServiceExtractionEntityType) -> Extra
             .into_iter()
             .map(to_proto_allowed_edge)
             .collect(),
+    }
+}
+
+fn to_proto_extraction_universe(universe: ServiceExtractionUniverseContext) -> ExtractionUniverse {
+    ExtractionUniverse {
+        id: universe.id,
+        name: universe.name,
+        described_by_text: universe.described_by_text,
     }
 }
 
@@ -211,6 +219,11 @@ impl KnowledgeInterface for KnowledgeGrpcService {
 
         let entity_types =
             build_extraction_entity_types(schema, extraction_options_from_request(&payload));
+        let universes = self
+            .app
+            .get_extraction_universes(&payload.user_id)
+            .await
+            .map_err(|e| Status::invalid_argument(e.to_string()))?;
         let prompt_context_markdown = render_prompt_context_markdown(&entity_types);
 
         Ok(Response::new(GetExtractionSchemaContextReply {
@@ -219,6 +232,10 @@ impl KnowledgeInterface for KnowledgeGrpcService {
                 .map(to_proto_extraction_entity_type)
                 .collect(),
             prompt_context_markdown: Some(prompt_context_markdown),
+            universes: universes
+                .into_iter()
+                .map(to_proto_extraction_universe)
+                .collect(),
         }))
     }
 
@@ -393,14 +410,14 @@ pub async fn run_server(
 mod tests {
     use super::{
         extraction_options_from_request, render_prompt_context_markdown,
-        to_proto_extraction_entity_type,
+        to_proto_extraction_entity_type, to_proto_extraction_universe,
     };
     use crate::domain::{
         EdgeEndpointRule, FullSchema, SchemaEdgeTypeHydrated, SchemaNodeTypeHydrated, SchemaType,
     };
     use crate::service::{
         build_extraction_entity_types, ExtractionAllowedEdge, ExtractionEntityType,
-        ExtractionSchemaOptions,
+        ExtractionSchemaOptions, ExtractionUniverseContext,
     };
     use crate::transport::proto::GetExtractionSchemaContextRequest;
 
@@ -653,6 +670,7 @@ mod tests {
         let request = GetExtractionSchemaContextRequest {
             include_edge_properties: None,
             include_inactive: None,
+            user_id: "user-1".to_string(),
         };
 
         let options = extraction_options_from_request(&request);
@@ -666,12 +684,29 @@ mod tests {
         let request = GetExtractionSchemaContextRequest {
             include_edge_properties: Some(true),
             include_inactive: Some(true),
+            user_id: "user-1".to_string(),
         };
 
         let options = extraction_options_from_request(&request);
 
         assert!(options.include_edge_properties);
         assert!(options.include_inactive);
+    }
+
+    #[test]
+    fn proto_mapping_preserves_extraction_universe_shape() {
+        let proto = to_proto_extraction_universe(ExtractionUniverseContext {
+            id: "universe-1".to_string(),
+            name: "Middle-earth".to_string(),
+            described_by_text: Some("Fictional setting".to_string()),
+        });
+
+        assert_eq!(proto.id, "universe-1");
+        assert_eq!(proto.name, "Middle-earth");
+        assert_eq!(
+            proto.described_by_text.as_deref(),
+            Some("Fictional setting")
+        );
     }
 
     #[test]

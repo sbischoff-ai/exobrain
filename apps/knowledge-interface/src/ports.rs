@@ -2,7 +2,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 
 use crate::domain::{
-    EdgeEndpointRule, EmbeddedBlock, EntityCandidate, ExistingBlockContext,
+    EdgeEndpointRule, EmbeddedBlock, EntityCandidate, ExistingBlockContext, ExtractionUniverse,
     FindEntityCandidatesQuery, GetEntityContextQuery, GetEntityContextResult, GraphDelta,
     NodeRelationshipCounts, SchemaType, TypeInheritance, TypeProperty,
     UpsertSchemaTypePropertyInput, UserInitGraphNodeIds,
@@ -67,6 +67,7 @@ pub trait GraphRepository: Send + Sync {
         &self,
         query: &GetEntityContextQuery,
     ) -> Result<GetEntityContextResult>;
+    async fn get_extraction_universes(&self, user_id: &str) -> Result<Vec<ExtractionUniverse>>;
 }
 
 #[async_trait]

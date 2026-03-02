@@ -6,10 +6,10 @@ use anyhow::{anyhow, Result};
 
 use crate::{
     domain::{
-        BlockNode, EmbeddedBlock, EntityNode, ExistingBlockContext, FindEntityCandidatesQuery,
-        FindEntityCandidatesResult, FullSchema, GetEntityContextQuery, GetEntityContextResult,
-        GraphDelta, GraphEdge, PropertyScalar, PropertyValue, SchemaType, UniverseNode,
-        UpsertSchemaTypeCommand, UserInitGraphNodeIds, Visibility,
+        BlockNode, EmbeddedBlock, EntityNode, ExistingBlockContext, ExtractionUniverse,
+        FindEntityCandidatesQuery, FindEntityCandidatesResult, FullSchema, GetEntityContextQuery,
+        GetEntityContextResult, GraphDelta, GraphEdge, PropertyScalar, PropertyValue, SchemaType,
+        UniverseNode, UpsertSchemaTypeCommand, UserInitGraphNodeIds, Visibility,
     },
     ports::{Embedder, GraphRepository, SchemaRepository},
 };
@@ -35,6 +35,13 @@ pub(crate) struct ExtractionAllowedEdge {
     pub other_entity_type_name: String,
     pub min_cardinality: Option<u32>,
     pub max_cardinality: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ExtractionUniverseContext {
+    pub id: String,
+    pub name: String,
+    pub described_by_text: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -96,6 +103,7 @@ pub(crate) fn build_extraction_entity_types(
     let mut entity_types = node_types
         .into_iter()
         .filter(|node| node.schema_type.kind == "node")
+        .filter(|node| node.schema_type.id != "node")
         .filter(|node| options.include_inactive || node.schema_type.active)
         .map(|node| {
             let mut inheritance_chain = vec![node.schema_type.id.clone()];
@@ -110,7 +118,13 @@ pub(crate) fn build_extraction_entity_types(
                 .iter()
                 .flat_map(|edge| edge.rules.iter())
                 .filter(|rule| options.include_inactive || rule.active)
-                .filter(|rule| rule.from_node_type_id == node.schema_type.id)
+                .filter(|rule| {
+                    extraction_type_is_assignable(
+                        &node.schema_type.id,
+                        &rule.from_node_type_id,
+                        &parent_by_child,
+                    )
+                })
                 .filter_map(|rule| {
                     let (edge_name, edge_description) = edge_meta_by_id.get(&rule.edge_type_id)?;
                     Some(ExtractionAllowedEdge {
@@ -133,7 +147,13 @@ pub(crate) fn build_extraction_entity_types(
                 .iter()
                 .flat_map(|edge| edge.rules.iter())
                 .filter(|rule| options.include_inactive || rule.active)
-                .filter(|rule| rule.to_node_type_id == node.schema_type.id)
+                .filter(|rule| {
+                    extraction_type_is_assignable(
+                        &node.schema_type.id,
+                        &rule.to_node_type_id,
+                        &parent_by_child,
+                    )
+                })
                 .filter_map(|rule| {
                     let (edge_name, edge_description) = edge_meta_by_id.get(&rule.edge_type_id)?;
                     Some(ExtractionAllowedEdge {
@@ -165,6 +185,26 @@ pub(crate) fn build_extraction_entity_types(
 
     entity_types.sort_by(|a, b| a.type_id.cmp(&b.type_id));
     entity_types
+}
+
+fn extraction_type_is_assignable(
+    node_type_id: &str,
+    target_type_id: &str,
+    inheritance: &BTreeMap<String, String>,
+) -> bool {
+    if node_type_id == target_type_id {
+        return true;
+    }
+
+    let mut current = node_type_id;
+    while let Some(parent) = inheritance.get(current) {
+        if parent == target_type_id {
+            return true;
+        }
+        current = parent;
+    }
+
+    false
 }
 
 fn extraction_allowed_edge_sort_key(
@@ -260,6 +300,30 @@ impl KnowledgeApplication {
             node_types: hydrated_nodes,
             edge_types: hydrated_edges,
         })
+    }
+
+    pub async fn get_extraction_universes(
+        &self,
+        user_id: &str,
+    ) -> Result<Vec<ExtractionUniverseContext>> {
+        let trimmed_user_id = user_id.trim();
+        if trimmed_user_id.is_empty() {
+            return Err(anyhow!("user_id is required"));
+        }
+
+        let mut universes = self
+            .graph_repository
+            .get_extraction_universes(trimmed_user_id)
+            .await?
+            .into_iter()
+            .map(|universe: ExtractionUniverse| ExtractionUniverseContext {
+                id: universe.id,
+                name: universe.name,
+                described_by_text: universe.described_by_text,
+            })
+            .collect::<Vec<_>>();
+        universes.sort_by(|a, b| a.id.cmp(&b.id));
+        Ok(universes)
     }
 
     pub async fn upsert_schema_type(&self, command: UpsertSchemaTypeCommand) -> Result<SchemaType> {
@@ -903,11 +967,13 @@ impl KnowledgeApplication {
         delta: &GraphDelta,
         errors: &mut Vec<String>,
     ) -> Result<()> {
+        let universe_ids: HashSet<&str> = delta.universes.iter().map(|u| u.id.as_str()).collect();
         let mut incoming_by_node: HashMap<&str, usize> = HashMap::new();
         let mut outgoing_by_node: HashMap<&str, usize> = HashMap::new();
         let mut entity_is_part_of: HashMap<&str, usize> = HashMap::new();
         let mut block_parent_edges: HashMap<&str, usize> = HashMap::new();
         let mut entity_described_by_edges: HashMap<&str, usize> = HashMap::new();
+        let mut universe_described_by_edges: HashMap<&str, usize> = HashMap::new();
 
         for edge in &delta.edges {
             *incoming_by_node.entry(edge.to_id.as_str()).or_insert(0) += 1;
@@ -918,9 +984,15 @@ impl KnowledgeApplication {
             }
             if edge.edge_type.eq_ignore_ascii_case("DESCRIBED_BY") {
                 *block_parent_edges.entry(edge.to_id.as_str()).or_insert(0) += 1;
-                *entity_described_by_edges
-                    .entry(edge.from_id.as_str())
-                    .or_insert(0) += 1;
+                if universe_ids.contains(edge.from_id.as_str()) {
+                    *universe_described_by_edges
+                        .entry(edge.from_id.as_str())
+                        .or_insert(0) += 1;
+                } else {
+                    *entity_described_by_edges
+                        .entry(edge.from_id.as_str())
+                        .or_insert(0) += 1;
+                }
             }
             if edge.edge_type.eq_ignore_ascii_case("SUMMARIZES") {
                 *block_parent_edges.entry(edge.to_id.as_str()).or_insert(0) += 1;
@@ -950,6 +1022,16 @@ impl KnowledgeApplication {
             if existing.total + payload_total == 0 {
                 errors.push(format!(
                     "universe {} must have at least one relationship",
+                    universe.id
+                ));
+            }
+            let payload_described_by = universe_described_by_edges
+                .get(universe.id.as_str())
+                .copied()
+                .unwrap_or(0);
+            if existing.universe_described_by_edges + payload_described_by > 1 {
+                errors.push(format!(
+                    "universe {} must have exactly one outgoing DESCRIBED_BY edge",
                     universe.id
                 ));
             }
@@ -1415,9 +1497,10 @@ mod tests {
 
     use crate::{
         domain::{
-            BlockNode, EdgeEndpointRule, EntityCandidate, EntityNode, FindEntityCandidatesQuery,
-            GraphEdge, NodeRelationshipCounts, PropertyValue, TypeInheritance, TypeProperty,
-            UpsertSchemaTypePropertyInput, UserInitGraphNodeIds, Visibility,
+            BlockNode, EdgeEndpointRule, EntityCandidate, EntityNode, ExtractionUniverse,
+            FindEntityCandidatesQuery, GraphEdge, NodeRelationshipCounts, PropertyValue,
+            TypeInheritance, TypeProperty, UpsertSchemaTypePropertyInput, UserInitGraphNodeIds,
+            Visibility,
         },
         ports::{Embedder, GraphRepository, SchemaRepository},
     };
@@ -1526,6 +1609,13 @@ mod tests {
                         id: "node.block".to_string(),
                         kind: "node".to_string(),
                         name: "Block".to_string(),
+                        description: String::new(),
+                        active: true,
+                    },
+                    SchemaType {
+                        id: "node.universe".to_string(),
+                        kind: "node".to_string(),
+                        name: "Universe".to_string(),
                         description: String::new(),
                         active: true,
                     },
@@ -1735,6 +1825,13 @@ mod tests {
                     description: String::new(),
                 },
                 EdgeEndpointRule {
+                    edge_type_id: "edge.described_by".to_string(),
+                    from_node_type_id: "node.universe".to_string(),
+                    to_node_type_id: "node.block".to_string(),
+                    active: true,
+                    description: String::new(),
+                },
+                EdgeEndpointRule {
                     edge_type_id: "edge.is_part_of".to_string(),
                     from_node_type_id: "node.entity".to_string(),
                     to_node_type_id: "node.universe".to_string(),
@@ -1890,6 +1987,13 @@ mod tests {
         ) -> Result<GetEntityContextResult> {
             Err(anyhow!("not implemented"))
         }
+
+        async fn get_extraction_universes(
+            &self,
+            _user_id: &str,
+        ) -> Result<Vec<ExtractionUniverse>> {
+            Ok(Vec::new())
+        }
     }
 
     struct FakeEmbedder;
@@ -1997,6 +2101,13 @@ mod tests {
         ) -> Result<GetEntityContextResult> {
             Err(anyhow!("not implemented"))
         }
+
+        async fn get_extraction_universes(
+            &self,
+            _user_id: &str,
+        ) -> Result<Vec<ExtractionUniverse>> {
+            Ok(Vec::new())
+        }
     }
 
     struct CountingGraphRepository {
@@ -2074,6 +2185,13 @@ mod tests {
             _query: &GetEntityContextQuery,
         ) -> Result<GetEntityContextResult> {
             Err(anyhow!("not implemented"))
+        }
+
+        async fn get_extraction_universes(
+            &self,
+            _user_id: &str,
+        ) -> Result<Vec<ExtractionUniverse>> {
+            Ok(Vec::new())
         }
     }
 
@@ -2174,6 +2292,13 @@ mod tests {
         ) -> Result<GetEntityContextResult> {
             Err(anyhow!("not implemented"))
         }
+
+        async fn get_extraction_universes(
+            &self,
+            _user_id: &str,
+        ) -> Result<Vec<ExtractionUniverse>> {
+            Ok(Vec::new())
+        }
     }
 
     #[tokio::test]
@@ -2187,6 +2312,7 @@ mod tests {
                 entity_is_part_of: 0,
                 block_parent_edges: 1,
                 entity_described_by_edges: 0,
+                universe_described_by_edges: 0,
             },
         );
         let mut block_contexts = HashMap::new();
@@ -3155,6 +3281,13 @@ mod tests {
         ) -> Result<GetEntityContextResult> {
             Err(anyhow!("not implemented"))
         }
+
+        async fn get_extraction_universes(
+            &self,
+            _user_id: &str,
+        ) -> Result<Vec<ExtractionUniverse>> {
+            Ok(Vec::new())
+        }
     }
 
     struct TrackingEmbedder {
@@ -3445,6 +3578,13 @@ mod tests {
                 .push(query.clone());
             Ok(self.result.clone())
         }
+
+        async fn get_extraction_universes(
+            &self,
+            _user_id: &str,
+        ) -> Result<Vec<ExtractionUniverse>> {
+            Ok(Vec::new())
+        }
     }
 
     #[tokio::test]
@@ -3557,6 +3697,52 @@ mod tests {
     }
 
     #[test]
+    fn extraction_builder_excludes_abstract_node_type() {
+        let schema = crate::domain::FullSchema {
+            node_types: vec![
+                crate::domain::SchemaNodeTypeHydrated {
+                    schema_type: crate::domain::SchemaType {
+                        id: "node".to_string(),
+                        kind: "node".to_string(),
+                        name: "Node".to_string(),
+                        description: "Abstract".to_string(),
+                        active: true,
+                    },
+                    properties: vec![],
+                    parents: vec![],
+                },
+                crate::domain::SchemaNodeTypeHydrated {
+                    schema_type: crate::domain::SchemaType {
+                        id: "node.entity".to_string(),
+                        kind: "node".to_string(),
+                        name: "Entity".to_string(),
+                        description: "Root".to_string(),
+                        active: true,
+                    },
+                    properties: vec![],
+                    parents: vec![crate::domain::TypeInheritance {
+                        child_type_id: "node.entity".to_string(),
+                        parent_type_id: "node".to_string(),
+                        description: "inherits".to_string(),
+                        active: true,
+                    }],
+                },
+            ],
+            edge_types: vec![],
+        };
+
+        let entity_types = build_extraction_entity_types(
+            schema,
+            ExtractionSchemaOptions {
+                include_edge_properties: false,
+                include_inactive: false,
+            },
+        );
+
+        assert!(entity_types.iter().all(|entity| entity.type_id != "node"));
+    }
+
+    #[test]
     fn extraction_builder_flattens_multi_level_inheritance_chain() {
         let schema = crate::domain::FullSchema {
             node_types: vec![
@@ -3623,6 +3809,87 @@ mod tests {
             book.inheritance_chain,
             vec!["node.entity", "node.concept", "node.book"]
         );
+    }
+
+    #[test]
+    fn extraction_builder_includes_universe_described_by_rule_for_subtypes() {
+        let schema = crate::domain::FullSchema {
+            node_types: vec![
+                crate::domain::SchemaNodeTypeHydrated {
+                    schema_type: crate::domain::SchemaType {
+                        id: "node.universe".to_string(),
+                        kind: "node".to_string(),
+                        name: "Universe".to_string(),
+                        description: "Universe".to_string(),
+                        active: true,
+                    },
+                    properties: vec![],
+                    parents: vec![],
+                },
+                crate::domain::SchemaNodeTypeHydrated {
+                    schema_type: crate::domain::SchemaType {
+                        id: "node.fictional_universe".to_string(),
+                        kind: "node".to_string(),
+                        name: "Fictional Universe".to_string(),
+                        description: "Fiction".to_string(),
+                        active: true,
+                    },
+                    properties: vec![],
+                    parents: vec![crate::domain::TypeInheritance {
+                        child_type_id: "node.fictional_universe".to_string(),
+                        parent_type_id: "node.universe".to_string(),
+                        description: "inherits".to_string(),
+                        active: true,
+                    }],
+                },
+                crate::domain::SchemaNodeTypeHydrated {
+                    schema_type: crate::domain::SchemaType {
+                        id: "node.block".to_string(),
+                        kind: "node".to_string(),
+                        name: "Block".to_string(),
+                        description: "Block".to_string(),
+                        active: true,
+                    },
+                    properties: vec![],
+                    parents: vec![],
+                },
+            ],
+            edge_types: vec![crate::domain::SchemaEdgeTypeHydrated {
+                schema_type: crate::domain::SchemaType {
+                    id: "edge.described_by".to_string(),
+                    kind: "edge".to_string(),
+                    name: "DESCRIBED_BY".to_string(),
+                    description: "desc".to_string(),
+                    active: true,
+                },
+                properties: vec![],
+                rules: vec![crate::domain::EdgeEndpointRule {
+                    edge_type_id: "edge.described_by".to_string(),
+                    from_node_type_id: "node.universe".to_string(),
+                    to_node_type_id: "node.block".to_string(),
+                    active: true,
+                    description: "u->b".to_string(),
+                }],
+            }],
+        };
+
+        let entity_types = build_extraction_entity_types(
+            schema,
+            ExtractionSchemaOptions {
+                include_edge_properties: false,
+                include_inactive: false,
+            },
+        );
+
+        let fictional = entity_types
+            .iter()
+            .find(|entity| entity.type_id == "node.fictional_universe")
+            .expect("fictional universe should be present");
+        assert!(fictional
+            .outgoing_edges
+            .iter()
+            .any(|edge| edge.edge_type_id == "edge.described_by"
+                && edge.other_entity_type_id == "node.block"));
     }
 
     #[test]

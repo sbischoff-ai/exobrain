@@ -71,6 +71,7 @@ message GetSchemaReply {
 message GetExtractionSchemaContextRequest {
   optional bool include_edge_properties = 1;
   optional bool include_inactive = 2;
+  string user_id = 3;
 }
 
 message AllowedEdge {
@@ -95,7 +96,15 @@ message ExtractionEntityType {
 message GetExtractionSchemaContextReply {
   repeated ExtractionEntityType entity_types = 1;
   optional string prompt_context_markdown = 2;
+  repeated ExtractionUniverse universes = 3;
 }
+
+message ExtractionUniverse {
+  string id = 1;
+  string name = 2;
+  optional string described_by_text = 3;
+}
+
 
 message UpsertSchemaTypeProperty {
   string prop_name = 1;

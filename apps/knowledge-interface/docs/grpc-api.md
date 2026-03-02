@@ -134,6 +134,7 @@ Visibility values are accepted as provided per node/edge; scope is carried per u
 message GetExtractionSchemaContextRequest {
   optional bool include_edge_properties = 1;
   optional bool include_inactive = 2;
+  string user_id = 3;
 }
 ```
 
@@ -145,6 +146,9 @@ Request behavior:
 - `include_inactive`
   - includes inactive types/rules when `true`
   - omitted/`null` behaves as `false`
+- `user_id`
+  - required
+  - used to include caller-visible universes (`PRIVATE` for that user + `SHARED`)
 
 ### Full response schema
 
@@ -168,18 +172,26 @@ message ExtractionEntityType {
   repeated AllowedEdge incoming_edges = 6;
 }
 
+message ExtractionUniverse {
+  string id = 1;
+  string name = 2;
+  optional string described_by_text = 3;
+}
+
 message GetExtractionSchemaContextReply {
   repeated ExtractionEntityType entity_types = 1;
   optional string prompt_context_markdown = 2;
+  repeated ExtractionUniverse universes = 3;
 }
 ```
 
 Response behavior:
 
-- `entity_types` are sorted by `type_id`.
+- `entity_types` are sorted by `type_id` and exclude the abstract `node` type.
 - `outgoing_edges` and `incoming_edges` are sorted deterministically by edge type and counterpart type.
 - `inheritance_chain` is flattened root-first (for example `node.entity -> node.person`).
 - `prompt_context_markdown` is derived from `entity_types` and can be embedded directly in prompts.
+- `universes` are sorted by `id` and include optional root `DESCRIBED_BY` text so extractors can distinguish real-world vs fictional context.
 
 ### Example response (small schema subset)
 
