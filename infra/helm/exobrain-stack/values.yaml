@@ -36,8 +36,7 @@ assistantBackend:
     METASTORE_DSN: postgresql://exobrain:exobrain@exobrain-metastore:5432/exobrain
     ASSISTANT_DB_DSN: postgresql://assistant_backend:assistant_backend@exobrain-metastore:5432/assistant_db
     ASSISTANT_CACHE_REDIS_URL: redis://exobrain-assistant-cache:6379/0
-    EXOBRAIN_NATS_URL: nats://exobrain-message-broker:4222
-    JOBS_SUBJECT_PREFIX: jobs
+    JOB_ORCHESTRATOR_CONNECT_TIMEOUT_SECONDS: "5.0"
     MAIN_AGENT_MODEL: agent
     MODEL_PROVIDER_BASE_URL: http://exobrain-model-provider:8010/v1
   resources:
@@ -271,6 +270,18 @@ jobOrchestrator:
     JOB_DLQ_RAW_MESSAGE_MAX_CHARS: "4096"
     JOB_CONSUMER_DURABLE: job-orchestrator-worker-v2
     KNOWLEDGE_INTERFACE_GRPC_TARGET: exobrain-knowledge-interface:50051
+  api:
+    replicaCount: 1
+    service:
+      type: ClusterIP
+      port: 50061
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
   worker:
     replicaCount: 1
     resources:

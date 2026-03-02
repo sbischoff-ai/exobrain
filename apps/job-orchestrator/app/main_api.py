@@ -24,7 +24,11 @@ async def main() -> None:
     servicer = JobOrchestratorServicer(js.publish)
     job_orchestrator_pb2_grpc.add_JobOrchestratorServicer_to_server(servicer, server)
 
-    bind_target = f"{settings.job_orchestrator_api_host}:{settings.job_orchestrator_api_port}"
+    if not settings.job_orchestrator_api_enabled:
+        logger.info("job orchestrator api disabled via config")
+        return
+
+    bind_target = settings.job_orchestrator_api_bind_target
     server.add_insecure_port(bind_target)
     await server.start()
     logger.info("job orchestrator api started", extra={"bind_target": bind_target})
