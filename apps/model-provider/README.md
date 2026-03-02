@@ -8,6 +8,43 @@ OpenAI-compatible gateway that maps internal model aliases to upstream providers
 - `POST /v1/chat/completions`
 - `POST /v1/embeddings`
 
+## Behavior
+
+### Structured output (JSON schema)
+
+`POST /v1/chat/completions` accepts OpenAI-style `response_format` for structured JSON output:
+
+- `response_format.type`: `json_schema`
+- `response_format.json_schema`: object with `name`, `schema`, and optional `strict`
+
+Provider behavior:
+
+- OpenAI: `response_format` is passed through directly to the OpenAI API.
+- Anthropic: `response_format.json_schema` is translated to Anthropic's output configuration.
+
+Minimal example:
+
+```json
+{
+  "model": "openai/gpt-4o-mini",
+  "messages": [{ "role": "user", "content": "Return a status object" }],
+  "response_format": {
+    "type": "json_schema",
+    "json_schema": {
+      "name": "status",
+      "schema": {
+        "type": "object",
+        "properties": { "ok": { "type": "boolean" } },
+        "required": ["ok"],
+        "additionalProperties": false
+      }
+    }
+  }
+}
+```
+
+Invalid `response_format` payloads (for example malformed schema objects) return a 4xx validation error from the gateway or upstream provider.
+
 ## Local run
 
 ```bash
