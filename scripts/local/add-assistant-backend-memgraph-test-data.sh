@@ -27,7 +27,7 @@ fi
 
 if ! grpcurl -plaintext -d '{}' "$KNOWLEDGE_GRPC_TARGET" exobrain.knowledge.v1.KnowledgeInterface/Health >/dev/null 2>&1; then
   echo "error: unable to reach knowledge-interface gRPC health endpoint at $KNOWLEDGE_GRPC_TARGET" >&2
-  echo "hint: start dependencies (Memgraph/Qdrant) and run ./scripts/local/run-knowledge-interface.sh" >&2
+  echo "hint: start dependencies (Memgraph/Qdrant) and run ./scripts/agent/run-knowledge-interface-native.sh (or ./scripts/local/run-knowledge-interface.sh in docker-compose workflows)" >&2
   exit 1
 fi
 

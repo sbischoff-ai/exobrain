@@ -17,7 +17,7 @@ Canonical workflow metadata is stored in `.agent/workflows.yaml`. Keep this docu
 | Frontend UI tweak                     | None (mock API mode)   | None (default agent workflow) | `./scripts/agent/run-assistant-frontend-mock.sh`                                                                                          | `cd apps/assistant-frontend && npm test`                                    |
 | Frontend E2E validation               | None (mock API mode)   | None (default agent workflow) | `./scripts/agent/run-assistant-frontend-e2e.sh`                                                                                           | `./scripts/agent/run-assistant-frontend-e2e.sh`                             |
 | DB migration/schema changes           | Postgres               | None (default agent workflow) | `./scripts/agent/assistant-db-setup-native.sh`                                                                                            | `./scripts/agent/assistant-db-setup-native.sh`                              |
-| Knowledge-interface ingestion changes | Postgres, NATS, Qdrant | None (default agent workflow) | `./scripts/agent/native-infra-up.sh` then `./scripts/local/run-knowledge-interface.sh`                                                    | `./scripts/agent/native-infra-health.sh`                                    |
+| Knowledge-interface ingestion changes | Postgres, Qdrant, Memgraph | `knowledge-interface-local` skill | `./scripts/agent/native-infra-up.sh` then `./scripts/agent/run-knowledge-interface-native.sh`                                           | `grpcurl -plaintext -d '{}' 127.0.0.1:50051 exobrain.knowledge.v1.KnowledgeInterface/Health` |
 | Docs-only changes                     | None                   | None (default agent workflow) | N/A                                                                                                                                       | `pnpm -s prettier --check docs/agents/codex-runbook.agent.md AGENTS.md`     |
 
 Use this matrix to pick the fastest path; detailed instructions remain in the sections below.
@@ -61,6 +61,34 @@ Rollout guidance for deploys: avoid mixed producer behavior by deploying orchest
 - `native-infra-down.sh`
   - Stops NATS/Qdrant started by agent scripts.
   - Stops local PGDATA-based Postgres instances; set `AGENT_STOP_SYSTEM_PG=1` to stop system cluster.
+
+
+## Knowledge-interface native runtime notes
+
+Why prior agent runs failed to start/validate knowledge-interface:
+
+- `./scripts/agent/native-infra-up.sh` intentionally starts Postgres, NATS, Qdrant, and Redis, **but not Memgraph**.
+- `./scripts/local/run-knowledge-interface.sh` defaults to Docker-compose ports/DSNs (`localhost:15432`, `localhost:17687`) that do not match native-infra defaults (`5432`, `6333`) in cloud-agent runtimes.
+- Without overriding DSNs (including `sslmode=disable` in this environment), startup can fail with Postgres authentication/TLS errors before gRPC is reachable.
+
+Use this native-safe sequence:
+
+```sh
+./scripts/agent/native-infra-up.sh
+sudo -u postgres psql -v ON_ERROR_STOP=1 -f infra/docker/metastore/init/03-knowledge-schema-db.sql
+reshape migration start --complete --url 'postgresql://knowledge_schema:knowledge_schema@localhost:5432/knowledge_graph_schema?sslmode=disable' --dirs infra/metastore/knowledge-interface/migrations
+psql 'postgresql://knowledge_schema:knowledge_schema@localhost:5432/knowledge_graph_schema?sslmode=disable' -v ON_ERROR_STOP=1 -f infra/metastore/knowledge-interface/seeds/001_starter_schema_types.sql
+./scripts/agent/run-knowledge-interface-native.sh
+```
+
+Then in a second terminal:
+
+```sh
+grpcurl -plaintext -d '{}' 127.0.0.1:50051 exobrain.knowledge.v1.KnowledgeInterface/Health
+./scripts/local/add-assistant-backend-memgraph-test-data.sh
+```
+
+If Memgraph is unavailable, `run-knowledge-interface-native.sh` fails fast with a targeted hint.
 
 ## Build/test loop
 
