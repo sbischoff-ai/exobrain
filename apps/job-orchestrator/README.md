@@ -48,6 +48,48 @@ Persistence distinguishes retryable and terminal failures: retryable failures ke
 
 Lifecycle status events are published on job-scoped subjects (`jobs.status.<job_id>`) so `WatchJobStatus` can subscribe narrowly and terminate after terminal events (`SUCCEEDED` or `FAILED_FINAL`).
 
+### GetJobStatus
+
+`GetJobStatus` returns a single snapshot for `job_id`.
+
+- Request: `GetJobStatusRequest { job_id }`
+- Success response: `GetJobStatusReply { job_id, state, attempt, detail, terminal, updated_at }`
+- Validation/lookup behavior:
+  - Invalid UUID job IDs return `INVALID_ARGUMENT`.
+  - Unknown job IDs return `NOT_FOUND`.
+
+The `state` value is normalized from stored lifecycle rows:
+
+- `requested`/`pending`/`enqueued_or_pending` -> `ENQUEUED_OR_PENDING`
+- `processing`/`started` -> `STARTED`
+- `retrying` -> `RETRYING`
+- `completed`/`succeeded` -> `SUCCEEDED`
+- `failed` with `is_terminal=false` -> `RETRYING`
+- `failed` with `is_terminal=true` -> `FAILED_FINAL`
+
+`FAILED_FINAL` specifically means max attempts were exhausted and the job was handed off to DLQ flow (`terminal_reason='max-attempts'`).
+
+### WatchJobStatus
+
+`WatchJobStatus` opens a server stream of `JobStatusEvent` messages for a single `job_id`.
+
+- Request: `WatchJobStatusRequest { job_id, include_current }`
+- Stream response item: `JobStatusEvent { job_id, state, attempt, detail, terminal, emitted_at }`
+- Validation/lookup behavior:
+  - Invalid UUID job IDs return `INVALID_ARGUMENT`.
+  - If `include_current=true` and the job is unknown, returns `NOT_FOUND`.
+
+Streaming semantics:
+
+- If `include_current=true`, the API emits the current snapshot first.
+- After the optional snapshot, the API subscribes to lifecycle status events for that exact job and forwards matching events in order.
+- The stream stays open for non-terminal states (`ENQUEUED_OR_PENDING`, `STARTED`, `RETRYING`) and closes only after a terminal event (`SUCCEEDED` or `FAILED_FINAL`).
+- If the first emitted snapshot is already terminal, the stream closes immediately after that event.
+
+Observability/debugging note:
+
+- Status events are emitted to job-scoped NATS subjects (`jobs.status.<job_id>`), which keeps `WatchJobStatus` subscriptions narrow and makes per-job tracing straightforward in NATS tooling.
+
 Request flow:
 
 ```text
