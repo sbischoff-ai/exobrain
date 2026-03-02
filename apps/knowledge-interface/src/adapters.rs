@@ -17,9 +17,10 @@ use tracing::warn;
 
 use crate::{
     domain::{
-        EdgeEndpointRule, EmbeddedBlock, ExistingBlockContext, GraphDelta, NodeRelationshipCounts,
-        PropertyScalar, PropertyValue, SchemaType, TypeInheritance, TypeProperty,
-        UpsertSchemaTypePropertyInput, Visibility,
+        EdgeEndpointRule, EmbeddedBlock, EntityCandidate, ExistingBlockContext,
+        FindEntityCandidatesQuery, GraphDelta, NodeRelationshipCounts, PropertyScalar,
+        PropertyValue, SchemaType, TypeInheritance, TypeProperty, UpsertSchemaTypePropertyInput,
+        Visibility,
     },
     ports::{Embedder, GraphRepository, SchemaRepository},
 };
@@ -645,6 +646,14 @@ impl GraphRepository for MemgraphQdrantGraphRepository {
 
     async fn get_node_relationship_counts(&self, node_id: &str) -> Result<NodeRelationshipCounts> {
         self.graph_store.get_node_relationship_counts(node_id).await
+    }
+
+    async fn find_entity_candidates(
+        &self,
+        _query: &FindEntityCandidatesQuery,
+        _query_vector: Option<&[f32]>,
+    ) -> Result<Vec<EntityCandidate>> {
+        Ok(Vec::new())
     }
 }
 

@@ -5,9 +5,9 @@ use anyhow::{anyhow, Result};
 
 use crate::{
     domain::{
-        BlockNode, EmbeddedBlock, EntityNode, ExistingBlockContext, FullSchema, GraphDelta,
-        GraphEdge, PropertyScalar, PropertyValue, SchemaType, UniverseNode,
-        UpsertSchemaTypeCommand, Visibility,
+        BlockNode, EmbeddedBlock, EntityNode, ExistingBlockContext, FindEntityCandidatesQuery,
+        FindEntityCandidatesResult, FullSchema, GraphDelta, GraphEdge, PropertyScalar,
+        PropertyValue, SchemaType, UniverseNode, UpsertSchemaTypeCommand, Visibility,
     },
     ports::{Embedder, GraphRepository, SchemaRepository},
 };
@@ -364,6 +364,61 @@ impl KnowledgeApplication {
                 },
             ],
         }
+    }
+
+    pub async fn find_entity_candidates(
+        &self,
+        mut query: FindEntityCandidatesQuery,
+    ) -> Result<FindEntityCandidatesResult> {
+        query.names = query
+            .names
+            .iter()
+            .map(|name| name.trim().to_lowercase())
+            .filter(|name| !name.is_empty())
+            .collect();
+
+        query.potential_type_ids = query
+            .potential_type_ids
+            .iter()
+            .map(|type_id| type_id.trim().to_string())
+            .filter(|type_id| !type_id.is_empty())
+            .collect();
+
+        query.user_id = query.user_id.trim().to_string();
+        if query.user_id.is_empty() {
+            return Err(anyhow!("user_id is required"));
+        }
+
+        query.short_description = query
+            .short_description
+            .as_ref()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+
+        if query.names.is_empty() && query.short_description.is_none() {
+            return Err(anyhow!(
+                "at least one name or short_description is required"
+            ));
+        }
+
+        let description_vectors = match &query.short_description {
+            Some(description) => self.embedder.embed_texts(&[description.clone()]).await?,
+            None => Vec::new(),
+        };
+        let query_vector = description_vectors.first().map(Vec::as_slice);
+
+        let mut candidates = self
+            .graph_repository
+            .find_entity_candidates(&query, query_vector)
+            .await?;
+
+        candidates.sort_by(|a, b| b.score.total_cmp(&a.score));
+
+        if let Some(limit) = query.limit {
+            candidates.truncate(limit);
+        }
+
+        Ok(FindEntityCandidatesResult { candidates })
     }
 
     pub async fn upsert_graph_delta(&self, delta: GraphDelta) -> Result<()> {
@@ -1111,9 +1166,9 @@ mod tests {
 
     use crate::{
         domain::{
-            BlockNode, EdgeEndpointRule, EntityNode, GraphEdge, NodeRelationshipCounts,
-            PropertyValue, TypeInheritance, TypeProperty, UpsertSchemaTypePropertyInput,
-            Visibility,
+            BlockNode, EdgeEndpointRule, EntityCandidate, EntityNode, FindEntityCandidatesQuery,
+            GraphEdge, NodeRelationshipCounts, PropertyValue, TypeInheritance, TypeProperty,
+            UpsertSchemaTypePropertyInput, Visibility,
         },
         ports::{Embedder, GraphRepository, SchemaRepository},
     };
@@ -1556,6 +1611,14 @@ mod tests {
         ) -> Result<NodeRelationshipCounts> {
             Ok(NodeRelationshipCounts::default())
         }
+
+        async fn find_entity_candidates(
+            &self,
+            _query: &FindEntityCandidatesQuery,
+            _query_vector: Option<&[f32]>,
+        ) -> Result<Vec<EntityCandidate>> {
+            Ok(Vec::new())
+        }
     }
 
     struct FakeEmbedder;
@@ -1622,6 +1685,14 @@ mod tests {
         ) -> Result<NodeRelationshipCounts> {
             Ok(NodeRelationshipCounts::default())
         }
+
+        async fn find_entity_candidates(
+            &self,
+            _query: &FindEntityCandidatesQuery,
+            _query_vector: Option<&[f32]>,
+        ) -> Result<Vec<EntityCandidate>> {
+            Ok(Vec::new())
+        }
     }
 
     struct CountingGraphRepository {
@@ -1669,6 +1740,14 @@ mod tests {
             node_id: &str,
         ) -> Result<NodeRelationshipCounts> {
             Ok(self.counts.get(node_id).cloned().unwrap_or_default())
+        }
+
+        async fn find_entity_candidates(
+            &self,
+            _query: &FindEntityCandidatesQuery,
+            _query_vector: Option<&[f32]>,
+        ) -> Result<Vec<EntityCandidate>> {
+            Ok(Vec::new())
         }
     }
 
@@ -1742,6 +1821,14 @@ mod tests {
             _node_id: &str,
         ) -> Result<NodeRelationshipCounts> {
             Ok(NodeRelationshipCounts::default())
+        }
+
+        async fn find_entity_candidates(
+            &self,
+            _query: &FindEntityCandidatesQuery,
+            _query_vector: Option<&[f32]>,
+        ) -> Result<Vec<EntityCandidate>> {
+            Ok(Vec::new())
         }
     }
 
@@ -2517,5 +2604,188 @@ mod tests {
         })
         .await
         .expect("cross-user records should be accepted in a single delta");
+    }
+
+    struct CandidateGraphRepository {
+        seen_queries: Arc<Mutex<Vec<FindEntityCandidatesQuery>>>,
+        seen_vectors: Arc<Mutex<Vec<Option<Vec<f32>>>>>,
+        candidates: Vec<EntityCandidate>,
+    }
+
+    #[async_trait]
+    impl GraphRepository for CandidateGraphRepository {
+        async fn apply_delta_with_blocks(
+            &self,
+            _delta: &GraphDelta,
+            _blocks: &[EmbeddedBlock],
+        ) -> Result<()> {
+            Ok(())
+        }
+
+        async fn common_root_graph_exists(&self) -> Result<bool> {
+            Ok(true)
+        }
+
+        async fn user_graph_needs_initialization(&self, _user_id: &str) -> Result<bool> {
+            Ok(false)
+        }
+
+        async fn is_user_graph_initialized(&self, _user_id: &str) -> Result<bool> {
+            Ok(true)
+        }
+
+        async fn mark_user_graph_initialized(&self, _user_id: &str) -> Result<()> {
+            Ok(())
+        }
+
+        async fn get_existing_block_context(
+            &self,
+            _block_id: &str,
+            _user_id: &str,
+            _visibility: Visibility,
+        ) -> Result<Option<ExistingBlockContext>> {
+            Ok(None)
+        }
+
+        async fn get_node_relationship_counts(
+            &self,
+            _node_id: &str,
+        ) -> Result<NodeRelationshipCounts> {
+            Ok(NodeRelationshipCounts::default())
+        }
+
+        async fn find_entity_candidates(
+            &self,
+            query: &FindEntityCandidatesQuery,
+            query_vector: Option<&[f32]>,
+        ) -> Result<Vec<EntityCandidate>> {
+            self.seen_queries
+                .lock()
+                .expect("lock should be available")
+                .push(query.clone());
+            self.seen_vectors
+                .lock()
+                .expect("lock should be available")
+                .push(query_vector.map(|v| v.to_vec()));
+            Ok(self.candidates.clone())
+        }
+    }
+
+    struct TrackingEmbedder {
+        seen_texts: Arc<Mutex<Vec<Vec<String>>>>,
+        vectors: Vec<Vec<f32>>,
+    }
+
+    #[async_trait]
+    impl Embedder for TrackingEmbedder {
+        async fn embed_texts(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
+            self.seen_texts
+                .lock()
+                .expect("lock should be available")
+                .push(texts.to_vec());
+            Ok(self.vectors.clone())
+        }
+    }
+
+    #[tokio::test]
+    async fn find_entity_candidates_normalizes_embeds_sorts_and_limits() {
+        let seen_queries = Arc::new(Mutex::new(Vec::new()));
+        let seen_vectors = Arc::new(Mutex::new(Vec::new()));
+        let seen_texts = Arc::new(Mutex::new(Vec::new()));
+
+        let app = KnowledgeApplication::new(
+            Arc::new(FakeSchemaRepo::new()),
+            Arc::new(CandidateGraphRepository {
+                seen_queries: Arc::clone(&seen_queries),
+                seen_vectors: Arc::clone(&seen_vectors),
+                candidates: vec![
+                    EntityCandidate {
+                        id: "2".to_string(),
+                        name: "Beta".to_string(),
+                        described_by_text: None,
+                        score: 0.2,
+                        type_id: "node.person".to_string(),
+                        matched_tokens: vec!["beta".to_string()],
+                    },
+                    EntityCandidate {
+                        id: "1".to_string(),
+                        name: "Alpha".to_string(),
+                        described_by_text: Some("alpha description".to_string()),
+                        score: 0.9,
+                        type_id: "node.person".to_string(),
+                        matched_tokens: vec!["alpha".to_string()],
+                    },
+                ],
+            }),
+            Arc::new(TrackingEmbedder {
+                seen_texts: Arc::clone(&seen_texts),
+                vectors: vec![vec![0.3, 0.4]],
+            }),
+        );
+
+        let result = app
+            .find_entity_candidates(FindEntityCandidatesQuery {
+                names: vec!["  Alice ".to_string(), "".to_string(), "Bob".to_string()],
+                potential_type_ids: vec![" node.person ".to_string(), "   ".to_string()],
+                short_description: Some("  knows rust  ".to_string()),
+                user_id: " user-1 ".to_string(),
+                limit: Some(1),
+            })
+            .await
+            .expect("query should succeed");
+
+        assert_eq!(result.candidates.len(), 1);
+        assert_eq!(result.candidates[0].id, "1");
+
+        let queries = seen_queries.lock().expect("lock should be available");
+        assert_eq!(queries.len(), 1);
+        assert_eq!(
+            queries[0].names,
+            vec!["alice".to_string(), "bob".to_string()]
+        );
+        assert_eq!(
+            queries[0].potential_type_ids,
+            vec!["node.person".to_string()]
+        );
+        assert_eq!(queries[0].short_description.as_deref(), Some("knows rust"));
+        assert_eq!(queries[0].user_id, "user-1");
+
+        let vectors = seen_vectors.lock().expect("lock should be available");
+        assert_eq!(vectors.len(), 1);
+        assert_eq!(vectors[0], Some(vec![0.3, 0.4]));
+
+        let texts = seen_texts.lock().expect("lock should be available");
+        assert_eq!(texts.as_slice(), &[vec!["knows rust".to_string()]]);
+    }
+
+    #[tokio::test]
+    async fn find_entity_candidates_rejects_empty_payload() {
+        let app = KnowledgeApplication::new(
+            Arc::new(FakeSchemaRepo::new()),
+            Arc::new(CandidateGraphRepository {
+                seen_queries: Arc::new(Mutex::new(Vec::new())),
+                seen_vectors: Arc::new(Mutex::new(Vec::new())),
+                candidates: vec![],
+            }),
+            Arc::new(TrackingEmbedder {
+                seen_texts: Arc::new(Mutex::new(Vec::new())),
+                vectors: vec![],
+            }),
+        );
+
+        let err = app
+            .find_entity_candidates(FindEntityCandidatesQuery {
+                names: vec!["  ".to_string()],
+                potential_type_ids: vec![],
+                short_description: Some("   ".to_string()),
+                user_id: "user-1".to_string(),
+                limit: Some(10),
+            })
+            .await
+            .expect_err("empty query payload should fail");
+
+        assert!(err
+            .to_string()
+            .contains("at least one name or short_description is required"));
     }
 }
