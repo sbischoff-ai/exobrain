@@ -64,7 +64,7 @@ The script reads:
 
 Optional overrides:
 
-- `KNOWLEDGE_GRPC_TARGET` (default `localhost:50051`)
+- `KNOWLEDGE_GRPC_TARGET` (default `127.0.0.1:50051`)
 - `INIT_REQUEST_PATH`
 - `DELTA_TEMPLATE_PATH`
 
