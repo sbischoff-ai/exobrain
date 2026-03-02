@@ -119,6 +119,7 @@ INSERT INTO knowledge_graph_schema_edge_rules (edge_type_id, from_node_type_id, 
 VALUES
   ('edge.is_part_of', 'node.entity', 'node.universe', TRUE, 'Each entity should point to exactly one universe via IS_PART_OF.', NULL),
   ('edge.described_by', 'node.entity', 'node.block', TRUE, 'Each entity should point to exactly one root block via DESCRIBED_BY.', NULL),
+  ('edge.described_by', 'node.universe', 'node.block', TRUE, 'A universe may point to at most one root block via DESCRIBED_BY.', NULL),
   ('edge.summarizes', 'node.block', 'node.block', TRUE, 'Summary blocks point to deeper detail blocks; no cycles should be introduced.', NULL),
   ('edge.mentions', 'node.block', 'node.entity', TRUE, 'Blocks mention entities referenced in their text.', NULL),
   ('edge.quoted_person', 'node.quote', 'node.person', TRUE, 'Quote blocks can attribute quoted text to a person.', NULL),

@@ -6,7 +6,7 @@ This document defines the shared world-model schema used across Exobrain service
 
 - Entities are lightweight world objects (`Entity` + sublabels).
 - Blocks are the narrative surface (`Block` nodes with text).
-- `DESCRIBED_BY` edges are explicit graph edges from `Entity` to `Block` (client-specified).
+- `DESCRIBED_BY` edges are explicit graph edges from `Entity` (and optionally `Universe`) to `Block` (client-specified).
 - Root blocks can fan out into deeper details (`SUMMARIZES`) as a DAG.
 - Blocks cross-link entities (`MENTIONS`) to support retrieval + backlinks.
 
@@ -31,7 +31,7 @@ flowchart TD
 ## Invariants
 
 - Every `Entity` has exactly one `IS_PART_OF` edge to `Universe`.
-- `DESCRIBED_BY` is used when a block directly describes an entity; higher-level summary blocks can omit it.
+- `DESCRIBED_BY` is used when a block directly describes an entity (or universe context); higher-level summary blocks can omit it.
 - `SUMMARIZES` forms a DAG (no cycles).
 - World semantics should prefer explicit edge types over excess properties.
 
