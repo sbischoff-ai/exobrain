@@ -8,6 +8,7 @@ service KnowledgeInterface {
   rpc UpsertSchemaType(UpsertSchemaTypeRequest) returns (UpsertSchemaTypeReply);
   rpc UpsertGraphDelta(UpsertGraphDeltaRequest) returns (UpsertGraphDeltaReply);
   rpc InitializeUserGraph(InitializeUserGraphRequest) returns (InitializeUserGraphReply);
+  rpc FindEntityCandidates(FindEntityCandidatesRequest) returns (FindEntityCandidatesReply);
 }
 
 message HealthRequest {}
@@ -161,4 +162,27 @@ message InitializeUserGraphReply {
   uint32 entities_upserted = 2;
   uint32 blocks_upserted = 3;
   uint32 edges_upserted = 4;
+}
+
+message FindEntityCandidatesRequest {
+  repeated string names = 1;
+  repeated string potential_type_ids = 2;
+  string short_description = 3;
+  string user_id = 4;
+  Visibility visibility = 5;
+  optional uint32 limit = 6;
+}
+
+message EntityCandidate {
+  string entity_id = 1;
+  string entity_name = 2;
+  string described_by_text = 3;
+  double score = 4;
+  string matched_name = 5;
+  string matched_alias = 6;
+  string entity_type_id = 7;
+}
+
+message FindEntityCandidatesReply {
+  repeated EntityCandidate candidates = 1;
 }

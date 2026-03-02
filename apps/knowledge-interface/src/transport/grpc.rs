@@ -13,9 +13,9 @@ use super::mappers::{
 };
 use super::proto::knowledge_interface_server::{KnowledgeInterface, KnowledgeInterfaceServer};
 use super::proto::{
-    GetSchemaReply, GetSchemaRequest, HealthReply, HealthRequest, InitializeUserGraphReply,
-    InitializeUserGraphRequest, UpsertGraphDeltaReply, UpsertGraphDeltaRequest,
-    UpsertSchemaTypeReply, UpsertSchemaTypeRequest,
+    FindEntityCandidatesReply, FindEntityCandidatesRequest, GetSchemaReply, GetSchemaRequest,
+    HealthReply, HealthRequest, InitializeUserGraphReply, InitializeUserGraphRequest,
+    UpsertGraphDeltaReply, UpsertGraphDeltaRequest, UpsertSchemaTypeReply, UpsertSchemaTypeRequest,
 };
 use super::FILE_DESCRIPTOR_SET;
 
@@ -145,6 +145,14 @@ impl KnowledgeInterface for KnowledgeGrpcService {
         }))
     }
 
+    async fn find_entity_candidates(
+        &self,
+        _request: Request<FindEntityCandidatesRequest>,
+    ) -> Result<Response<FindEntityCandidatesReply>, Status> {
+        Ok(Response::new(FindEntityCandidatesReply {
+            candidates: Vec::new(),
+        }))
+    }
     async fn upsert_graph_delta(
         &self,
         request: Request<UpsertGraphDeltaRequest>,
