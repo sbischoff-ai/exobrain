@@ -534,7 +534,7 @@ impl Neo4jGraphStore {
         let mut result = self
             .graph
             .execute(query(
-                "MATCH (n {id: $node_id}) OPTIONAL MATCH (n)-[out]->() WITH n, COUNT(out) AS outgoing OPTIONAL MATCH ()-[incoming]->(n) WITH n, outgoing, COUNT(incoming) AS incoming OPTIONAL MATCH (n)-[is_part_of:IS_PART_OF]->(:Universe) WITH n, outgoing, incoming, COUNT(is_part_of) AS entity_is_part_of OPTIONAL MATCH ()-[parent:DESCRIBED_BY|SUMMARIZES]->(n) RETURN incoming + outgoing AS total, entity_is_part_of, COUNT(parent) AS block_parent_edges",
+                "MATCH (n {id: $node_id}) OPTIONAL MATCH (n)-[out]->() WITH n, COUNT(out) AS outgoing OPTIONAL MATCH ()-[incoming]->(n) WITH n, outgoing, COUNT(incoming) AS incoming OPTIONAL MATCH (n)-[is_part_of:IS_PART_OF]->(:Universe) WITH n, outgoing, incoming, COUNT(is_part_of) AS entity_is_part_of OPTIONAL MATCH (n)-[described_by:DESCRIBED_BY]->(:Block) WITH n, outgoing, incoming, entity_is_part_of, COUNT(described_by) AS entity_described_by_edges OPTIONAL MATCH ()-[parent:DESCRIBED_BY|SUMMARIZES]->(n) RETURN incoming + outgoing AS total, entity_is_part_of, COUNT(parent) AS block_parent_edges, entity_described_by_edges",
             ).param("node_id", node_id.to_string()))
             .await
             .context("failed to query node relationship counts")?;
@@ -547,6 +547,7 @@ impl Neo4jGraphStore {
             total: row.get::<i64>("total")? as usize,
             entity_is_part_of: row.get::<i64>("entity_is_part_of")? as usize,
             block_parent_edges: row.get::<i64>("block_parent_edges")? as usize,
+            entity_described_by_edges: row.get::<i64>("entity_described_by_edges")? as usize,
         })
     }
 
