@@ -4,6 +4,16 @@ package exobrain.job_orchestrator.v1;
 
 service JobOrchestrator {
   rpc EnqueueJob(EnqueueJobRequest) returns (EnqueueJobReply);
+  rpc GetJobStatus(GetJobStatusRequest) returns (GetJobStatusReply);
+  rpc WatchJobStatus(WatchJobStatusRequest) returns (stream JobStatusEvent);
+}
+
+enum JobLifecycleState {
+  ENQUEUED_OR_PENDING = 0;
+  STARTED = 1;
+  RETRYING = 2;
+  SUCCEEDED = 3;
+  FAILED_FINAL = 4;
 }
 
 message KnowledgeUpdateMessage {
@@ -31,4 +41,31 @@ message EnqueueJobRequest {
 
 message EnqueueJobReply {
   string job_id = 1;
+}
+
+message GetJobStatusRequest {
+  string job_id = 1;
+}
+
+message GetJobStatusReply {
+  string job_id = 1;
+  JobLifecycleState state = 2;
+  int32 attempt = 3;
+  string detail = 4;
+  bool terminal = 5;
+  string updated_at = 6;
+}
+
+message WatchJobStatusRequest {
+  string job_id = 1;
+  bool include_current = 2;
+}
+
+message JobStatusEvent {
+  string job_id = 1;
+  JobLifecycleState state = 2;
+  int32 attempt = 3;
+  string detail = 4;
+  bool terminal = 5;
+  string emitted_at = 6;
 }

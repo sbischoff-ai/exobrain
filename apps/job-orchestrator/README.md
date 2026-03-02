@@ -36,7 +36,13 @@ uv sync --extra dev
 uv run python -m app.main_api
 ```
 
-The gRPC `EnqueueJob` endpoint validates `job_type` and payload schema before publishing `JobEnvelope` messages to JetStream subjects shaped as `jobs.<job_type>.requested`. Job IDs are generated server-side as UUIDs and returned in the RPC response.
+The gRPC API exposes:
+
+- `EnqueueJob` to validate `job_type` and payload schema before publishing `JobEnvelope` messages to JetStream subjects shaped as `jobs.<job_type>.requested`.
+- `GetJobStatus` to fetch the latest canonical lifecycle snapshot for a job.
+- `WatchJobStatus` to stream lifecycle events for a job, optionally including the current snapshot first.
+
+Job IDs are generated server-side as UUIDs and returned in the enqueue response. Status APIs normalize lifecycle states to user-visible values: `ENQUEUED_OR_PENDING`, `STARTED`, `RETRYING`, `SUCCEEDED`, and `FAILED_FINAL`.
 
 Request flow:
 
