@@ -391,6 +391,10 @@ impl Neo4jGraphStore {
         Ok(result.next().await?.is_some())
     }
 
+    async fn user_graph_needs_initialization(&self, user_id: &str) -> Result<bool> {
+        Ok(!self.is_user_graph_initialized(user_id).await?)
+    }
+
     async fn is_user_graph_initialized(&self, user_id: &str) -> Result<bool> {
         let mut result = self
             .graph
@@ -612,6 +616,12 @@ impl GraphRepository for MemgraphQdrantGraphRepository {
 
     async fn common_root_graph_exists(&self) -> Result<bool> {
         self.graph_store.common_root_graph_exists().await
+    }
+
+    async fn user_graph_needs_initialization(&self, user_id: &str) -> Result<bool> {
+        self.graph_store
+            .user_graph_needs_initialization(user_id)
+            .await
     }
 
     async fn is_user_graph_initialized(&self, user_id: &str) -> Result<bool> {

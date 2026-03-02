@@ -201,18 +201,16 @@ impl KnowledgeApplication {
             return Err(anyhow!("user_name is required"));
         }
 
-        if self
+        if !self
             .graph_repository
-            .is_user_graph_initialized(trimmed_user_id)
+            .user_graph_needs_initialization(trimmed_user_id)
             .await?
         {
             return Ok(Self::user_init_delta(trimmed_user_id, trimmed_user_name));
         }
 
         let delta = Self::user_init_delta(trimmed_user_id, trimmed_user_name);
-        self.upsert_graph_delta(delta.clone()).await?;
-        self.graph_repository
-            .mark_user_graph_initialized(trimmed_user_id)
+        self.apply_user_initialization_delta(trimmed_user_id, delta.clone())
             .await?;
         Ok(delta)
     }
@@ -368,7 +366,23 @@ impl KnowledgeApplication {
         }
     }
 
-    pub async fn upsert_graph_delta(&self, mut delta: GraphDelta) -> Result<()> {
+    pub async fn upsert_graph_delta(&self, delta: GraphDelta) -> Result<()> {
+        self.ensure_users_initialized_for_delta(&delta).await?;
+        self.upsert_graph_delta_internal(delta).await
+    }
+
+    async fn apply_user_initialization_delta(
+        &self,
+        user_id: &str,
+        delta: GraphDelta,
+    ) -> Result<()> {
+        self.upsert_graph_delta_internal(delta).await?;
+        self.graph_repository
+            .mark_user_graph_initialized(user_id)
+            .await
+    }
+
+    async fn upsert_graph_delta_internal(&self, mut delta: GraphDelta) -> Result<()> {
         let inheritance = self.validate_delta_against_schema(&delta).await?;
         validate_delta_access_scope(&delta)?;
 
@@ -414,6 +428,42 @@ impl KnowledgeApplication {
         self.graph_repository
             .apply_delta_with_blocks(&delta, &blocks)
             .await
+    }
+
+    async fn ensure_users_initialized_for_delta(&self, delta: &GraphDelta) -> Result<()> {
+        let mut user_ids = HashSet::new();
+
+        for universe in &delta.universes {
+            user_ids.insert(universe.user_id.trim().to_string());
+        }
+        for entity in &delta.entities {
+            user_ids.insert(entity.user_id.trim().to_string());
+        }
+        for block in &delta.blocks {
+            user_ids.insert(block.user_id.trim().to_string());
+        }
+        for edge in &delta.edges {
+            user_ids.insert(edge.user_id.trim().to_string());
+        }
+
+        for user_id in user_ids {
+            if user_id.is_empty() || user_id == EXOBRAIN_USER_ID {
+                continue;
+            }
+            if self
+                .graph_repository
+                .user_graph_needs_initialization(&user_id)
+                .await?
+            {
+                // In implicit initialization flow, we deterministically reuse `user_id` as
+                // `user_name` when no richer user profile is available in the request.
+                let delta = Self::user_init_delta(&user_id, &user_id);
+                self.apply_user_initialization_delta(&user_id, delta)
+                    .await?;
+            }
+        }
+
+        Ok(())
     }
 
     async fn validate_delta_against_schema(
@@ -1479,6 +1529,10 @@ mod tests {
             Ok(self.root_exists)
         }
 
+        async fn user_graph_needs_initialization(&self, _user_id: &str) -> Result<bool> {
+            Ok(true)
+        }
+
         async fn is_user_graph_initialized(&self, _user_id: &str) -> Result<bool> {
             Ok(false)
         }
@@ -1537,6 +1591,10 @@ mod tests {
             Ok(self.root_exists)
         }
 
+        async fn user_graph_needs_initialization(&self, _user_id: &str) -> Result<bool> {
+            Ok(!self.user_graph_initialized)
+        }
+
         async fn is_user_graph_initialized(&self, _user_id: &str) -> Result<bool> {
             Ok(self.user_graph_initialized)
         }
@@ -1585,6 +1643,10 @@ mod tests {
             Ok(false)
         }
 
+        async fn user_graph_needs_initialization(&self, _user_id: &str) -> Result<bool> {
+            Ok(true)
+        }
+
         async fn is_user_graph_initialized(&self, _user_id: &str) -> Result<bool> {
             Ok(false)
         }
@@ -1607,6 +1669,79 @@ mod tests {
             node_id: &str,
         ) -> Result<NodeRelationshipCounts> {
             Ok(self.counts.get(node_id).cloned().unwrap_or_default())
+        }
+    }
+
+    struct TrackingInitGraphRepository {
+        initialized: Arc<Mutex<HashSet<String>>>,
+        call_order: Arc<Mutex<Vec<String>>>,
+    }
+
+    #[async_trait]
+    impl GraphRepository for TrackingInitGraphRepository {
+        async fn apply_delta_with_blocks(
+            &self,
+            delta: &GraphDelta,
+            _blocks: &[EmbeddedBlock],
+        ) -> Result<()> {
+            let marker = if delta
+                .entities
+                .iter()
+                .any(|entity| entity.type_id == "node.ai_agent")
+            {
+                "init"
+            } else {
+                "main"
+            };
+            self.call_order
+                .lock()
+                .expect("lock should be available")
+                .push(marker.to_string());
+            Ok(())
+        }
+
+        async fn common_root_graph_exists(&self) -> Result<bool> {
+            Ok(true)
+        }
+
+        async fn user_graph_needs_initialization(&self, user_id: &str) -> Result<bool> {
+            Ok(!self
+                .initialized
+                .lock()
+                .expect("lock should be available")
+                .contains(user_id))
+        }
+
+        async fn is_user_graph_initialized(&self, user_id: &str) -> Result<bool> {
+            Ok(self
+                .initialized
+                .lock()
+                .expect("lock should be available")
+                .contains(user_id))
+        }
+
+        async fn mark_user_graph_initialized(&self, user_id: &str) -> Result<()> {
+            self.initialized
+                .lock()
+                .expect("lock should be available")
+                .insert(user_id.to_string());
+            Ok(())
+        }
+
+        async fn get_existing_block_context(
+            &self,
+            _block_id: &str,
+            _user_id: &str,
+            _visibility: Visibility,
+        ) -> Result<Option<ExistingBlockContext>> {
+            Ok(None)
+        }
+
+        async fn get_node_relationship_counts(
+            &self,
+            _node_id: &str,
+        ) -> Result<NodeRelationshipCounts> {
+            Ok(NodeRelationshipCounts::default())
         }
     }
 
@@ -1757,7 +1892,7 @@ mod tests {
             Arc::new(CapturingGraphRepository {
                 seen: captured.clone(),
                 root_exists: false,
-                user_graph_initialized: false,
+                user_graph_initialized: true,
                 marked_user_ids: Arc::new(Mutex::new(vec![])),
                 block_contexts: HashMap::new(),
             }),
@@ -1917,6 +2052,64 @@ mod tests {
 
         let marked = marked_user_ids.lock().expect("lock should be available");
         assert!(marked.is_empty());
+    }
+
+    #[tokio::test]
+    async fn upsert_graph_delta_initializes_missing_users_before_main_write() {
+        let initialized = Arc::new(Mutex::new(HashSet::from(["user-ready".to_string()])));
+        let call_order = Arc::new(Mutex::new(vec![]));
+        let app = KnowledgeApplication::new(
+            Arc::new(FakeSchemaRepo::new()),
+            Arc::new(TrackingInitGraphRepository {
+                initialized: initialized.clone(),
+                call_order: call_order.clone(),
+            }),
+            Arc::new(FakeEmbedder),
+        );
+
+        app.upsert_graph_delta(GraphDelta {
+            universes: vec![],
+            entities: vec![EntityNode {
+                id: "550e8400-e29b-41d4-a716-446655440011".to_string(),
+                type_id: "node.person".to_string(),
+                universe_id: Some(COMMON_UNIVERSE_ID.to_string()),
+                user_id: "user-missing".to_string(),
+                visibility: Visibility::Private,
+                properties: vec![PropertyValue {
+                    key: "name".to_string(),
+                    value: PropertyScalar::String("Taylor".to_string()),
+                }],
+                resolved_labels: vec![],
+            }],
+            blocks: vec![BlockNode {
+                id: "550e8400-e29b-41d4-a716-446655440012".to_string(),
+                type_id: "node.block".to_string(),
+                user_id: "user-ready".to_string(),
+                visibility: Visibility::Private,
+                properties: vec![PropertyValue {
+                    key: "text".to_string(),
+                    value: PropertyScalar::String("A note from an initialized user".to_string()),
+                }],
+                resolved_labels: vec![],
+            }],
+            edges: vec![GraphEdge {
+                from_id: "550e8400-e29b-41d4-a716-446655440011".to_string(),
+                to_id: "550e8400-e29b-41d4-a716-446655440012".to_string(),
+                edge_type: "DESCRIBED_BY".to_string(),
+                user_id: "user-ready".to_string(),
+                visibility: Visibility::Private,
+                properties: default_edge_properties("test linkage"),
+            }],
+        })
+        .await
+        .expect("upsert should initialize missing user then apply main delta");
+
+        let initialized_guard = initialized.lock().expect("lock should be available");
+        assert!(initialized_guard.contains("user-missing"));
+        assert!(initialized_guard.contains("user-ready"));
+
+        let order_guard = call_order.lock().expect("lock should be available");
+        assert_eq!(order_guard.as_slice(), ["init", "main"]);
     }
 
     #[tokio::test]
