@@ -148,6 +148,7 @@ pub struct NodeRelationshipCounts {
     pub total: usize,
     pub entity_is_part_of: usize,
     pub block_parent_edges: usize,
+    pub entity_described_by_edges: usize,
 }
 
 #[derive(Debug, Clone)]

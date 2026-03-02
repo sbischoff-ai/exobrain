@@ -748,6 +748,7 @@ impl KnowledgeApplication {
         let mut outgoing_by_node: HashMap<&str, usize> = HashMap::new();
         let mut entity_is_part_of: HashMap<&str, usize> = HashMap::new();
         let mut block_parent_edges: HashMap<&str, usize> = HashMap::new();
+        let mut entity_described_by_edges: HashMap<&str, usize> = HashMap::new();
 
         for edge in &delta.edges {
             *incoming_by_node.entry(edge.to_id.as_str()).or_insert(0) += 1;
@@ -756,9 +757,13 @@ impl KnowledgeApplication {
             if edge.edge_type.eq_ignore_ascii_case("IS_PART_OF") {
                 *entity_is_part_of.entry(edge.from_id.as_str()).or_insert(0) += 1;
             }
-            if edge.edge_type.eq_ignore_ascii_case("DESCRIBED_BY")
-                || edge.edge_type.eq_ignore_ascii_case("SUMMARIZES")
-            {
+            if edge.edge_type.eq_ignore_ascii_case("DESCRIBED_BY") {
+                *block_parent_edges.entry(edge.to_id.as_str()).or_insert(0) += 1;
+                *entity_described_by_edges
+                    .entry(edge.from_id.as_str())
+                    .or_insert(0) += 1;
+            }
+            if edge.edge_type.eq_ignore_ascii_case("SUMMARIZES") {
                 *block_parent_edges.entry(edge.to_id.as_str()).or_insert(0) += 1;
             }
         }
@@ -817,6 +822,16 @@ impl KnowledgeApplication {
             if existing.entity_is_part_of + payload_is_part_of == 0 {
                 errors.push(format!(
                     "entity {} must have IS_PART_OF edge to a universe",
+                    entity.id
+                ));
+            }
+            let payload_described_by = entity_described_by_edges
+                .get(entity.id.as_str())
+                .copied()
+                .unwrap_or(0);
+            if existing.entity_described_by_edges + payload_described_by > 1 {
+                errors.push(format!(
+                    "entity {} must have exactly one outgoing DESCRIBED_BY edge",
                     entity.id
                 ));
             }
@@ -2012,6 +2027,7 @@ mod tests {
                 total: 1,
                 entity_is_part_of: 0,
                 block_parent_edges: 1,
+                entity_described_by_edges: 0,
             },
         );
         let mut block_contexts = HashMap::new();
@@ -2087,6 +2103,80 @@ mod tests {
         assert!(err
             .to_string()
             .contains("must have exactly one incoming DESCRIBED_BY or SUMMARIZES edge"));
+    }
+
+    #[tokio::test]
+    async fn rejects_entity_with_multiple_described_by_edges() {
+        let app = KnowledgeApplication::new(
+            Arc::new(FakeSchemaRepo::new()),
+            Arc::new(FakeGraphRepository { root_exists: false }),
+            Arc::new(FakeEmbedder),
+        );
+
+        let err = app
+            .upsert_graph_delta(GraphDelta {
+                universes: vec![],
+                entities: vec![EntityNode {
+                    id: "550e8400-e29b-41d4-a716-446655440010".to_string(),
+                    type_id: "node.person".to_string(),
+                    universe_id: None,
+                    user_id: "exobrain".to_string(),
+                    visibility: Visibility::Shared,
+                    properties: vec![PropertyValue {
+                        key: "name".to_string(),
+                        value: PropertyScalar::String("Entity".to_string()),
+                    }],
+                    resolved_labels: vec![],
+                }],
+                blocks: vec![
+                    BlockNode {
+                        id: "550e8400-e29b-41d4-a716-446655440011".to_string(),
+                        type_id: "node.block".to_string(),
+                        user_id: "exobrain".to_string(),
+                        visibility: Visibility::Shared,
+                        properties: vec![PropertyValue {
+                            key: "text".to_string(),
+                            value: PropertyScalar::String("root a".to_string()),
+                        }],
+                        resolved_labels: vec![],
+                    },
+                    BlockNode {
+                        id: "550e8400-e29b-41d4-a716-446655440012".to_string(),
+                        type_id: "node.block".to_string(),
+                        user_id: "exobrain".to_string(),
+                        visibility: Visibility::Shared,
+                        properties: vec![PropertyValue {
+                            key: "text".to_string(),
+                            value: PropertyScalar::String("root b".to_string()),
+                        }],
+                        resolved_labels: vec![],
+                    },
+                ],
+                edges: vec![
+                    GraphEdge {
+                        from_id: "550e8400-e29b-41d4-a716-446655440010".to_string(),
+                        to_id: "550e8400-e29b-41d4-a716-446655440011".to_string(),
+                        edge_type: "DESCRIBED_BY".to_string(),
+                        user_id: "exobrain".to_string(),
+                        visibility: Visibility::Shared,
+                        properties: default_edge_properties("root a"),
+                    },
+                    GraphEdge {
+                        from_id: "550e8400-e29b-41d4-a716-446655440010".to_string(),
+                        to_id: "550e8400-e29b-41d4-a716-446655440012".to_string(),
+                        edge_type: "DESCRIBED_BY".to_string(),
+                        user_id: "exobrain".to_string(),
+                        visibility: Visibility::Shared,
+                        properties: default_edge_properties("root b"),
+                    },
+                ],
+            })
+            .await
+            .expect_err("entity should not allow multiple DESCRIBED_BY edges");
+
+        assert!(err
+            .to_string()
+            .contains("must have exactly one outgoing DESCRIBED_BY edge"));
     }
 
     #[tokio::test]
@@ -2694,18 +2784,32 @@ mod tests {
 
         app.upsert_graph_delta(GraphDelta {
             universes: vec![],
-            entities: vec![EntityNode {
-                id: "64357dfa-389d-401e-a246-c7a97147f627".to_string(),
-                type_id: "node.person".to_string(),
-                universe_id: None,
-                user_id: "exobrain".to_string(),
-                visibility: Visibility::Shared,
-                properties: vec![PropertyValue {
-                    key: "name".to_string(),
-                    value: PropertyScalar::String("Witness".to_string()),
-                }],
-                resolved_labels: vec![],
-            }],
+            entities: vec![
+                EntityNode {
+                    id: "64357dfa-389d-401e-a246-c7a97147f627".to_string(),
+                    type_id: "node.person".to_string(),
+                    universe_id: None,
+                    user_id: "exobrain".to_string(),
+                    visibility: Visibility::Shared,
+                    properties: vec![PropertyValue {
+                        key: "name".to_string(),
+                        value: PropertyScalar::String("Witness A".to_string()),
+                    }],
+                    resolved_labels: vec![],
+                },
+                EntityNode {
+                    id: "74357dfa-389d-401e-a246-c7a97147f627".to_string(),
+                    type_id: "node.person".to_string(),
+                    universe_id: None,
+                    user_id: "exobrain".to_string(),
+                    visibility: Visibility::Shared,
+                    properties: vec![PropertyValue {
+                        key: "name".to_string(),
+                        value: PropertyScalar::String("Witness B".to_string()),
+                    }],
+                    resolved_labels: vec![],
+                },
+            ],
             blocks: vec![
                 BlockNode {
                     id: "352832a6-fe04-4697-9de0-dbec398adf13".to_string(),
@@ -2740,7 +2844,7 @@ mod tests {
                     properties: default_edge_properties("test root a"),
                 },
                 GraphEdge {
-                    from_id: "64357dfa-389d-401e-a246-c7a97147f627".to_string(),
+                    from_id: "74357dfa-389d-401e-a246-c7a97147f627".to_string(),
                     to_id: "afc3bff2-2478-43f0-bb88-9199f960d0c1".to_string(),
                     edge_type: "DESCRIBED_BY".to_string(),
                     user_id: "exobrain".to_string(),

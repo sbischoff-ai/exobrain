@@ -62,6 +62,9 @@ For example, a `RELATED_TO` edge is valid only if a matching rule exists for sou
 
 - For `PRIVATE` edge writes, endpoint nodes may be either `PRIVATE` or `SHARED`; caller services enforce RBAC/user boundaries.
 - `UpsertGraphDelta` may include mixed-user node/edge records in a single request; ownership policies are enforced by upstream caller services.
+- Graph-state cardinality is enforced after applying the delta:
+  - `(:Entity)-[:DESCRIBED_BY]->(:Block)` is enforced as 1-to-1 cardinality (an entity may not have more than one outgoing `DESCRIBED_BY`, and each block still has one incoming parent edge).
+  - `(:Block)-[:SUMMARIZES]->(:Block)` is 1-to-N: a parent block may summarize many child blocks, while each child block still has exactly one incoming parent edge (`DESCRIBED_BY` or `SUMMARIZES`).
 
 ```mermaid
 flowchart LR
