@@ -104,7 +104,7 @@ How to interpret scores:
 ## Choosing between GetSchema and GetExtractionSchemaContext
 
 - Use `GetSchema` when clients need the canonical, lossless schema model (types, properties, inheritance, and edge rules) for admin tooling, migrations, or schema UIs.
-- Use `GetExtractionSchemaContext` when clients need a prompt-ready, deterministic view for entity/relationship extraction (flattened inheritance + incoming/outgoing edge expansions per entity type).
+- Use `GetExtractionSchemaContext` when clients need a prompt-ready, deterministic view for entity/relationship extraction (flattened inheritance + incoming/outgoing edge expansions per entity type, plus caller-visible universe context).
 
 ## Graph delta constraints for clients
 

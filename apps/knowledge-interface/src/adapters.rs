@@ -19,10 +19,10 @@ use crate::{
     domain::{
         EdgeEndpointRule, EmbeddedBlock, EntityCandidate, EntityContextBlockItem,
         EntityContextEntitySnapshot, EntityContextNeighborItem, ExistingBlockContext,
-        FindEntityCandidatesQuery, GetEntityContextQuery, GetEntityContextResult, GraphDelta,
-        NeighborDirection, NodeRelationshipCounts, PropertyScalar, PropertyValue, SchemaType,
-        TypeInheritance, TypeProperty, UpsertSchemaTypePropertyInput, UserInitGraphNodeIds,
-        Visibility,
+        ExtractionUniverse, FindEntityCandidatesQuery, GetEntityContextQuery,
+        GetEntityContextResult, GraphDelta, NeighborDirection, NodeRelationshipCounts,
+        PropertyScalar, PropertyValue, SchemaType, TypeInheritance, TypeProperty,
+        UpsertSchemaTypePropertyInput, UserInitGraphNodeIds, Visibility,
     },
     ports::{Embedder, GraphRepository, SchemaRepository},
 };
@@ -536,7 +536,7 @@ impl Neo4jGraphStore {
         let mut result = self
             .graph
             .execute(query(
-                "MATCH (n {id: $node_id}) OPTIONAL MATCH (n)-[out]->() WITH n, COUNT(out) AS outgoing OPTIONAL MATCH ()-[incoming]->(n) WITH n, outgoing, COUNT(incoming) AS incoming OPTIONAL MATCH (n)-[is_part_of:IS_PART_OF]->(:Universe) WITH n, outgoing, incoming, COUNT(is_part_of) AS entity_is_part_of OPTIONAL MATCH (n)-[described_by:DESCRIBED_BY]->(:Block) WITH n, outgoing, incoming, entity_is_part_of, COUNT(described_by) AS entity_described_by_edges OPTIONAL MATCH ()-[parent:DESCRIBED_BY|SUMMARIZES]->(n) RETURN incoming + outgoing AS total, entity_is_part_of, COUNT(parent) AS block_parent_edges, entity_described_by_edges",
+                "MATCH (n {id: $node_id}) OPTIONAL MATCH (n)-[out]->() WITH n, COUNT(out) AS outgoing OPTIONAL MATCH ()-[incoming]->(n) WITH n, outgoing, COUNT(incoming) AS incoming OPTIONAL MATCH (n)-[is_part_of:IS_PART_OF]->(:Universe) WITH n, outgoing, incoming, COUNT(is_part_of) AS entity_is_part_of OPTIONAL MATCH (n)-[described_by_entity:DESCRIBED_BY]->(:Block) WHERE n:Entity WITH n, outgoing, incoming, entity_is_part_of, COUNT(described_by_entity) AS entity_described_by_edges OPTIONAL MATCH (n)-[described_by_universe:DESCRIBED_BY]->(:Block) WHERE n:Universe WITH n, outgoing, incoming, entity_is_part_of, entity_described_by_edges, COUNT(described_by_universe) AS universe_described_by_edges OPTIONAL MATCH ()-[parent:DESCRIBED_BY|SUMMARIZES]->(n) RETURN incoming + outgoing AS total, entity_is_part_of, COUNT(parent) AS block_parent_edges, entity_described_by_edges, universe_described_by_edges",
             ).param("node_id", node_id.to_string()))
             .await
             .context("failed to query node relationship counts")?;
@@ -550,6 +550,7 @@ impl Neo4jGraphStore {
             entity_is_part_of: row.get::<i64>("entity_is_part_of")? as usize,
             block_parent_edges: row.get::<i64>("block_parent_edges")? as usize,
             entity_described_by_edges: row.get::<i64>("entity_described_by_edges")? as usize,
+            universe_described_by_edges: row.get::<i64>("universe_described_by_edges")? as usize,
         })
     }
 
@@ -907,6 +908,32 @@ impl GraphRepository for MemgraphQdrantGraphRepository {
 
     async fn get_node_relationship_counts(&self, node_id: &str) -> Result<NodeRelationshipCounts> {
         self.graph_store.get_node_relationship_counts(node_id).await
+    }
+
+    async fn get_extraction_universes(&self, user_id: &str) -> Result<Vec<ExtractionUniverse>> {
+        let mut rows = self
+            .graph_store
+            .graph
+            .execute(query(
+                "MATCH (u:Universe)                  WHERE u.user_id = $user_id OR u.visibility = 'SHARED'                  OPTIONAL MATCH (u)-[:DESCRIBED_BY]->(b:Block)                  RETURN u.id AS id, u.name AS name, b.text AS described_by_text                  ORDER BY u.id"
+            )
+            .param("user_id", user_id.to_string()))
+            .await
+            .context("failed to fetch extraction universes from memgraph")?;
+
+        let mut universes = Vec::new();
+        while let Some(row) = rows.next().await? {
+            let id: String = row.get("id")?;
+            let name: String = row.get("name")?;
+            let described_by_text: Option<String> = row.get("described_by_text")?;
+            universes.push(ExtractionUniverse {
+                id,
+                name,
+                described_by_text,
+            });
+        }
+
+        Ok(universes)
     }
 
     async fn find_entity_candidates(
@@ -1461,10 +1488,9 @@ mod tests {
     use super::{
         allowed_node_visibilities, build_get_entity_context_blocks_query,
         build_get_entity_context_entity_query, build_get_entity_context_neighbors_query,
-        compute_name_score, internal_timestamp_trigger_specs,
-        is_trigger_already_exists_error, memgraph_user_or_shared_access_clause,
-        normalize_qdrant_grpc_url, parse_block_level, parse_neighbor_direction, payload_i64,
-        payload_string, prop_as_aliases,
+        compute_name_score, internal_timestamp_trigger_specs, is_trigger_already_exists_error,
+        memgraph_user_or_shared_access_clause, normalize_qdrant_grpc_url, parse_block_level,
+        parse_neighbor_direction, payload_i64, payload_string, prop_as_aliases,
         qdrant_user_or_shared_access_filter, semantic_score_with_block_level,
         upsert_semantic_candidate, validate_edge_type, MockEmbedder,
     };
