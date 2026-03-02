@@ -2788,4 +2788,94 @@ mod tests {
             .to_string()
             .contains("at least one name or short_description is required"));
     }
+
+    #[tokio::test]
+    async fn find_entity_candidates_rejects_blank_user_id() {
+        let app = KnowledgeApplication::new(
+            Arc::new(FakeSchemaRepo::new()),
+            Arc::new(CandidateGraphRepository {
+                seen_queries: Arc::new(Mutex::new(Vec::new())),
+                seen_vectors: Arc::new(Mutex::new(Vec::new())),
+                candidates: vec![],
+            }),
+            Arc::new(TrackingEmbedder {
+                seen_texts: Arc::new(Mutex::new(Vec::new())),
+                vectors: vec![],
+            }),
+        );
+
+        let err = app
+            .find_entity_candidates(FindEntityCandidatesQuery {
+                names: vec!["alice".to_string()],
+                potential_type_ids: vec![],
+                short_description: None,
+                user_id: "   ".to_string(),
+                limit: None,
+            })
+            .await
+            .expect_err("blank user_id should fail");
+
+        assert!(err.to_string().contains("user_id is required"));
+    }
+
+    #[tokio::test]
+    async fn find_entity_candidates_orders_by_score_without_limit() {
+        let app = KnowledgeApplication::new(
+            Arc::new(FakeSchemaRepo::new()),
+            Arc::new(CandidateGraphRepository {
+                seen_queries: Arc::new(Mutex::new(Vec::new())),
+                seen_vectors: Arc::new(Mutex::new(Vec::new())),
+                candidates: vec![
+                    EntityCandidate {
+                        id: "low".to_string(),
+                        name: "Low".to_string(),
+                        described_by_text: None,
+                        score: 0.1,
+                        type_id: "node.person".to_string(),
+                        matched_tokens: vec![],
+                    },
+                    EntityCandidate {
+                        id: "high".to_string(),
+                        name: "High".to_string(),
+                        described_by_text: None,
+                        score: 0.9,
+                        type_id: "node.person".to_string(),
+                        matched_tokens: vec![],
+                    },
+                    EntityCandidate {
+                        id: "mid".to_string(),
+                        name: "Mid".to_string(),
+                        described_by_text: None,
+                        score: 0.4,
+                        type_id: "node.person".to_string(),
+                        matched_tokens: vec![],
+                    },
+                ],
+            }),
+            Arc::new(TrackingEmbedder {
+                seen_texts: Arc::new(Mutex::new(Vec::new())),
+                vectors: vec![],
+            }),
+        );
+
+        let result = app
+            .find_entity_candidates(FindEntityCandidatesQuery {
+                names: vec!["high".to_string()],
+                potential_type_ids: vec![],
+                short_description: None,
+                user_id: "u-1".to_string(),
+                limit: None,
+            })
+            .await
+            .expect("query should succeed");
+
+        assert_eq!(
+            result
+                .candidates
+                .into_iter()
+                .map(|candidate| candidate.id)
+                .collect::<Vec<_>>(),
+            vec!["high".to_string(), "mid".to_string(), "low".to_string()]
+        );
+    }
 }

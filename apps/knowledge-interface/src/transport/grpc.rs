@@ -7,8 +7,9 @@ use crate::service::KnowledgeApplication;
 
 use super::errors::map_ingest_error;
 use super::mappers::{
-    to_domain_block_node, to_domain_entity_node, to_domain_graph_edge, to_domain_universe_node,
-    to_proto_edge_endpoint_rule, to_proto_schema_type, to_proto_type_inheritance,
+    to_domain_block_node, to_domain_entity_node, to_domain_find_entity_candidates_query,
+    to_domain_graph_edge, to_domain_universe_node, to_proto_edge_endpoint_rule,
+    to_proto_entity_candidate, to_proto_schema_type, to_proto_type_inheritance,
     to_proto_type_property,
 };
 use super::proto::knowledge_interface_server::{KnowledgeInterface, KnowledgeInterfaceServer};
@@ -147,10 +148,21 @@ impl KnowledgeInterface for KnowledgeGrpcService {
 
     async fn find_entity_candidates(
         &self,
-        _request: Request<FindEntityCandidatesRequest>,
+        request: Request<FindEntityCandidatesRequest>,
     ) -> Result<Response<FindEntityCandidatesReply>, Status> {
+        let query = to_domain_find_entity_candidates_query(request.into_inner());
+        let result = self
+            .app
+            .find_entity_candidates(query)
+            .await
+            .map_err(|e| Status::invalid_argument(e.to_string()))?;
+
         Ok(Response::new(FindEntityCandidatesReply {
-            candidates: Vec::new(),
+            candidates: result
+                .candidates
+                .into_iter()
+                .map(to_proto_entity_candidate)
+                .collect(),
         }))
     }
     async fn upsert_graph_delta(
