@@ -55,6 +55,8 @@ grpcui -plaintext localhost:50051
 
 On startup, the service checks whether the shared root graph exists in Memgraph and seeds it if missing. The seed is written through the same validated ingestion pipeline used by gRPC requests, including Qdrant projection updates.
 
+Internal Memgraph timestamp triggers are ensured idempotently during startup; pre-existing triggers are treated as already-initialized state instead of a fatal error.
+
 ## Write consistency guarantees
 
 All graph writes now flow through a single application path (`KnowledgeApplication::upsert_graph_delta`) that:
