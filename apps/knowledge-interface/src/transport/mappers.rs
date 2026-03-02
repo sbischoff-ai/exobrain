@@ -1,9 +1,9 @@
 use tonic::Status;
 
 use crate::domain::{
-    BlockNode, EdgeEndpointRule, EntityCandidate, EntityNode, FindEntityCandidatesQuery, GraphEdge,
-    PropertyScalar, PropertyValue, SchemaType, TypeInheritance, TypeProperty, UniverseNode,
-    Visibility,
+    BlockNode, EdgeEndpointRule, EntityCandidate, EntityNode, FindEntityCandidatesQuery,
+    GetEntityContextQuery, GetEntityContextResult, GraphEdge, NeighborDirection, PropertyScalar,
+    PropertyValue, SchemaType, TypeInheritance, TypeProperty, UniverseNode, Visibility,
 };
 
 use super::proto;
@@ -136,6 +136,83 @@ pub(crate) fn to_proto_entity_candidate(candidate: EntityCandidate) -> proto::En
     }
 }
 
+pub(crate) fn to_domain_get_entity_context_query(
+    request: proto::GetEntityContextRequest,
+) -> GetEntityContextQuery {
+    GetEntityContextQuery {
+        entity_id: request.entity_id,
+        user_id: request.user_id,
+        max_block_level: request.max_block_level,
+    }
+}
+
+pub(crate) fn to_proto_get_entity_context_reply(
+    result: GetEntityContextResult,
+) -> proto::GetEntityContextReply {
+    proto::GetEntityContextReply {
+        entity: Some(proto::EntityContextCore {
+            id: result.entity.id,
+            type_id: result.entity.type_id,
+            user_id: result.entity.user_id,
+            visibility: to_proto_visibility(result.entity.visibility) as i32,
+        }),
+        entity_properties: result
+            .entity
+            .properties
+            .into_iter()
+            .map(to_proto_property_value)
+            .collect(),
+        blocks: result
+            .blocks
+            .into_iter()
+            .map(|block| proto::EntityContextBlock {
+                id: block.id,
+                type_id: block.type_id,
+                block_level: block.block_level,
+                properties: block
+                    .properties
+                    .into_iter()
+                    .map(to_proto_property_value)
+                    .collect(),
+                parent_block_id: block.parent_block_id,
+                parent_entity_id: block.parent_entity_id,
+            })
+            .collect(),
+        neighbors: result
+            .neighbors
+            .into_iter()
+            .map(|neighbor| proto::EntityContextNeighbor {
+                direction: to_proto_neighbor_direction(neighbor.direction) as i32,
+                edge_type: neighbor.edge_type,
+                edge_properties: neighbor
+                    .edge_properties
+                    .into_iter()
+                    .map(to_proto_property_value)
+                    .collect(),
+                other_entity_id: neighbor.other_entity_id,
+            })
+            .collect(),
+    }
+}
+
+pub(crate) fn to_proto_property_value(value: PropertyValue) -> proto::PropertyValue {
+    let PropertyValue { key, value } = value;
+
+    let value = match value {
+        PropertyScalar::String(v) => proto::property_value::Value::StringValue(v),
+        PropertyScalar::Float(v) => proto::property_value::Value::FloatValue(v),
+        PropertyScalar::Int(v) => proto::property_value::Value::IntValue(v),
+        PropertyScalar::Bool(v) => proto::property_value::Value::BoolValue(v),
+        PropertyScalar::Datetime(v) => proto::property_value::Value::DatetimeValue(v),
+        PropertyScalar::Json(v) => proto::property_value::Value::JsonValue(v),
+    };
+
+    proto::PropertyValue {
+        key,
+        value: Some(value),
+    }
+}
+
 pub(crate) fn to_domain_property_value(
     value: proto::PropertyValue,
 ) -> Result<PropertyValue, Status> {
@@ -168,15 +245,34 @@ pub(crate) fn map_visibility(value: i32) -> Result<Visibility, Status> {
     }
 }
 
+fn to_proto_visibility(value: Visibility) -> proto::Visibility {
+    match value {
+        Visibility::Private => proto::Visibility::Private,
+        Visibility::Shared => proto::Visibility::Shared,
+    }
+}
+
+fn to_proto_neighbor_direction(value: NeighborDirection) -> proto::NeighborDirection {
+    match value {
+        NeighborDirection::Outgoing => proto::NeighborDirection::Outgoing,
+        NeighborDirection::Incoming => proto::NeighborDirection::Incoming,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use tonic::Code;
 
     use super::{
-        map_visibility, to_domain_find_entity_candidates_query, to_domain_property_value,
-        to_proto_entity_candidate,
+        map_visibility, to_domain_find_entity_candidates_query, to_domain_get_entity_context_query,
+        to_domain_property_value, to_proto_entity_candidate, to_proto_get_entity_context_reply,
+        to_proto_property_value,
     };
-    use crate::domain::EntityCandidate;
+    use crate::domain::{
+        EntityCandidate, EntityContextBlockItem, EntityContextEntitySnapshot,
+        EntityContextNeighborItem, GetEntityContextResult, NeighborDirection, PropertyScalar,
+        PropertyValue, Visibility,
+    };
     use crate::transport::proto;
 
     #[test]
@@ -230,5 +326,84 @@ mod tests {
         assert!(proto.described_by_text.is_empty());
         assert_eq!(proto.matched_name, "ada");
         assert!(proto.matched_alias.is_empty());
+    }
+
+    #[test]
+    fn to_domain_get_entity_context_query_preserves_empty_fields() {
+        let query = to_domain_get_entity_context_query(proto::GetEntityContextRequest {
+            entity_id: "".to_string(),
+            user_id: "".to_string(),
+            max_block_level: 5,
+        });
+
+        assert!(query.entity_id.is_empty());
+        assert!(query.user_id.is_empty());
+        assert_eq!(query.max_block_level, 5);
+    }
+
+    #[test]
+    fn to_proto_property_value_maps_all_scalars() {
+        let value = to_proto_property_value(PropertyValue {
+            key: "weight".to_string(),
+            value: PropertyScalar::Float(42.5),
+        });
+
+        assert_eq!(value.key, "weight");
+        assert!(matches!(
+            value.value,
+            Some(proto::property_value::Value::FloatValue(v)) if v == 42.5
+        ));
+    }
+
+    #[test]
+    fn to_proto_get_entity_context_reply_maps_optional_fields_and_directions() {
+        let reply = to_proto_get_entity_context_reply(GetEntityContextResult {
+            entity: EntityContextEntitySnapshot {
+                id: "e-1".to_string(),
+                type_id: "node.person".to_string(),
+                user_id: "u-1".to_string(),
+                visibility: Visibility::Shared,
+                properties: vec![PropertyValue {
+                    key: "name".to_string(),
+                    value: PropertyScalar::String("Ada".to_string()),
+                }],
+            },
+            blocks: vec![EntityContextBlockItem {
+                id: "b-1".to_string(),
+                type_id: "block.note".to_string(),
+                block_level: 0,
+                properties: vec![],
+                parent_block_id: None,
+                parent_entity_id: Some("e-1".to_string()),
+            }],
+            neighbors: vec![
+                EntityContextNeighborItem {
+                    direction: NeighborDirection::Outgoing,
+                    edge_type: "DESCRIBED_BY".to_string(),
+                    edge_properties: vec![],
+                    other_entity_id: "e-2".to_string(),
+                },
+                EntityContextNeighborItem {
+                    direction: NeighborDirection::Incoming,
+                    edge_type: "MENTIONS".to_string(),
+                    edge_properties: vec![],
+                    other_entity_id: "e-3".to_string(),
+                },
+            ],
+        });
+
+        let entity = reply.entity.expect("entity should be present");
+        assert_eq!(entity.id, "e-1");
+        assert_eq!(entity.visibility, proto::Visibility::Shared as i32);
+        assert_eq!(reply.blocks[0].parent_block_id, None);
+        assert_eq!(reply.blocks[0].parent_entity_id.as_deref(), Some("e-1"));
+        assert_eq!(
+            reply.neighbors[0].direction,
+            proto::NeighborDirection::Outgoing as i32
+        );
+        assert_eq!(
+            reply.neighbors[1].direction,
+            proto::NeighborDirection::Incoming as i32
+        );
     }
 }
