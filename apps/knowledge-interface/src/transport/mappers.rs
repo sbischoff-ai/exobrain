@@ -329,15 +329,15 @@ mod tests {
     }
 
     #[test]
-    fn to_domain_get_entity_context_query_preserves_empty_fields() {
+    fn to_domain_get_entity_context_query_maps_request_fields() {
         let query = to_domain_get_entity_context_query(proto::GetEntityContextRequest {
-            entity_id: "".to_string(),
-            user_id: "".to_string(),
+            entity_id: "entity-1".to_string(),
+            user_id: "user-1".to_string(),
             max_block_level: 5,
         });
 
-        assert!(query.entity_id.is_empty());
-        assert!(query.user_id.is_empty());
+        assert_eq!(query.entity_id, "entity-1");
+        assert_eq!(query.user_id, "user-1");
         assert_eq!(query.max_block_level, 5);
     }
 
@@ -372,7 +372,10 @@ mod tests {
                 id: "b-1".to_string(),
                 type_id: "block.note".to_string(),
                 block_level: 0,
-                properties: vec![],
+                properties: vec![PropertyValue {
+                    key: "text".to_string(),
+                    value: PropertyScalar::String("Root summary".to_string()),
+                }],
                 parent_block_id: None,
                 parent_entity_id: Some("e-1".to_string()),
             }],
@@ -380,7 +383,10 @@ mod tests {
                 EntityContextNeighborItem {
                     direction: NeighborDirection::Outgoing,
                     edge_type: "DESCRIBED_BY".to_string(),
-                    edge_properties: vec![],
+                    edge_properties: vec![PropertyValue {
+                        key: "confidence".to_string(),
+                        value: PropertyScalar::Float(0.9),
+                    }],
                     other_entity_id: "e-2".to_string(),
                 },
                 EntityContextNeighborItem {
@@ -397,6 +403,14 @@ mod tests {
         assert_eq!(entity.visibility, proto::Visibility::Shared as i32);
         assert_eq!(reply.blocks[0].parent_block_id, None);
         assert_eq!(reply.blocks[0].parent_entity_id.as_deref(), Some("e-1"));
+        assert!(matches!(
+            reply.blocks[0].properties[0].value,
+            Some(proto::property_value::Value::StringValue(ref v)) if v == "Root summary"
+        ));
+        assert!(matches!(
+            reply.neighbors[0].edge_properties[0].value,
+            Some(proto::property_value::Value::FloatValue(v)) if (v - 0.9).abs() < f64::EPSILON
+        ));
         assert_eq!(
             reply.neighbors[0].direction,
             proto::NeighborDirection::Outgoing as i32
