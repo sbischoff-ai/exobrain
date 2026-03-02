@@ -94,6 +94,7 @@ message ExtractionEntityType {
 
 message GetExtractionSchemaContextReply {
   repeated ExtractionEntityType entity_types = 1;
+  optional string prompt_context_markdown = 2;
 }
 
 message UpsertSchemaTypeProperty {

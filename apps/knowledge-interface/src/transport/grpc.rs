@@ -1,4 +1,5 @@
-use std::collections::HashMap;
+use std::cmp::Ordering;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use tonic::{transport::Server, Request, Response, Status};
@@ -46,7 +47,7 @@ fn build_extraction_entity_types(
         .map(|node| (node.schema_type.id.clone(), node.schema_type.name.clone()))
         .collect();
 
-    let parent_by_child: HashMap<String, String> = node_types
+    let parent_by_child: BTreeMap<String, String> = node_types
         .iter()
         .flat_map(|node| {
             node.parents
@@ -54,7 +55,16 @@ fn build_extraction_entity_types(
                 .filter(move |parent| options.include_inactive || parent.active)
                 .map(|parent| (node.schema_type.id.clone(), parent.parent_type_id.clone()))
         })
-        .collect();
+        .fold(BTreeMap::new(), |mut acc, (child, parent)| {
+            acc.entry(child)
+                .and_modify(|existing| {
+                    if parent < *existing {
+                        *existing = parent.clone();
+                    }
+                })
+                .or_insert(parent);
+            acc
+        });
 
     let edge_meta_by_id: HashMap<String, (String, String)> = edge_types
         .iter()
@@ -70,7 +80,7 @@ fn build_extraction_entity_types(
         })
         .collect();
 
-    node_types
+    let mut entity_types = node_types
         .into_iter()
         .filter(|node| node.schema_type.kind == "node")
         .filter(|node| options.include_inactive || node.schema_type.active)
@@ -83,7 +93,7 @@ fn build_extraction_entity_types(
             }
             inheritance_chain.reverse();
 
-            let outgoing_edges = edge_types
+            let mut outgoing_edges: Vec<AllowedEdge> = edge_types
                 .iter()
                 .flat_map(|edge| edge.rules.iter())
                 .filter(|rule| options.include_inactive || rule.active)
@@ -105,8 +115,9 @@ fn build_extraction_entity_types(
                     })
                 })
                 .collect();
+            outgoing_edges.sort_by(allowed_edge_sort_key);
 
-            let incoming_edges = edge_types
+            let mut incoming_edges: Vec<AllowedEdge> = edge_types
                 .iter()
                 .flat_map(|edge| edge.rules.iter())
                 .filter(|rule| options.include_inactive || rule.active)
@@ -128,6 +139,7 @@ fn build_extraction_entity_types(
                     })
                 })
                 .collect();
+            incoming_edges.sort_by(allowed_edge_sort_key);
 
             ExtractionEntityType {
                 type_id: node.schema_type.id,
@@ -138,7 +150,87 @@ fn build_extraction_entity_types(
                 incoming_edges,
             }
         })
-        .collect()
+        .collect::<Vec<_>>();
+
+    entity_types.sort_by(|a, b| a.type_id.cmp(&b.type_id));
+    entity_types
+}
+
+fn allowed_edge_sort_key(a: &AllowedEdge, b: &AllowedEdge) -> Ordering {
+    a.edge_type_id
+        .cmp(&b.edge_type_id)
+        .then_with(|| a.other_entity_type_id.cmp(&b.other_entity_type_id))
+        .then_with(|| a.edge_name.cmp(&b.edge_name))
+        .then_with(|| a.other_entity_type_name.cmp(&b.other_entity_type_name))
+}
+
+fn render_prompt_context_markdown(entity_types: &[ExtractionEntityType]) -> String {
+    let mut markdown = String::from("# Extraction schema context\n\n");
+
+    markdown.push_str("## Entity types\n\n");
+    markdown.push_str("| Type ID | Name | Description | Inheritance |\n");
+    markdown.push_str("| --- | --- | --- | --- |\n");
+    for entity in entity_types {
+        let inheritance = if entity.inheritance_chain.is_empty() {
+            "-".to_string()
+        } else {
+            entity.inheritance_chain.join(" → ")
+        };
+        markdown.push_str(&format!(
+            "| {} | {} | {} | {} |\n",
+            entity.type_id, entity.name, entity.description, inheritance
+        ));
+    }
+
+    markdown.push_str("\n## Allowed edges\n\n");
+    markdown.push_str("| Entity Type | Direction | Edge Type | Edge Name | Other Entity Type | Other Entity Name | Description |\n");
+    markdown.push_str("| --- | --- | --- | --- | --- | --- | --- |\n");
+
+    let mut all_edges: Vec<(&str, &AllowedEdge, &str)> = entity_types
+        .iter()
+        .flat_map(|entity| {
+            entity
+                .outgoing_edges
+                .iter()
+                .map(move |edge| (entity.type_id.as_str(), edge, "outgoing"))
+                .chain(
+                    entity
+                        .incoming_edges
+                        .iter()
+                        .map(move |edge| (entity.type_id.as_str(), edge, "incoming")),
+                )
+        })
+        .collect();
+
+    all_edges.sort_by(
+        |(a_type, a_edge, a_direction), (b_type, b_edge, b_direction)| {
+            a_type
+                .cmp(b_type)
+                .then_with(|| a_edge.edge_type_id.cmp(&b_edge.edge_type_id))
+                .then_with(|| {
+                    a_edge
+                        .other_entity_type_id
+                        .cmp(&b_edge.other_entity_type_id)
+                })
+                .then_with(|| a_direction.cmp(b_direction))
+                .then_with(|| a_edge.edge_name.cmp(&b_edge.edge_name))
+        },
+    );
+
+    for (entity_type, edge, direction) in all_edges {
+        markdown.push_str(&format!(
+            "| {} | {} | {} | {} | {} | {} | {} |\n",
+            entity_type,
+            direction,
+            edge.edge_type_id,
+            edge.edge_name,
+            edge.other_entity_type_id,
+            edge.other_entity_type_name,
+            edge.edge_description,
+        ));
+    }
+
+    markdown
 }
 
 #[tonic::async_trait]
@@ -219,8 +311,11 @@ impl KnowledgeInterface for KnowledgeGrpcService {
             },
         );
 
+        let prompt_context_markdown = render_prompt_context_markdown(&entity_types);
+
         Ok(Response::new(GetExtractionSchemaContextReply {
             entity_types,
+            prompt_context_markdown: Some(prompt_context_markdown),
         }))
     }
 
@@ -393,10 +488,13 @@ pub async fn run_server(
 
 #[cfg(test)]
 mod tests {
-    use super::{build_extraction_entity_types, ExtractionSchemaOptions};
+    use super::{
+        build_extraction_entity_types, render_prompt_context_markdown, ExtractionSchemaOptions,
+    };
     use crate::domain::{
         EdgeEndpointRule, FullSchema, SchemaEdgeTypeHydrated, SchemaNodeTypeHydrated, SchemaType,
     };
+    use crate::transport::proto::ExtractionEntityType;
 
     #[test]
     fn extraction_schema_context_filters_inactive_types_and_rules_by_default() {
@@ -485,5 +583,160 @@ mod tests {
         assert_eq!(person.inheritance_chain, vec!["node.entity", "node.person"]);
         assert_eq!(person.outgoing_edges.len(), 1);
         assert_eq!(person.outgoing_edges[0].other_entity_type_id, "node.entity");
+    }
+
+    #[test]
+    fn extraction_schema_context_is_deterministically_sorted() {
+        let schema = FullSchema {
+            node_types: vec![
+                SchemaNodeTypeHydrated {
+                    schema_type: SchemaType {
+                        id: "node.zeta".to_string(),
+                        kind: "node".to_string(),
+                        name: "Zeta".to_string(),
+                        description: "Z".to_string(),
+                        active: true,
+                    },
+                    properties: vec![],
+                    parents: vec![crate::domain::TypeInheritance {
+                        child_type_id: "node.zeta".to_string(),
+                        parent_type_id: "node.entity".to_string(),
+                        description: "inherits".to_string(),
+                        active: true,
+                    }],
+                },
+                SchemaNodeTypeHydrated {
+                    schema_type: SchemaType {
+                        id: "node.entity".to_string(),
+                        kind: "node".to_string(),
+                        name: "Entity".to_string(),
+                        description: "Root".to_string(),
+                        active: true,
+                    },
+                    properties: vec![],
+                    parents: vec![],
+                },
+                SchemaNodeTypeHydrated {
+                    schema_type: SchemaType {
+                        id: "node.alpha".to_string(),
+                        kind: "node".to_string(),
+                        name: "Alpha".to_string(),
+                        description: "A".to_string(),
+                        active: true,
+                    },
+                    properties: vec![],
+                    parents: vec![crate::domain::TypeInheritance {
+                        child_type_id: "node.alpha".to_string(),
+                        parent_type_id: "node.entity".to_string(),
+                        description: "inherits".to_string(),
+                        active: true,
+                    }],
+                },
+            ],
+            edge_types: vec![SchemaEdgeTypeHydrated {
+                schema_type: SchemaType {
+                    id: "edge.rel".to_string(),
+                    kind: "edge".to_string(),
+                    name: "REL".to_string(),
+                    description: "Relationship".to_string(),
+                    active: true,
+                },
+                properties: vec![],
+                rules: vec![
+                    EdgeEndpointRule {
+                        edge_type_id: "edge.rel".to_string(),
+                        from_node_type_id: "node.alpha".to_string(),
+                        to_node_type_id: "node.zeta".to_string(),
+                        active: true,
+                        description: "alpha->zeta".to_string(),
+                    },
+                    EdgeEndpointRule {
+                        edge_type_id: "edge.rel".to_string(),
+                        from_node_type_id: "node.alpha".to_string(),
+                        to_node_type_id: "node.entity".to_string(),
+                        active: true,
+                        description: "alpha->entity".to_string(),
+                    },
+                ],
+            }],
+        };
+
+        let entity_types = build_extraction_entity_types(
+            schema,
+            ExtractionSchemaOptions {
+                include_edge_properties: false,
+                include_inactive: false,
+            },
+        );
+
+        assert_eq!(
+            entity_types
+                .iter()
+                .map(|entity| entity.type_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["node.alpha", "node.entity", "node.zeta"]
+        );
+
+        let alpha = entity_types
+            .iter()
+            .find(|entity| entity.type_id == "node.alpha")
+            .expect("alpha type should exist");
+
+        assert_eq!(alpha.inheritance_chain, vec!["node.entity", "node.alpha"]);
+        assert_eq!(
+            alpha
+                .outgoing_edges
+                .iter()
+                .map(|edge| edge.other_entity_type_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["node.entity", "node.zeta"]
+        );
+    }
+
+    #[test]
+    fn prompt_context_markdown_is_derived_from_sorted_structured_payload() {
+        let entity_types = vec![
+            ExtractionEntityType {
+                type_id: "node.alpha".to_string(),
+                name: "Alpha".to_string(),
+                description: "A".to_string(),
+                inheritance_chain: vec!["node.entity".to_string(), "node.alpha".to_string()],
+                outgoing_edges: vec![crate::transport::proto::AllowedEdge {
+                    edge_type_id: "edge.rel".to_string(),
+                    edge_name: "REL".to_string(),
+                    edge_description: "Relationship".to_string(),
+                    other_entity_type_id: "node.entity".to_string(),
+                    other_entity_type_name: "Entity".to_string(),
+                    min_cardinality: None,
+                    max_cardinality: None,
+                }],
+                incoming_edges: vec![],
+            },
+            ExtractionEntityType {
+                type_id: "node.entity".to_string(),
+                name: "Entity".to_string(),
+                description: "Root".to_string(),
+                inheritance_chain: vec!["node.entity".to_string()],
+                outgoing_edges: vec![],
+                incoming_edges: vec![crate::transport::proto::AllowedEdge {
+                    edge_type_id: "edge.rel".to_string(),
+                    edge_name: "REL".to_string(),
+                    edge_description: "Relationship".to_string(),
+                    other_entity_type_id: "node.alpha".to_string(),
+                    other_entity_type_name: "Alpha".to_string(),
+                    min_cardinality: None,
+                    max_cardinality: None,
+                }],
+            },
+        ];
+
+        let markdown = render_prompt_context_markdown(&entity_types);
+        assert!(markdown.contains("| node.alpha | Alpha | A | node.entity → node.alpha |"));
+        assert!(markdown.contains(
+            "| node.alpha | outgoing | edge.rel | REL | node.entity | Entity | Relationship |"
+        ));
+        assert!(markdown.contains(
+            "| node.entity | incoming | edge.rel | REL | node.alpha | Alpha | Relationship |"
+        ));
     }
 }
