@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Sequence
-from typing import Any
+from typing import Any, TypedDict
 from datetime import datetime
 from typing import Protocol
 
@@ -246,13 +246,30 @@ class JobPublisherProtocol(Protocol):
         """Stream lifecycle status events for a job id from the remote orchestrator."""
 
 
+class KnowledgeJobStatusSSEPayload(TypedDict):
+    """Frontend-facing SSE payload for one knowledge update job lifecycle event."""
+
+    job_id: str
+    state: str
+    attempt: int
+    detail: str
+    terminal: bool
+    emitted_at: str
+
+
 class KnowledgeServiceProtocol(Protocol):
     """Service contract for knowledge-graph related asynchronous workflows."""
 
     async def enqueue_update_job(self, *, user_id: str, journal_reference: str | None = None) -> str:
         """Queue one or more knowledge update jobs from uncommitted journal messages."""
 
-    async def watch_update_job(self, *, job_id: str) -> AsyncIterator[KnowledgeUpdateStreamEvent]:
+    async def watch_update_job(
+        self,
+        *,
+        user_id: str,
+        job_id: str,
+        include_current: bool = True,
+    ) -> AsyncIterator[KnowledgeUpdateStreamEvent]:
         """Yield typed lifecycle events for one enqueued knowledge update job."""
 
 

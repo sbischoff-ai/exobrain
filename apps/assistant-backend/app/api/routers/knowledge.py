@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 
 from app.api.dependencies.auth import get_required_auth_context
@@ -6,6 +6,12 @@ from app.api.schemas.auth import UnifiedPrincipal
 from app.api.schemas.knowledge import KnowledgeUpdateRequest, KnowledgeUpdateResponse
 from app.dependency_injection import get_container
 from app.services.contracts import KnowledgeServiceProtocol
+from app.services.knowledge_service import (
+    KnowledgeJobAccessDeniedError,
+    KnowledgeJobNotFoundError,
+    KnowledgeUpstreamUnavailableError,
+    KnowledgeWatchError,
+)
 from app.services.knowledge_stream import encode_knowledge_sse_event
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
@@ -42,12 +48,21 @@ async def enqueue_knowledge_update(
 async def watch_knowledge_update(
     job_id: str,
     request: Request,
-    _auth_context: UnifiedPrincipal = Depends(get_required_auth_context),
+    auth_context: UnifiedPrincipal = Depends(get_required_auth_context),
 ) -> StreamingResponse:
     service = get_container(request).resolve(KnowledgeServiceProtocol)
 
     async def event_stream() -> str:
-        async for event in service.watch_update_job(job_id=job_id):
-            yield encode_knowledge_sse_event(event)
+        try:
+            async for event in service.watch_update_job(user_id=auth_context.user_id, job_id=job_id):
+                yield encode_knowledge_sse_event(event)
+        except KnowledgeJobNotFoundError as exc:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="knowledge update job not found") from exc
+        except KnowledgeJobAccessDeniedError as exc:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="knowledge update job access denied") from exc
+        except KnowledgeUpstreamUnavailableError as exc:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="knowledge stream unavailable") from exc
+        except KnowledgeWatchError as exc:
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="knowledge stream error") from exc
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")

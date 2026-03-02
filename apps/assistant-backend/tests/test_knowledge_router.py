@@ -17,14 +17,20 @@ from tests.conftest import build_test_container, build_test_request
 class FakeKnowledgeService:
     def __init__(self) -> None:
         self.calls: list[dict[str, str | None]] = []
-        self.watch_calls: list[str] = []
+        self.watch_calls: list[dict[str, object]] = []
 
     async def enqueue_update_job(self, *, user_id: str, journal_reference: str | None = None) -> str:
         self.calls.append({"user_id": user_id, "journal_reference": journal_reference})
         return "job-knowledge-1"
 
-    async def watch_update_job(self, *, job_id: str) -> AsyncIterator[dict[str, object]]:
-        self.watch_calls.append(job_id)
+    async def watch_update_job(
+        self,
+        *,
+        user_id: str,
+        job_id: str,
+        include_current: bool = True,
+    ) -> AsyncIterator[dict[str, object]]:
+        self.watch_calls.append({"user_id": user_id, "job_id": job_id, "include_current": include_current})
         yield {"type": "status", "data": {"job_id": job_id, "state": "STARTED", "attempt": 1, "detail": "working", "terminal": False, "emitted_at": "2026-02-19T10:00:00Z"}}
         yield {"type": "done", "data": {"job_id": job_id, "state": "SUCCEEDED", "terminal": True}}
 
@@ -111,4 +117,4 @@ def test_api_knowledge_watch_streams_sse_events() -> None:
     assert "event: status" in response.text
     assert '"state": "STARTED"' in response.text
     assert "event: done" in response.text
-    assert service.watch_calls == ["job-knowledge-1"]
+    assert service.watch_calls == [{"user_id": "user-1", "job_id": "job-knowledge-1", "include_current": True}]

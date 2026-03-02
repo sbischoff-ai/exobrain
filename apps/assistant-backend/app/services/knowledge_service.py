@@ -3,8 +3,14 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Sequence
 from typing import Any
 
+import grpc
+
 from app.core.settings import Settings
-from app.services.contracts import DatabaseServiceProtocol, JobPublisherProtocol
+from app.services.contracts import (
+    DatabaseServiceProtocol,
+    JobPublisherProtocol,
+    KnowledgeJobStatusSSEPayload,
+)
 from app.services.grpc import job_orchestrator_pb2
 from app.services.knowledge_stream import (
     KnowledgeUpdateDoneEventData,
@@ -12,6 +18,21 @@ from app.services.knowledge_stream import (
     KnowledgeUpdateStreamEvent,
 )
 
+
+class KnowledgeWatchError(Exception):
+    """Base domain error for watch-stream failures."""
+
+
+class KnowledgeJobNotFoundError(KnowledgeWatchError):
+    """Raised when a requested knowledge update job id does not exist."""
+
+
+class KnowledgeJobAccessDeniedError(KnowledgeWatchError):
+    """Raised when a user cannot access the requested job stream."""
+
+
+class KnowledgeUpstreamUnavailableError(KnowledgeWatchError):
+    """Raised when the job orchestrator is unavailable during stream watch."""
 
 class KnowledgeService:
     def __init__(
@@ -48,27 +69,44 @@ class KnowledgeService:
         return job_ids[0]
 
 
-    async def watch_update_job(self, *, job_id: str) -> AsyncIterator[KnowledgeUpdateStreamEvent]:
-        async for event in self._job_publisher.watch_job_status(job_id=job_id, include_current=True):
-            state_name = job_orchestrator_pb2.JobLifecycleState.Name(event.state)
-            status_event: KnowledgeUpdateStatusEventData = {
-                "job_id": event.job_id,
-                "state": state_name,
-                "attempt": event.attempt,
-                "detail": event.detail,
-                "terminal": event.terminal,
-                "emitted_at": event.emitted_at,
-            }
-            yield {"type": "status", "data": status_event}
-
-            if event.terminal:
-                done_event: KnowledgeUpdateDoneEventData = {
+    async def watch_update_job(
+        self,
+        *,
+        user_id: str,
+        job_id: str,
+        include_current: bool = True,
+    ) -> AsyncIterator[KnowledgeUpdateStreamEvent]:
+        del user_id
+        try:
+            async for event in self._job_publisher.watch_job_status(job_id=job_id, include_current=include_current):
+                payload: KnowledgeJobStatusSSEPayload = {
                     "job_id": event.job_id,
-                    "state": state_name,
+                    "state": job_orchestrator_pb2.JobLifecycleState.Name(event.state),
+                    "attempt": event.attempt,
+                    "detail": event.detail,
                     "terminal": event.terminal,
+                    "emitted_at": event.emitted_at,
                 }
-                yield {"type": "done", "data": done_event}
-                return
+                status_event: KnowledgeUpdateStatusEventData = payload
+                yield {"type": "status", "data": status_event}
+
+                if payload["terminal"]:
+                    done_event: KnowledgeUpdateDoneEventData = {
+                        "job_id": payload["job_id"],
+                        "state": payload["state"],
+                        "terminal": payload["terminal"],
+                    }
+                    yield {"type": "done", "data": done_event}
+                    return
+        except grpc.aio.AioRpcError as exc:
+            status_code = exc.code()
+            if status_code == grpc.StatusCode.NOT_FOUND:
+                raise KnowledgeJobNotFoundError(f"knowledge update job not found: {job_id}") from exc
+            if status_code in (grpc.StatusCode.PERMISSION_DENIED, grpc.StatusCode.UNAUTHENTICATED):
+                raise KnowledgeJobAccessDeniedError(f"knowledge update job access denied: {job_id}") from exc
+            if status_code in (grpc.StatusCode.DEADLINE_EXCEEDED, grpc.StatusCode.UNAVAILABLE):
+                raise KnowledgeUpstreamUnavailableError("knowledge update stream unavailable") from exc
+            raise KnowledgeWatchError("failed to watch knowledge update job") from exc
 
     async def _list_uncommitted_message_sequences(
         self,
