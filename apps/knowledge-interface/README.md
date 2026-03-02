@@ -4,7 +4,8 @@ Rust + tonic gRPC service for GraphRAG ingestion and canonical KG schema registr
 
 ## What this service is
 
-- Provides schema introspection (`GetSchema`) and schema type upsert (`UpsertSchemaType`).
+- Provides full schema introspection (`GetSchema`) and extraction-focused schema projection (`GetExtractionSchemaContext`).
+- Provides schema type upsert (`UpsertSchemaType`).
 - Accepts schema-driven graph writes through `UpsertGraphDelta`.
 - Exposes `GetUserInitGraph` to seed a new user-scoped starter subgraph.
 - Exposes `GetEntityContext` to read an entity's typed context graph payload.
@@ -96,6 +97,12 @@ How to interpret scores:
 - Semantic similarity is weighted by block depth so root description blocks count more.
 - Higher score means stronger overall confidence.
 - Candidates are sorted descending by score and capped by `limit`.
+
+
+## Choosing between GetSchema and GetExtractionSchemaContext
+
+- Use `GetSchema` when clients need the canonical, lossless schema model (types, properties, inheritance, and edge rules) for admin tooling, migrations, or schema UIs.
+- Use `GetExtractionSchemaContext` when clients need a prompt-ready, deterministic view for entity/relationship extraction (flattened inheritance + incoming/outgoing edge expansions per entity type).
 
 ## Graph delta constraints for clients
 

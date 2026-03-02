@@ -117,9 +117,18 @@ Visibility values are accepted as provided per node/edge; scope is carried per u
 
 ## GetExtractionSchemaContext
 
-`GetExtractionSchemaContext` returns an entity-centric schema projection tailored for LLM extraction prompts.
+`GetExtractionSchemaContext` returns a normalized, deterministic, LLM-focused view of the schema. Use it when a caller needs:
 
-### Request schema
+- inheritance chains flattened per entity type
+- allowed outgoing and incoming edge expansions per entity type
+- stable ordering for deterministic prompt construction and cache keys
+
+### Endpoint purpose
+
+- **Primary**: build extraction prompts grounded in currently active schema types and edge rules.
+- **Secondary**: expose a compact, client-friendly structure without requiring each client to resolve inheritance and edge endpoints itself.
+
+### Full request schema
 
 ```proto
 message GetExtractionSchemaContextRequest {
@@ -128,10 +137,16 @@ message GetExtractionSchemaContextRequest {
 }
 ```
 
-- `include_edge_properties`: reserved control for including richer edge metadata in future iterations.
-- `include_inactive`: includes inactive schema types/rules when `true`; defaults to `false`.
+Request behavior:
 
-### Response schema
+- `include_edge_properties`
+  - currently reserved for richer edge payload expansion
+  - omitted/`null` behaves as `false`
+- `include_inactive`
+  - includes inactive types/rules when `true`
+  - omitted/`null` behaves as `false`
+
+### Full response schema
 
 ```proto
 message AllowedEdge {
@@ -159,22 +174,45 @@ message GetExtractionSchemaContextReply {
 }
 ```
 
-Each `ExtractionEntityType` includes enough information for reasoning models to answer:
+Response behavior:
 
-- what entity types are valid output candidates
-- what edge types are valid from each entity type (`outgoing_edges`)
-- what edge types are valid to each entity type (`incoming_edges`)
+- `entity_types` are sorted by `type_id`.
+- `outgoing_edges` and `incoming_edges` are sorted deterministically by edge type and counterpart type.
+- `inheritance_chain` is flattened root-first (for example `node.entity -> node.person`).
+- `prompt_context_markdown` is derived from `entity_types` and can be embedded directly in prompts.
 
-`inheritance_chain` is returned root → leaf. Cardinality hints are optional and may be absent (`null`) when not defined by schema metadata.
+### Example response (small schema subset)
 
-Deterministic ordering guarantees:
-- `entity_types` sorted by `type_id`
-- `inheritance_chain` sorted ancestor → descendant
-- `outgoing_edges` / `incoming_edges` sorted by `(edge_type_id, other_entity_type_id, direction)`
+```json
+{
+  "entityTypes": [
+    {
+      "typeId": "node.person",
+      "name": "Person",
+      "description": "A human person",
+      "inheritanceChain": ["node.entity", "node.person"],
+      "outgoingEdges": [
+        {
+          "edgeTypeId": "edge.related_to",
+          "edgeName": "RELATED_TO",
+          "edgeDescription": "Generic relationship",
+          "otherEntityTypeId": "node.organization",
+          "otherEntityTypeName": "Organization"
+        }
+      ],
+      "incomingEdges": []
+    }
+  ],
+  "promptContextMarkdown": "# Extraction schema context\n..."
+}
+```
 
-Recommended caller usage:
-- Use structured `entity_types` for programmatic validation and constraints.
-- Use `prompt_context_markdown` for direct LLM prompt context injection. The markdown is generated from the same canonical structured payload to keep both representations consistent.
+### Guidance for LLM prompt usage
+
+- Prefer `entity_types` as the source of truth for programmatic prompt assembly and validation.
+- Use `prompt_context_markdown` for fast prompt bootstrapping when you need a readable schema summary.
+- Inject only relevant entity types/edges for the current extraction task to reduce token usage.
+- Re-fetch when schema might have changed; ordering is deterministic so prompt diffs are meaningful.
 
 ## FindEntityCandidates
 

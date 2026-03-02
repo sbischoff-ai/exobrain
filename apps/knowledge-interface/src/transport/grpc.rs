@@ -1,11 +1,13 @@
-use std::cmp::Ordering;
-use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use tonic::{transport::Server, Request, Response, Status};
 
 use crate::domain::{SchemaType, UpsertSchemaTypeCommand, UpsertSchemaTypePropertyInput};
-use crate::service::KnowledgeApplication;
+use crate::service::{
+    build_extraction_entity_types, ExtractionAllowedEdge as ServiceAllowedEdge,
+    ExtractionEntityType as ServiceExtractionEntityType, ExtractionSchemaOptions,
+    KnowledgeApplication,
+};
 
 use super::errors::map_ingest_error;
 use super::mappers::{
@@ -28,143 +30,47 @@ pub struct KnowledgeGrpcService {
     pub app: Arc<KnowledgeApplication>,
 }
 
-#[derive(Debug, Clone)]
-struct ExtractionSchemaOptions {
-    include_edge_properties: bool,
-    include_inactive: bool,
+fn extraction_options_from_request(
+    request: &GetExtractionSchemaContextRequest,
+) -> ExtractionSchemaOptions {
+    ExtractionSchemaOptions {
+        include_edge_properties: request.include_edge_properties.unwrap_or(false),
+        include_inactive: request.include_inactive.unwrap_or(false),
+    }
 }
 
-fn build_extraction_entity_types(
-    schema: crate::domain::FullSchema,
-    options: ExtractionSchemaOptions,
-) -> Vec<ExtractionEntityType> {
-    let _include_edge_properties = options.include_edge_properties;
-    let node_types = schema.node_types;
-    let edge_types = schema.edge_types;
-
-    let type_name_by_id: HashMap<String, String> = node_types
-        .iter()
-        .map(|node| (node.schema_type.id.clone(), node.schema_type.name.clone()))
-        .collect();
-
-    let parent_by_child: BTreeMap<String, String> = node_types
-        .iter()
-        .flat_map(|node| {
-            node.parents
-                .iter()
-                .filter(move |parent| options.include_inactive || parent.active)
-                .map(|parent| (node.schema_type.id.clone(), parent.parent_type_id.clone()))
-        })
-        .fold(BTreeMap::new(), |mut acc, (child, parent)| {
-            acc.entry(child)
-                .and_modify(|existing| {
-                    if parent < *existing {
-                        *existing = parent.clone();
-                    }
-                })
-                .or_insert(parent);
-            acc
-        });
-
-    let edge_meta_by_id: HashMap<String, (String, String)> = edge_types
-        .iter()
-        .filter(|edge| options.include_inactive || edge.schema_type.active)
-        .map(|edge| {
-            (
-                edge.schema_type.id.clone(),
-                (
-                    edge.schema_type.name.clone(),
-                    edge.schema_type.description.clone(),
-                ),
-            )
-        })
-        .collect();
-
-    let mut entity_types = node_types
-        .into_iter()
-        .filter(|node| node.schema_type.kind == "node")
-        .filter(|node| options.include_inactive || node.schema_type.active)
-        .map(|node| {
-            let mut inheritance_chain = vec![node.schema_type.id.clone()];
-            let mut current = node.schema_type.id.clone();
-            while let Some(parent_id) = parent_by_child.get(&current) {
-                inheritance_chain.push(parent_id.clone());
-                current = parent_id.clone();
-            }
-            inheritance_chain.reverse();
-
-            let mut outgoing_edges: Vec<AllowedEdge> = edge_types
-                .iter()
-                .flat_map(|edge| edge.rules.iter())
-                .filter(|rule| options.include_inactive || rule.active)
-                .filter(|rule| rule.from_node_type_id == node.schema_type.id)
-                .filter_map(|rule| {
-                    let (edge_name, edge_description) =
-                        edge_meta_by_id.get(&rule.edge_type_id)?.clone();
-                    Some(AllowedEdge {
-                        edge_type_id: rule.edge_type_id.clone(),
-                        edge_name,
-                        edge_description,
-                        other_entity_type_id: rule.to_node_type_id.clone(),
-                        other_entity_type_name: type_name_by_id
-                            .get(&rule.to_node_type_id)
-                            .cloned()
-                            .unwrap_or_default(),
-                        min_cardinality: None,
-                        max_cardinality: None,
-                    })
-                })
-                .collect();
-            outgoing_edges.sort_by(allowed_edge_sort_key);
-
-            let mut incoming_edges: Vec<AllowedEdge> = edge_types
-                .iter()
-                .flat_map(|edge| edge.rules.iter())
-                .filter(|rule| options.include_inactive || rule.active)
-                .filter(|rule| rule.to_node_type_id == node.schema_type.id)
-                .filter_map(|rule| {
-                    let (edge_name, edge_description) =
-                        edge_meta_by_id.get(&rule.edge_type_id)?.clone();
-                    Some(AllowedEdge {
-                        edge_type_id: rule.edge_type_id.clone(),
-                        edge_name,
-                        edge_description,
-                        other_entity_type_id: rule.from_node_type_id.clone(),
-                        other_entity_type_name: type_name_by_id
-                            .get(&rule.from_node_type_id)
-                            .cloned()
-                            .unwrap_or_default(),
-                        min_cardinality: None,
-                        max_cardinality: None,
-                    })
-                })
-                .collect();
-            incoming_edges.sort_by(allowed_edge_sort_key);
-
-            ExtractionEntityType {
-                type_id: node.schema_type.id,
-                name: node.schema_type.name,
-                description: node.schema_type.description,
-                inheritance_chain,
-                outgoing_edges,
-                incoming_edges,
-            }
-        })
-        .collect::<Vec<_>>();
-
-    entity_types.sort_by(|a, b| a.type_id.cmp(&b.type_id));
-    entity_types
+fn to_proto_allowed_edge(edge: ServiceAllowedEdge) -> AllowedEdge {
+    AllowedEdge {
+        edge_type_id: edge.edge_type_id,
+        edge_name: edge.edge_name,
+        edge_description: edge.edge_description,
+        other_entity_type_id: edge.other_entity_type_id,
+        other_entity_type_name: edge.other_entity_type_name,
+        min_cardinality: edge.min_cardinality,
+        max_cardinality: edge.max_cardinality,
+    }
 }
 
-fn allowed_edge_sort_key(a: &AllowedEdge, b: &AllowedEdge) -> Ordering {
-    a.edge_type_id
-        .cmp(&b.edge_type_id)
-        .then_with(|| a.other_entity_type_id.cmp(&b.other_entity_type_id))
-        .then_with(|| a.edge_name.cmp(&b.edge_name))
-        .then_with(|| a.other_entity_type_name.cmp(&b.other_entity_type_name))
+fn to_proto_extraction_entity_type(entity: ServiceExtractionEntityType) -> ExtractionEntityType {
+    ExtractionEntityType {
+        type_id: entity.type_id,
+        name: entity.name,
+        description: entity.description,
+        inheritance_chain: entity.inheritance_chain,
+        outgoing_edges: entity
+            .outgoing_edges
+            .into_iter()
+            .map(to_proto_allowed_edge)
+            .collect(),
+        incoming_edges: entity
+            .incoming_edges
+            .into_iter()
+            .map(to_proto_allowed_edge)
+            .collect(),
+    }
 }
 
-fn render_prompt_context_markdown(entity_types: &[ExtractionEntityType]) -> String {
+fn render_prompt_context_markdown(entity_types: &[ServiceExtractionEntityType]) -> String {
     let mut markdown = String::from("# Extraction schema context\n\n");
 
     markdown.push_str("## Entity types\n\n");
@@ -186,7 +92,7 @@ fn render_prompt_context_markdown(entity_types: &[ExtractionEntityType]) -> Stri
     markdown.push_str("| Entity Type | Direction | Edge Type | Edge Name | Other Entity Type | Other Entity Name | Description |\n");
     markdown.push_str("| --- | --- | --- | --- | --- | --- | --- |\n");
 
-    let mut all_edges: Vec<(&str, &AllowedEdge, &str)> = entity_types
+    let mut all_edges: Vec<(&str, &ServiceAllowedEdge, &str)> = entity_types
         .iter()
         .flat_map(|entity| {
             entity
@@ -303,18 +209,15 @@ impl KnowledgeInterface for KnowledgeGrpcService {
             .await
             .map_err(|e| Status::internal(e.to_string()))?;
 
-        let entity_types = build_extraction_entity_types(
-            schema,
-            ExtractionSchemaOptions {
-                include_edge_properties: payload.include_edge_properties.unwrap_or(false),
-                include_inactive: payload.include_inactive.unwrap_or(false),
-            },
-        );
-
+        let entity_types =
+            build_extraction_entity_types(schema, extraction_options_from_request(&payload));
         let prompt_context_markdown = render_prompt_context_markdown(&entity_types);
 
         Ok(Response::new(GetExtractionSchemaContextReply {
-            entity_types,
+            entity_types: entity_types
+                .into_iter()
+                .map(to_proto_extraction_entity_type)
+                .collect(),
             prompt_context_markdown: Some(prompt_context_markdown),
         }))
     }
@@ -489,12 +392,17 @@ pub async fn run_server(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_extraction_entity_types, render_prompt_context_markdown, ExtractionSchemaOptions,
+        extraction_options_from_request, render_prompt_context_markdown,
+        to_proto_extraction_entity_type,
     };
     use crate::domain::{
         EdgeEndpointRule, FullSchema, SchemaEdgeTypeHydrated, SchemaNodeTypeHydrated, SchemaType,
     };
-    use crate::transport::proto::ExtractionEntityType;
+    use crate::service::{
+        build_extraction_entity_types, ExtractionAllowedEdge, ExtractionEntityType,
+        ExtractionSchemaOptions,
+    };
+    use crate::transport::proto::GetExtractionSchemaContextRequest;
 
     #[test]
     fn extraction_schema_context_filters_inactive_types_and_rules_by_default() {
@@ -701,7 +609,7 @@ mod tests {
                 name: "Alpha".to_string(),
                 description: "A".to_string(),
                 inheritance_chain: vec!["node.entity".to_string(), "node.alpha".to_string()],
-                outgoing_edges: vec![crate::transport::proto::AllowedEdge {
+                outgoing_edges: vec![ExtractionAllowedEdge {
                     edge_type_id: "edge.rel".to_string(),
                     edge_name: "REL".to_string(),
                     edge_description: "Relationship".to_string(),
@@ -718,7 +626,7 @@ mod tests {
                 description: "Root".to_string(),
                 inheritance_chain: vec!["node.entity".to_string()],
                 outgoing_edges: vec![],
-                incoming_edges: vec![crate::transport::proto::AllowedEdge {
+                incoming_edges: vec![ExtractionAllowedEdge {
                     edge_type_id: "edge.rel".to_string(),
                     edge_name: "REL".to_string(),
                     edge_description: "Relationship".to_string(),
@@ -738,5 +646,58 @@ mod tests {
         assert!(markdown.contains(
             "| node.entity | incoming | edge.rel | REL | node.alpha | Alpha | Relationship |"
         ));
+    }
+
+    #[test]
+    fn extraction_request_optional_flags_default_to_false() {
+        let request = GetExtractionSchemaContextRequest {
+            include_edge_properties: None,
+            include_inactive: None,
+        };
+
+        let options = extraction_options_from_request(&request);
+
+        assert!(!options.include_edge_properties);
+        assert!(!options.include_inactive);
+    }
+
+    #[test]
+    fn extraction_request_optional_flags_respect_explicit_true() {
+        let request = GetExtractionSchemaContextRequest {
+            include_edge_properties: Some(true),
+            include_inactive: Some(true),
+        };
+
+        let options = extraction_options_from_request(&request);
+
+        assert!(options.include_edge_properties);
+        assert!(options.include_inactive);
+    }
+
+    #[test]
+    fn proto_mapping_preserves_extraction_entity_shape() {
+        let proto = to_proto_extraction_entity_type(ExtractionEntityType {
+            type_id: "node.person".to_string(),
+            name: "Person".to_string(),
+            description: "A person".to_string(),
+            inheritance_chain: vec!["node.entity".to_string(), "node.person".to_string()],
+            outgoing_edges: vec![ExtractionAllowedEdge {
+                edge_type_id: "edge.related_to".to_string(),
+                edge_name: "RELATED_TO".to_string(),
+                edge_description: "rel".to_string(),
+                other_entity_type_id: "node.concept".to_string(),
+                other_entity_type_name: "Concept".to_string(),
+                min_cardinality: Some(1),
+                max_cardinality: Some(2),
+            }],
+            incoming_edges: vec![],
+        });
+
+        assert_eq!(proto.type_id, "node.person");
+        assert_eq!(proto.inheritance_chain, vec!["node.entity", "node.person"]);
+        assert_eq!(proto.outgoing_edges.len(), 1);
+        assert_eq!(proto.outgoing_edges[0].edge_type_id, "edge.related_to");
+        assert_eq!(proto.outgoing_edges[0].min_cardinality, Some(1));
+        assert_eq!(proto.outgoing_edges[0].max_cardinality, Some(2));
     }
 }
