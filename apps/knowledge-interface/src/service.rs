@@ -1637,6 +1637,13 @@ mod tests {
         ) -> Result<Vec<EntityCandidate>> {
             Ok(Vec::new())
         }
+
+        async fn get_entity_context(
+            &self,
+            _query: &crate::domain::GetEntityContextQuery,
+        ) -> Result<Option<crate::domain::EntityContext>> {
+            Ok(None)
+        }
     }
 
     struct FakeEmbedder;
@@ -1707,6 +1714,13 @@ mod tests {
         ) -> Result<Vec<EntityCandidate>> {
             Ok(Vec::new())
         }
+
+        async fn get_entity_context(
+            &self,
+            _query: &crate::domain::GetEntityContextQuery,
+        ) -> Result<Option<crate::domain::EntityContext>> {
+            Ok(None)
+        }
     }
 
     struct CountingGraphRepository {
@@ -1758,6 +1772,13 @@ mod tests {
             _query_vector: Option<&[f32]>,
         ) -> Result<Vec<EntityCandidate>> {
             Ok(Vec::new())
+        }
+
+        async fn get_entity_context(
+            &self,
+            _query: &crate::domain::GetEntityContextQuery,
+        ) -> Result<Option<crate::domain::EntityContext>> {
+            Ok(None)
         }
     }
 
@@ -1831,6 +1852,13 @@ mod tests {
             _query_vector: Option<&[f32]>,
         ) -> Result<Vec<EntityCandidate>> {
             Ok(Vec::new())
+        }
+
+        async fn get_entity_context(
+            &self,
+            _query: &crate::domain::GetEntityContextQuery,
+        ) -> Result<Option<crate::domain::EntityContext>> {
+            Ok(None)
         }
     }
 
@@ -2706,6 +2734,13 @@ mod tests {
                 .expect("lock should be available")
                 .push(query_vector.map(|v| v.to_vec()));
             Ok(self.candidates.clone())
+        }
+
+        async fn get_entity_context(
+            &self,
+            _query: &crate::domain::GetEntityContextQuery,
+        ) -> Result<Option<crate::domain::EntityContext>> {
+            Ok(None)
         }
     }
 

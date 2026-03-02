@@ -17,10 +17,11 @@ use tracing::warn;
 
 use crate::{
     domain::{
-        EdgeEndpointRule, EmbeddedBlock, EntityCandidate, ExistingBlockContext,
-        FindEntityCandidatesQuery, GraphDelta, NodeRelationshipCounts, PropertyScalar,
-        PropertyValue, SchemaType, TypeInheritance, TypeProperty, UpsertSchemaTypePropertyInput,
-        Visibility,
+        EdgeEndpointRule, EmbeddedBlock, EntityCandidate, EntityContext, EntityContextBlock,
+        EntityContextCore, EntityContextNeighbor, ExistingBlockContext, FindEntityCandidatesQuery,
+        GetEntityContextQuery, GraphDelta, NeighborDirection, NodeRelationshipCounts,
+        PropertyScalar, PropertyValue, SchemaType, TypeInheritance, TypeProperty,
+        UpsertSchemaTypePropertyInput, Visibility,
     },
     ports::{Embedder, GraphRepository, SchemaRepository},
 };
@@ -478,6 +479,162 @@ impl Neo4jGraphStore {
         }))
     }
 
+    async fn get_entity_context(
+        &self,
+        query_input: &GetEntityContextQuery,
+    ) -> Result<Option<EntityContext>> {
+        let mut entity_rows = self
+            .graph
+            .execute(
+                query(&format!(
+                    "MATCH (e:Entity {{id: $entity_id}}) WHERE {} RETURN e.id AS id, e.type_id AS type_id, e.user_id AS user_id, e.visibility AS visibility, e.name AS name, e.aliases AS aliases",
+                    memgraph_user_or_shared_access_clause("e")
+                ))
+                .param("entity_id", query_input.entity_id.clone())
+                .param("user_id", query_input.user_id.clone()),
+            )
+            .await
+            .context("failed to query target entity context")?;
+
+        let Some(entity_row) = entity_rows.next().await? else {
+            return Ok(None);
+        };
+
+        let entity_visibility = visibility_from_str(&entity_row.get::<String>("visibility")?)
+            .context("failed to parse target entity visibility")?;
+
+        let mut entity_properties = Vec::new();
+        if let Ok(name) = entity_row.get::<String>("name") {
+            entity_properties.push(PropertyValue {
+                key: "name".to_string(),
+                value: PropertyScalar::String(name),
+            });
+        }
+        if let Ok(aliases) = entity_row.get::<Vec<String>>("aliases") {
+            entity_properties.push(PropertyValue {
+                key: "aliases".to_string(),
+                value: PropertyScalar::Json(format!("{:?}", aliases)),
+            });
+        }
+
+        let mut block_rows = self
+            .graph
+            .execute(
+                query(&format!(
+                    "MATCH (e:Entity {{id: $entity_id}})-[:DESCRIBED_BY]->(root:Block)                      WHERE {} AND {}                      MATCH path=(root)-[:SUMMARIZES*0..$max_block_level]->(b:Block)                      WHERE ALL(n IN nodes(path) WHERE (n.user_id = $user_id OR n.visibility = 'SHARED'))                      OPTIONAL MATCH (parent:Block)-[:SUMMARIZES]->(b)                      WHERE parent IN nodes(path)                      RETURN DISTINCT b.id AS id, b.type_id AS type_id, length(path)-1 AS block_level, b.text AS text, parent.id AS parent_block_id, e.id AS parent_entity_id                      ORDER BY block_level ASC, id ASC",
+                    memgraph_user_or_shared_access_clause("e"),
+                    memgraph_user_or_shared_access_clause("root")
+                ))
+                .param("entity_id", query_input.entity_id.clone())
+                .param("user_id", query_input.user_id.clone())
+                .param("max_block_level", query_input.max_block_level as i64),
+            )
+            .await
+            .context("failed to query entity context blocks")?;
+
+        let mut blocks = Vec::new();
+        while let Some(row) = block_rows.next().await? {
+            let mut properties = Vec::new();
+            if let Ok(text) = row.get::<String>("text") {
+                properties.push(PropertyValue {
+                    key: "text".to_string(),
+                    value: PropertyScalar::String(text),
+                });
+            }
+
+            blocks.push(EntityContextBlock {
+                id: row.get("id").context("failed to parse context block id")?,
+                type_id: row
+                    .get("type_id")
+                    .context("failed to parse context block type_id")?,
+                block_level: row
+                    .get::<i64>("block_level")
+                    .context("failed to parse context block level")?
+                    .max(0) as u32,
+                properties,
+                parent_block_id: row.get("parent_block_id").ok(),
+                parent_entity_id: row.get("parent_entity_id").ok(),
+            });
+        }
+
+        let mut neighbor_rows = self
+            .graph
+            .execute(
+                query(&format!(
+                    "MATCH (e:Entity {{id: $entity_id}}) WHERE {}                      CALL {{                        WITH e                        MATCH (e)-[r]->(other:Entity)                        WHERE {} AND {}                        RETURN 'OUTGOING' AS direction, type(r) AS edge_type, r.confidence AS confidence, r.status AS status, r.provenance_hint AS provenance_hint, other.id AS other_entity_id                        UNION ALL                        WITH e                        MATCH (other:Entity)-[r]->(e)                        WHERE {} AND {}                        RETURN 'INCOMING' AS direction, type(r) AS edge_type, r.confidence AS confidence, r.status AS status, r.provenance_hint AS provenance_hint, other.id AS other_entity_id                      }}                      RETURN direction, edge_type, confidence, status, provenance_hint, other_entity_id                      ORDER BY direction ASC, edge_type ASC, other_entity_id ASC",
+                    memgraph_user_or_shared_access_clause("e"),
+                    memgraph_user_or_shared_access_clause("other"),
+                    memgraph_user_or_shared_access_clause("r"),
+                    memgraph_user_or_shared_access_clause("other"),
+                    memgraph_user_or_shared_access_clause("r")
+                ))
+                .param("entity_id", query_input.entity_id.clone())
+                .param("user_id", query_input.user_id.clone()),
+            )
+            .await
+            .context("failed to query entity context neighbors")?;
+
+        let mut neighbors = Vec::new();
+        while let Some(row) = neighbor_rows.next().await? {
+            let direction_raw: String = row
+                .get("direction")
+                .context("failed to parse neighbor direction")?;
+            let direction = if direction_raw == "OUTGOING" {
+                NeighborDirection::Outgoing
+            } else {
+                NeighborDirection::Incoming
+            };
+
+            let mut edge_properties = Vec::new();
+            if let Ok(value) = row.get::<f64>("confidence") {
+                edge_properties.push(PropertyValue {
+                    key: "confidence".to_string(),
+                    value: PropertyScalar::Float(value),
+                });
+            }
+            if let Ok(value) = row.get::<String>("status") {
+                edge_properties.push(PropertyValue {
+                    key: "status".to_string(),
+                    value: PropertyScalar::String(value),
+                });
+            }
+            if let Ok(value) = row.get::<String>("provenance_hint") {
+                edge_properties.push(PropertyValue {
+                    key: "provenance_hint".to_string(),
+                    value: PropertyScalar::String(value),
+                });
+            }
+
+            neighbors.push(EntityContextNeighbor {
+                direction,
+                edge_type: row
+                    .get("edge_type")
+                    .context("failed to parse neighbor edge_type")?,
+                edge_properties,
+                other_entity_id: row
+                    .get("other_entity_id")
+                    .context("failed to parse neighbor entity id")?,
+            });
+        }
+
+        Ok(Some(EntityContext {
+            entity: EntityContextCore {
+                id: entity_row
+                    .get("id")
+                    .context("failed to parse context entity id")?,
+                type_id: entity_row
+                    .get("type_id")
+                    .context("failed to parse context entity type_id")?,
+                user_id: entity_row
+                    .get("user_id")
+                    .context("failed to parse context entity user_id")?,
+                visibility: entity_visibility,
+            },
+            entity_properties,
+            blocks,
+            neighbors,
+        }))
+    }
     async fn get_node_relationship_counts(&self, node_id: &str) -> Result<NodeRelationshipCounts> {
         let mut result = self
             .graph
@@ -663,6 +820,13 @@ impl GraphRepository for MemgraphQdrantGraphRepository {
 
     async fn get_node_relationship_counts(&self, node_id: &str) -> Result<NodeRelationshipCounts> {
         self.graph_store.get_node_relationship_counts(node_id).await
+    }
+
+    async fn get_entity_context(
+        &self,
+        query: &GetEntityContextQuery,
+    ) -> Result<Option<EntityContext>> {
+        self.graph_store.get_entity_context(query).await
     }
 
     async fn find_entity_candidates(
@@ -1152,6 +1316,14 @@ fn visibility_as_str(visibility: Visibility) -> &'static str {
     match visibility {
         Visibility::Private => "PRIVATE",
         Visibility::Shared => "SHARED",
+    }
+}
+
+fn visibility_from_str(value: &str) -> Result<Visibility> {
+    match value {
+        "PRIVATE" => Ok(Visibility::Private),
+        "SHARED" => Ok(Visibility::Shared),
+        _ => anyhow::bail!("unsupported visibility value '{}'", value),
     }
 }
 

@@ -152,6 +152,53 @@ pub struct ExistingBlockContext {
 }
 
 #[derive(Debug, Clone)]
+pub struct GetEntityContextQuery {
+    pub entity_id: String,
+    pub user_id: String,
+    pub max_block_level: u32,
+}
+
+#[derive(Debug, Clone)]
+pub struct EntityContextCore {
+    pub id: String,
+    pub type_id: String,
+    pub user_id: String,
+    pub visibility: Visibility,
+}
+
+#[derive(Debug, Clone)]
+pub struct EntityContextBlock {
+    pub id: String,
+    pub type_id: String,
+    pub block_level: u32,
+    pub properties: Vec<PropertyValue>,
+    pub parent_block_id: Option<String>,
+    pub parent_entity_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum NeighborDirection {
+    Outgoing,
+    Incoming,
+}
+
+#[derive(Debug, Clone)]
+pub struct EntityContextNeighbor {
+    pub direction: NeighborDirection,
+    pub edge_type: String,
+    pub edge_properties: Vec<PropertyValue>,
+    pub other_entity_id: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct EntityContext {
+    pub entity: EntityContextCore,
+    pub entity_properties: Vec<PropertyValue>,
+    pub blocks: Vec<EntityContextBlock>,
+    pub neighbors: Vec<EntityContextNeighbor>,
+}
+
+#[derive(Debug, Clone)]
 pub struct SchemaNodeTypeHydrated {
     pub schema_type: SchemaType,
     pub properties: Vec<TypeProperty>,
