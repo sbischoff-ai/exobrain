@@ -28,7 +28,7 @@ class _FakeStub:
 
 
 @pytest.mark.asyncio
-async def test_enqueue_job_builds_json_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_enqueue_job_builds_typed_knowledge_update_payload(monkeypatch: pytest.MonkeyPatch) -> None:
     created_channels: list[_FakeChannel] = []
     created_stubs: list[_FakeStub] = []
 
@@ -48,11 +48,12 @@ async def test_enqueue_job_builds_json_payload(monkeypatch: pytest.MonkeyPatch) 
     client = JobOrchestratorClient(grpc_target="localhost:50061")
 
     job_id = await client.enqueue_job(
+        user_id="user-1",
         job_type="knowledge.update",
         payload={
             "journal_reference": "2026/02/19",
-            "messages": [{"role": "user", "content": "hello"}],
-            "requested_for_user": {"user_id": "user-1", "name": "Ada"},
+            "messages": [{"role": "user", "content": "hello", "sequence": 1}],
+            "requested_by_user_id": "user-1",
         },
     )
 
@@ -61,8 +62,37 @@ async def test_enqueue_job_builds_json_payload(monkeypatch: pytest.MonkeyPatch) 
     assert created_channels[0].target == "localhost:50061"
     request, timeout = created_stubs[0].requests[0]
     assert request.job_type == "knowledge.update"
+    assert request.user_id == "user-1"
+    assert request.WhichOneof("payload") == "knowledge_update"
+    assert request.knowledge_update.requested_by_user_id == "user-1"
+    assert request.knowledge_update.messages[0].sequence == 1
     assert timeout == 5.0
-    assert json.loads(request.payload_json)["requested_for_user"]["name"] == "Ada"
+
+
+@pytest.mark.asyncio
+async def test_enqueue_job_builds_json_payload_for_non_typed_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
+    created_stubs: list[_FakeStub] = []
+
+    monkeypatch.setattr(
+        "app.services.job_orchestrator_client.grpc.aio.insecure_channel",
+        lambda target: _FakeChannel(target),
+    )
+
+    def _fake_stub_factory(channel: _FakeChannel) -> _FakeStub:
+        stub = _FakeStub(channel)
+        created_stubs.append(stub)
+        return stub
+
+    monkeypatch.setattr("app.services.job_orchestrator_client.job_orchestrator_pb2_grpc.JobOrchestratorStub", _fake_stub_factory)
+
+    client = JobOrchestratorClient(grpc_target="localhost:50061")
+
+    await client.enqueue_job(user_id="user-1", job_type="other.job", payload={"a": 1})
+
+    request, _ = created_stubs[0].requests[0]
+    assert request.user_id == "user-1"
+    assert request.WhichOneof("payload") == "payload_json"
+    assert json.loads(request.payload_json)["a"] == 1
 
 
 @pytest.mark.asyncio
@@ -72,7 +102,7 @@ async def test_close_closes_channel(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("app.services.job_orchestrator_client.job_orchestrator_pb2_grpc.JobOrchestratorStub", _FakeStub)
 
     client = JobOrchestratorClient(grpc_target="localhost:50061")
-    await client.enqueue_job(job_type="other.job", payload={"a": 1})
+    await client.enqueue_job(user_id="user-1", job_type="other.job", payload={"a": 1})
     await client.close()
 
     assert channel.closed is True
@@ -95,7 +125,7 @@ async def test_enqueue_job_uses_custom_timeout(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr("app.services.job_orchestrator_client.job_orchestrator_pb2_grpc.JobOrchestratorStub", _fake_stub_factory)
 
     client = JobOrchestratorClient(grpc_target="localhost:50061", connect_timeout_seconds=2.5)
-    await client.enqueue_job(job_type="other.job", payload={"a": 1})
+    await client.enqueue_job(user_id="user-1", job_type="other.job", payload={"a": 1})
 
     _, timeout = created_stubs[0].requests[0]
     assert timeout == 2.5

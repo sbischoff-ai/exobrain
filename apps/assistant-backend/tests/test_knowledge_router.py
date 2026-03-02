@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 import pytest
 
+from app.api.dependencies.auth import get_required_auth_context
 from app.api.routers import knowledge as knowledge_router
 from app.api.schemas.auth import UnifiedPrincipal
 from app.api.schemas.knowledge import KnowledgeUpdateRequest
@@ -52,3 +55,26 @@ async def test_enqueue_knowledge_update_uses_knowledge_service_without_reference
     assert response.job_id == "job-knowledge-1"
     assert response.status == "queued"
     assert service.calls == [{"user_id": "user-1", "journal_reference": None}]
+
+
+def test_api_knowledge_update_surfaces_job_id() -> None:
+    principal = UnifiedPrincipal(user_id="user-1", email="u@example.com", display_name="User")
+    service = FakeKnowledgeService()
+    container = build_test_container({KnowledgeServiceProtocol: service})
+
+    app = FastAPI()
+
+    @app.middleware("http")
+    async def attach_container(request, call_next):
+        request.app.state.container = container
+        return await call_next(request)
+
+    app.dependency_overrides[get_required_auth_context] = lambda: principal
+    app.include_router(knowledge_router.router, prefix="/api")
+
+    with TestClient(app) as client:
+        response = client.post("/api/knowledge/update", json={"journal_reference": "2026/02/19"})
+
+    assert response.status_code == 200
+    assert response.json()["job_id"] == "job-knowledge-1"
+    assert service.calls == [{"user_id": "user-1", "journal_reference": "2026/02/19"}]
