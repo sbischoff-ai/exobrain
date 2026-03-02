@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -27,7 +28,7 @@ class _FakeStub:
 
 
 @pytest.mark.asyncio
-async def test_enqueue_knowledge_update_builds_typed_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_enqueue_job_builds_json_payload(monkeypatch: pytest.MonkeyPatch) -> None:
     created_channels: list[_FakeChannel] = []
     created_stubs: list[_FakeStub] = []
 
@@ -48,13 +49,10 @@ async def test_enqueue_knowledge_update_builds_typed_payload(monkeypatch: pytest
 
     job_id = await client.enqueue_job(
         job_type="knowledge.update",
-        user_id="user-1",
         payload={
             "journal_reference": "2026/02/19",
-            "messages": [
-                {"role": "user", "content": "hello", "sequence": 1, "created_at": "2026-02-19T10:00:00Z"}
-            ],
-            "requested_by_user_id": "user-1",
+            "messages": [{"role": "user", "content": "hello"}],
+            "requested_for_user": {"user_id": "user-1", "name": "Ada"},
         },
     )
 
@@ -63,10 +61,7 @@ async def test_enqueue_knowledge_update_builds_typed_payload(monkeypatch: pytest
     assert created_channels[0].target == "localhost:50061"
     request = created_stubs[0].requests[0]
     assert request.job_type == "knowledge.update"
-    assert request.user_id == "user-1"
-    assert request.knowledge_update.journal_reference == "2026/02/19"
-    assert request.knowledge_update.requested_by_user_id == "user-1"
-    assert request.knowledge_update.messages[0].content == "hello"
+    assert json.loads(request.payload_json)["requested_for_user"]["name"] == "Ada"
 
 
 @pytest.mark.asyncio
@@ -76,7 +71,7 @@ async def test_close_closes_channel(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("app.services.job_orchestrator_client.job_orchestrator_pb2_grpc.JobOrchestratorStub", _FakeStub)
 
     client = JobOrchestratorClient(grpc_target="localhost:50061")
-    await client.enqueue_job(job_type="other.job", user_id="user-1", payload={"a": 1})
+    await client.enqueue_job(job_type="other.job", payload={"a": 1})
     await client.close()
 
     assert channel.closed is True
