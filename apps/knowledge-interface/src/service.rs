@@ -1610,10 +1610,6 @@ mod tests {
             Ok(true)
         }
 
-        async fn is_user_graph_initialized(&self, _user_id: &str) -> Result<bool> {
-            Ok(false)
-        }
-
         async fn mark_user_graph_initialized(&self, _user_id: &str) -> Result<()> {
             Ok(())
         }
@@ -1680,10 +1676,6 @@ mod tests {
             Ok(!self.user_graph_initialized)
         }
 
-        async fn is_user_graph_initialized(&self, _user_id: &str) -> Result<bool> {
-            Ok(self.user_graph_initialized)
-        }
-
         async fn mark_user_graph_initialized(&self, user_id: &str) -> Result<()> {
             self.marked_user_ids
                 .lock()
@@ -1738,10 +1730,6 @@ mod tests {
 
         async fn user_graph_needs_initialization(&self, _user_id: &str) -> Result<bool> {
             Ok(true)
-        }
-
-        async fn is_user_graph_initialized(&self, _user_id: &str) -> Result<bool> {
-            Ok(false)
         }
 
         async fn mark_user_graph_initialized(&self, _user_id: &str) -> Result<()> {
@@ -1807,14 +1795,6 @@ mod tests {
 
         async fn user_graph_needs_initialization(&self, user_id: &str) -> Result<bool> {
             Ok(!self
-                .initialized
-                .lock()
-                .expect("lock should be available")
-                .contains(user_id))
-        }
-
-        async fn is_user_graph_initialized(&self, user_id: &str) -> Result<bool> {
-            Ok(self
                 .initialized
                 .lock()
                 .expect("lock should be available")
@@ -2690,10 +2670,6 @@ mod tests {
 
         async fn user_graph_needs_initialization(&self, _user_id: &str) -> Result<bool> {
             Ok(false)
-        }
-
-        async fn is_user_graph_initialized(&self, _user_id: &str) -> Result<bool> {
-            Ok(true)
         }
 
         async fn mark_user_graph_initialized(&self, _user_id: &str) -> Result<()> {
