@@ -126,6 +126,12 @@ pub struct GraphDelta {
 }
 
 #[derive(Debug, Clone)]
+pub struct UserInitGraphNodeIds {
+    pub person_entity_id: String,
+    pub assistant_entity_id: String,
+}
+
+#[derive(Debug, Clone)]
 pub struct EmbeddedBlock {
     pub block: BlockNode,
     pub universe_id: String,

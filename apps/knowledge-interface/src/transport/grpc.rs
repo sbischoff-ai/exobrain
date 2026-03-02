@@ -15,8 +15,8 @@ use super::mappers::{
 use super::proto::knowledge_interface_server::{KnowledgeInterface, KnowledgeInterfaceServer};
 use super::proto::{
     FindEntityCandidatesReply, FindEntityCandidatesRequest, GetEntityContextReply,
-    GetEntityContextRequest, GetSchemaReply, GetSchemaRequest, HealthReply, HealthRequest,
-    InitializeUserGraphReply, InitializeUserGraphRequest, UpsertGraphDeltaReply,
+    GetEntityContextRequest, GetSchemaReply, GetSchemaRequest, GetUserInitGraphReply,
+    GetUserInitGraphRequest, HealthReply, HealthRequest, UpsertGraphDeltaReply,
     UpsertGraphDeltaRequest, UpsertSchemaTypeReply, UpsertSchemaTypeRequest,
 };
 use super::FILE_DESCRIPTOR_SET;
@@ -128,22 +128,20 @@ impl KnowledgeInterface for KnowledgeGrpcService {
         }))
     }
 
-    async fn initialize_user_graph(
+    async fn get_user_init_graph(
         &self,
-        request: Request<InitializeUserGraphRequest>,
-    ) -> Result<Response<InitializeUserGraphReply>, Status> {
+        request: Request<GetUserInitGraphRequest>,
+    ) -> Result<Response<GetUserInitGraphReply>, Status> {
         let payload = request.into_inner();
-        let delta = self
+        let node_ids = self
             .app
-            .initialize_user_graph(&payload.user_id, &payload.user_name)
+            .get_user_init_graph(&payload.user_id, &payload.user_name)
             .await
             .map_err(|e| Status::invalid_argument(e.to_string()))?;
 
-        Ok(Response::new(InitializeUserGraphReply {
-            universe_id: "9d7f0fa5-78c1-4805-9efb-3f8f16090d7f".to_string(),
-            entities_upserted: delta.entities.len() as u32,
-            blocks_upserted: delta.blocks.len() as u32,
-            edges_upserted: delta.edges.len() as u32,
+        Ok(Response::new(GetUserInitGraphReply {
+            person_entity_id: node_ids.person_entity_id,
+            assistant_entity_id: node_ids.assistant_entity_id,
         }))
     }
 

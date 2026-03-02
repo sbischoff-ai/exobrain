@@ -6,7 +6,7 @@ Rust + tonic gRPC service for GraphRAG ingestion and canonical KG schema registr
 
 - Provides schema introspection (`GetSchema`) and schema type upsert (`UpsertSchemaType`).
 - Accepts schema-driven graph writes through `UpsertGraphDelta`.
-- Exposes `InitializeUserGraph` to seed a new user-scoped starter subgraph.
+- Exposes `GetUserInitGraph` to seed a new user-scoped starter subgraph.
 - Exposes `GetEntityContext` to read an entity's typed context graph payload.
 - Uses typed property payloads instead of hardcoded event/task fields.
 
@@ -65,9 +65,9 @@ All graph writes now flow through a single application path (`KnowledgeApplicati
 
 The Memgraph write is held in a transaction until Qdrant upserts complete. If Qdrant fails, Memgraph is rolled back. If Memgraph commit fails after Qdrant upsert, the new Qdrant points are deleted as compensation.
 
-## InitializeUserGraph gRPC
+## GetUserInitGraph gRPC
 
-`InitializeUserGraph` accepts `user_id` + `user_name` and creates a shared starter subgraph for that user:
+`GetUserInitGraph` accepts `user_id` + `user_name`; it initializes the user starter graph if missing, otherwise returns persisted starter node ids and syncs the person name when changed:
 
 - person entity (UUID id) with aliases `me`, `I`, `myself`
 - AI agent entity (`node.ai_agent`, UUID id) named `Exobrain Assistant`

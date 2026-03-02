@@ -20,7 +20,7 @@ use crate::{
         EdgeEndpointRule, EmbeddedBlock, EntityCandidate, ExistingBlockContext,
         FindEntityCandidatesQuery, GetEntityContextQuery, GetEntityContextResult, GraphDelta,
         NodeRelationshipCounts, PropertyScalar, PropertyValue, SchemaType, TypeInheritance,
-        TypeProperty, UpsertSchemaTypePropertyInput, Visibility,
+        TypeProperty, UpsertSchemaTypePropertyInput, UserInitGraphNodeIds, Visibility,
     },
     ports::{Embedder, GraphRepository, SchemaRepository},
 };
@@ -432,16 +432,66 @@ impl Neo4jGraphStore {
         Ok(result.next().await?.is_none())
     }
 
-    async fn mark_user_graph_initialized(&self, user_id: &str) -> Result<()> {
+    async fn mark_user_graph_initialized(
+        &self,
+        user_id: &str,
+        node_ids: &UserInitGraphNodeIds,
+    ) -> Result<()> {
         self.graph
             .run(
                 query(
-                    "MERGE (m:GraphInitialization {user_id: $user_id}) SET m.visibility = 'SHARED'",
+                    "MERGE (m:GraphInitialization {user_id: $user_id}) SET m.visibility = 'SHARED', m.person_entity_id = $person_entity_id, m.assistant_entity_id = $assistant_entity_id",
+                )
+                .param("user_id", user_id.to_string())
+                .param("person_entity_id", node_ids.person_entity_id.clone())
+                .param("assistant_entity_id", node_ids.assistant_entity_id.clone()),
+            )
+            .await
+            .context("failed to mark user graph initialized")?;
+
+        Ok(())
+    }
+
+    async fn get_user_init_graph_node_ids(
+        &self,
+        user_id: &str,
+    ) -> Result<Option<UserInitGraphNodeIds>> {
+        let mut result = self
+            .graph
+            .execute(
+                query(
+                    "MATCH (m:GraphInitialization {user_id: $user_id, visibility: 'SHARED'}) RETURN m.person_entity_id AS person_entity_id, m.assistant_entity_id AS assistant_entity_id LIMIT 1",
                 )
                 .param("user_id", user_id.to_string()),
             )
             .await
-            .context("failed to mark user graph initialized")?;
+            .context("failed to query user graph node ids")?;
+
+        let Some(row) = result.next().await? else {
+            return Ok(None);
+        };
+
+        let person_entity_id = row.get::<String>("person_entity_id").unwrap_or_default();
+        let assistant_entity_id = row.get::<String>("assistant_entity_id").unwrap_or_default();
+        if person_entity_id.is_empty() || assistant_entity_id.is_empty() {
+            return Ok(None);
+        }
+
+        Ok(Some(UserInitGraphNodeIds {
+            person_entity_id,
+            assistant_entity_id,
+        }))
+    }
+
+    async fn update_person_name(&self, person_entity_id: &str, user_name: &str) -> Result<()> {
+        self.graph
+            .run(
+                query("MATCH (p:Entity {id: $person_entity_id}) SET p.name = $user_name")
+                    .param("person_entity_id", person_entity_id.to_string())
+                    .param("user_name", user_name.to_string()),
+            )
+            .await
+            .context("failed to update person name")?;
 
         Ok(())
     }
@@ -646,8 +696,27 @@ impl GraphRepository for MemgraphQdrantGraphRepository {
             .await
     }
 
-    async fn mark_user_graph_initialized(&self, user_id: &str) -> Result<()> {
-        self.graph_store.mark_user_graph_initialized(user_id).await
+    async fn mark_user_graph_initialized(
+        &self,
+        user_id: &str,
+        node_ids: &UserInitGraphNodeIds,
+    ) -> Result<()> {
+        self.graph_store
+            .mark_user_graph_initialized(user_id, node_ids)
+            .await
+    }
+
+    async fn get_user_init_graph_node_ids(
+        &self,
+        user_id: &str,
+    ) -> Result<Option<UserInitGraphNodeIds>> {
+        self.graph_store.get_user_init_graph_node_ids(user_id).await
+    }
+
+    async fn update_person_name(&self, person_entity_id: &str, user_name: &str) -> Result<()> {
+        self.graph_store
+            .update_person_name(person_entity_id, user_name)
+            .await
     }
 
     async fn get_existing_block_context(

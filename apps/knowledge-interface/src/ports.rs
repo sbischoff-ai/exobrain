@@ -5,7 +5,7 @@ use crate::domain::{
     EdgeEndpointRule, EmbeddedBlock, EntityCandidate, ExistingBlockContext,
     FindEntityCandidatesQuery, GetEntityContextQuery, GetEntityContextResult, GraphDelta,
     NodeRelationshipCounts, SchemaType, TypeInheritance, TypeProperty,
-    UpsertSchemaTypePropertyInput,
+    UpsertSchemaTypePropertyInput, UserInitGraphNodeIds,
 };
 
 #[async_trait]
@@ -41,7 +41,16 @@ pub trait GraphRepository: Send + Sync {
     ) -> Result<()>;
     async fn common_root_graph_exists(&self) -> Result<bool>;
     async fn user_graph_needs_initialization(&self, user_id: &str) -> Result<bool>;
-    async fn mark_user_graph_initialized(&self, user_id: &str) -> Result<()>;
+    async fn mark_user_graph_initialized(
+        &self,
+        user_id: &str,
+        node_ids: &UserInitGraphNodeIds,
+    ) -> Result<()>;
+    async fn get_user_init_graph_node_ids(
+        &self,
+        user_id: &str,
+    ) -> Result<Option<UserInitGraphNodeIds>>;
+    async fn update_person_name(&self, person_entity_id: &str, user_name: &str) -> Result<()>;
     async fn get_existing_block_context(
         &self,
         block_id: &str,

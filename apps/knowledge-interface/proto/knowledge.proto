@@ -7,7 +7,7 @@ service KnowledgeInterface {
   rpc GetSchema(GetSchemaRequest) returns (GetSchemaReply);
   rpc UpsertSchemaType(UpsertSchemaTypeRequest) returns (UpsertSchemaTypeReply);
   rpc UpsertGraphDelta(UpsertGraphDeltaRequest) returns (UpsertGraphDeltaReply);
-  rpc InitializeUserGraph(InitializeUserGraphRequest) returns (InitializeUserGraphReply);
+  rpc GetUserInitGraph(GetUserInitGraphRequest) returns (GetUserInitGraphReply);
   rpc FindEntityCandidates(FindEntityCandidatesRequest) returns (FindEntityCandidatesReply);
   rpc GetEntityContext(GetEntityContextRequest) returns (GetEntityContextReply);
 }
@@ -153,16 +153,14 @@ message UpsertGraphDeltaReply {
   uint32 edges_upserted = 3;
 }
 
-message InitializeUserGraphRequest {
+message GetUserInitGraphRequest {
   string user_id = 1;
   string user_name = 2;
 }
 
-message InitializeUserGraphReply {
-  string universe_id = 1;
-  uint32 entities_upserted = 2;
-  uint32 blocks_upserted = 3;
-  uint32 edges_upserted = 4;
+message GetUserInitGraphReply {
+  string person_entity_id = 1;
+  string assistant_entity_id = 2;
 }
 
 message FindEntityCandidatesRequest {

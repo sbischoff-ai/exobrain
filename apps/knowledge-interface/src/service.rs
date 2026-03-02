@@ -8,7 +8,7 @@ use crate::{
         BlockNode, EmbeddedBlock, EntityNode, ExistingBlockContext, FindEntityCandidatesQuery,
         FindEntityCandidatesResult, FullSchema, GetEntityContextQuery, GetEntityContextResult,
         GraphDelta, GraphEdge, PropertyScalar, PropertyValue, SchemaType, UniverseNode,
-        UpsertSchemaTypeCommand, Visibility,
+        UpsertSchemaTypeCommand, UserInitGraphNodeIds, Visibility,
     },
     ports::{Embedder, GraphRepository, SchemaRepository},
 };
@@ -187,11 +187,11 @@ impl KnowledgeApplication {
         self.upsert_graph_delta(Self::common_root_delta()).await
     }
 
-    pub async fn initialize_user_graph(
+    pub async fn get_user_init_graph(
         &self,
         user_id: &str,
         user_name: &str,
-    ) -> Result<GraphDelta> {
+    ) -> Result<UserInitGraphNodeIds> {
         let trimmed_user_id = user_id.trim();
         if trimmed_user_id.is_empty() {
             return Err(anyhow!("user_id is required"));
@@ -202,18 +202,29 @@ impl KnowledgeApplication {
             return Err(anyhow!("user_name is required"));
         }
 
-        if !self
+        if self
             .graph_repository
             .user_graph_needs_initialization(trimmed_user_id)
             .await?
         {
-            return Ok(Self::user_init_delta(trimmed_user_id, trimmed_user_name));
+            let delta = Self::user_init_delta(trimmed_user_id, trimmed_user_name);
+            let node_ids = Self::user_init_graph_node_ids(&delta)?;
+            self.apply_user_initialization_delta(trimmed_user_id, delta, &node_ids)
+                .await?;
+            return Ok(node_ids);
         }
 
-        let delta = Self::user_init_delta(trimmed_user_id, trimmed_user_name);
-        self.apply_user_initialization_delta(trimmed_user_id, delta.clone())
+        let node_ids = self
+            .graph_repository
+            .get_user_init_graph_node_ids(trimmed_user_id)
+            .await?
+            .ok_or_else(|| anyhow!("user graph marker missing node ids"))?;
+
+        self.graph_repository
+            .update_person_name(&node_ids.person_entity_id, trimmed_user_name)
             .await?;
-        Ok(delta)
+
+        Ok(node_ids)
     }
 
     fn common_root_delta() -> GraphDelta {
@@ -367,6 +378,26 @@ impl KnowledgeApplication {
         }
     }
 
+    fn user_init_graph_node_ids(delta: &GraphDelta) -> Result<UserInitGraphNodeIds> {
+        let person_entity_id = delta
+            .entities
+            .iter()
+            .find(|entity| entity.type_id == "node.person")
+            .map(|entity| entity.id.clone())
+            .ok_or_else(|| anyhow!("missing person entity in user init delta"))?;
+        let assistant_entity_id = delta
+            .entities
+            .iter()
+            .find(|entity| entity.type_id == "node.ai_agent")
+            .map(|entity| entity.id.clone())
+            .ok_or_else(|| anyhow!("missing assistant entity in user init delta"))?;
+
+        Ok(UserInitGraphNodeIds {
+            person_entity_id,
+            assistant_entity_id,
+        })
+    }
+
     pub async fn find_entity_candidates(
         &self,
         mut query: FindEntityCandidatesQuery,
@@ -450,10 +481,11 @@ impl KnowledgeApplication {
         &self,
         user_id: &str,
         delta: GraphDelta,
+        node_ids: &UserInitGraphNodeIds,
     ) -> Result<()> {
         self.upsert_graph_delta_internal(delta).await?;
         self.graph_repository
-            .mark_user_graph_initialized(user_id)
+            .mark_user_graph_initialized(user_id, node_ids)
             .await
     }
 
@@ -533,7 +565,8 @@ impl KnowledgeApplication {
                 // In implicit initialization flow, we deterministically reuse `user_id` as
                 // `user_name` when no richer user profile is available in the request.
                 let delta = Self::user_init_delta(&user_id, &user_id);
-                self.apply_user_initialization_delta(&user_id, delta)
+                let node_ids = Self::user_init_graph_node_ids(&delta)?;
+                self.apply_user_initialization_delta(&user_id, delta, &node_ids)
                     .await?;
             }
         }
@@ -1210,7 +1243,7 @@ mod tests {
         domain::{
             BlockNode, EdgeEndpointRule, EntityCandidate, EntityNode, FindEntityCandidatesQuery,
             GraphEdge, NodeRelationshipCounts, PropertyValue, TypeInheritance, TypeProperty,
-            UpsertSchemaTypePropertyInput, Visibility,
+            UpsertSchemaTypePropertyInput, UserInitGraphNodeIds, Visibility,
         },
         ports::{Embedder, GraphRepository, SchemaRepository},
     };
@@ -1630,7 +1663,26 @@ mod tests {
             Ok(true)
         }
 
-        async fn mark_user_graph_initialized(&self, _user_id: &str) -> Result<()> {
+        async fn mark_user_graph_initialized(
+            &self,
+            _user_id: &str,
+            _node_ids: &UserInitGraphNodeIds,
+        ) -> Result<()> {
+            Ok(())
+        }
+
+        async fn get_user_init_graph_node_ids(
+            &self,
+            _user_id: &str,
+        ) -> Result<Option<UserInitGraphNodeIds>> {
+            Ok(None)
+        }
+
+        async fn update_person_name(
+            &self,
+            _person_entity_id: &str,
+            _user_name: &str,
+        ) -> Result<()> {
             Ok(())
         }
 
@@ -1703,11 +1755,41 @@ mod tests {
             Ok(!self.user_graph_initialized)
         }
 
-        async fn mark_user_graph_initialized(&self, user_id: &str) -> Result<()> {
+        async fn mark_user_graph_initialized(
+            &self,
+            user_id: &str,
+            node_ids: &UserInitGraphNodeIds,
+        ) -> Result<()> {
             self.marked_user_ids
                 .lock()
                 .expect("lock should be available")
-                .push(user_id.to_string());
+                .push(format!(
+                    "{}:{}:{}",
+                    user_id, node_ids.person_entity_id, node_ids.assistant_entity_id
+                ));
+            Ok(())
+        }
+
+        async fn get_user_init_graph_node_ids(
+            &self,
+            _user_id: &str,
+        ) -> Result<Option<UserInitGraphNodeIds>> {
+            Ok(Some(UserInitGraphNodeIds {
+                person_entity_id: uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, b"person:user-1")
+                    .to_string(),
+                assistant_entity_id: uuid::Uuid::new_v5(
+                    &uuid::Uuid::NAMESPACE_OID,
+                    b"assistant:user-1",
+                )
+                .to_string(),
+            }))
+        }
+
+        async fn update_person_name(
+            &self,
+            _person_entity_id: &str,
+            _user_name: &str,
+        ) -> Result<()> {
             Ok(())
         }
 
@@ -1766,7 +1848,26 @@ mod tests {
             Ok(true)
         }
 
-        async fn mark_user_graph_initialized(&self, _user_id: &str) -> Result<()> {
+        async fn mark_user_graph_initialized(
+            &self,
+            _user_id: &str,
+            _node_ids: &UserInitGraphNodeIds,
+        ) -> Result<()> {
+            Ok(())
+        }
+
+        async fn get_user_init_graph_node_ids(
+            &self,
+            _user_id: &str,
+        ) -> Result<Option<UserInitGraphNodeIds>> {
+            Ok(None)
+        }
+
+        async fn update_person_name(
+            &self,
+            _person_entity_id: &str,
+            _user_name: &str,
+        ) -> Result<()> {
             Ok(())
         }
 
@@ -1842,11 +1943,30 @@ mod tests {
                 .contains(user_id))
         }
 
-        async fn mark_user_graph_initialized(&self, user_id: &str) -> Result<()> {
+        async fn mark_user_graph_initialized(
+            &self,
+            user_id: &str,
+            _node_ids: &UserInitGraphNodeIds,
+        ) -> Result<()> {
             self.initialized
                 .lock()
                 .expect("lock should be available")
                 .insert(user_id.to_string());
+            Ok(())
+        }
+
+        async fn get_user_init_graph_node_ids(
+            &self,
+            _user_id: &str,
+        ) -> Result<Option<UserInitGraphNodeIds>> {
+            Ok(None)
+        }
+
+        async fn update_person_name(
+            &self,
+            _person_entity_id: &str,
+            _user_name: &str,
+        ) -> Result<()> {
             Ok(())
         }
 
@@ -2134,29 +2254,21 @@ mod tests {
             Arc::new(FakeEmbedder),
         );
 
-        let delta = app
-            .initialize_user_graph("user-1", "Alex")
+        let node_ids = app
+            .get_user_init_graph("user-1", "Alex")
             .await
             .expect("user graph init should succeed");
 
-        assert_eq!(delta.entities.len(), 2);
-        assert_eq!(delta.blocks.len(), 1);
-        assert_eq!(delta.edges.len(), 4);
-        assert!(delta
-            .entities
-            .iter()
-            .any(|entity| entity.type_id == "node.ai_agent"
-                && entity
-                    .properties
-                    .iter()
-                    .any(|prop| prop.key == "name" && matches!(&prop.value, PropertyScalar::String(name) if name == "Exobrain Assistant"))));
+        assert!(!node_ids.person_entity_id.is_empty());
+        assert!(!node_ids.assistant_entity_id.is_empty());
 
         let guard = captured.lock().expect("lock should be available");
         assert_eq!(guard.len(), 1);
         assert_eq!(guard[0].block_level, 0);
 
         let marked = marked_user_ids.lock().expect("lock should be available");
-        assert_eq!(marked.as_slice(), ["user-1"]);
+        assert_eq!(marked.len(), 1);
+        assert!(marked[0].starts_with("user-1:"));
     }
 
     #[tokio::test]
@@ -2175,14 +2287,13 @@ mod tests {
             Arc::new(FakeEmbedder),
         );
 
-        let delta = app
-            .initialize_user_graph("user-1", "Alex")
+        let node_ids = app
+            .get_user_init_graph("user-1", "Alex")
             .await
             .expect("user graph init should short-circuit");
 
-        assert_eq!(delta.entities.len(), 2);
-        assert_eq!(delta.blocks.len(), 1);
-        assert_eq!(delta.edges.len(), 4);
+        assert!(!node_ids.person_entity_id.is_empty());
+        assert!(!node_ids.assistant_entity_id.is_empty());
 
         let guard = captured.lock().expect("lock should be available");
         assert!(guard.is_empty());
@@ -2720,7 +2831,26 @@ mod tests {
             Ok(false)
         }
 
-        async fn mark_user_graph_initialized(&self, _user_id: &str) -> Result<()> {
+        async fn mark_user_graph_initialized(
+            &self,
+            _user_id: &str,
+            _node_ids: &UserInitGraphNodeIds,
+        ) -> Result<()> {
+            Ok(())
+        }
+
+        async fn get_user_init_graph_node_ids(
+            &self,
+            _user_id: &str,
+        ) -> Result<Option<UserInitGraphNodeIds>> {
+            Ok(None)
+        }
+
+        async fn update_person_name(
+            &self,
+            _person_entity_id: &str,
+            _user_name: &str,
+        ) -> Result<()> {
             Ok(())
         }
 
@@ -2995,7 +3125,26 @@ mod tests {
             Ok(false)
         }
 
-        async fn mark_user_graph_initialized(&self, _user_id: &str) -> Result<()> {
+        async fn mark_user_graph_initialized(
+            &self,
+            _user_id: &str,
+            _node_ids: &UserInitGraphNodeIds,
+        ) -> Result<()> {
+            Ok(())
+        }
+
+        async fn get_user_init_graph_node_ids(
+            &self,
+            _user_id: &str,
+        ) -> Result<Option<UserInitGraphNodeIds>> {
+            Ok(None)
+        }
+
+        async fn update_person_name(
+            &self,
+            _person_entity_id: &str,
+            _user_name: &str,
+        ) -> Result<()> {
             Ok(())
         }
 
