@@ -8,9 +8,9 @@ use crate::service::KnowledgeApplication;
 use super::errors::map_ingest_error;
 use super::mappers::{
     to_domain_block_node, to_domain_entity_node, to_domain_find_entity_candidates_query,
-    to_domain_graph_edge, to_domain_universe_node, to_proto_edge_endpoint_rule,
-    to_proto_entity_candidate, to_proto_schema_type, to_proto_type_inheritance,
-    to_proto_type_property,
+    to_domain_get_entity_context_query, to_domain_graph_edge, to_domain_universe_node,
+    to_proto_edge_endpoint_rule, to_proto_entity_candidate, to_proto_get_entity_context_reply,
+    to_proto_schema_type, to_proto_type_inheritance, to_proto_type_property,
 };
 use super::proto::knowledge_interface_server::{KnowledgeInterface, KnowledgeInterfaceServer};
 use super::proto::{
@@ -167,11 +167,16 @@ impl KnowledgeInterface for KnowledgeGrpcService {
 
     async fn get_entity_context(
         &self,
-        _request: Request<GetEntityContextRequest>,
+        request: Request<GetEntityContextRequest>,
     ) -> Result<Response<GetEntityContextReply>, Status> {
-        Err(Status::unimplemented(
-            "GetEntityContext is not implemented yet",
-        ))
+        let query = to_domain_get_entity_context_query(request.into_inner());
+        let result = self
+            .app
+            .get_entity_context(query)
+            .await
+            .map_err(|e| Status::invalid_argument(e.to_string()))?;
+
+        Ok(Response::new(to_proto_get_entity_context_reply(result)))
     }
 
     async fn upsert_graph_delta(
