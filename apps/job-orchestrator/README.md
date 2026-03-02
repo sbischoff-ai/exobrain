@@ -46,6 +46,8 @@ Job IDs are generated server-side as UUIDs and returned in the enqueue response.
 
 Persistence distinguishes retryable and terminal failures: retryable failures keep `status='failed'` with `is_terminal=false`, while max-attempt/DLQ failures set `is_terminal=true` and `terminal_reason='max-attempts'`.
 
+Lifecycle status events are published on job-scoped subjects (`jobs.status.<job_id>`) so `WatchJobStatus` can subscribe narrowly and terminate after terminal events (`SUCCEEDED` or `FAILED_FINAL`).
+
 Request flow:
 
 ```text

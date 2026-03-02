@@ -6,7 +6,7 @@ from typing import Awaitable, Callable
 from nats.aio.msg import Msg
 from pydantic import ValidationError
 
-from app.contracts import DeadLetterEvent, JobEnvelope, JobResultEvent, WorkerJobRunnerProtocol
+from app.contracts import DeadLetterEvent, JobEnvelope, JobResultEvent, JobStatusEvent, WorkerJobRunnerProtocol
 from app.job_repository import JobRepository
 from app.worker.job_registry import JOB_PAYLOAD_MODEL_BY_TYPE
 
@@ -71,18 +71,22 @@ class JobOrchestrator:
 
         if delivery_attempt == 1:
             inserted = await self._repository.register_requested(run_job)
+            if inserted:
+                await self._emit_status(run_job.job_id, "ENQUEUED_OR_PENDING", attempt=delivery_attempt - 1, terminal=False)
             if not inserted:
                 logger.info("skipping duplicate job", extra={"job_id": run_job.job_id})
                 await msg.ack()
                 return
 
         await self._repository.mark_processing(run_job.job_id, delivery_attempt)
+        await self._emit_status(run_job.job_id, "STARTED", attempt=delivery_attempt, terminal=False)
 
         try:
             logger.info("starting job execution", extra={"job_id": run_job.job_id, "job_type": run_job.job_type, "attempt": delivery_attempt})
             await self._runner.run_job(run_job)
             await self._repository.mark_completed(run_job.job_id)
             await self._emit_result(run_job, "completed", attempt=delivery_attempt)
+            await self._emit_status(run_job.job_id, "SUCCEEDED", attempt=delivery_attempt, terminal=True)
             logger.info("job execution completed", extra={"job_id": run_job.job_id, "job_type": run_job.job_type, "attempt": delivery_attempt})
             await msg.ack()
         except Exception as exc:  # noqa: BLE001
@@ -94,11 +98,19 @@ class JobOrchestrator:
                 await self._repository.mark_terminal_failure(run_job.job_id, str(exc), "max-attempts")
                 logger.error("max retries reached, sending to DLQ", extra={"job_id": run_job.job_id})
                 await self._emit_result(run_job, "failed", attempt=delivery_attempt, detail=str(exc))
+                await self._emit_status(
+                    run_job.job_id,
+                    "FAILED_FINAL",
+                    attempt=delivery_attempt,
+                    detail=str(exc),
+                    terminal=True,
+                )
                 await self._emit_dlq(reason="max-attempts", detail=str(exc), raw_message=msg.data)
                 await msg.ack()
                 return
 
             await self._repository.mark_retrying_failure(run_job.job_id, str(exc))
+            await self._emit_status(run_job.job_id, "RETRYING", attempt=delivery_attempt, detail=str(exc), terminal=False)
             logger.warning("retrying job", extra={"job_id": run_job.job_id, "next_attempt": delivery_attempt + 1})
             await msg.nak()
 
@@ -119,6 +131,12 @@ class JobOrchestrator:
             return None
         except ValidationError as exc:
             return str(exc)
+
+
+    async def _emit_status(self, job_id: str, state: str, attempt: int, terminal: bool, detail: str | None = None) -> None:
+        event = JobStatusEvent(job_id=job_id, state=state, attempt=attempt, detail=detail, terminal=terminal)
+        subject = f"jobs.status.{job_id}"
+        await self._publish_event(subject, event.model_dump_json().encode("utf-8"))
 
     async def _emit_result(self, job: JobEnvelope, status: str, attempt: int, detail: str | None = None) -> None:
         event = JobResultEvent(

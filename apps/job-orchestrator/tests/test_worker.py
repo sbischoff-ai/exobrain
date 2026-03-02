@@ -97,7 +97,12 @@ async def test_worker_marks_completed_for_new_job() -> None:
     assert msg.acked is True
     assert msg.nacked is False
     assert ("completed", "job-1") in repo.calls
-    assert events == ["jobs.events.knowledge.update.completed"]
+    assert events == [
+        "jobs.status.job-1",
+        "jobs.status.job-1",
+        "jobs.events.knowledge.update.completed",
+        "jobs.status.job-1",
+    ]
 
 
 @pytest.mark.asyncio
@@ -188,7 +193,7 @@ async def test_worker_naks_on_retryable_failure() -> None:
     assert msg.acked is False
     assert msg.nacked is True
     assert ("retrying_failed", "job-1") in repo.calls
-    assert events == []
+    assert events == ["jobs.status.job-1", "jobs.status.job-1", "jobs.status.job-1"]
 
 
 @pytest.mark.asyncio
@@ -207,7 +212,12 @@ async def test_worker_dlqs_when_max_attempts_reached() -> None:
     assert msg.acked is True
     assert msg.nacked is False
     assert ("terminal_failed", "job-1:max-attempts") in repo.calls
-    assert events == ["jobs.events.knowledge.update.failed", "jobs.dlq"]
+    assert events == [
+        "jobs.status.job-1",
+        "jobs.events.knowledge.update.failed",
+        "jobs.status.job-1",
+        "jobs.dlq",
+    ]
 
 
 @pytest.mark.asyncio

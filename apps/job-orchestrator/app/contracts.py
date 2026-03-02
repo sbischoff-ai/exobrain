@@ -41,6 +41,16 @@ class JobResultEvent(BaseModel):
     emitted_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
+class JobStatusEvent(BaseModel):
+    schema_version: int = Field(default=1)
+    job_id: str
+    state: str
+    attempt: int
+    detail: str | None = None
+    terminal: bool
+    emitted_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
 class DeadLetterEvent(BaseModel):
     schema_version: int = Field(default=1)
     reason: str
