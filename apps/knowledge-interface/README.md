@@ -73,6 +73,29 @@ The Memgraph write is held in a transaction until Qdrant upserts complete. If Qd
 - one descriptive assistant block (embedded + upserted to Qdrant)
 - `RELATED_TO` edge from assistant -> person
 
+## FindEntityCandidates gRPC
+
+`FindEntityCandidates` helps resolve user-provided entity mentions to known graph entities.
+
+Example request payload:
+
+```json
+{
+  "names": ["Ada", "Ada Lovelace"],
+  "potential_type_ids": ["node.person"],
+  "short_description": "mathematician known for analytical engine notes",
+  "user_id": "user-123",
+  "limit": 5
+}
+```
+
+How to interpret scores:
+
+- Score combines lexical name/alias matching and semantic block similarity.
+- Semantic similarity is weighted by block depth so root description blocks count more.
+- Higher score means stronger overall confidence.
+- Candidates are sorted descending by score and capped by `limit`.
+
 ## Graph delta constraints for clients
 
 See detailed contract docs here:

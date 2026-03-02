@@ -1,6 +1,7 @@
 # Knowledge Interface gRPC API and Graph Delta Contract
 
-This document describes what clients must send to `UpsertGraphDelta` and `InitializeUserGraph`.
+This document describes what clients must send to `UpsertGraphDelta` and
+`InitializeUserGraph`, plus how to query `FindEntityCandidates`.
 
 ## Core rule
 
@@ -107,3 +108,40 @@ For interactive request prototyping use `grpcui -plaintext localhost:50051`.
 
 
 Visibility values are accepted as provided per node/edge; scope is carried per universe/entity/block/edge (no top-level request scope fields).
+
+## FindEntityCandidates
+
+`FindEntityCandidates` returns candidate entities by combining lexical name matching and
+semantic similarity over `node.block` text.
+
+### Request schema
+
+- `names[]`: free-form candidate names (case-insensitive; trimmed and normalized)
+- `potential_type_ids[]`: optional entity type filter (`node.person`, `node.company`, ...)
+- `short_description`: optional semantic hint text (embedded and searched against Qdrant)
+- `user_id`: required requester scope
+- `limit`: optional maximum result count
+
+At least one non-empty `names[]` value or a non-empty `short_description` is required.
+
+### Response schema
+
+Each `EntityCandidate` includes:
+
+- `entity_id`
+- `entity_name`
+- `described_by_text` (best available lowest block-level description, if present)
+- `score` (combined lexical + semantic ranking score)
+- `matched_name` / `matched_alias` (best-effort matched tokens)
+- `entity_type_id`
+
+### Matching semantics
+
+- Name score is computed from normalized `names[]` against entity `name` and `aliases`.
+- Semantic score comes from Qdrant block similarity and is weighted by block depth:
+  - `weighted = raw_similarity * (1 / (1 + block_level))`
+  - root description blocks (`block_level = 0`) contribute most.
+- Entity hits are deduplicated by `entity_id` across lexical and semantic paths.
+- Final score is combined as:
+  - `0.55 * name_score + 0.45 * weighted_semantic_score`
+- Results are sorted descending by final score and truncated by `limit` when provided.

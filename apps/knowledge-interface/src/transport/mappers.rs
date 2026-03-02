@@ -1,8 +1,9 @@
 use tonic::Status;
 
 use crate::domain::{
-    BlockNode, EdgeEndpointRule, EntityNode, GraphEdge, PropertyScalar, PropertyValue, SchemaType,
-    TypeInheritance, TypeProperty, UniverseNode, Visibility,
+    BlockNode, EdgeEndpointRule, EntityCandidate, EntityNode, FindEntityCandidatesQuery, GraphEdge,
+    PropertyScalar, PropertyValue, SchemaType, TypeInheritance, TypeProperty, UniverseNode,
+    Visibility,
 };
 
 use super::proto;
@@ -106,6 +107,35 @@ pub(crate) fn to_domain_graph_edge(edge: proto::GraphEdge) -> Result<GraphEdge, 
     })
 }
 
+pub(crate) fn to_domain_find_entity_candidates_query(
+    request: proto::FindEntityCandidatesRequest,
+) -> FindEntityCandidatesQuery {
+    FindEntityCandidatesQuery {
+        names: request.names,
+        potential_type_ids: request.potential_type_ids,
+        short_description: (!request.short_description.trim().is_empty())
+            .then_some(request.short_description),
+        user_id: request.user_id,
+        limit: request.limit.map(|value| value as usize),
+    }
+}
+
+pub(crate) fn to_proto_entity_candidate(candidate: EntityCandidate) -> proto::EntityCandidate {
+    proto::EntityCandidate {
+        entity_id: candidate.id,
+        entity_name: candidate.name,
+        described_by_text: candidate.described_by_text.unwrap_or_default(),
+        score: candidate.score,
+        matched_name: candidate
+            .matched_tokens
+            .first()
+            .cloned()
+            .unwrap_or_default(),
+        matched_alias: candidate.matched_tokens.get(1).cloned().unwrap_or_default(),
+        entity_type_id: candidate.type_id,
+    }
+}
+
 pub(crate) fn to_domain_property_value(
     value: proto::PropertyValue,
 ) -> Result<PropertyValue, Status> {
@@ -142,7 +172,11 @@ pub(crate) fn map_visibility(value: i32) -> Result<Visibility, Status> {
 mod tests {
     use tonic::Code;
 
-    use super::{map_visibility, to_domain_property_value};
+    use super::{
+        map_visibility, to_domain_find_entity_candidates_query, to_domain_property_value,
+        to_proto_entity_candidate,
+    };
+    use crate::domain::EntityCandidate;
     use crate::transport::proto;
 
     #[test]
@@ -164,5 +198,37 @@ mod tests {
         let error = result.expect_err("expected invalid visibility enum to fail");
         assert_eq!(error.code(), Code::InvalidArgument);
         assert_eq!(error.message(), "visibility is invalid");
+    }
+
+    #[test]
+    fn to_domain_find_entity_candidates_query_maps_empty_description_to_none() {
+        let query = to_domain_find_entity_candidates_query(proto::FindEntityCandidatesRequest {
+            names: vec!["Ada".to_string()],
+            potential_type_ids: vec!["node.person".to_string()],
+            short_description: "   ".to_string(),
+            user_id: "u-1".to_string(),
+            limit: Some(7),
+        });
+
+        assert_eq!(query.names, vec!["Ada".to_string()]);
+        assert_eq!(query.short_description, None);
+        assert_eq!(query.limit, Some(7));
+    }
+
+    #[test]
+    fn to_proto_entity_candidate_maps_optional_fields_and_tokens() {
+        let proto = to_proto_entity_candidate(EntityCandidate {
+            id: "e-1".to_string(),
+            name: "Ada Lovelace".to_string(),
+            described_by_text: None,
+            score: 0.97,
+            type_id: "node.person".to_string(),
+            matched_tokens: vec!["ada".to_string()],
+        });
+
+        assert_eq!(proto.entity_id, "e-1");
+        assert!(proto.described_by_text.is_empty());
+        assert_eq!(proto.matched_name, "ada");
+        assert!(proto.matched_alias.is_empty());
     }
 }

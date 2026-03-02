@@ -744,29 +744,16 @@ impl GraphRepository for MemgraphQdrantGraphRepository {
                 };
                 let block_level = payload_i64(&point.payload, "block_level").unwrap_or(99);
                 let text = payload_string(&point.payload, "text");
-                let level_weight = 1.0 / (1.0 + block_level as f64);
-                let weighted_semantic = (point.score as f64) * level_weight;
+                let weighted_semantic =
+                    semantic_score_with_block_level(point.score as f64, block_level);
 
-                let entry = aggregated.entry(root_entity_id.clone()).or_insert_with(|| {
-                    AggregatedCandidate {
-                        id: root_entity_id,
-                        name: String::new(),
-                        type_id: String::new(),
-                        name_score: 0.0,
-                        semantic_score_weighted: weighted_semantic,
-                        described_by_text: text.clone(),
-                        described_by_block_level: block_level,
-                        matched_tokens: Vec::new(),
-                    }
-                });
-
-                if weighted_semantic > entry.semantic_score_weighted {
-                    entry.semantic_score_weighted = weighted_semantic;
-                }
-                if block_level < entry.described_by_block_level {
-                    entry.described_by_text = text;
-                    entry.described_by_block_level = block_level;
-                }
+                upsert_semantic_candidate(
+                    &mut aggregated,
+                    root_entity_id,
+                    weighted_semantic,
+                    block_level,
+                    text,
+                );
             }
         }
 
@@ -824,6 +811,39 @@ struct AggregatedCandidate {
     described_by_text: Option<String>,
     described_by_block_level: i64,
     matched_tokens: Vec<String>,
+}
+
+fn semantic_score_with_block_level(raw_score: f64, block_level: i64) -> f64 {
+    raw_score * (1.0 / (1.0 + block_level as f64))
+}
+
+fn upsert_semantic_candidate(
+    aggregated: &mut HashMap<String, AggregatedCandidate>,
+    root_entity_id: String,
+    weighted_semantic: f64,
+    block_level: i64,
+    text: Option<String>,
+) {
+    let entry = aggregated
+        .entry(root_entity_id.clone())
+        .or_insert_with(|| AggregatedCandidate {
+            id: root_entity_id,
+            name: String::new(),
+            type_id: String::new(),
+            name_score: 0.0,
+            semantic_score_weighted: weighted_semantic,
+            described_by_text: text.clone(),
+            described_by_block_level: block_level,
+            matched_tokens: Vec::new(),
+        });
+
+    if weighted_semantic > entry.semantic_score_weighted {
+        entry.semantic_score_weighted = weighted_semantic;
+    }
+    if block_level < entry.described_by_block_level {
+        entry.described_by_text = text;
+        entry.described_by_block_level = block_level;
+    }
 }
 
 fn compute_name_score(
@@ -1094,10 +1114,12 @@ mod tests {
     use super::{
         allowed_node_visibilities, compute_name_score, memgraph_user_or_shared_access_clause,
         normalize_qdrant_grpc_url, payload_i64, payload_string,
-        qdrant_user_or_shared_access_filter, validate_edge_type, MockEmbedder,
+        qdrant_user_or_shared_access_filter, semantic_score_with_block_level,
+        upsert_semantic_candidate, validate_edge_type, MockEmbedder,
     };
     use crate::domain::Visibility;
     use crate::ports::Embedder;
+    use std::collections::HashMap;
 
     #[test]
     fn normalizes_qdrant_rest_port_to_grpc_port() {
@@ -1201,5 +1223,37 @@ mod tests {
     fn rejects_unsafe_edge_type() {
         assert!(validate_edge_type("RELATED_TO); MATCH (n)").is_err());
         assert!(validate_edge_type("related_to").is_err());
+    }
+
+    #[test]
+    fn semantic_score_applies_block_level_weighting() {
+        assert_eq!(semantic_score_with_block_level(0.8, 0), 0.8);
+        assert!(semantic_score_with_block_level(0.8, 2) < 0.8);
+    }
+
+    #[test]
+    fn upsert_semantic_candidate_deduplicates_entity_and_keeps_best_fields() {
+        let mut aggregated = HashMap::new();
+
+        upsert_semantic_candidate(
+            &mut aggregated,
+            "entity-1".to_string(),
+            0.2,
+            3,
+            Some("deep summary".to_string()),
+        );
+        upsert_semantic_candidate(
+            &mut aggregated,
+            "entity-1".to_string(),
+            0.5,
+            1,
+            Some("root summary".to_string()),
+        );
+
+        assert_eq!(aggregated.len(), 1);
+        let candidate = aggregated.get("entity-1").expect("candidate should exist");
+        assert_eq!(candidate.semantic_score_weighted, 0.5);
+        assert_eq!(candidate.described_by_block_level, 1);
+        assert_eq!(candidate.described_by_text.as_deref(), Some("root summary"));
     }
 }
