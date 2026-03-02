@@ -672,7 +672,8 @@
     canLoadOlder={canLoadOlderMessages}
     inputDisabled={chatInputDisabled}
     disabledReason={isPastJournalSelected ? 'You can not chat with past journals.' : ''}
-    requestError={requestError || knowledgeUpdateNotice}
+    requestError={requestError}
+    requestStatus={knowledgeUpdateNotice}
     streamingInProgress={awaitingAssistant}
     autoScrollEnabled={!isPastJournalSelected}
     {knowledgeUpdateDisabled}

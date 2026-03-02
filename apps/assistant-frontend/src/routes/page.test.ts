@@ -320,10 +320,100 @@ describe('root page', () => {
       expect(updateButton).toBeDisabled();
       expect(updateButton).toHaveAttribute('title', 'nothing to update');
       expect(updateButton.querySelector('svg')).not.toHaveClass('spinning');
-      expect(screen.getByText('Knowledge base updated successfully.')).toBeInTheDocument();
+      const successNotice = screen.getByText('Knowledge base updated successfully.');
+      expect(successNotice).toBeInTheDocument();
+      expect(successNotice).toHaveAttribute('role', 'status');
+      expect(successNotice).toHaveAttribute('aria-live', 'polite');
     });
   });
 
+  it('shows an alert when knowledge update ends in terminal failure', async () => {
+    window.sessionStorage.setItem(
+      'exobrain.assistant.session',
+      JSON.stringify({
+        user: { name: 'Test User', email: 'test.user@exobrain.local' },
+        journalReference: '2026/02/19',
+        messageCount: 0,
+        messages: []
+      })
+    );
+
+    vi.stubGlobal('EventSource', MockEventSource as unknown as typeof EventSource);
+
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(jsonResponse({ name: 'Test User', email: 'test.user@exobrain.local' }))
+      .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19', message_count: 2 }))
+      .mockResolvedValueOnce(
+        jsonResponse([
+          { id: 'm1', role: 'assistant', content: 'server hello', sequence: 2 },
+          { id: 'm2', role: 'user', content: 'server hi', sequence: 1 }
+        ])
+      )
+      .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
+      .mockResolvedValueOnce(jsonResponse([{ reference: '2026/02/19' }]))
+      .mockResolvedValueOnce(jsonResponse({ job_id: 'job-123' }));
+
+    render(Page);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Update knowledge base' })).toBeEnabled();
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Update knowledge base' }));
+
+    const source = MockEventSource.latest!;
+    source.emit('done', { job_id: 'job-123', state: 'FAILED', terminal: true });
+
+    await waitFor(() => {
+      const errorNotice = screen.getByText('Could not update knowledge base. Please try again.');
+      expect(errorNotice).toBeInTheDocument();
+      expect(errorNotice).toHaveAttribute('role', 'alert');
+    });
+  });
+
+  it('shows an alert when knowledge update watch transport fails', async () => {
+    window.sessionStorage.setItem(
+      'exobrain.assistant.session',
+      JSON.stringify({
+        user: { name: 'Test User', email: 'test.user@exobrain.local' },
+        journalReference: '2026/02/19',
+        messageCount: 0,
+        messages: []
+      })
+    );
+
+    vi.stubGlobal('EventSource', MockEventSource as unknown as typeof EventSource);
+
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(jsonResponse({ name: 'Test User', email: 'test.user@exobrain.local' }))
+      .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19', message_count: 2 }))
+      .mockResolvedValueOnce(
+        jsonResponse([
+          { id: 'm1', role: 'assistant', content: 'server hello', sequence: 2 },
+          { id: 'm2', role: 'user', content: 'server hi', sequence: 1 }
+        ])
+      )
+      .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
+      .mockResolvedValueOnce(jsonResponse([{ reference: '2026/02/19' }]))
+      .mockResolvedValueOnce(jsonResponse({ job_id: 'job-123' }));
+
+    render(Page);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Update knowledge base' })).toBeEnabled();
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Update knowledge base' }));
+
+    const source = MockEventSource.latest!;
+    source.onerror?.(new Event('error'));
+
+    await waitFor(() => {
+      const errorNotice = screen.getByText('Could not update knowledge base. Please try again.');
+      expect(errorNotice).toBeInTheDocument();
+      expect(errorNotice).toHaveAttribute('role', 'alert');
+    });
+  });
 
   it('collapses the journal sidebar when clicking outside it', async () => {
     window.sessionStorage.setItem(

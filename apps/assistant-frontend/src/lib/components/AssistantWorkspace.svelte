@@ -18,6 +18,7 @@
   export let inputDisabled = false;
   export let disabledReason = '';
   export let requestError = '';
+  export let requestStatus = '';
   export let streamingInProgress = false;
   export let autoScrollEnabled = true;
   export let knowledgeUpdateDisabled = false;
@@ -88,6 +89,7 @@
       {inputDisabled}
       {disabledReason}
       {requestError}
+      {requestStatus}
       {streamingInProgress}
       {autoScrollEnabled}
       onSend={(text) => dispatch('send', { text })}

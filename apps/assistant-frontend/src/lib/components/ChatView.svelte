@@ -14,6 +14,7 @@
   export let inputDisabled = false;
   export let disabledReason = '';
   export let requestError = '';
+  export let requestStatus = '';
   export let streamingInProgress = false;
   export let autoScrollEnabled = true;
   export let onSend: (text: string) => void = () => {};
@@ -407,8 +408,12 @@
     />
   {/if}
 
+  {#if requestStatus}
+    <p class="chat-notice" role="status" aria-live="polite">{requestStatus}</p>
+  {/if}
+
   {#if requestError}
-    <p class="chat-notice" role="status" aria-live="polite">{requestError}</p>
+    <p class="chat-notice" role="alert">{requestError}</p>
   {/if}
 
   <ChatComposer
