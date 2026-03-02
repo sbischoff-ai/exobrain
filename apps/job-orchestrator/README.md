@@ -36,6 +36,7 @@ uv run python -m app.main_api
 ```
 
 The gRPC `EnqueueJob` endpoint validates `job_type` and payload schema before publishing `JobEnvelope` messages to JetStream subjects shaped as `jobs.<job_type>.requested`. Job IDs are generated server-side as UUIDs and returned in the RPC response.
+For `knowledge.update`, clients must provide `user_id` plus the typed `knowledge_update` payload (`journal_reference`, `messages`, and `requested_by_user_id`), and the server uses `user_id` as the envelope correlation id.
 
 ## Common commands
 

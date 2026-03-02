@@ -23,33 +23,23 @@ class KnowledgeService:
         if not message_sequences:
             return ""
 
-        requested_for_user = await self._requested_for_user(user_id)
         job_ids: list[str] = []
         for sequence in message_sequences:
             payload_messages = [self._message_payload(row) for row in sequence]
             payload_journal_reference = sequence[0]["reference"]
             job_id = await self._job_publisher.enqueue_job(
+                user_id=user_id,
                 job_type="knowledge.update",
                 payload={
                     "journal_reference": payload_journal_reference,
                     "messages": payload_messages,
-                    "requested_for_user": requested_for_user,
+                    "requested_by_user_id": user_id,
                 },
             )
             job_ids.append(job_id)
             await self._mark_messages_committed([row["id"] for row in sequence])
 
         return job_ids[0]
-
-    async def _requested_for_user(self, user_id: str) -> dict[str, str]:
-        row = await self._database.fetchrow(
-            "SELECT name FROM users WHERE id = $1::uuid",
-            user_id,
-        )
-        return {
-            "user_id": user_id,
-            "name": row["name"] if row else "",
-        }
 
     async def _list_uncommitted_message_sequences(
         self,

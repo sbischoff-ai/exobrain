@@ -56,6 +56,7 @@ Core runtime vars:
 - `ASSISTANT_DB_DSN` (Postgres metastore)
 - `ASSISTANT_CACHE_REDIS_URL` (session store)
 - `JOB_ORCHESTRATOR_GRPC_TARGET` (job-orchestrator enqueue endpoint, default `localhost:50061`)
+- Knowledge update requests to the orchestrator send `user_id`, `job_type=knowledge.update`, and a typed payload containing `journal_reference`, message entries, and `requested_by_user_id`.
 - `JOB_ORCHESTRATOR_CONNECT_TIMEOUT_SECONDS` (gRPC request timeout in seconds, default `5.0`)
 - `EXOBRAIN_QDRANT_URL`, `EXOBRAIN_MEMGRAPH_URL` (knowledge dependencies)
 - `KNOWLEDGE_UPDATE_MAX_TOKENS` (max tokens per knowledge-update job payload, default `8000`)

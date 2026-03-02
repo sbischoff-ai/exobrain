@@ -238,7 +238,7 @@ class JobPublisherProtocol(Protocol):
     async def close(self) -> None:
         """Release any open transport resources during shutdown."""
 
-    async def enqueue_job(self, *, job_type: str, payload: dict[str, object]) -> str:
+    async def enqueue_job(self, *, user_id: str, job_type: str, payload: dict[str, object]) -> str:
         """Request remote enqueue and return the orchestrator-assigned job id."""
 
 
