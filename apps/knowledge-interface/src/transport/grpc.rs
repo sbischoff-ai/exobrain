@@ -14,9 +14,10 @@ use super::mappers::{
 };
 use super::proto::knowledge_interface_server::{KnowledgeInterface, KnowledgeInterfaceServer};
 use super::proto::{
-    FindEntityCandidatesReply, FindEntityCandidatesRequest, GetSchemaReply, GetSchemaRequest,
-    HealthReply, HealthRequest, InitializeUserGraphReply, InitializeUserGraphRequest,
-    UpsertGraphDeltaReply, UpsertGraphDeltaRequest, UpsertSchemaTypeReply, UpsertSchemaTypeRequest,
+    FindEntityCandidatesReply, FindEntityCandidatesRequest, GetEntityContextReply,
+    GetEntityContextRequest, GetSchemaReply, GetSchemaRequest, HealthReply, HealthRequest,
+    InitializeUserGraphReply, InitializeUserGraphRequest, UpsertGraphDeltaReply,
+    UpsertGraphDeltaRequest, UpsertSchemaTypeReply, UpsertSchemaTypeRequest,
 };
 use super::FILE_DESCRIPTOR_SET;
 
@@ -165,6 +166,16 @@ impl KnowledgeInterface for KnowledgeGrpcService {
                 .collect(),
         }))
     }
+
+    async fn get_entity_context(
+        &self,
+        _request: Request<GetEntityContextRequest>,
+    ) -> Result<Response<GetEntityContextReply>, Status> {
+        Err(Status::unimplemented(
+            "GetEntityContext is not implemented yet",
+        ))
+    }
+
     async fn upsert_graph_delta(
         &self,
         request: Request<UpsertGraphDeltaRequest>,

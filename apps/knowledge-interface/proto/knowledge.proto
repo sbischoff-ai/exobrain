@@ -9,6 +9,7 @@ service KnowledgeInterface {
   rpc UpsertGraphDelta(UpsertGraphDeltaRequest) returns (UpsertGraphDeltaReply);
   rpc InitializeUserGraph(InitializeUserGraphRequest) returns (InitializeUserGraphReply);
   rpc FindEntityCandidates(FindEntityCandidatesRequest) returns (FindEntityCandidatesReply);
+  rpc GetEntityContext(GetEntityContextRequest) returns (GetEntityContextReply);
 }
 
 message HealthRequest {}
@@ -184,4 +185,46 @@ message EntityCandidate {
 
 message FindEntityCandidatesReply {
   repeated EntityCandidate candidates = 1;
+}
+
+message GetEntityContextRequest {
+  string entity_id = 1;
+  string user_id = 2;
+  uint32 max_block_level = 3;
+}
+
+message EntityContextCore {
+  string id = 1;
+  string type_id = 2;
+  string user_id = 3;
+  Visibility visibility = 4;
+}
+
+message EntityContextBlock {
+  string id = 1;
+  string type_id = 2;
+  uint32 block_level = 3;
+  repeated PropertyValue properties = 4;
+  optional string parent_block_id = 5;
+  optional string parent_entity_id = 6;
+}
+
+enum NeighborDirection {
+  NEIGHBOR_DIRECTION_UNSPECIFIED = 0;
+  OUTGOING = 1;
+  INCOMING = 2;
+}
+
+message EntityContextNeighbor {
+  NeighborDirection direction = 1;
+  string edge_type = 2;
+  repeated PropertyValue edge_properties = 3;
+  string other_entity_id = 4;
+}
+
+message GetEntityContextReply {
+  EntityContextCore entity = 1;
+  repeated PropertyValue entity_properties = 2;
+  repeated EntityContextBlock blocks = 3;
+  repeated EntityContextNeighbor neighbors = 4;
 }

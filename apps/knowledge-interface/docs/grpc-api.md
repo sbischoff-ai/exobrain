@@ -1,7 +1,7 @@
 # Knowledge Interface gRPC API and Graph Delta Contract
 
 This document describes what clients must send to `UpsertGraphDelta` and
-`InitializeUserGraph`, plus how to query `FindEntityCandidates`.
+`InitializeUserGraph`, plus how to query `FindEntityCandidates` and `GetEntityContext`.
 
 ## Core rule
 
@@ -147,3 +147,21 @@ Each `EntityCandidate` includes:
 - Final score is combined as:
   - `0.55 * name_score + 0.45 * weighted_semantic_score`
 - Results are sorted descending by final score and truncated by `limit` when provided.
+
+
+## GetEntityContext
+
+`GetEntityContext` is a schema-driven read contract for entity context hydration.
+
+### Request schema
+
+- `entity_id`: target entity UUID
+- `user_id`: caller user scope
+- `max_block_level`: maximum `block_level` depth to include
+
+### Response schema
+
+- `entity`: core fields (`id`, `type_id`, `user_id`, `visibility`)
+- `entity_properties[]`: typed properties (`PropertyValue`)
+- `blocks[]`: typed block entries (`id`, `type_id`, `block_level`, `properties`) with parent linkage (`parent_block_id` and `parent_entity_id`)
+- `neighbors[]`: outgoing and incoming entity neighbors with edge metadata (`direction`, `edge_type`, `edge_properties`, `other_entity_id`)

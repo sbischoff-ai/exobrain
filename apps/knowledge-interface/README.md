@@ -7,6 +7,7 @@ Rust + tonic gRPC service for GraphRAG ingestion and canonical KG schema registr
 - Provides schema introspection (`GetSchema`) and schema type upsert (`UpsertSchemaType`).
 - Accepts schema-driven graph writes through `UpsertGraphDelta`.
 - Exposes `InitializeUserGraph` to seed a new user-scoped starter subgraph.
+- Exposes `GetEntityContext` to read an entity's typed context graph payload.
 - Uses typed property payloads instead of hardcoded event/task fields.
 
 ## Quick start
