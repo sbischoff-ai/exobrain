@@ -417,10 +417,6 @@ impl Neo4jGraphStore {
     }
 
     async fn user_graph_needs_initialization(&self, user_id: &str) -> Result<bool> {
-        Ok(!self.is_user_graph_initialized(user_id).await?)
-    }
-
-    async fn is_user_graph_initialized(&self, user_id: &str) -> Result<bool> {
         let mut result = self
             .graph
             .execute(
@@ -432,7 +428,7 @@ impl Neo4jGraphStore {
             .await
             .context("failed to query user graph initialization marker")?;
 
-        Ok(result.next().await?.is_some())
+        Ok(result.next().await?.is_none())
     }
 
     async fn mark_user_graph_initialized(&self, user_id: &str) -> Result<()> {
@@ -647,10 +643,6 @@ impl GraphRepository for MemgraphQdrantGraphRepository {
         self.graph_store
             .user_graph_needs_initialization(user_id)
             .await
-    }
-
-    async fn is_user_graph_initialized(&self, user_id: &str) -> Result<bool> {
-        self.graph_store.is_user_graph_initialized(user_id).await
     }
 
     async fn mark_user_graph_initialized(&self, user_id: &str) -> Result<()> {
