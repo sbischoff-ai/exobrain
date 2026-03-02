@@ -3231,7 +3231,43 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn get_entity_context_trims_and_caps_max_block_level() {
+    async fn get_entity_context_passes_max_block_level_and_result_unchanged() {
+        let seen_queries = Arc::new(Mutex::new(Vec::new()));
+        let expected = sample_entity_context_result();
+        let app = KnowledgeApplication::new(
+            Arc::new(FakeSchemaRepo::new()),
+            Arc::new(ContextGraphRepository {
+                seen_queries: Arc::clone(&seen_queries),
+                result: expected.clone(),
+            }),
+            Arc::new(FakeEmbedder),
+        );
+
+        let result = app
+            .get_entity_context(GetEntityContextQuery {
+                entity_id: "entity-1".to_string(),
+                user_id: "user-1".to_string(),
+                max_block_level: 7,
+            })
+            .await
+            .expect("query should succeed");
+
+        assert_eq!(result.entity.id, expected.entity.id);
+        assert_eq!(result.entity.type_id, expected.entity.type_id);
+        assert_eq!(
+            format!("{:?}", result.entity.visibility),
+            format!("{:?}", expected.entity.visibility)
+        );
+        assert_eq!(result.blocks.len(), expected.blocks.len());
+        assert_eq!(result.neighbors.len(), expected.neighbors.len());
+
+        let seen = seen_queries.lock().expect("lock should be available");
+        assert_eq!(seen.len(), 1);
+        assert_eq!(seen[0].max_block_level, 7);
+    }
+
+    #[tokio::test]
+    async fn get_entity_context_applies_input_normalization_rules() {
         let seen_queries = Arc::new(Mutex::new(Vec::new()));
         let app = KnowledgeApplication::new(
             Arc::new(FakeSchemaRepo::new()),
@@ -3242,16 +3278,13 @@ mod tests {
             Arc::new(FakeEmbedder),
         );
 
-        let result = app
-            .get_entity_context(GetEntityContextQuery {
-                entity_id: " entity-1 ".to_string(),
-                user_id: " user-1 ".to_string(),
-                max_block_level: 99,
-            })
-            .await
-            .expect("query should succeed");
-
-        assert_eq!(result.entity.id, "entity-1");
+        app.get_entity_context(GetEntityContextQuery {
+            entity_id: " entity-1 ".to_string(),
+            user_id: " user-1 ".to_string(),
+            max_block_level: 99,
+        })
+        .await
+        .expect("query should succeed");
 
         let seen = seen_queries.lock().expect("lock should be available");
         assert_eq!(seen.len(), 1);

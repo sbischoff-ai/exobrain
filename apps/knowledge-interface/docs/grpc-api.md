@@ -155,13 +155,65 @@ Each `EntityCandidate` includes:
 
 ### Request schema
 
+```proto
+message GetEntityContextRequest {
+  string entity_id = 1;
+  string user_id = 2;
+  uint32 max_block_level = 3;
+}
+```
+
 - `entity_id`: target entity UUID
 - `user_id`: caller user scope
-- `max_block_level`: maximum `block_level` depth to include
+- `max_block_level`: maximum `block_level` depth to include (`0..32`; service clamps larger values to `32`)
 
 ### Response schema
+
+```proto
+message GetEntityContextReply {
+  EntityContextCore entity = 1;
+  repeated PropertyValue entity_properties = 2;
+  repeated EntityContextBlock blocks = 3;
+  repeated EntityContextNeighbor neighbors = 4;
+}
+```
 
 - `entity`: core fields (`id`, `type_id`, `user_id`, `visibility`)
 - `entity_properties[]`: typed properties (`PropertyValue`)
 - `blocks[]`: typed block entries (`id`, `type_id`, `block_level`, `properties`) with parent linkage (`parent_block_id` and `parent_entity_id`)
 - `neighbors[]`: outgoing and incoming entity neighbors with edge metadata (`direction`, `edge_type`, `edge_properties`, `other_entity_id`)
+
+### Block level semantics
+
+- `block_level = 0`: the root block directly connected by `DESCRIBED_BY` from the entity.
+- `block_level = N (> 0)`: a block reached in `N` `SUMMARIZES` hops from the root block.
+- The API returns blocks ordered by `block_level ASC`, then by block id.
+
+### Neighbor direction semantics
+
+- `OUTGOING`: returned for `(entity)-[edge]->(other_entity)`.
+- `INCOMING`: returned for `(other_entity)-[edge]->(entity)`.
+- Results include both directions and preserve edge metadata (`edge_type`, `edge_properties`).
+
+### Access policy behavior
+
+- Entity, block, neighbor entity, and edge records are filtered with the same visibility policy:
+  - visible when `user_id == requester`
+  - or when `visibility == SHARED`
+- If the target entity is not visible/found under that policy, the RPC returns an error (`entity not found or inaccessible`).
+
+### `grpcui` example
+
+```bash
+grpcui -plaintext localhost:50051
+```
+
+Example JSON request payload:
+
+```json
+{
+  "entityId": "550e8400-e29b-41d4-a716-446655440010",
+  "userId": "u-123",
+  "maxBlockLevel": 2
+}
+```

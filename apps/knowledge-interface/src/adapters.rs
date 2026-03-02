@@ -554,21 +554,19 @@ impl Neo4jGraphStore {
         &self,
         query_input: &GetEntityContextQuery,
     ) -> Result<GetEntityContextResult> {
+        let entity_query = build_get_entity_context_entity_query();
         let mut entity_rows = self
             .graph
             .execute(
-                query(&format!(
-                    "MATCH (e:Entity {{id: $entity_id}}) WHERE {} RETURN e.id AS id, e.type_id AS type_id, e.user_id AS user_id, e.visibility AS visibility",
-                    memgraph_user_or_shared_access_clause("e")
-                ))
-                .param("entity_id", query_input.entity_id.clone())
-                .param("user_id", query_input.user_id.clone()),
+                query(&entity_query)
+                    .param("entity_id", query_input.entity_id.clone())
+                    .param("user_id", query_input.user_id.clone()),
             )
             .await
             .context("failed to query target entity context")?;
 
         let Some(entity_row) = entity_rows.next().await? else {
-            anyhow::bail!("entity not found or inaccessible")
+            return Err(entity_not_found_or_inaccessible_error());
         };
 
         let entity = EntityContextEntitySnapshot {
@@ -587,30 +585,14 @@ impl Neo4jGraphStore {
             properties: Vec::new(),
         };
 
+        let block_query = build_get_entity_context_blocks_query();
         let mut block_rows = self
             .graph
             .execute(
-                query(&format!(
-                    "MATCH (e:Entity {{id: $entity_id}})-[:DESCRIBED_BY]->(root:Block)
-                     WHERE {entity_access} AND {root_access}
-                     MATCH p=(root)-[:SUMMARIZES*0..$max_block_level]->(b:Block)
-                     WHERE {block_access}
-                     OPTIONAL MATCH (parent:Block)-[:SUMMARIZES]->(b)
-                     WHERE {parent_access}
-                     RETURN b.id AS block_id,
-                            b.type_id AS type_id,
-                            length(p) AS block_level,
-                            parent.id AS parent_block_id,
-                            e.id AS parent_entity_id
-                     ORDER BY block_level ASC, block_id ASC",
-                    entity_access = memgraph_user_or_shared_access_clause("e"),
-                    root_access = memgraph_user_or_shared_access_clause("root"),
-                    block_access = memgraph_user_or_shared_access_clause("b"),
-                    parent_access = memgraph_user_or_shared_access_clause("parent"),
-                ))
-                .param("entity_id", query_input.entity_id.clone())
-                .param("user_id", query_input.user_id.clone())
-                .param("max_block_level", query_input.max_block_level as i64),
+                query(&block_query)
+                    .param("entity_id", query_input.entity_id.clone())
+                    .param("user_id", query_input.user_id.clone())
+                    .param("max_block_level", query_input.max_block_level as i64),
             )
             .await
             .context("failed to query entity context blocks")?;
@@ -623,36 +605,14 @@ impl Neo4jGraphStore {
             blocks.push(EntityContextBlockItem {
                 id: row.get("block_id").context("missing block.id")?,
                 type_id: row.get("type_id").context("missing block.type_id")?,
-                block_level: block_level as u32,
+                block_level: parse_block_level(block_level)?,
                 properties: Vec::new(),
                 parent_block_id: row.get("parent_block_id").ok(),
                 parent_entity_id: row.get("parent_entity_id").ok(),
             });
         }
 
-        let neighbor_query = format!(
-            "MATCH (e:Entity {{id: $entity_id}})
-             WHERE {entity_access}
-             MATCH (e)-[r]->(other:Entity)
-             WHERE {other_access} AND {edge_access}
-             RETURN 'OUTGOING' AS direction,
-                    type(r) AS edge_type,
-                    properties(r) AS edge_props,
-                    other.id AS other_entity_id
-             UNION ALL
-             MATCH (e:Entity {{id: $entity_id}})
-             WHERE {entity_access}
-             MATCH (e)<-[r]-(other:Entity)
-             WHERE {other_access} AND {edge_access}
-             RETURN 'INCOMING' AS direction,
-                    type(r) AS edge_type,
-                    properties(r) AS edge_props,
-                    other.id AS other_entity_id
-             ORDER BY direction ASC, edge_type ASC, other_entity_id ASC",
-            entity_access = memgraph_user_or_shared_access_clause("e"),
-            other_access = memgraph_user_or_shared_access_clause("other"),
-            edge_access = memgraph_user_or_shared_access_clause("r"),
-        );
+        let neighbor_query = build_get_entity_context_neighbors_query();
 
         let mut neighbor_rows = self
             .graph
@@ -668,11 +628,7 @@ impl Neo4jGraphStore {
         while let Some(row) = neighbor_rows.next().await? {
             let direction_raw: String =
                 row.get("direction").context("missing neighbor.direction")?;
-            let direction = match direction_raw.as_str() {
-                "OUTGOING" => NeighborDirection::Outgoing,
-                "INCOMING" => NeighborDirection::Incoming,
-                _ => anyhow::bail!("invalid neighbor direction: {direction_raw}"),
-            };
+            let direction = parse_neighbor_direction(&direction_raw)?;
             let edge_props: BoltMap = row
                 .get("edge_props")
                 .context("missing neighbor.edge_props")?;
@@ -695,11 +651,81 @@ impl Neo4jGraphStore {
     }
 }
 
+fn entity_not_found_or_inaccessible_error() -> anyhow::Error {
+    anyhow::anyhow!("entity not found or inaccessible")
+}
+
 fn allowed_node_visibilities(edge_visibility: Visibility) -> Vec<String> {
     match edge_visibility {
         Visibility::Private => vec!["PRIVATE".to_string(), "SHARED".to_string()],
         Visibility::Shared => vec!["SHARED".to_string()],
     }
+}
+
+fn build_get_entity_context_entity_query() -> String {
+    format!(
+        "MATCH (e:Entity {{id: $entity_id}}) WHERE {} RETURN e.id AS id, e.type_id AS type_id, e.user_id AS user_id, e.visibility AS visibility",
+        memgraph_user_or_shared_access_clause("e")
+    )
+}
+
+fn build_get_entity_context_blocks_query() -> String {
+    format!(
+        "MATCH (e:Entity {{id: $entity_id}})-[:DESCRIBED_BY]->(root:Block)
+         WHERE {entity_access} AND {root_access}
+         MATCH p=(root)-[:SUMMARIZES*0..$max_block_level]->(b:Block)
+         WHERE {block_access}
+         OPTIONAL MATCH (parent:Block)-[:SUMMARIZES]->(b)
+         WHERE {parent_access}
+         RETURN b.id AS block_id,
+                b.type_id AS type_id,
+                length(p) AS block_level,
+                parent.id AS parent_block_id,
+                e.id AS parent_entity_id
+         ORDER BY block_level ASC, block_id ASC",
+        entity_access = memgraph_user_or_shared_access_clause("e"),
+        root_access = memgraph_user_or_shared_access_clause("root"),
+        block_access = memgraph_user_or_shared_access_clause("b"),
+        parent_access = memgraph_user_or_shared_access_clause("parent"),
+    )
+}
+
+fn build_get_entity_context_neighbors_query() -> String {
+    format!(
+        "MATCH (e:Entity {{id: $entity_id}})
+         WHERE {entity_access}
+         MATCH (e)-[r]->(other:Entity)
+         WHERE {other_access} AND {edge_access}
+         RETURN 'OUTGOING' AS direction,
+                type(r) AS edge_type,
+                properties(r) AS edge_props,
+                other.id AS other_entity_id
+         UNION ALL
+         MATCH (e:Entity {{id: $entity_id}})
+         WHERE {entity_access}
+         MATCH (e)<-[r]-(other:Entity)
+         WHERE {other_access} AND {edge_access}
+         RETURN 'INCOMING' AS direction,
+                type(r) AS edge_type,
+                properties(r) AS edge_props,
+                other.id AS other_entity_id
+         ORDER BY direction ASC, edge_type ASC, other_entity_id ASC",
+        entity_access = memgraph_user_or_shared_access_clause("e"),
+        other_access = memgraph_user_or_shared_access_clause("other"),
+        edge_access = memgraph_user_or_shared_access_clause("r"),
+    )
+}
+
+fn parse_neighbor_direction(direction: &str) -> Result<NeighborDirection> {
+    match direction {
+        "OUTGOING" => Ok(NeighborDirection::Outgoing),
+        "INCOMING" => Ok(NeighborDirection::Incoming),
+        _ => anyhow::bail!("invalid neighbor direction: {direction}"),
+    }
+}
+
+fn parse_block_level(block_level: i64) -> Result<u32> {
+    u32::try_from(block_level).map_err(|_| anyhow::anyhow!("invalid block level: {block_level}"))
 }
 
 pub struct QdrantVectorStore {
@@ -1424,11 +1450,13 @@ fn validate_edge_type(edge_type: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        allowed_node_visibilities, compute_name_score, internal_timestamp_trigger_specs,
-        memgraph_user_or_shared_access_clause, normalize_qdrant_grpc_url, payload_i64,
-        payload_string, prop_as_aliases, qdrant_user_or_shared_access_filter,
-        semantic_score_with_block_level, upsert_semantic_candidate, validate_edge_type,
-        MockEmbedder,
+        allowed_node_visibilities, build_get_entity_context_blocks_query,
+        build_get_entity_context_entity_query, build_get_entity_context_neighbors_query,
+        compute_name_score, internal_timestamp_trigger_specs,
+        memgraph_user_or_shared_access_clause, normalize_qdrant_grpc_url, parse_block_level,
+        parse_neighbor_direction, payload_i64, payload_string, prop_as_aliases,
+        qdrant_user_or_shared_access_filter, semantic_score_with_block_level,
+        upsert_semantic_candidate, validate_edge_type, MockEmbedder,
     };
     use crate::domain::Visibility;
     use crate::ports::Embedder;
@@ -1543,6 +1571,57 @@ mod tests {
             memgraph_user_or_shared_access_clause("e"),
             "(e.user_id = $user_id OR e.visibility = 'SHARED')"
         );
+    }
+
+    #[test]
+    fn get_entity_context_queries_apply_access_clauses() {
+        let entity_query = build_get_entity_context_entity_query();
+        assert!(entity_query.contains("(e.user_id = $user_id OR e.visibility = 'SHARED')"));
+
+        let block_query = build_get_entity_context_blocks_query();
+        assert!(block_query.contains("(e.user_id = $user_id OR e.visibility = 'SHARED')"));
+        assert!(block_query.contains("(root.user_id = $user_id OR root.visibility = 'SHARED')"));
+        assert!(block_query.contains("(b.user_id = $user_id OR b.visibility = 'SHARED')"));
+        assert!(block_query.contains("(parent.user_id = $user_id OR parent.visibility = 'SHARED')"));
+
+        let neighbor_query = build_get_entity_context_neighbors_query();
+        assert!(
+            neighbor_query.contains("(other.user_id = $user_id OR other.visibility = 'SHARED')")
+        );
+        assert!(neighbor_query.contains("(r.user_id = $user_id OR r.visibility = 'SHARED')"));
+    }
+
+    #[test]
+    fn parses_entity_context_block_levels_and_neighbor_direction() {
+        assert_eq!(parse_block_level(0).expect("level 0 should parse"), 0);
+        assert_eq!(parse_block_level(4).expect("level 4 should parse"), 4);
+
+        assert!(matches!(
+            parse_neighbor_direction("OUTGOING").expect("direction should parse"),
+            crate::domain::NeighborDirection::Outgoing
+        ));
+        assert!(matches!(
+            parse_neighbor_direction("INCOMING").expect("direction should parse"),
+            crate::domain::NeighborDirection::Incoming
+        ));
+    }
+
+    #[test]
+    fn rejects_invalid_entity_context_direction_and_block_level() {
+        let direction_err =
+            parse_neighbor_direction("SIDEWAYS").expect_err("invalid direction should fail");
+        assert!(direction_err
+            .to_string()
+            .contains("invalid neighbor direction: SIDEWAYS"));
+
+        let level_err = parse_block_level(-1).expect_err("negative level should fail");
+        assert!(level_err.to_string().contains("invalid block level: -1"));
+    }
+
+    #[test]
+    fn reports_missing_or_inaccessible_entity() {
+        let err = super::entity_not_found_or_inaccessible_error();
+        assert_eq!(err.to_string(), "entity not found or inaccessible");
     }
 
     #[test]
