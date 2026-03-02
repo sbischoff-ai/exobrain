@@ -51,18 +51,27 @@ async def watch_knowledge_update(
     auth_context: UnifiedPrincipal = Depends(get_required_auth_context),
 ) -> StreamingResponse:
     service = get_container(request).resolve(KnowledgeServiceProtocol)
+    stream = service.watch_update_job(user_id=auth_context.user_id, job_id=job_id)
+
+    first_event: dict[str, object] | None = None
+    try:
+        first_event = await anext(stream)
+    except StopAsyncIteration:
+        first_event = None
+    except KnowledgeJobNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="knowledge update job not found") from exc
+    except KnowledgeJobAccessDeniedError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="knowledge update job access denied") from exc
+    except KnowledgeUpstreamUnavailableError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="knowledge stream unavailable") from exc
+    except KnowledgeWatchError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="knowledge stream error") from exc
 
     async def event_stream() -> str:
-        try:
-            async for event in service.watch_update_job(user_id=auth_context.user_id, job_id=job_id):
-                yield encode_knowledge_sse_event(event)
-        except KnowledgeJobNotFoundError as exc:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="knowledge update job not found") from exc
-        except KnowledgeJobAccessDeniedError as exc:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="knowledge update job access denied") from exc
-        except KnowledgeUpstreamUnavailableError as exc:
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="knowledge stream unavailable") from exc
-        except KnowledgeWatchError as exc:
-            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="knowledge stream error") from exc
+        if first_event is not None:
+            yield encode_knowledge_sse_event(first_event)
+
+        async for event in stream:
+            yield encode_knowledge_sse_event(event)
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
