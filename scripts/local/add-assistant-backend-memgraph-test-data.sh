@@ -41,20 +41,43 @@ if [[ -z "$universe_id" ]]; then
   exit 1
 fi
 
+make_uuid() {
+  cat /proc/sys/kernel/random/uuid
+}
+
+task_id=$(make_uuid)
+block1_id=$(make_uuid)
+block2_id=$(make_uuid)
+block3_id=$(make_uuid)
+block4_id=$(make_uuid)
+block5_id=$(make_uuid)
+block6_id=$(make_uuid)
+block7_id=$(make_uuid)
+
 tmp_delta=$(mktemp)
 cleanup() {
   rm -f "$tmp_delta"
 }
 trap cleanup EXIT
 
-jq --arg universe_id "$universe_id" '
+jq   --arg universe_id "$universe_id"   --arg task_id "$task_id"   --arg block1_id "$block1_id"   --arg block2_id "$block2_id"   --arg block3_id "$block3_id"   --arg block4_id "$block4_id"   --arg block5_id "$block5_id"   --arg block6_id "$block6_id"   --arg block7_id "$block7_id" '
+  def remap_id($id):
+    if $id == "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1" then $task_id
+    elif $id == "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1" then $block1_id
+    elif $id == "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2" then $block2_id
+    elif $id == "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb3" then $block3_id
+    elif $id == "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb4" then $block4_id
+    elif $id == "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb5" then $block5_id
+    elif $id == "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb6" then $block6_id
+    elif $id == "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb7" then $block7_id
+    else $id end;
+
   .entities |= map(
-    if .universe_id == "__UNIVERSE_ID__" then
-      .universe_id = $universe_id
-    else
-      .
-    end
+    .id = remap_id(.id)
+    | if .universe_id == "__UNIVERSE_ID__" then .universe_id = $universe_id else . end
   )
+  | .blocks |= map(.id = remap_id(.id))
+  | .edges |= map(.from_id = remap_id(.from_id) | .to_id = remap_id(.to_id))
 ' "$DELTA_TEMPLATE_PATH" > "$tmp_delta"
 
 echo "Upserting graph delta with universe_id=$universe_id..."

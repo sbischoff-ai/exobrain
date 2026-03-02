@@ -843,7 +843,7 @@ fn resolve_labels_for_type(
         .collect()
 }
 
-fn default_edge_properties(provenance_hint: &str) -> Vec<PropertyValue> {
+fn default_edge_properties(context: &str) -> Vec<PropertyValue> {
     vec![
         PropertyValue {
             key: "confidence".to_string(),
@@ -854,8 +854,8 @@ fn default_edge_properties(provenance_hint: &str) -> Vec<PropertyValue> {
             value: PropertyScalar::String("asserted".to_string()),
         },
         PropertyValue {
-            key: "provenance_hint".to_string(),
-            value: PropertyScalar::String(provenance_hint.to_string()),
+            key: "context".to_string(),
+            value: PropertyScalar::String(context.to_string()),
         },
     ]
 }
@@ -1480,7 +1480,7 @@ mod tests {
                 },
                 TypeProperty {
                     owner_type_id: "edge".to_string(),
-                    prop_name: "provenance_hint".to_string(),
+                    prop_name: "context".to_string(),
                     value_type: "string".to_string(),
                     required: true,
                     readable: true,
@@ -2502,7 +2502,7 @@ mod tests {
         let message = err.to_string();
         assert!(message.contains("required property 'confidence'"));
         assert!(message.contains("required property 'status'"));
-        assert!(message.contains("required property 'provenance_hint'"));
+        assert!(message.contains("required property 'context'"));
     }
 
     #[tokio::test]

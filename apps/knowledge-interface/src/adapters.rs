@@ -269,27 +269,32 @@ impl Neo4jGraphStore {
     async fn ensure_internal_timestamps_triggers(&self) -> Result<()> {
         // `created_at` and `updated_at` are knowledge-interface-internal metadata
         // and are maintained only by Memgraph triggers.
-        let trigger_queries = [
-            "CREATE TRIGGER set_node_timestamps_on_create ON () CREATE BEFORE COMMIT EXECUTE UNWIND createdVertices AS n SET n.created_at = coalesce(n.created_at, datetime()), n.updated_at = datetime()",
-            "CREATE TRIGGER set_edge_timestamps_on_create ON () CREATE BEFORE COMMIT EXECUTE UNWIND createdEdges AS e SET e.created_at = coalesce(e.created_at, datetime()), e.updated_at = datetime()",
-            "CREATE TRIGGER set_node_updated_at_on_update ON () UPDATE BEFORE COMMIT EXECUTE UNWIND updatedVertices AS n SET n.updated_at = datetime()",
-            "CREATE TRIGGER set_edge_updated_at_on_update ON () UPDATE BEFORE COMMIT EXECUTE UNWIND updatedEdges AS e SET e.updated_at = datetime()",
-        ];
-
-        for cypher in trigger_queries {
-            if let Err(err) = self.graph.run(query(cypher)).await {
-                let msg = err.to_string();
-                if !(msg.contains("already exists") || msg.contains("exists")) {
-                    return Err(err).context("failed to ensure internal timestamp triggers");
+        let mut existing_trigger_names = std::collections::HashSet::new();
+        if let Ok(mut rows) = self.graph.execute(query("SHOW TRIGGERS")).await {
+            while let Some(row) = rows.next().await? {
+                for key in ["trigger_name", "name", "trigger"] {
+                    if let Ok(value) = row.get::<String>(key) {
+                        existing_trigger_names.insert(value);
+                    }
                 }
             }
+        }
+
+        for (name, cypher) in internal_timestamp_trigger_specs() {
+            if existing_trigger_names.contains(name) {
+                continue;
+            }
+            self.graph
+                .run(query(cypher))
+                .await
+                .context("failed to ensure internal timestamp triggers")?;
         }
 
         Ok(())
     }
 
     async fn apply_delta_in_tx(&self, txn: &mut Txn, delta: &GraphDelta) -> Result<()> {
-        let universe_aliases = "[]".to_string();
+        let universe_aliases: Vec<String> = Vec::new();
         for universe in &delta.universes {
             txn.run(
                 query("MERGE (u:Universe {id: $id}) SET u.name = $name, u.aliases = $aliases, u.user_id = $user_id, u.visibility = $visibility")
@@ -317,11 +322,7 @@ impl Neo4jGraphStore {
                         "name",
                         prop_as_string(&entity.properties, "name").unwrap_or_default(),
                     )
-                    .param(
-                        "aliases",
-                        prop_as_string(&entity.properties, "aliases")
-                            .unwrap_or_else(|| "[]".to_string()),
-                    )
+                    .param("aliases", prop_as_aliases(&entity.properties))
                     .param("user_id", entity.user_id.clone())
                     .param("visibility", visibility_as_str(entity.visibility))
                     .param(
@@ -360,7 +361,7 @@ impl Neo4jGraphStore {
         for edge in &delta.edges {
             validate_edge_type(&edge.edge_type)?;
             let allowed_node_visibilities = allowed_node_visibilities(edge.visibility);
-            let cypher = format!("MATCH (a {{id: $from_id}}), (b {{id: $to_id}}) WHERE a.visibility IN $allowed_node_visibilities AND b.visibility IN $allowed_node_visibilities MERGE (a)-[r:{}]->(b) SET r.confidence = $confidence, r.status = $status, r.provenance_hint = $provenance_hint, r.user_id = $user_id, r.visibility = $visibility RETURN COUNT(r) AS upserted_count", edge.edge_type);
+            let cypher = format!("MATCH (a {{id: $from_id}}), (b {{id: $to_id}}) WHERE a.visibility IN $allowed_node_visibilities AND b.visibility IN $allowed_node_visibilities MERGE (a)-[r:{}]->(b) SET r.confidence = $confidence, r.status = $status, r.context = $context, r.user_id = $user_id, r.visibility = $visibility RETURN COUNT(r) AS upserted_count", edge.edge_type);
             let mut result = txn
                 .execute(
                     query(&cypher)
@@ -379,8 +380,8 @@ impl Neo4jGraphStore {
                                 .unwrap_or_else(|| "asserted".to_string()),
                         )
                         .param(
-                            "provenance_hint",
-                            prop_as_string(&edge.properties, "provenance_hint").unwrap_or_default(),
+                            "context",
+                            prop_as_string(&edge.properties, "context").unwrap_or_default(),
                         ),
                 )
                 .await
@@ -1008,6 +1009,27 @@ fn prop_as_string(props: &[PropertyValue], key: &str) -> Option<String> {
     })
 }
 
+fn prop_as_aliases(props: &[PropertyValue]) -> Vec<String> {
+    let Some(raw) = prop_as_string(props, "aliases") else {
+        return Vec::new();
+    };
+
+    let trimmed = raw.trim();
+    if trimmed.starts_with('[') && trimmed.ends_with(']') {
+        let inner = &trimmed[1..trimmed.len() - 1];
+        let parsed: Vec<String> = inner
+            .split(',')
+            .map(|item| item.trim().trim_matches('"').to_string())
+            .filter(|item| !item.is_empty())
+            .collect();
+        if !parsed.is_empty() {
+            return parsed;
+        }
+    }
+
+    vec![raw]
+}
+
 fn prop_as_float(props: &[PropertyValue], key: &str) -> Option<f64> {
     props.iter().find_map(|p| {
         if p.key != key {
@@ -1113,6 +1135,27 @@ fn normalize_qdrant_grpc_url(url: &str) -> String {
     normalized
 }
 
+fn internal_timestamp_trigger_specs() -> [(&'static str, &'static str); 4] {
+    [
+        (
+            "set_node_timestamps_on_create",
+            "CREATE TRIGGER set_node_timestamps_on_create ON () CREATE BEFORE COMMIT EXECUTE UNWIND createdVertices AS n SET n.created_at = coalesce(n.created_at, datetime()), n.updated_at = datetime()",
+        ),
+        (
+            "set_edge_timestamps_on_create",
+            "CREATE TRIGGER set_edge_timestamps_on_create ON --> CREATE BEFORE COMMIT EXECUTE UNWIND createdEdges AS e SET e.created_at = coalesce(e.created_at, datetime()), e.updated_at = datetime()",
+        ),
+        (
+            "set_node_updated_at_on_update",
+            "CREATE TRIGGER set_node_updated_at_on_update ON () UPDATE BEFORE COMMIT EXECUTE UNWIND updatedVertices AS n SET n.updated_at = datetime()",
+        ),
+        (
+            "set_edge_updated_at_on_update",
+            "CREATE TRIGGER set_edge_updated_at_on_update ON --> UPDATE BEFORE COMMIT EXECUTE UNWIND updatedEdges AS e SET e.updated_at = datetime()",
+        ),
+    ]
+}
+
 fn visibility_as_str(visibility: Visibility) -> &'static str {
     match visibility {
         Visibility::Private => "PRIVATE",
@@ -1136,14 +1179,24 @@ fn validate_edge_type(edge_type: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        allowed_node_visibilities, compute_name_score, memgraph_user_or_shared_access_clause,
-        normalize_qdrant_grpc_url, payload_i64, payload_string,
-        qdrant_user_or_shared_access_filter, semantic_score_with_block_level,
-        upsert_semantic_candidate, validate_edge_type, MockEmbedder,
+        allowed_node_visibilities, compute_name_score, internal_timestamp_trigger_specs,
+        memgraph_user_or_shared_access_clause, normalize_qdrant_grpc_url, payload_i64,
+        payload_string, prop_as_aliases, qdrant_user_or_shared_access_filter,
+        semantic_score_with_block_level, upsert_semantic_candidate, validate_edge_type,
+        MockEmbedder,
     };
     use crate::domain::Visibility;
     use crate::ports::Embedder;
     use std::collections::HashMap;
+
+    #[test]
+    fn uses_edge_event_patterns_for_edge_timestamp_triggers() {
+        let triggers = internal_timestamp_trigger_specs();
+        assert!(triggers[1].1.contains("ON --> CREATE"));
+        assert!(triggers[3].1.contains("ON --> UPDATE"));
+        assert!(triggers[1].1.contains("createdEdges"));
+        assert!(triggers[3].1.contains("updatedEdges"));
+    }
 
     #[test]
     fn normalizes_qdrant_rest_port_to_grpc_port() {
@@ -1193,6 +1246,23 @@ mod tests {
 
         assert!(score > 0.8);
         assert_eq!(matched_tokens, names);
+    }
+
+    #[test]
+    fn parses_aliases_from_json_or_falls_back_to_single_value() {
+        use crate::domain::{PropertyScalar, PropertyValue};
+
+        let json_aliases = vec![PropertyValue {
+            key: "aliases".to_string(),
+            value: PropertyScalar::Json("[\"alpha\",\"beta\"]".to_string()),
+        }];
+        assert_eq!(prop_as_aliases(&json_aliases), vec!["alpha", "beta"]);
+
+        let plain_alias = vec![PropertyValue {
+            key: "aliases".to_string(),
+            value: PropertyScalar::String("alpha".to_string()),
+        }];
+        assert_eq!(prop_as_aliases(&plain_alias), vec!["alpha"]);
     }
 
     #[test]
