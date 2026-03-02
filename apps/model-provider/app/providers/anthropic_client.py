@@ -28,6 +28,16 @@ class AnthropicProviderClient(ProviderClient):
     def _to_messages_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
         mapped = dict(payload)
         mapped["max_tokens"] = mapped.get("max_tokens", 1024)
+        response_format = mapped.pop("response_format", None)
+        if response_format is not None:
+            json_schema = response_format.get("json_schema") if isinstance(response_format, dict) else None
+            schema = json_schema.get("schema") if isinstance(json_schema, dict) else None
+            if not isinstance(schema, dict) or not schema:
+                raise ProviderClientError(
+                    status_code=400,
+                    message="response_format.json_schema.schema must be a non-empty object for Anthropic",
+                )
+            mapped["output_config"] = {"format": {"type": "json_schema", "schema": schema}}
         return mapped
 
     def _to_openai_response(self, payload: dict[str, Any], response: Any) -> dict[str, Any]:

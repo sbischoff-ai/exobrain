@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.providers.anthropic_client import AnthropicProviderClient
+from app.providers.base import ProviderClientError
 from app.providers.openai_client import OpenAIProviderClient
 
 
@@ -109,3 +110,62 @@ async def test_anthropic_provider_translates_to_openai_shape() -> None:
     assert response["object"] == "chat.completion"
     assert response["choices"][0]["message"]["content"] == "hello"
     assert messages.last_create["model"] == "claude-sonnet-4-6"
+
+
+@pytest.mark.asyncio
+async def test_anthropic_provider_translates_openai_response_format_to_output_config() -> None:
+    messages = FakeAnthropicMessages()
+    fake_client = SimpleNamespace(messages=messages)
+    client = AnthropicProviderClient(api_key="x", client=fake_client)
+
+    payload = {
+        "model": "claude-sonnet-4-6",
+        "messages": [{"role": "user", "content": "hi"}],
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "answer",
+                "schema": {
+                    "type": "object",
+                    "properties": {"value": {"type": "string"}},
+                    "required": ["value"],
+                },
+            },
+        },
+    }
+
+    await client.chat_completions(payload)
+
+    assert "response_format" not in messages.last_create
+    assert messages.last_create["output_config"] == {
+        "format": {
+            "type": "json_schema",
+            "schema": {
+                "type": "object",
+                "properties": {"value": {"type": "string"}},
+                "required": ["value"],
+            },
+        }
+    }
+
+
+@pytest.mark.asyncio
+async def test_anthropic_provider_rejects_invalid_response_format_schema() -> None:
+    messages = FakeAnthropicMessages()
+    fake_client = SimpleNamespace(messages=messages)
+    client = AnthropicProviderClient(api_key="x", client=fake_client)
+
+    payload = {
+        "model": "claude-sonnet-4-6",
+        "messages": [{"role": "user", "content": "hi"}],
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {"name": "answer"},
+        },
+    }
+
+    with pytest.raises(ProviderClientError) as exc_info:
+        await client.chat_completions(payload)
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.message == "response_format.json_schema.schema must be a non-empty object for Anthropic"
