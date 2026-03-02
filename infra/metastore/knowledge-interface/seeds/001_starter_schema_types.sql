@@ -100,7 +100,7 @@ VALUES
   ('node.block', 'text', 'string', TRUE, TRUE, TRUE, TRUE, 'Primary content text for the block used for reading and embeddings.', NULL, NULL, NULL, NULL, NULL),
   ('edge', 'confidence', 'float', TRUE, TRUE, TRUE, TRUE, 'Required confidence score from 0.0 to 1.0 representing trust in this relation.', NULL, NULL, 0, 1, NULL),
   ('edge', 'status', 'string', TRUE, TRUE, TRUE, TRUE, 'Required truth status of the relation.', 'asserted|disputed|falsified', NULL, NULL, NULL, NULL),
-  ('edge', 'context', 'string', TRUE, TRUE, TRUE, TRUE, 'Required provenance hint describing where the relation came from.', NULL, NULL, NULL, NULL, NULL)
+  ('edge', 'provenance_hint', 'string', TRUE, TRUE, TRUE, TRUE, 'Required provenance hint describing where the relation came from.', NULL, NULL, NULL, NULL, NULL)
 ON CONFLICT (owner_type_id, prop_name) DO UPDATE
 SET
   value_type = EXCLUDED.value_type,
