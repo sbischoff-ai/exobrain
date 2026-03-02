@@ -47,7 +47,7 @@ Knowledge update enqueue sequence:
 assistant-backend -> job-orchestrator (gRPC EnqueueJob) -> JetStream jobs.<job_type>.requested -> worker consume/process
 ```
 
-Rollout guidance for deploys: avoid mixed producer behavior by deploying orchestrator `EnqueueJob` first, then cutting over assistant-backend instances via feature flag/wave rollout, and removing legacy direct-producer paths only after full cutover.
+Rollout guidance for deploys: avoid mixed producer behavior by deploying orchestrator `EnqueueJob` first, then cutting over assistant-backend instances in waves, and removing legacy direct-producer paths only after full cutover.
 
 ## What the agent scripts do
 
