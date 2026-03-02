@@ -58,6 +58,8 @@
   let awaitingAssistant = false;
   let knowledgeUpdateInProgress = false;
   let knowledgeUpdateEventSource: EventSource | null = null;
+  let knowledgeUpdateNotice = '';
+  let lastKnowledgeUpdateMessageCount = 0;
 
   let authError = '';
   let user: CurrentUser | null = null;
@@ -73,13 +75,21 @@
 
   $: canLoadOlderMessages = currentMessageCount > messages.length;
   $: isPastJournalSelected = Boolean(currentReference) && Boolean(todayReference) && currentReference !== todayReference;
+  $: hasNewTodayMessages = Boolean(currentReference) && currentReference === todayReference && currentMessageCount > lastKnowledgeUpdateMessageCount;
   $: chatInputDisabled = loadingJournal || syncingMessages || isPastJournalSelected || awaitingAssistant;
   $: knowledgeUpdateDisabled =
-    loadingJournal || syncingMessages || isPastJournalSelected || knowledgeUpdateInProgress || !currentReference;
+    loadingJournal ||
+    syncingMessages ||
+    isPastJournalSelected ||
+    knowledgeUpdateInProgress ||
+    !currentReference ||
+    !hasNewTodayMessages;
   $: knowledgeUpdateTooltip = knowledgeUpdateInProgress
     ? 'Knowledge update in progress'
     : isPastJournalSelected
       ? 'Switch to today to update knowledge base'
+      : !hasNewTodayMessages
+        ? 'nothing to update'
       : 'Update knowledge base';
 
   onMount(async () => {
@@ -87,10 +97,7 @@
   });
 
   onDestroy(() => {
-    if (knowledgeUpdateEventSource) {
-      knowledgeUpdateEventSource.close();
-      knowledgeUpdateEventSource = null;
-    }
+    stopKnowledgeUpdateWatch();
   });
 
   async function bootstrap(): Promise<void> {
@@ -142,8 +149,12 @@
     currentReference = '';
     messages = [];
     currentMessageCount = 0;
+    lastKnowledgeUpdateMessageCount = 0;
     requestError = '';
+    knowledgeUpdateNotice = '';
     awaitingAssistant = false;
+    knowledgeUpdateInProgress = false;
+    stopKnowledgeUpdateWatch();
   }
 
   async function refreshAllState(): Promise<void> {
@@ -520,6 +531,7 @@
 
   async function handleSend(event: CustomEvent<{ text: string }>): Promise<void> {
     requestError = '';
+    knowledgeUpdateNotice = '';
 
     if (isPastJournalSelected) {
       requestError = 'You can not chat with past journals.';
@@ -569,25 +581,20 @@
   }
 
   async function handleKnowledgeUpdate(): Promise<void> {
-    if (knowledgeUpdateDisabled) {
+    if (knowledgeUpdateDisabled || knowledgeUpdateEventSource) {
       return;
     }
 
+    requestError = '';
+    knowledgeUpdateNotice = '';
     knowledgeUpdateInProgress = true;
 
     try {
-      const { job_id: jobId } = await knowledgeService.enqueueUpdate(currentReference || undefined);
+      const { job_id: jobId } = await knowledgeService.enqueueUpdate();
 
       await new Promise<void>((resolve, reject) => {
         const eventSource = knowledgeService.watchUpdate(jobId);
         knowledgeUpdateEventSource = eventSource;
-
-        const closeWatcher = () => {
-          eventSource.close();
-          if (knowledgeUpdateEventSource === eventSource) {
-            knowledgeUpdateEventSource = null;
-          }
-        };
 
         const handleStreamEvent = (eventType: string) => (event: Event) => {
           const parsed = parseKnowledgeUpdateStreamEvent(eventType, (event as MessageEvent).data ?? '');
@@ -595,8 +602,24 @@
             return;
           }
 
+          if (
+            parsed.data.state === 'ENQUEUED_OR_PENDING' ||
+            parsed.data.state === 'STARTED' ||
+            parsed.data.state === 'RETRYING'
+          ) {
+            knowledgeUpdateInProgress = true;
+          }
+
           if (isTerminalKnowledgeUpdateState(parsed)) {
-            closeWatcher();
+            stopKnowledgeUpdateWatch();
+
+            if (parsed.data.state === 'SUCCEEDED') {
+              knowledgeUpdateNotice = 'Knowledge base updated successfully.';
+              lastKnowledgeUpdateMessageCount = currentMessageCount;
+            } else {
+              requestError = 'Could not update knowledge base. Please try again.';
+            }
+
             resolve();
           }
         };
@@ -604,15 +627,27 @@
         eventSource.addEventListener('status', handleStreamEvent('status'));
         eventSource.addEventListener('done', handleStreamEvent('done'));
         eventSource.onerror = () => {
-          closeWatcher();
+          stopKnowledgeUpdateWatch();
+          requestError = 'Could not update knowledge base. Please try again.';
           reject(new Error('knowledge update watch disconnected'));
         };
       });
     } catch {
-      requestError = 'Could not update knowledge base. Please try again.';
+      if (!requestError) {
+        requestError = 'Could not update knowledge base. Please try again.';
+      }
     } finally {
       knowledgeUpdateInProgress = false;
     }
+  }
+
+  function stopKnowledgeUpdateWatch(): void {
+    if (!knowledgeUpdateEventSource) {
+      return;
+    }
+
+    knowledgeUpdateEventSource.close();
+    knowledgeUpdateEventSource = null;
   }
 </script>
 
@@ -637,7 +672,7 @@
     canLoadOlder={canLoadOlderMessages}
     inputDisabled={chatInputDisabled}
     disabledReason={isPastJournalSelected ? 'You can not chat with past journals.' : ''}
-    {requestError}
+    requestError={requestError || knowledgeUpdateNotice}
     streamingInProgress={awaitingAssistant}
     autoScrollEnabled={!isPastJournalSelected}
     {knowledgeUpdateDisabled}
