@@ -594,6 +594,7 @@ impl KnowledgeApplication {
                 &inheritance,
                 &mut errors,
             );
+            validate_internal_timestamps_not_provided(&entity.id, &entity.properties, &mut errors);
         }
 
         for block in &delta.blocks {
@@ -622,6 +623,7 @@ impl KnowledgeApplication {
                 &inheritance,
                 &mut errors,
             );
+            validate_internal_timestamps_not_provided(&block.id, &block.properties, &mut errors);
         }
 
         for edge in &delta.edges {
@@ -645,6 +647,11 @@ impl KnowledgeApplication {
                 &edge.properties,
                 &properties,
                 &inheritance,
+                &mut errors,
+            );
+            validate_internal_timestamps_not_provided(
+                &format!("{}:{}->{}", edge.edge_type, edge.from_id, edge.to_id),
+                &edge.properties,
                 &mut errors,
             );
             if let (Some(from_type), Some(to_type)) = (
@@ -836,7 +843,7 @@ fn resolve_labels_for_type(
         .collect()
 }
 
-fn default_edge_properties(context: &str) -> Vec<PropertyValue> {
+fn default_edge_properties(provenance_hint: &str) -> Vec<PropertyValue> {
     vec![
         PropertyValue {
             key: "confidence".to_string(),
@@ -847,10 +854,25 @@ fn default_edge_properties(context: &str) -> Vec<PropertyValue> {
             value: PropertyScalar::String("asserted".to_string()),
         },
         PropertyValue {
-            key: "context".to_string(),
-            value: PropertyScalar::String(context.to_string()),
+            key: "provenance_hint".to_string(),
+            value: PropertyScalar::String(provenance_hint.to_string()),
         },
     ]
+}
+
+fn validate_internal_timestamps_not_provided(
+    subject_id: &str,
+    provided: &[PropertyValue],
+    errors: &mut Vec<String>,
+) {
+    for prop in provided {
+        if prop.key == "created_at" || prop.key == "updated_at" {
+            errors.push(format!(
+                "{} cannot set internal property '{}'",
+                subject_id, prop.key
+            ));
+        }
+    }
 }
 
 fn is_global_property_owner(owner_type_id: &str, property_owner_type_id: &str) -> bool {
@@ -1458,7 +1480,7 @@ mod tests {
                 },
                 TypeProperty {
                     owner_type_id: "edge".to_string(),
-                    prop_name: "context".to_string(),
+                    prop_name: "provenance_hint".to_string(),
                     value_type: "string".to_string(),
                     required: true,
                     readable: true,
@@ -2480,7 +2502,47 @@ mod tests {
         let message = err.to_string();
         assert!(message.contains("required property 'confidence'"));
         assert!(message.contains("required property 'status'"));
-        assert!(message.contains("required property 'context'"));
+        assert!(message.contains("required property 'provenance_hint'"));
+    }
+
+    #[tokio::test]
+    async fn rejects_client_supplied_internal_timestamps() {
+        let app = KnowledgeApplication::new(
+            Arc::new(FakeSchemaRepo::new()),
+            Arc::new(FakeGraphRepository { root_exists: false }),
+            Arc::new(FakeEmbedder),
+        );
+
+        let err = app
+            .upsert_graph_delta(GraphDelta {
+                universes: vec![],
+                entities: vec![EntityNode {
+                    id: "2b9bdcc4-2f4a-4b58-9097-8ab205d8d506".to_string(),
+                    type_id: "node.person".to_string(),
+                    universe_id: None,
+                    user_id: "exobrain".to_string(),
+                    visibility: Visibility::Shared,
+                    properties: vec![
+                        PropertyValue {
+                            key: "name".to_string(),
+                            value: PropertyScalar::String("Alex".to_string()),
+                        },
+                        PropertyValue {
+                            key: "created_at".to_string(),
+                            value: PropertyScalar::String("2025-01-01T00:00:00Z".to_string()),
+                        },
+                    ],
+                    resolved_labels: vec![],
+                }],
+                blocks: vec![],
+                edges: vec![],
+            })
+            .await
+            .expect_err("created_at should be internal-only");
+
+        assert!(err
+            .to_string()
+            .contains("cannot set internal property 'created_at'"));
     }
 
     #[tokio::test]

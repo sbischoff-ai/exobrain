@@ -50,7 +50,9 @@ Example:
 
 - `node.person` inherits `node.entity`
 - if `node.entity` defines `name`, then `node.person` can use `name`
-- if `edge` defines `confidence`/`status`/`context`, then every edge type (for example `RELATED_TO`, `LOCATED_AT`) must provide them
+- if `edge` defines `confidence`/`status`/`provenance_hint`, then every edge type (for example `RELATED_TO`, `LOCATED_AT`) must provide them
+
+Internal graph metadata fields `created_at` and `updated_at` are managed by Memgraph triggers and must not be sent by clients in `UpsertGraphDelta`.
 
 ## Edge endpoint validation
 

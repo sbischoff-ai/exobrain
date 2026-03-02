@@ -261,7 +261,31 @@ impl Neo4jGraphStore {
             .db(database)
             .build()?;
         let graph = Graph::connect(config).await?;
-        Ok(Self { graph })
+        let store = Self { graph };
+        store.ensure_internal_timestamps_triggers().await?;
+        Ok(store)
+    }
+
+    async fn ensure_internal_timestamps_triggers(&self) -> Result<()> {
+        // `created_at` and `updated_at` are knowledge-interface-internal metadata
+        // and are maintained only by Memgraph triggers.
+        let trigger_queries = [
+            "CREATE TRIGGER set_node_timestamps_on_create ON () CREATE BEFORE COMMIT EXECUTE UNWIND createdVertices AS n SET n.created_at = coalesce(n.created_at, datetime()), n.updated_at = datetime()",
+            "CREATE TRIGGER set_edge_timestamps_on_create ON () CREATE BEFORE COMMIT EXECUTE UNWIND createdEdges AS e SET e.created_at = coalesce(e.created_at, datetime()), e.updated_at = datetime()",
+            "CREATE TRIGGER set_node_updated_at_on_update ON () UPDATE BEFORE COMMIT EXECUTE UNWIND updatedVertices AS n SET n.updated_at = datetime()",
+            "CREATE TRIGGER set_edge_updated_at_on_update ON () UPDATE BEFORE COMMIT EXECUTE UNWIND updatedEdges AS e SET e.updated_at = datetime()",
+        ];
+
+        for cypher in trigger_queries {
+            if let Err(err) = self.graph.run(query(cypher)).await {
+                let msg = err.to_string();
+                if !(msg.contains("already exists") || msg.contains("exists")) {
+                    return Err(err).context("failed to ensure internal timestamp triggers");
+                }
+            }
+        }
+
+        Ok(())
     }
 
     async fn apply_delta_in_tx(&self, txn: &mut Txn, delta: &GraphDelta) -> Result<()> {
@@ -336,7 +360,7 @@ impl Neo4jGraphStore {
         for edge in &delta.edges {
             validate_edge_type(&edge.edge_type)?;
             let allowed_node_visibilities = allowed_node_visibilities(edge.visibility);
-            let cypher = format!("MATCH (a {{id: $from_id}}), (b {{id: $to_id}}) WHERE a.visibility IN $allowed_node_visibilities AND b.visibility IN $allowed_node_visibilities MERGE (a)-[r:{}]->(b) SET r.confidence = $confidence, r.status = $status, r.context = $context, r.user_id = $user_id, r.visibility = $visibility RETURN COUNT(r) AS upserted_count", edge.edge_type);
+            let cypher = format!("MATCH (a {{id: $from_id}}), (b {{id: $to_id}}) WHERE a.visibility IN $allowed_node_visibilities AND b.visibility IN $allowed_node_visibilities MERGE (a)-[r:{}]->(b) SET r.confidence = $confidence, r.status = $status, r.provenance_hint = $provenance_hint, r.user_id = $user_id, r.visibility = $visibility RETURN COUNT(r) AS upserted_count", edge.edge_type);
             let mut result = txn
                 .execute(
                     query(&cypher)
@@ -355,8 +379,8 @@ impl Neo4jGraphStore {
                                 .unwrap_or_else(|| "asserted".to_string()),
                         )
                         .param(
-                            "context",
-                            prop_as_string(&edge.properties, "context").unwrap_or_default(),
+                            "provenance_hint",
+                            prop_as_string(&edge.properties, "provenance_hint").unwrap_or_default(),
                         ),
                 )
                 .await
