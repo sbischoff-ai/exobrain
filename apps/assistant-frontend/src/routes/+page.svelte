@@ -1,11 +1,16 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import AssistantWorkspace from '$lib/components/AssistantWorkspace.svelte';
   import IntroLoginPanel from '$lib/components/IntroLoginPanel.svelte';
   import type { CurrentUser } from '$lib/models/auth';
   import type { JournalEntry, ProcessInfo, StoredMessage } from '$lib/models/journal';
   import { authService } from '$lib/services/authService';
   import { journalService } from '$lib/services/journalService';
+  import {
+    isTerminalKnowledgeUpdateState,
+    knowledgeService,
+    parseKnowledgeUpdateStreamEvent
+  } from '$lib/services/knowledgeService';
   import {
     clearSessionState,
     loadSessionState,
@@ -51,6 +56,8 @@
   let loadingOlderMessages = false;
   let sidebarCollapsed = true;
   let awaitingAssistant = false;
+  let knowledgeUpdateInProgress = false;
+  let knowledgeUpdateEventSource: EventSource | null = null;
 
   let authError = '';
   let user: CurrentUser | null = null;
@@ -62,12 +69,28 @@
   let requestError = '';
   let currentMessageCount = 0;
 
+  let knowledgeUpdateTooltip = 'Update knowledge base';
+
   $: canLoadOlderMessages = currentMessageCount > messages.length;
   $: isPastJournalSelected = Boolean(currentReference) && Boolean(todayReference) && currentReference !== todayReference;
   $: chatInputDisabled = loadingJournal || syncingMessages || isPastJournalSelected || awaitingAssistant;
+  $: knowledgeUpdateDisabled =
+    loadingJournal || syncingMessages || isPastJournalSelected || knowledgeUpdateInProgress || !currentReference;
+  $: knowledgeUpdateTooltip = knowledgeUpdateInProgress
+    ? 'Knowledge update in progress'
+    : isPastJournalSelected
+      ? 'Switch to today to update knowledge base'
+      : 'Update knowledge base';
 
   onMount(async () => {
     await bootstrap();
+  });
+
+  onDestroy(() => {
+    if (knowledgeUpdateEventSource) {
+      knowledgeUpdateEventSource.close();
+      knowledgeUpdateEventSource = null;
+    }
   });
 
   async function bootstrap(): Promise<void> {
@@ -544,6 +567,53 @@
       awaitingAssistant = false;
     }
   }
+
+  async function handleKnowledgeUpdate(): Promise<void> {
+    if (knowledgeUpdateDisabled) {
+      return;
+    }
+
+    knowledgeUpdateInProgress = true;
+
+    try {
+      const { job_id: jobId } = await knowledgeService.enqueueUpdate(currentReference || undefined);
+
+      await new Promise<void>((resolve, reject) => {
+        const eventSource = knowledgeService.watchUpdate(jobId);
+        knowledgeUpdateEventSource = eventSource;
+
+        const closeWatcher = () => {
+          eventSource.close();
+          if (knowledgeUpdateEventSource === eventSource) {
+            knowledgeUpdateEventSource = null;
+          }
+        };
+
+        const handleStreamEvent = (eventType: string) => (event: Event) => {
+          const parsed = parseKnowledgeUpdateStreamEvent(eventType, (event as MessageEvent).data ?? '');
+          if (!parsed) {
+            return;
+          }
+
+          if (isTerminalKnowledgeUpdateState(parsed)) {
+            closeWatcher();
+            resolve();
+          }
+        };
+
+        eventSource.addEventListener('status', handleStreamEvent('status'));
+        eventSource.addEventListener('done', handleStreamEvent('done'));
+        eventSource.onerror = () => {
+          closeWatcher();
+          reject(new Error('knowledge update watch disconnected'));
+        };
+      });
+    } catch {
+      requestError = 'Could not update knowledge base. Please try again.';
+    } finally {
+      knowledgeUpdateInProgress = false;
+    }
+  }
 </script>
 
 <svelte:head>
@@ -570,7 +640,11 @@
     {requestError}
     streamingInProgress={awaitingAssistant}
     autoScrollEnabled={!isPastJournalSelected}
+    {knowledgeUpdateDisabled}
+    {knowledgeUpdateTooltip}
+    knowledgeUpdateInProgress={knowledgeUpdateInProgress}
     on:logout={logout}
+    on:knowledgeUpdate={handleKnowledgeUpdate}
     on:toggleSidebar={() => (sidebarCollapsed = !sidebarCollapsed)}
     on:closeSidebar={() => (sidebarCollapsed = true)}
     on:selectJournal={selectJournal}
