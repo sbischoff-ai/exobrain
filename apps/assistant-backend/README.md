@@ -1,6 +1,6 @@
 # Exobrain Assistant Backend
 
-FastAPI service for auth, chat orchestration, journal APIs, and knowledge-base update workflows. Includes `/api/knowledge/update` to update the knowledge base from journal messages.
+FastAPI service for auth, chat orchestration, journal APIs, and knowledge-base update workflows. Includes `/api/knowledge/update` to update the knowledge base from journal messages via job-orchestrator gRPC enqueue (not direct NATS publish).
 
 ## What this service is
 
@@ -55,8 +55,8 @@ Core runtime vars:
 
 - `ASSISTANT_DB_DSN` (Postgres metastore)
 - `ASSISTANT_CACHE_REDIS_URL` (session store)
-- `JOB_ORCHESTRATOR_GRPC_TARGET` (job-orchestrator enqueue endpoint, default `localhost:50061`)
-- Knowledge update requests to the orchestrator send `user_id`, `job_type=knowledge.update`, and a typed payload containing `journal_reference`, message entries, and `requested_by_user_id`.
+- `JOB_ORCHESTRATOR_GRPC_TARGET` (required orchestrator `EnqueueJob` gRPC endpoint, default `localhost:50061`)
+- Knowledge update requests do **not** publish to NATS directly from assistant-backend. The backend calls orchestrator `EnqueueJob` with `user_id`, `job_type=knowledge.update`, and a typed payload containing `journal_reference`, message entries, and `requested_by_user_id`.
 - `JOB_ORCHESTRATOR_CONNECT_TIMEOUT_SECONDS` (gRPC request timeout in seconds, default `5.0`)
 - `EXOBRAIN_QDRANT_URL`, `EXOBRAIN_MEMGRAPH_URL` (knowledge dependencies)
 - `KNOWLEDGE_UPDATE_MAX_TOKENS` (max tokens per knowledge-update job payload, default `8000`)
@@ -76,6 +76,28 @@ OpenAPI and logging:
 
 - `APP_ENV=local` enables `/docs`; non-local disables OpenAPI docs.
 - `LOG_LEVEL` overrides defaults (`DEBUG` local, `INFO` otherwise).
+
+## Enqueue flow
+
+```text
+assistant-backend
+  -> job-orchestrator (gRPC EnqueueJob)
+  -> JetStream subject jobs.<job_type>.requested
+  -> worker consume/process
+```
+
+This keeps enqueue validation and subject mapping centralized in job-orchestrator so producer services can remain transport-agnostic.
+
+## Backwards compatibility and rollout
+
+Use a staged cutover so deployments do not run mixed producer behavior (some instances publishing directly while others use gRPC):
+
+1. Deploy job-orchestrator API (`EnqueueJob`) everywhere and verify gRPC readiness.
+2. Enable assistant-backend orchestrator enqueue behind a feature flag (or rollout wave) while direct-producer path remains available for immediate rollback.
+3. Complete rollout to 100% of assistant-backend instances and confirm all new jobs are arriving via `EnqueueJob`-validated envelopes.
+4. Remove/disable the legacy direct-producer path only after all environments are fully cut over.
+
+Recommended flag naming pattern: `KNOWLEDGE_UPDATE_USE_ORCHESTRATOR_ENQUEUE=true` during transition windows.
 
 ## Troubleshooting
 

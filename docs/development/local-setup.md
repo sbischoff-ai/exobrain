@@ -20,11 +20,11 @@ Use this path for fast feature iteration with Docker Compose for infra and `mpro
 
 ## Pick a run profile
 
-| Goal | Profile | App launcher |
-| --- | --- | --- |
-| Backend APIs + jobs only | Backend | `./scripts/local/run-backend-suite.sh` (default config) |
+| Goal                            | Profile             | App launcher                                                                       |
+| ------------------------------- | ------------------- | ---------------------------------------------------------------------------------- |
+| Backend APIs + jobs only        | Backend             | `./scripts/local/run-backend-suite.sh` (default config)                            |
 | Backend APIs + knowledge + jobs | Backend + knowledge | `MPROCS_CONFIG=.mprocs/backend-knowledge.yml ./scripts/local/run-backend-suite.sh` |
-| Full stack (includes frontend) | Full stack | `./scripts/local/run-fullstack-suite.sh` |
+| Full stack (includes frontend)  | Full stack          | `./scripts/local/run-fullstack-suite.sh`                                           |
 
 ## Workflow
 
@@ -60,6 +60,8 @@ This starts PostgreSQL, Redis, NATS, Qdrant, Memgraph, and Memgraph Lab.
 
 ### 4) Start app processes with mprocs
 
+Startup dependency note: start `job-orchestrator` alongside `assistant-backend` before validating `/api/knowledge/update`, because assistant-backend now enqueues work through orchestrator `EnqueueJob` gRPC instead of publishing directly to NATS.
+
 Backend + knowledge profile:
 
 ```bash
@@ -70,6 +72,12 @@ Full-stack profile:
 
 ```bash
 ./scripts/local/run-fullstack-suite.sh
+```
+
+Knowledge-update enqueue flow:
+
+```text
+assistant-backend -> job-orchestrator (gRPC EnqueueJob) -> JetStream jobs.<job_type>.requested -> worker consume/process
 ```
 
 ### 5) Verify and run tests

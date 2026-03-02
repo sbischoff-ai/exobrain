@@ -4,6 +4,7 @@ Python service responsible for asynchronous job orchestration.
 
 ## What this service is
 
+- Owns the canonical `EnqueueJob` gRPC API that producers (including `assistant-backend`) call to enqueue asynchronous work.
 - Subscribes to NATS job request subjects.
 - Persists job lifecycle state in `job_orchestrator_db`.
 - Executes worker job scripts idempotently, retries failures, and publishes completion/failure events.
@@ -36,6 +37,17 @@ uv run python -m app.main_api
 ```
 
 The gRPC `EnqueueJob` endpoint validates `job_type` and payload schema before publishing `JobEnvelope` messages to JetStream subjects shaped as `jobs.<job_type>.requested`. Job IDs are generated server-side as UUIDs and returned in the RPC response.
+
+Request flow:
+
+```text
+assistant-backend
+  -> job-orchestrator EnqueueJob (gRPC)
+  -> JetStream subject jobs.<job_type>.requested
+  -> job-orchestrator worker consume/process/retry
+```
+
+This API ownership keeps producers decoupled from JetStream subject/version details and lets the orchestrator enforce payload validation centrally.
 For `knowledge.update`, clients must provide `user_id` plus the typed `knowledge_update` payload (`journal_reference`, `messages`, and `requested_by_user_id`), and the server uses `user_id` as the envelope correlation id.
 
 ## Common commands
@@ -56,6 +68,7 @@ Apply local migrations:
 - `JOB_MAX_ATTEMPTS` (default: `3`, max delivery attempts before DLQ)
 
 Keep request subject patterns narrow enough that they do not also match events/DLQ subjects.
+
 - `WORKER_REPLICA_COUNT` (default: `1`, max concurrent worker processes)
 - `JOB_ORCHESTRATOR_API_BIND_ADDRESS` (optional explicit bind target, e.g. `0.0.0.0:50061`)
 - `JOB_ORCHESTRATOR_API_HOST` (default: `0.0.0.0`, used when bind address not set)
@@ -73,7 +86,7 @@ Keep request subject patterns narrow enough that they do not also match events/D
 - Docs hub: [`../../docs/README.md`](../../docs/README.md)
 - Metastore migrations: [`../../infra/metastore/job-orchestrator/README.md`](../../infra/metastore/job-orchestrator/README.md)
 
-
 ## Troubleshooting
 
 - If `knowledge.update` retries with timeout errors, verify `KNOWLEDGE_INTERFACE_GRPC_TARGET` points to a reachable knowledge-interface gRPC endpoint.
+- If producers fail with `UNAVAILABLE` on `EnqueueJob`, confirm the orchestrator API process is running and reachable at `JOB_ORCHESTRATOR_API_BIND_ADDRESS` / `JOB_ORCHESTRATOR_API_PORT`.
