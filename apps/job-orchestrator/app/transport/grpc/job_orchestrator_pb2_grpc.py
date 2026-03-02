@@ -5,6 +5,26 @@ import warnings
 
 from . import job_orchestrator_pb2 as job__orchestrator__pb2
 
+GRPC_GENERATED_VERSION = '1.78.0'
+GRPC_VERSION = grpc.__version__
+_version_not_supported = False
+
+try:
+    from grpc._utilities import first_version_is_lower
+    _version_not_supported = first_version_is_lower(GRPC_VERSION, GRPC_GENERATED_VERSION)
+except ImportError:
+    _version_not_supported = True
+
+if _version_not_supported:
+    raise RuntimeError(
+        f'The grpc package installed is at version {GRPC_VERSION},'
+        + ' but the generated code in job_orchestrator_pb2_grpc.py depends on'
+        + f' grpcio>={GRPC_GENERATED_VERSION}.'
+        + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
+        + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
+    )
+
+
 class JobOrchestratorStub(object):
     """Missing associated documentation comment in .proto file."""
 
@@ -19,12 +39,34 @@ class JobOrchestratorStub(object):
                 request_serializer=job__orchestrator__pb2.EnqueueJobRequest.SerializeToString,
                 response_deserializer=job__orchestrator__pb2.EnqueueJobReply.FromString,
                 _registered_method=True)
+        self.GetJobStatus = channel.unary_unary(
+                '/exobrain.job_orchestrator.v1.JobOrchestrator/GetJobStatus',
+                request_serializer=job__orchestrator__pb2.GetJobStatusRequest.SerializeToString,
+                response_deserializer=job__orchestrator__pb2.GetJobStatusReply.FromString,
+                _registered_method=True)
+        self.WatchJobStatus = channel.unary_stream(
+                '/exobrain.job_orchestrator.v1.JobOrchestrator/WatchJobStatus',
+                request_serializer=job__orchestrator__pb2.WatchJobStatusRequest.SerializeToString,
+                response_deserializer=job__orchestrator__pb2.JobStatusEvent.FromString,
+                _registered_method=True)
 
 
 class JobOrchestratorServicer(object):
     """Missing associated documentation comment in .proto file."""
 
     def EnqueueJob(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetJobStatus(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def WatchJobStatus(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -37,6 +79,16 @@ def add_JobOrchestratorServicer_to_server(servicer, server):
                     servicer.EnqueueJob,
                     request_deserializer=job__orchestrator__pb2.EnqueueJobRequest.FromString,
                     response_serializer=job__orchestrator__pb2.EnqueueJobReply.SerializeToString,
+            ),
+            'GetJobStatus': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetJobStatus,
+                    request_deserializer=job__orchestrator__pb2.GetJobStatusRequest.FromString,
+                    response_serializer=job__orchestrator__pb2.GetJobStatusReply.SerializeToString,
+            ),
+            'WatchJobStatus': grpc.unary_stream_rpc_method_handler(
+                    servicer.WatchJobStatus,
+                    request_deserializer=job__orchestrator__pb2.WatchJobStatusRequest.FromString,
+                    response_serializer=job__orchestrator__pb2.JobStatusEvent.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -66,6 +118,60 @@ class JobOrchestrator(object):
             '/exobrain.job_orchestrator.v1.JobOrchestrator/EnqueueJob',
             job__orchestrator__pb2.EnqueueJobRequest.SerializeToString,
             job__orchestrator__pb2.EnqueueJobReply.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetJobStatus(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/exobrain.job_orchestrator.v1.JobOrchestrator/GetJobStatus',
+            job__orchestrator__pb2.GetJobStatusRequest.SerializeToString,
+            job__orchestrator__pb2.GetJobStatusReply.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def WatchJobStatus(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_stream(
+            request,
+            target,
+            '/exobrain.job_orchestrator.v1.JobOrchestrator/WatchJobStatus',
+            job__orchestrator__pb2.WatchJobStatusRequest.SerializeToString,
+            job__orchestrator__pb2.JobStatusEvent.FromString,
             options,
             channel_credentials,
             insecure,

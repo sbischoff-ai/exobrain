@@ -24,13 +24,15 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x16job_orchestrator.proto\x12\x1c\x65xobrain.job_orchestrator.v1\"]\n\x16KnowledgeUpdateMessage\x12\x0c\n\x04role\x18\x01 \x01(\t\x12\x0f\n\x07\x63ontent\x18\x02 \x01(\t\x12\x10\n\x08sequence\x18\x03 \x01(\x05\x12\x12\n\ncreated_at\x18\x04 \x01(\t\"\x99\x01\n\x16KnowledgeUpdatePayload\x12\x19\n\x11journal_reference\x18\x01 \x01(\t\x12\x46\n\x08messages\x18\x02 \x03(\x0b\x32\x34.exobrain.job_orchestrator.v1.KnowledgeUpdateMessage\x12\x1c\n\x14requested_by_user_id\x18\x03 \x01(\t\"\xab\x01\n\x11\x45nqueueJobRequest\x12\x10\n\x08job_type\x18\x01 \x01(\t\x12\x0f\n\x07user_id\x18\x02 \x01(\t\x12P\n\x10knowledge_update\x18\x03 \x01(\x0b\x32\x34.exobrain.job_orchestrator.v1.KnowledgeUpdatePayloadH\x00\x12\x16\n\x0cpayload_json\x18\x04 \x01(\tH\x00\x42\t\n\x07payload\"!\n\x0f\x45nqueueJobReply\x12\x0e\n\x06job_id\x18\x01 \x01(\t2\x7f\n\x0fJobOrchestrator\x12l\n\nEnqueueJob\x12/.exobrain.job_orchestrator.v1.EnqueueJobRequest\x1a-.exobrain.job_orchestrator.v1.EnqueueJobReplyb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x16job_orchestrator.proto\x12\x1c\x65xobrain.job_orchestrator.v1\"]\n\x16KnowledgeUpdateMessage\x12\x0c\n\x04role\x18\x01 \x01(\t\x12\x0f\n\x07\x63ontent\x18\x02 \x01(\t\x12\x10\n\x08sequence\x18\x03 \x01(\x05\x12\x12\n\ncreated_at\x18\x04 \x01(\t\"\x99\x01\n\x16KnowledgeUpdatePayload\x12\x19\n\x11journal_reference\x18\x01 \x01(\t\x12\x46\n\x08messages\x18\x02 \x03(\x0b\x32\x34.exobrain.job_orchestrator.v1.KnowledgeUpdateMessage\x12\x1c\n\x14requested_by_user_id\x18\x03 \x01(\t\"\xab\x01\n\x11\x45nqueueJobRequest\x12\x10\n\x08job_type\x18\x01 \x01(\t\x12\x0f\n\x07user_id\x18\x02 \x01(\t\x12P\n\x10knowledge_update\x18\x03 \x01(\x0b\x32\x34.exobrain.job_orchestrator.v1.KnowledgeUpdatePayloadH\x00\x12\x16\n\x0cpayload_json\x18\x04 \x01(\tH\x00\x42\t\n\x07payload\"!\n\x0f\x45nqueueJobReply\x12\x0e\n\x06job_id\x18\x01 \x01(\t\"%\n\x13GetJobStatusRequest\x12\x0e\n\x06job_id\x18\x01 \x01(\t\"\xaa\x01\n\x11GetJobStatusReply\x12\x0e\n\x06job_id\x18\x01 \x01(\t\x12>\n\x05state\x18\x02 \x01(\x0e\x32/.exobrain.job_orchestrator.v1.JobLifecycleState\x12\x0f\n\x07\x61ttempt\x18\x03 \x01(\x05\x12\x0e\n\x06\x64\x65tail\x18\x04 \x01(\t\x12\x10\n\x08terminal\x18\x05 \x01(\x08\x12\x12\n\nupdated_at\x18\x06 \x01(\t\"@\n\x15WatchJobStatusRequest\x12\x0e\n\x06job_id\x18\x01 \x01(\t\x12\x17\n\x0finclude_current\x18\x02 \x01(\x08\"\xa7\x01\n\x0eJobStatusEvent\x12\x0e\n\x06job_id\x18\x01 \x01(\t\x12>\n\x05state\x18\x02 \x01(\x0e\x32/.exobrain.job_orchestrator.v1.JobLifecycleState\x12\x0f\n\x07\x61ttempt\x18\x03 \x01(\x05\x12\x0e\n\x06\x64\x65tail\x18\x04 \x01(\t\x12\x10\n\x08terminal\x18\x05 \x01(\x08\x12\x12\n\nemitted_at\x18\x06 \x01(\t*h\n\x11JobLifecycleState\x12\x17\n\x13\x45NQUEUED_OR_PENDING\x10\x00\x12\x0b\n\x07STARTED\x10\x01\x12\x0c\n\x08RETRYING\x10\x02\x12\r\n\tSUCCEEDED\x10\x03\x12\x10\n\x0c\x46\x41ILED_FINAL\x10\x04\x32\xea\x02\n\x0fJobOrchestrator\x12l\n\nEnqueueJob\x12/.exobrain.job_orchestrator.v1.EnqueueJobRequest\x1a-.exobrain.job_orchestrator.v1.EnqueueJobReply\x12r\n\x0cGetJobStatus\x12\x31.exobrain.job_orchestrator.v1.GetJobStatusRequest\x1a/.exobrain.job_orchestrator.v1.GetJobStatusReply\x12u\n\x0eWatchJobStatus\x12\x33.exobrain.job_orchestrator.v1.WatchJobStatusRequest\x1a,.exobrain.job_orchestrator.v1.JobStatusEvent0\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'job_orchestrator_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
+  _globals['_JOBLIFECYCLESTATE']._serialized_start=964
+  _globals['_JOBLIFECYCLESTATE']._serialized_end=1068
   _globals['_KNOWLEDGEUPDATEMESSAGE']._serialized_start=56
   _globals['_KNOWLEDGEUPDATEMESSAGE']._serialized_end=149
   _globals['_KNOWLEDGEUPDATEPAYLOAD']._serialized_start=152
@@ -39,6 +41,14 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_ENQUEUEJOBREQUEST']._serialized_end=479
   _globals['_ENQUEUEJOBREPLY']._serialized_start=481
   _globals['_ENQUEUEJOBREPLY']._serialized_end=514
-  _globals['_JOBORCHESTRATOR']._serialized_start=516
-  _globals['_JOBORCHESTRATOR']._serialized_end=643
+  _globals['_GETJOBSTATUSREQUEST']._serialized_start=516
+  _globals['_GETJOBSTATUSREQUEST']._serialized_end=553
+  _globals['_GETJOBSTATUSREPLY']._serialized_start=556
+  _globals['_GETJOBSTATUSREPLY']._serialized_end=726
+  _globals['_WATCHJOBSTATUSREQUEST']._serialized_start=728
+  _globals['_WATCHJOBSTATUSREQUEST']._serialized_end=792
+  _globals['_JOBSTATUSEVENT']._serialized_start=795
+  _globals['_JOBSTATUSEVENT']._serialized_end=962
+  _globals['_JOBORCHESTRATOR']._serialized_start=1071
+  _globals['_JOBORCHESTRATOR']._serialized_end=1433
 # @@protoc_insertion_point(module_scope)
