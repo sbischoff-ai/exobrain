@@ -49,12 +49,26 @@ async def test_openai_provider_uses_sdk_methods_for_chat_embeddings_and_stream()
     fake = FakeOpenAIClient()
     client = OpenAIProviderClient(api_key="x", client=fake)
 
+    response_format = {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "answer",
+            "schema": {
+                "type": "object",
+                "properties": {"value": {"type": "string"}},
+                "required": ["value"],
+            },
+        },
+    }
     chat_payload = {"model": "gpt-5-mini", "messages": [{"role": "user", "content": "hi"}]}
-    response = await client.chat_completions({**chat_payload, "max_tokens": 123})
+    response = await client.chat_completions(
+        {**chat_payload, "max_tokens": 123, "response_format": response_format}
+    )
     assert response["id"] == "resp1"
     assert fake.called_with["model"] == chat_payload["model"]
     assert "max_tokens" not in fake.called_with
     assert fake.called_with["max_completion_tokens"] == 123
+    assert fake.called_with["response_format"] == response_format
 
     emb_payload = {"model": "text-embedding-3-large", "input": ["hi"]}
     emb_response = await client.embeddings(emb_payload)
@@ -62,11 +76,14 @@ async def test_openai_provider_uses_sdk_methods_for_chat_embeddings_and_stream()
     assert fake.called_with == emb_payload
 
     chunks = []
-    async for chunk in client.chat_completions_stream({**chat_payload, "stream": True}):
+    async for chunk in client.chat_completions_stream(
+        {**chat_payload, "stream": True, "response_format": response_format}
+    ):
         chunks.append(chunk)
     assert chunks[-1] == "data: [DONE]\n\n"
     assert fake.stream_called_with is not None
     assert "max_tokens" not in fake.stream_called_with
+    assert fake.stream_called_with["response_format"] == response_format
 
 
 class FakeAnthropicMessages:
