@@ -653,14 +653,14 @@ impl GraphRepository for MemgraphQdrantGraphRepository {
         find_query: &FindEntityCandidatesQuery,
         query_vector: Option<&[f32]>,
     ) -> Result<Vec<EntityCandidate>> {
-        let allowed_visibilities = allowed_node_visibilities(Visibility::Private);
         let names = find_query.names.clone();
         let has_names = !names.is_empty();
         let potential_type_ids = find_query.potential_type_ids.clone();
         let has_type_filter = !potential_type_ids.is_empty();
 
-        let mut cypher = String::from(
-            "MATCH (e:Entity) WHERE e.user_id = $user_id AND e.visibility IN $allowed_visibilities",
+        let mut cypher = format!(
+            "MATCH (e:Entity) WHERE {}",
+            memgraph_user_or_shared_access_clause("e")
         );
         if has_names {
             cypher.push_str(" AND (");
@@ -684,7 +684,6 @@ impl GraphRepository for MemgraphQdrantGraphRepository {
             .execute(
                 query(&cypher)
                     .param("user_id", find_query.user_id.clone())
-                    .param("allowed_visibilities", allowed_visibilities)
                     .param("names", names.clone())
                     .param("potential_type_ids", potential_type_ids.clone()),
             )
@@ -723,10 +722,6 @@ impl GraphRepository for MemgraphQdrantGraphRepository {
         }
 
         if let Some(vector) = query_vector {
-            let visibility_filter = Filter::should([
-                Condition::matches("visibility", "SHARED".to_string()),
-                Condition::matches("visibility", "PRIVATE".to_string()),
-            ]);
             let search_limit = (find_query.limit.unwrap_or(10) as u64).saturating_mul(8);
             let search = SearchPointsBuilder::new(
                 &self.vector_store.collection,
@@ -734,10 +729,7 @@ impl GraphRepository for MemgraphQdrantGraphRepository {
                 search_limit,
             )
             .with_payload(true)
-            .filter(Filter::must([
-                Condition::matches("user_id", find_query.user_id.clone()),
-                visibility_filter.into(),
-            ]));
+            .filter(qdrant_user_or_shared_access_filter(&find_query.user_id));
 
             let response = self
                 .vector_store
@@ -786,10 +778,9 @@ impl GraphRepository for MemgraphQdrantGraphRepository {
         let mut entity_rows = self
             .graph_store
             .graph
-            .execute(query("MATCH (e:Entity) WHERE e.id IN $ids AND e.user_id = $user_id AND e.visibility IN $allowed_visibilities RETURN e.id AS id, e.name AS name, e.type_id AS type_id" )
+            .execute(query(&format!("MATCH (e:Entity) WHERE e.id IN $ids AND {} RETURN e.id AS id, e.name AS name, e.type_id AS type_id", memgraph_user_or_shared_access_clause("e")))
                 .param("ids", ids)
-                .param("user_id", find_query.user_id.clone())
-                .param("allowed_visibilities", allowed_node_visibilities(Visibility::Private)))
+                .param("user_id", find_query.user_id.clone()))
             .await
             .context("failed to hydrate candidate display fields")?;
 
@@ -902,6 +893,17 @@ fn payload_i64(payload: &HashMap<String, Value>, key: &str) -> Option<i64> {
             Kind::DoubleValue(value) => Some(*value as i64),
             _ => None,
         })
+}
+
+fn memgraph_user_or_shared_access_clause(alias: &str) -> String {
+    format!("({alias}.user_id = $user_id OR {alias}.visibility = 'SHARED')")
+}
+
+fn qdrant_user_or_shared_access_filter(user_id: &str) -> Filter {
+    Filter::should([
+        Condition::matches("user_id", user_id.to_string()),
+        Condition::matches("visibility", "SHARED".to_string()),
+    ])
 }
 
 fn to_point(embedded: &EmbeddedBlock) -> PointStruct {
@@ -1090,8 +1092,9 @@ fn validate_edge_type(edge_type: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        allowed_node_visibilities, compute_name_score, normalize_qdrant_grpc_url, payload_i64,
-        payload_string, validate_edge_type, MockEmbedder,
+        allowed_node_visibilities, compute_name_score, memgraph_user_or_shared_access_clause,
+        normalize_qdrant_grpc_url, payload_i64, payload_string,
+        qdrant_user_or_shared_access_filter, validate_edge_type, MockEmbedder,
     };
     use crate::domain::Visibility;
     use crate::ports::Embedder;
@@ -1171,6 +1174,21 @@ mod tests {
             Some("root block")
         );
         assert_eq!(payload_i64(&payload, "block_level"), Some(0));
+    }
+
+    #[test]
+    fn builds_memgraph_user_or_shared_access_clause() {
+        assert_eq!(
+            memgraph_user_or_shared_access_clause("e"),
+            "(e.user_id = $user_id OR e.visibility = 'SHARED')"
+        );
+    }
+
+    #[test]
+    fn builds_qdrant_user_or_shared_access_filter() {
+        let filter = qdrant_user_or_shared_access_filter("alice");
+        assert!(filter.must.is_empty());
+        assert_eq!(filter.should.len(), 2);
     }
 
     #[test]
