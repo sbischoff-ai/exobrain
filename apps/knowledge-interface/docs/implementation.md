@@ -52,10 +52,10 @@ This document is code-oriented: it helps a new contributor quickly navigate the 
 5. service hands both graph delta and embedded blocks to one repository call.
 6. adapter layer writes Memgraph + Qdrant with transaction/rollback behavior.
 
-### 4) `InitializeUserGraph`
+### 4) `GetUserInitGraph`
 
 1. gRPC handler validates and forwards `user_id` + `user_name`.
-2. `KnowledgeApplication::initialize_user_graph` first checks a durable Memgraph initialization marker keyed by `user_id`.
+2. `KnowledgeApplication::get_user_init_graph` first checks a durable Memgraph initialization marker keyed by `user_id`.
 3. when the marker is absent, the service builds a deterministic starter delta and writes graph + embeddings.
 4. after a successful write, the service marks the user graph initialized via an idempotent Memgraph `MERGE` marker write.
 

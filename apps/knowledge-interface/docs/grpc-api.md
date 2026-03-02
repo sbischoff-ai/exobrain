@@ -1,7 +1,7 @@
 # Knowledge Interface gRPC API and Graph Delta Contract
 
 This document describes what clients must send to `UpsertGraphDelta` and
-`InitializeUserGraph`, plus how to query `FindEntityCandidates` and `GetEntityContext`.
+`GetUserInitGraph`, plus how to query `FindEntityCandidates` and `GetEntityContext`.
 
 ## Core rule
 
