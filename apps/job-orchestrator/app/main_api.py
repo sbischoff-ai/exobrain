@@ -5,6 +5,8 @@ import logging
 import signal
 
 import grpc
+from app.database import Database
+from nats.aio.subscription import Subscription
 from app.jetstream import connect_jetstream, ensure_jobs_stream
 from app.logging import configure_logging
 from app.settings import get_settings
@@ -17,16 +19,45 @@ logger = logging.getLogger(__name__)
 
 
 async def main() -> None:
-    nc, js = await connect_jetstream(settings.exobrain_nats_url)
-    await ensure_jobs_stream(js)
-
-    server = grpc.aio.server()
-    servicer = JobOrchestratorServicer(js.publish)
-    job_orchestrator_pb2_grpc.add_JobOrchestratorServicer_to_server(servicer, server)
-
     if not settings.job_orchestrator_api_enabled:
         logger.info("job orchestrator api disabled via config")
         return
+
+    db = Database(settings.job_orchestrator_db_dsn, reshape_schema_query=settings.reshape_schema_query)
+    await db.connect()
+
+    nc, js = await connect_jetstream(settings.exobrain_nats_url)
+    await ensure_jobs_stream(js)
+
+    async def fetch_status(job_id: str):
+        return await db.fetchrow(
+            """
+            SELECT job_id, status, attempt, last_error, is_terminal, updated_at
+            FROM orchestrator_jobs
+            WHERE job_id = $1
+            """,
+            job_id,
+        )
+
+    async def subscribe_status(subject: str):
+        sub: Subscription = await js.subscribe(subject)
+
+        async def _messages():
+            async for msg in sub.messages:
+                yield msg.data
+
+        class _Wrapper:
+            def __aiter__(self):
+                return _messages()
+
+            async def unsubscribe(self):
+                await sub.unsubscribe()
+
+        return _Wrapper()
+
+    server = grpc.aio.server()
+    servicer = JobOrchestratorServicer(js.publish, fetch_job_status=fetch_status, subscribe_job_status=subscribe_status)
+    job_orchestrator_pb2_grpc.add_JobOrchestratorServicer_to_server(servicer, server)
 
     bind_target = settings.job_orchestrator_api_bind_target
     server.add_insecure_port(bind_target)
@@ -51,6 +82,7 @@ async def main() -> None:
     finally:
         await server.stop(grace=5)
         await nc.drain()
+        await db.close()
         logger.info("job orchestrator api shutdown complete")
 
 

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import json
-from uuid import UUID
+from datetime import datetime, timezone
+from uuid import UUID, uuid4
 
 import grpc
 import pytest
@@ -13,15 +15,70 @@ from app.transport.grpc.service import JobOrchestratorServicer
 from app.worker.job_registry import JOB_PAYLOAD_MODEL_BY_TYPE
 
 
+class _StatusSubscription:
+    def __init__(self) -> None:
+        self._queue: asyncio.Queue[bytes | None] = asyncio.Queue()
+        self.unsubscribed = False
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self) -> bytes:
+        item = await self._queue.get()
+        if item is None:
+            raise StopAsyncIteration
+        return item
+
+    async def publish(self, payload: bytes) -> None:
+        await self._queue.put(payload)
+
+    async def close(self) -> None:
+        await self._queue.put(None)
+
+    async def unsubscribe(self) -> None:
+        self.unsubscribed = True
+
+
+async def _wait_for_subscription(subscriptions: dict[str, _StatusSubscription], subject: str) -> _StatusSubscription:
+    for _ in range(50):
+        sub = subscriptions.get(subject)
+        if sub is not None:
+            return sub
+        await asyncio.sleep(0.01)
+    raise AssertionError(f"subscription not created for {subject}")
+
+
 @pytest.fixture
-async def grpc_orchestrator_stub() -> tuple[job_orchestrator_pb2_grpc.JobOrchestratorStub, list[tuple[str, bytes]]]:
+async def grpc_orchestrator_stub() -> tuple[
+    job_orchestrator_pb2_grpc.JobOrchestratorStub,
+    list[tuple[str, bytes]],
+    dict[str, _StatusSubscription],
+    dict[str, dict[str, object]],
+]:
     published: list[tuple[str, bytes]] = []
+    status_subscriptions: dict[str, _StatusSubscription] = {}
+    status_snapshots: dict[str, dict[str, object]] = {}
 
     async def publish(subject: str, payload: bytes) -> None:
         published.append((subject, payload))
 
+    async def fetch_status(job_id: str) -> dict[str, object] | None:
+        return status_snapshots.get(job_id)
+
+    async def subscribe_status(subject: str) -> _StatusSubscription:
+        sub = _StatusSubscription()
+        status_subscriptions[subject] = sub
+        return sub
+
     server = grpc.aio.server()
-    job_orchestrator_pb2_grpc.add_JobOrchestratorServicer_to_server(JobOrchestratorServicer(publish), server)
+    job_orchestrator_pb2_grpc.add_JobOrchestratorServicer_to_server(
+        JobOrchestratorServicer(
+            publish,
+            fetch_job_status=fetch_status,
+            subscribe_job_status=subscribe_status,
+        ),
+        server,
+    )
     port = server.add_insecure_port("127.0.0.1:0")
     await server.start()
 
@@ -29,7 +86,7 @@ async def grpc_orchestrator_stub() -> tuple[job_orchestrator_pb2_grpc.JobOrchest
     stub = job_orchestrator_pb2_grpc.JobOrchestratorStub(channel)
 
     try:
-        yield stub, published
+        yield stub, published, status_subscriptions, status_snapshots
     finally:
         await channel.close()
         await server.stop(grace=None)
@@ -37,9 +94,14 @@ async def grpc_orchestrator_stub() -> tuple[job_orchestrator_pb2_grpc.JobOrchest
 
 @pytest.mark.asyncio
 async def test_enqueue_job_success_publishes_expected_subject_and_job_id(
-    grpc_orchestrator_stub: tuple[job_orchestrator_pb2_grpc.JobOrchestratorStub, list[tuple[str, bytes]]]
+    grpc_orchestrator_stub: tuple[
+        job_orchestrator_pb2_grpc.JobOrchestratorStub,
+        list[tuple[str, bytes]],
+        dict[str, _StatusSubscription],
+        dict[str, dict[str, object]],
+    ]
 ) -> None:
-    stub, published = grpc_orchestrator_stub
+    stub, published, _, _ = grpc_orchestrator_stub
 
     reply = await stub.EnqueueJob(
         job_orchestrator_pb2.EnqueueJobRequest(
@@ -55,16 +117,26 @@ async def test_enqueue_job_success_publishes_expected_subject_and_job_id(
 
     assert reply.job_id
     UUID(reply.job_id)
-    assert len(published) == 1
+    assert len(published) == 2
     subject, _ = published[0]
     assert subject == "jobs.knowledge.update.requested"
+    status_subject, status_payload = published[1]
+    assert status_subject == f"jobs.status.{reply.job_id}"
+    # Ensure emitted payload shape is parseable JSON and carries initial status.
+    decoded = json.loads(status_payload.decode("utf-8"))
+    assert decoded["state"] == "ENQUEUED_OR_PENDING"
 
 
 @pytest.mark.asyncio
 async def test_enqueue_job_invalid_payload_or_job_type_returns_grpc_error(
-    grpc_orchestrator_stub: tuple[job_orchestrator_pb2_grpc.JobOrchestratorStub, list[tuple[str, bytes]]]
+    grpc_orchestrator_stub: tuple[
+        job_orchestrator_pb2_grpc.JobOrchestratorStub,
+        list[tuple[str, bytes]],
+        dict[str, _StatusSubscription],
+        dict[str, dict[str, object]],
+    ]
 ) -> None:
-    stub, _ = grpc_orchestrator_stub
+    stub, _, _, _ = grpc_orchestrator_stub
 
     with pytest.raises(grpc.aio.AioRpcError) as job_type_error:
         await stub.EnqueueJob(
@@ -92,9 +164,14 @@ async def test_enqueue_job_invalid_payload_or_job_type_returns_grpc_error(
 
 @pytest.mark.asyncio
 async def test_enqueue_job_generates_envelope_matching_contract(
-    grpc_orchestrator_stub: tuple[job_orchestrator_pb2_grpc.JobOrchestratorStub, list[tuple[str, bytes]]]
+    grpc_orchestrator_stub: tuple[
+        job_orchestrator_pb2_grpc.JobOrchestratorStub,
+        list[tuple[str, bytes]],
+        dict[str, _StatusSubscription],
+        dict[str, dict[str, object]],
+    ]
 ) -> None:
-    stub, published = grpc_orchestrator_stub
+    stub, published, _, _ = grpc_orchestrator_stub
 
     reply = await stub.EnqueueJob(
         job_orchestrator_pb2.EnqueueJobRequest(
@@ -117,6 +194,116 @@ async def test_enqueue_job_generates_envelope_matching_contract(
     assert envelope.schema_version == 1
     assert envelope.attempt == 0
     assert envelope.payload["requested_by_user_id"] == "user-1"
+
+
+@pytest.mark.asyncio
+async def test_watch_job_status_happy_path_streams_started_then_succeeded_and_closes(
+    grpc_orchestrator_stub: tuple[
+        job_orchestrator_pb2_grpc.JobOrchestratorStub,
+        list[tuple[str, bytes]],
+        dict[str, _StatusSubscription],
+        dict[str, dict[str, object]],
+    ]
+) -> None:
+    stub, _, subscriptions, _ = grpc_orchestrator_stub
+    job_id = str(uuid4())
+
+    stream = stub.WatchJobStatus(job_orchestrator_pb2.WatchJobStatusRequest(job_id=job_id))
+    first_event = asyncio.create_task(stream.read())
+    subscription = await _wait_for_subscription(subscriptions, f"jobs.status.{job_id}")
+
+    await subscription.publish(
+        json.dumps({"job_id": job_id, "state": "STARTED", "attempt": 1, "terminal": False, "emitted_at": datetime.now(timezone.utc).isoformat()}).encode(
+            "utf-8"
+        )
+    )
+    await subscription.publish(
+        json.dumps({"job_id": job_id, "state": "SUCCEEDED", "attempt": 1, "terminal": True, "emitted_at": datetime.now(timezone.utc).isoformat()}).encode(
+            "utf-8"
+        )
+    )
+
+    events = [await first_event]
+    while True:
+        event = await stream.read()
+        if event == grpc.aio.EOF:
+            break
+        events.append(event)
+
+    assert [event.state for event in events] == [job_orchestrator_pb2.STARTED, job_orchestrator_pb2.SUCCEEDED]
+    assert subscription.unsubscribed is True
+
+
+@pytest.mark.asyncio
+async def test_watch_job_status_retry_then_terminal_failure_closes(
+    grpc_orchestrator_stub: tuple[
+        job_orchestrator_pb2_grpc.JobOrchestratorStub,
+        list[tuple[str, bytes]],
+        dict[str, _StatusSubscription],
+        dict[str, dict[str, object]],
+    ]
+) -> None:
+    stub, _, subscriptions, _ = grpc_orchestrator_stub
+    job_id = str(uuid4())
+
+    stream = stub.WatchJobStatus(job_orchestrator_pb2.WatchJobStatusRequest(job_id=job_id))
+    first_event = asyncio.create_task(stream.read())
+    subscription = await _wait_for_subscription(subscriptions, f"jobs.status.{job_id}")
+
+    await subscription.publish(
+        json.dumps(
+            {
+                "job_id": job_id,
+                "state": "RETRYING",
+                "attempt": 1,
+                "detail": "temporary",
+                "terminal": False,
+                "emitted_at": datetime.now(timezone.utc).isoformat(),
+            }
+        ).encode("utf-8")
+    )
+    await subscription.publish(
+        json.dumps(
+            {
+                "job_id": job_id,
+                "state": "FAILED_FINAL",
+                "attempt": 3,
+                "detail": "boom",
+                "terminal": True,
+                "emitted_at": datetime.now(timezone.utc).isoformat(),
+            }
+        ).encode("utf-8")
+    )
+
+    events = [await first_event]
+    while True:
+        event = await stream.read()
+        if event == grpc.aio.EOF:
+            break
+        events.append(event)
+    assert [event.state for event in events] == [job_orchestrator_pb2.RETRYING, job_orchestrator_pb2.FAILED_FINAL]
+    assert events[-1].terminal is True
+    assert subscriptions[f"jobs.status.{job_id}"].unsubscribed is True
+
+
+@pytest.mark.asyncio
+async def test_watch_job_status_include_current_not_found_returns_not_found(
+    grpc_orchestrator_stub: tuple[
+        job_orchestrator_pb2_grpc.JobOrchestratorStub,
+        list[tuple[str, bytes]],
+        dict[str, _StatusSubscription],
+        dict[str, dict[str, object]],
+    ]
+) -> None:
+    stub, _, _, _ = grpc_orchestrator_stub
+
+    with pytest.raises(grpc.aio.AioRpcError) as error:
+        call = stub.WatchJobStatus(
+            job_orchestrator_pb2.WatchJobStatusRequest(job_id=str(uuid4()), include_current=True)
+        )
+        await call.read()
+
+    assert error.value.code() == grpc.StatusCode.NOT_FOUND
 
 
 @pytest.mark.asyncio
