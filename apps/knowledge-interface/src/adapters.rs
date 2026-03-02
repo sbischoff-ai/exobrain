@@ -5,8 +5,8 @@ use async_trait::async_trait;
 use neo4rs::{query, ConfigBuilder, Graph, Txn};
 use qdrant_client::{
     qdrant::{
-        CreateCollectionBuilder, DeletePointsBuilder, Distance, PointId, PointStruct,
-        UpsertPointsBuilder, Value, VectorParamsBuilder,
+        value::Kind, Condition, CreateCollectionBuilder, DeletePointsBuilder, Distance, Filter,
+        PointId, PointStruct, SearchPointsBuilder, UpsertPointsBuilder, Value, VectorParamsBuilder,
     },
     Qdrant,
 };
@@ -650,11 +650,258 @@ impl GraphRepository for MemgraphQdrantGraphRepository {
 
     async fn find_entity_candidates(
         &self,
-        _query: &FindEntityCandidatesQuery,
-        _query_vector: Option<&[f32]>,
+        find_query: &FindEntityCandidatesQuery,
+        query_vector: Option<&[f32]>,
     ) -> Result<Vec<EntityCandidate>> {
-        Ok(Vec::new())
+        let allowed_visibilities = allowed_node_visibilities(Visibility::Private);
+        let names = find_query.names.clone();
+        let has_names = !names.is_empty();
+        let potential_type_ids = find_query.potential_type_ids.clone();
+        let has_type_filter = !potential_type_ids.is_empty();
+
+        let mut cypher = String::from(
+            "MATCH (e:Entity) WHERE e.user_id = $user_id AND e.visibility IN $allowed_visibilities",
+        );
+        if has_names {
+            cypher.push_str(" AND (");
+            cypher.push_str("ANY(name IN $names WHERE toLower(e.name) CONTAINS name)");
+            cypher.push_str(" OR ");
+            cypher.push_str(
+                "ANY(alias IN COALESCE(e.aliases, []) WHERE ANY(name IN $names WHERE toLower(alias) CONTAINS name))",
+            );
+            cypher.push(')');
+        }
+        if has_type_filter {
+            cypher.push_str(" AND e.type_id IN $potential_type_ids");
+        }
+        cypher.push_str(
+            " RETURN e.id AS id, e.name AS name, e.type_id AS type_id, e.aliases AS aliases",
+        );
+
+        let mut name_matches = self
+            .graph_store
+            .graph
+            .execute(
+                query(&cypher)
+                    .param("user_id", find_query.user_id.clone())
+                    .param("allowed_visibilities", allowed_visibilities)
+                    .param("names", names.clone())
+                    .param("potential_type_ids", potential_type_ids.clone()),
+            )
+            .await
+            .context("failed to fetch name candidates from memgraph")?;
+
+        let mut aggregated: HashMap<String, AggregatedCandidate> = HashMap::new();
+        while let Some(row) = name_matches.next().await? {
+            let id: String = row.get("id")?;
+            let entity_name: String = row.get("name")?;
+            let type_id: String = row.get("type_id")?;
+            let aliases: Option<Vec<String>> = row.get("aliases")?;
+
+            let (name_score, matched_tokens) =
+                compute_name_score(&names, &entity_name, aliases.as_deref());
+
+            let entry = aggregated
+                .entry(id.clone())
+                .or_insert_with(|| AggregatedCandidate {
+                    id: id.clone(),
+                    name: entity_name.clone(),
+                    type_id: type_id.clone(),
+                    name_score,
+                    semantic_score_weighted: 0.0,
+                    described_by_text: None,
+                    described_by_block_level: i64::MAX,
+                    matched_tokens: matched_tokens.clone(),
+                });
+
+            if name_score > entry.name_score {
+                entry.name_score = name_score;
+            }
+            if matched_tokens.len() > entry.matched_tokens.len() {
+                entry.matched_tokens = matched_tokens;
+            }
+        }
+
+        if let Some(vector) = query_vector {
+            let visibility_filter = Filter::should([
+                Condition::matches("visibility", "SHARED".to_string()),
+                Condition::matches("visibility", "PRIVATE".to_string()),
+            ]);
+            let search_limit = (find_query.limit.unwrap_or(10) as u64).saturating_mul(8);
+            let search = SearchPointsBuilder::new(
+                &self.vector_store.collection,
+                vector.to_vec(),
+                search_limit,
+            )
+            .with_payload(true)
+            .filter(Filter::must([
+                Condition::matches("user_id", find_query.user_id.clone()),
+                visibility_filter.into(),
+            ]));
+
+            let response = self
+                .vector_store
+                .client
+                .search_points(search)
+                .await
+                .context("failed to query qdrant semantic candidates")?;
+
+            for point in response.result {
+                let Some(root_entity_id) = payload_string(&point.payload, "root_entity_id") else {
+                    continue;
+                };
+                let block_level = payload_i64(&point.payload, "block_level").unwrap_or(99);
+                let text = payload_string(&point.payload, "text");
+                let level_weight = 1.0 / (1.0 + block_level as f64);
+                let weighted_semantic = (point.score as f64) * level_weight;
+
+                let entry = aggregated.entry(root_entity_id.clone()).or_insert_with(|| {
+                    AggregatedCandidate {
+                        id: root_entity_id,
+                        name: String::new(),
+                        type_id: String::new(),
+                        name_score: 0.0,
+                        semantic_score_weighted: weighted_semantic,
+                        described_by_text: text.clone(),
+                        described_by_block_level: block_level,
+                        matched_tokens: Vec::new(),
+                    }
+                });
+
+                if weighted_semantic > entry.semantic_score_weighted {
+                    entry.semantic_score_weighted = weighted_semantic;
+                }
+                if block_level < entry.described_by_block_level {
+                    entry.described_by_text = text;
+                    entry.described_by_block_level = block_level;
+                }
+            }
+        }
+
+        let ids: Vec<String> = aggregated.keys().cloned().collect();
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut entity_rows = self
+            .graph_store
+            .graph
+            .execute(query("MATCH (e:Entity) WHERE e.id IN $ids AND e.user_id = $user_id AND e.visibility IN $allowed_visibilities RETURN e.id AS id, e.name AS name, e.type_id AS type_id" )
+                .param("ids", ids)
+                .param("user_id", find_query.user_id.clone())
+                .param("allowed_visibilities", allowed_node_visibilities(Visibility::Private)))
+            .await
+            .context("failed to hydrate candidate display fields")?;
+
+        while let Some(row) = entity_rows.next().await? {
+            let id: String = row.get("id")?;
+            if let Some(entry) = aggregated.get_mut(&id) {
+                entry.name = row.get("name")?;
+                entry.type_id = row.get("type_id")?;
+            }
+        }
+
+        let mut candidates: Vec<EntityCandidate> = aggregated
+            .into_values()
+            .filter(|entry| !entry.name.is_empty() && !entry.type_id.is_empty())
+            .map(|entry| EntityCandidate {
+                id: entry.id,
+                name: entry.name,
+                described_by_text: entry.described_by_text,
+                score: (0.55 * entry.name_score) + (0.45 * entry.semantic_score_weighted),
+                type_id: entry.type_id,
+                matched_tokens: entry.matched_tokens,
+            })
+            .collect();
+
+        candidates.sort_by(|a, b| b.score.total_cmp(&a.score));
+        if let Some(limit) = find_query.limit {
+            candidates.truncate(limit);
+        }
+
+        Ok(candidates)
     }
+}
+
+#[derive(Debug, Clone)]
+struct AggregatedCandidate {
+    id: String,
+    name: String,
+    type_id: String,
+    name_score: f64,
+    semantic_score_weighted: f64,
+    described_by_text: Option<String>,
+    described_by_block_level: i64,
+    matched_tokens: Vec<String>,
+}
+
+fn compute_name_score(
+    names: &[String],
+    entity_name: &str,
+    aliases: Option<&[String]>,
+) -> (f64, Vec<String>) {
+    let normalized_name = entity_name.to_lowercase();
+    let alias_values: Vec<String> = aliases
+        .unwrap_or_default()
+        .iter()
+        .map(|alias| alias.to_lowercase())
+        .collect();
+
+    let mut total_score = 0.0;
+    let mut matched_tokens = Vec::new();
+    for token in names {
+        let mut token_score = 0.0;
+        if normalized_name == *token {
+            token_score = 1.0;
+        } else if normalized_name.contains(token) {
+            token_score = 0.85;
+        }
+
+        for alias in &alias_values {
+            let alias_score = if alias == token {
+                0.95
+            } else if alias.contains(token) {
+                0.75
+            } else {
+                0.0
+            };
+            if alias_score > token_score {
+                token_score = alias_score;
+            }
+        }
+
+        if token_score > 0.0 {
+            matched_tokens.push(token.clone());
+            total_score += token_score;
+        }
+    }
+
+    if names.is_empty() {
+        (0.0, matched_tokens)
+    } else {
+        (total_score / names.len() as f64, matched_tokens)
+    }
+}
+
+fn payload_string(payload: &HashMap<String, Value>, key: &str) -> Option<String> {
+    payload
+        .get(key)
+        .and_then(|value| value.kind.as_ref())
+        .and_then(|kind| match kind {
+            Kind::StringValue(value) => Some(value.clone()),
+            _ => None,
+        })
+}
+
+fn payload_i64(payload: &HashMap<String, Value>, key: &str) -> Option<i64> {
+    payload
+        .get(key)
+        .and_then(|value| value.kind.as_ref())
+        .and_then(|kind| match kind {
+            Kind::IntegerValue(value) => Some(*value),
+            Kind::DoubleValue(value) => Some(*value as i64),
+            _ => None,
+        })
 }
 
 fn to_point(embedded: &EmbeddedBlock) -> PointStruct {
@@ -843,7 +1090,8 @@ fn validate_edge_type(edge_type: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        allowed_node_visibilities, normalize_qdrant_grpc_url, validate_edge_type, MockEmbedder,
+        allowed_node_visibilities, compute_name_score, normalize_qdrant_grpc_url, payload_i64,
+        payload_string, validate_edge_type, MockEmbedder,
     };
     use crate::domain::Visibility;
     use crate::ports::Embedder;
@@ -885,6 +1133,44 @@ mod tests {
             .expect("mock embedding should succeed");
         assert_eq!(vectors.len(), 1);
         assert_eq!(vectors[0].len(), 3072);
+    }
+
+    #[test]
+    fn compute_name_score_prefers_exact_name_and_alias_matches() {
+        let names = vec!["ada".to_string(), "lovelace".to_string()];
+        let aliases = vec!["A. Lovelace".to_string(), "Augusta Ada".to_string()];
+
+        let (score, matched_tokens) = compute_name_score(&names, "Ada Lovelace", Some(&aliases));
+
+        assert!(score > 0.8);
+        assert_eq!(matched_tokens, names);
+    }
+
+    #[test]
+    fn payload_helpers_extract_expected_types() {
+        use qdrant_client::qdrant::value::Kind;
+        use qdrant_client::qdrant::Value;
+        use std::collections::HashMap;
+
+        let mut payload = HashMap::new();
+        payload.insert(
+            "text".to_string(),
+            Value {
+                kind: Some(Kind::StringValue("root block".to_string())),
+            },
+        );
+        payload.insert(
+            "block_level".to_string(),
+            Value {
+                kind: Some(Kind::IntegerValue(0)),
+            },
+        );
+
+        assert_eq!(
+            payload_string(&payload, "text").as_deref(),
+            Some("root block")
+        );
+        assert_eq!(payload_i64(&payload, "block_level"), Some(0));
     }
 
     #[test]
