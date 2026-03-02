@@ -11,8 +11,9 @@ from app.services.grpc import job_orchestrator_pb2, job_orchestrator_pb2_grpc
 class JobOrchestratorClient(JobPublisherProtocol):
     """gRPC client for the job-orchestrator EnqueueJob endpoint."""
 
-    def __init__(self, grpc_target: str) -> None:
+    def __init__(self, grpc_target: str, connect_timeout_seconds: float = 5.0) -> None:
         self._grpc_target = grpc_target
+        self._connect_timeout_seconds = connect_timeout_seconds
         self._channel: grpc.aio.Channel | None = None
         self._stub: job_orchestrator_pb2_grpc.JobOrchestratorStub | None = None
 
@@ -25,7 +26,7 @@ class JobOrchestratorClient(JobPublisherProtocol):
     async def enqueue_job(self, *, job_type: str, payload: dict[str, object]) -> str:
         stub = self._get_or_create_stub()
         request = self._build_request(job_type=job_type, payload=payload)
-        response = await stub.EnqueueJob(request)
+        response = await stub.EnqueueJob(request, timeout=self._connect_timeout_seconds)
         return response.job_id
 
     def _get_or_create_stub(self) -> job_orchestrator_pb2_grpc.JobOrchestratorStub:

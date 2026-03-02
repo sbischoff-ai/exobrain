@@ -56,8 +56,11 @@ Apply local migrations:
 
 Keep request subject patterns narrow enough that they do not also match events/DLQ subjects.
 - `WORKER_REPLICA_COUNT` (default: `1`, max concurrent worker processes)
-- `JOB_ORCHESTRATOR_API_HOST` (default: `0.0.0.0`)
-- `JOB_ORCHESTRATOR_API_PORT` (default: `50061`)
+- `JOB_ORCHESTRATOR_API_BIND_ADDRESS` (optional explicit bind target, e.g. `0.0.0.0:50061`)
+- `JOB_ORCHESTRATOR_API_HOST` (default: `0.0.0.0`, used when bind address not set)
+- `JOB_ORCHESTRATOR_API_PORT` (default: `50061`, used when bind address not set)
+- `JOB_ORCHESTRATOR_API_ENABLED` (default: `true`, run API process)
+- `JOB_ORCHESTRATOR_WORKER_ENABLED` (default: `true`, run worker process)
 - `KNOWLEDGE_INTERFACE_GRPC_TARGET` (default: `localhost:50051`)
 - `KNOWLEDGE_INTERFACE_CONNECT_TIMEOUT_SECONDS` (default: `5.0`)
 - `APP_ENV` (default: `local`, influences default logging level)

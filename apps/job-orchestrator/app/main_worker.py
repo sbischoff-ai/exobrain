@@ -17,6 +17,10 @@ logger = logging.getLogger(__name__)
 
 
 async def main() -> None:
+    if not settings.job_orchestrator_worker_enabled:
+        logger.info("job orchestrator worker disabled via config")
+        return
+
     logger.info("starting job orchestrator", extra={"app_env": settings.app_env, "log_level": settings.effective_log_level})
 
     db = Database(settings.job_orchestrator_db_dsn, reshape_schema_query=settings.reshape_schema_query)

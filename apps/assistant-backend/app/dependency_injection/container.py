@@ -62,6 +62,7 @@ def build_container(settings: Settings) -> punq.Container:
         JobPublisherProtocol,
         factory=lambda: JobOrchestratorClient(
             grpc_target=settings.job_orchestrator_grpc_target,
+            connect_timeout_seconds=settings.job_orchestrator_connect_timeout_seconds,
         ),
         scope=punq.Scope.singleton,
     )

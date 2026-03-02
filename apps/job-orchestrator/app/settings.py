@@ -31,9 +31,21 @@ class Settings(BaseSettings):
         alias="KNOWLEDGE_INTERFACE_CONNECT_TIMEOUT_SECONDS",
         gt=0,
     )
+    job_orchestrator_api_bind_address: str | None = Field(
+        default=None,
+        alias="JOB_ORCHESTRATOR_API_BIND_ADDRESS",
+    )
     job_orchestrator_api_host: str = Field(default="0.0.0.0", alias="JOB_ORCHESTRATOR_API_HOST")
     job_orchestrator_api_port: int = Field(default=50061, alias="JOB_ORCHESTRATOR_API_PORT", ge=1, le=65535)
+    job_orchestrator_api_enabled: bool = Field(default=True, alias="JOB_ORCHESTRATOR_API_ENABLED")
+    job_orchestrator_worker_enabled: bool = Field(default=True, alias="JOB_ORCHESTRATOR_WORKER_ENABLED")
     reshape_schema_query: str = Field(default="", alias="RESHAPE_SCHEMA_QUERY")
+
+    @property
+    def job_orchestrator_api_bind_target(self) -> str:
+        if self.job_orchestrator_api_bind_address:
+            return self.job_orchestrator_api_bind_address
+        return f"{self.job_orchestrator_api_host}:{self.job_orchestrator_api_port}"
 
     @property
     def effective_log_level(self) -> str:

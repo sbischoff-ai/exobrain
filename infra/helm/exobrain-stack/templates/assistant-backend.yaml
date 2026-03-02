@@ -24,18 +24,14 @@ spec:
               value: {{ .Values.assistantBackend.env.APP_ENV | quote }}
             - name: LOG_LEVEL
               value: {{ .Values.assistantBackend.env.LOG_LEVEL | quote }}
-            - name: KNOWLEDGE_INTERFACE_ADDR
-              value: {{ printf "exobrain-knowledge-interface:%v" .Values.knowledgeInterface.service.port | quote }}
-            - name: METASTORE_DSN
-              value: {{ .Values.assistantBackend.env.METASTORE_DSN | quote }}
             - name: ASSISTANT_DB_DSN
               value: {{ .Values.assistantBackend.env.ASSISTANT_DB_DSN | quote }}
             - name: ASSISTANT_CACHE_REDIS_URL
               value: {{ .Values.assistantBackend.env.ASSISTANT_CACHE_REDIS_URL | quote }}
-            - name: EXOBRAIN_NATS_URL
-              value: {{ .Values.assistantBackend.env.EXOBRAIN_NATS_URL | quote }}
-            - name: JOBS_SUBJECT_PREFIX
-              value: {{ .Values.assistantBackend.env.JOBS_SUBJECT_PREFIX | quote }}
+            - name: JOB_ORCHESTRATOR_GRPC_TARGET
+              value: {{ printf "exobrain-job-orchestrator-api:%v" .Values.jobOrchestrator.api.service.port | quote }}
+            - name: JOB_ORCHESTRATOR_CONNECT_TIMEOUT_SECONDS
+              value: {{ .Values.assistantBackend.env.JOB_ORCHESTRATOR_CONNECT_TIMEOUT_SECONDS | quote }}
             - name: MAIN_AGENT_MODEL
               value: {{ .Values.assistantBackend.env.MAIN_AGENT_MODEL | quote }}
             - name: MODEL_PROVIDER_BASE_URL
