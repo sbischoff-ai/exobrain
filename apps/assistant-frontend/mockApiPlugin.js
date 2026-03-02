@@ -42,7 +42,7 @@ function buildSeedState() {
     ]
   };
 
-  return { entries, messagesByReference, sessions: new Set() };
+  return { entries, messagesByReference, sessions: new Set(), streams: new Map() };
 }
 
 function parseCookies(cookieHeader = '') {
@@ -66,21 +66,9 @@ function json(res, status, payload, headers = {}) {
   res.end(JSON.stringify(payload));
 }
 
-function sendTextStream(res, chunks) {
-  res.statusCode = 200;
-  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-  res.setHeader('Transfer-Encoding', 'chunked');
-
-  let index = 0;
-  const timer = setInterval(() => {
-    if (index >= chunks.length) {
-      clearInterval(timer);
-      res.end();
-      return;
-    }
-    res.write(chunks[index]);
-    index += 1;
-  }, 60);
+function sendSseEvent(res, eventName, payload) {
+  res.write(`event: ${eventName}\n`);
+  res.write(`data: ${JSON.stringify(payload)}\n\n`);
 }
 
 async function parseBody(req) {
@@ -281,7 +269,46 @@ export function createMockApiPlugin({ enabled }) {
             sequence: nextSequence + 1
           });
 
-          sendTextStream(res, ['Mock response: ', String(body.message || ''), '\n\n(UI-only mode)']);
+          const streamId = randomUUID();
+          state.streams.set(streamId, {
+            chunks: ['Mock response: ', String(body.message || ''), '\n\n(UI-only mode)']
+          });
+
+          json(res, 200, { stream_id: streamId });
+          return;
+        }
+
+        if (pathname.startsWith('/api/chat/stream/') && req.method === 'GET') {
+          const streamId = pathname.slice('/api/chat/stream/'.length);
+          const stream = state.streams.get(streamId);
+          if (!stream) {
+            json(res, 404, { detail: 'unknown stream id' });
+            return;
+          }
+
+          res.statusCode = 200;
+          res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+          res.setHeader('Cache-Control', 'no-cache');
+          res.setHeader('Connection', 'keep-alive');
+
+          let index = 0;
+          const timer = setInterval(() => {
+            if (index >= stream.chunks.length) {
+              clearInterval(timer);
+              sendSseEvent(res, 'done', { stream_id: streamId });
+              res.end();
+              state.streams.delete(streamId);
+              return;
+            }
+
+            sendSseEvent(res, 'message_chunk', { text: stream.chunks[index] });
+            index += 1;
+          }, 60);
+
+          req.on('close', () => {
+            clearInterval(timer);
+          });
+
           return;
         }
 
