@@ -238,7 +238,33 @@ describe('root page', () => {
     });
   });
 
-  it('starts knowledge update watch and spins icon until done event', async () => {
+  it('disables knowledge update when there are no new today messages', async () => {
+    window.sessionStorage.setItem(
+      'exobrain.assistant.session',
+      JSON.stringify({
+        user: { name: 'Test User', email: 'test.user@exobrain.local' },
+        journalReference: '2026/02/19',
+        messageCount: 0,
+        messages: []
+      })
+    );
+
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(jsonResponse({ name: 'Test User', email: 'test.user@exobrain.local' }))
+      .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19', message_count: 0 }))
+      .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
+      .mockResolvedValueOnce(jsonResponse([{ reference: '2026/02/19' }]));
+
+    render(Page);
+
+    await waitFor(() => {
+      const updateButton = screen.getByRole('button', { name: 'Update knowledge base' });
+      expect(updateButton).toBeDisabled();
+      expect(updateButton).toHaveAttribute('title', 'nothing to update');
+    });
+  });
+
+  it('starts knowledge update watch, then marks today baseline on success', async () => {
     window.sessionStorage.setItem(
       'exobrain.assistant.session',
       JSON.stringify({
@@ -254,7 +280,13 @@ describe('root page', () => {
     const fetchSpy = vi
       .spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(jsonResponse({ name: 'Test User', email: 'test.user@exobrain.local' }))
-      .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19', message_count: 0 }))
+      .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19', message_count: 2 }))
+      .mockResolvedValueOnce(
+        jsonResponse([
+          { id: 'm1', role: 'assistant', content: 'server hello', sequence: 2 },
+          { id: 'm2', role: 'user', content: 'server hi', sequence: 1 }
+        ])
+      )
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
       .mockResolvedValueOnce(jsonResponse([{ reference: '2026/02/19' }]))
       .mockResolvedValueOnce(jsonResponse({ job_id: 'job-123' }));
@@ -277,16 +309,18 @@ describe('root page', () => {
     expect(fetchSpy).toHaveBeenCalledWith('/api/knowledge/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ journal_reference: '2026/02/19' })
+      body: JSON.stringify({})
     });
 
     const source = MockEventSource.latest!;
-    source.emit('done', { job_id: 'job-123', state: 'completed', terminal: true });
+    source.emit('status', { job_id: 'job-123', state: 'STARTED', attempt: 1, detail: 'working', terminal: false, emitted_at: '2026-02-19T00:00:00Z' });
+    source.emit('done', { job_id: 'job-123', state: 'SUCCEEDED', terminal: true });
 
     await waitFor(() => {
-      expect(updateButton).toBeEnabled();
-      expect(updateButton).toHaveAttribute('title', 'Update knowledge base');
+      expect(updateButton).toBeDisabled();
+      expect(updateButton).toHaveAttribute('title', 'nothing to update');
       expect(updateButton.querySelector('svg')).not.toHaveClass('spinning');
+      expect(screen.getByText('Knowledge base updated successfully.')).toBeInTheDocument();
     });
   });
 
