@@ -9,7 +9,13 @@ import pytest
 from app.services.grpc import job_orchestrator_pb2
 
 from app.core.settings import Settings
-from app.services.knowledge_service import KnowledgeService
+from app.services.knowledge_service import (
+    KnowledgeJobAccessDeniedError,
+    KnowledgeJobNotFoundError,
+    KnowledgeService,
+    KnowledgeUpstreamUnavailableError,
+    KnowledgeWatchError,
+)
 
 
 class FakeDatabase:
@@ -60,6 +66,17 @@ class FakeJobPublisher:
             terminal=True,
             emitted_at="2026-02-19T10:01:00Z",
         )
+
+
+class CustomEventJobPublisher(FakeJobPublisher):
+    def __init__(self, events: list[job_orchestrator_pb2.JobStatusEvent]) -> None:
+        super().__init__()
+        self._events = events
+
+    async def watch_job_status(self, *, job_id: str, include_current: bool = True) -> AsyncIterator[job_orchestrator_pb2.JobStatusEvent]:
+        self.watch_calls.append({"job_id": job_id, "include_current": include_current})
+        for event in self._events:
+            yield event
 
 
 @pytest.mark.asyncio
@@ -224,6 +241,52 @@ async def test_watch_update_job_maps_orchestrator_events_to_stream_events() -> N
     ]
 
 
+@pytest.mark.asyncio
+async def test_watch_update_job_stops_after_first_terminal_state() -> None:
+    database = FakeDatabase([])
+    publisher = CustomEventJobPublisher(
+        [
+            job_orchestrator_pb2.JobStatusEvent(
+                job_id="job-1",
+                state=job_orchestrator_pb2.SUCCEEDED,
+                attempt=1,
+                detail="done",
+                terminal=True,
+                emitted_at="2026-02-19T10:01:00Z",
+            ),
+            job_orchestrator_pb2.JobStatusEvent(
+                job_id="job-1",
+                state=job_orchestrator_pb2.FAILED_FINAL,
+                attempt=2,
+                detail="should not be emitted",
+                terminal=True,
+                emitted_at="2026-02-19T10:02:00Z",
+            ),
+        ]
+    )
+    service = KnowledgeService(database=database, job_publisher=publisher, settings=Settings())
+
+    events = [event async for event in service.watch_update_job(user_id="user-1", job_id="job-1")]
+
+    assert events == [
+        {
+            "type": "status",
+            "data": {
+                "job_id": "job-1",
+                "state": "SUCCEEDED",
+                "attempt": 1,
+                "detail": "done",
+                "terminal": True,
+                "emitted_at": "2026-02-19T10:01:00Z",
+            },
+        },
+        {
+            "type": "done",
+            "data": {"job_id": "job-1", "state": "SUCCEEDED", "terminal": True},
+        },
+    ]
+
+
 
 class FakeAioRpcError(grpc.aio.AioRpcError):
     def __init__(self, code: grpc.StatusCode) -> None:
@@ -246,11 +309,20 @@ class ErroringJobPublisher(FakeJobPublisher):
 
 
 @pytest.mark.asyncio
-async def test_watch_update_job_maps_grpc_errors_to_domain_errors() -> None:
-    from app.services.knowledge_service import KnowledgeJobNotFoundError
-
+@pytest.mark.parametrize(
+    ("status_code", "expected_error"),
+    [
+        (grpc.StatusCode.NOT_FOUND, KnowledgeJobNotFoundError),
+        (grpc.StatusCode.PERMISSION_DENIED, KnowledgeJobAccessDeniedError),
+        (grpc.StatusCode.UNAUTHENTICATED, KnowledgeJobAccessDeniedError),
+        (grpc.StatusCode.DEADLINE_EXCEEDED, KnowledgeUpstreamUnavailableError),
+        (grpc.StatusCode.UNAVAILABLE, KnowledgeUpstreamUnavailableError),
+        (grpc.StatusCode.INTERNAL, KnowledgeWatchError),
+    ],
+)
+async def test_watch_update_job_maps_grpc_errors_to_domain_errors(status_code: grpc.StatusCode, expected_error: type[Exception]) -> None:
     database = FakeDatabase([])
-    service = KnowledgeService(database=database, job_publisher=ErroringJobPublisher(grpc.StatusCode.NOT_FOUND), settings=Settings())
+    service = KnowledgeService(database=database, job_publisher=ErroringJobPublisher(status_code), settings=Settings())
 
-    with pytest.raises(KnowledgeJobNotFoundError):
+    with pytest.raises(expected_error):
         _ = [event async for event in service.watch_update_job(user_id="user-1", job_id="job-1")]

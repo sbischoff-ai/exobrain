@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 import pytest
 
@@ -11,6 +11,12 @@ from app.api.routers import knowledge as knowledge_router
 from app.api.schemas.auth import UnifiedPrincipal
 from app.api.schemas.knowledge import KnowledgeUpdateRequest
 from app.services.contracts import KnowledgeServiceProtocol
+from app.services.knowledge_service import (
+    KnowledgeJobAccessDeniedError,
+    KnowledgeJobNotFoundError,
+    KnowledgeUpstreamUnavailableError,
+    KnowledgeWatchError,
+)
 from tests.conftest import build_test_container, build_test_request
 
 
@@ -118,3 +124,73 @@ def test_api_knowledge_watch_streams_sse_events() -> None:
     assert '"state": "STARTED"' in response.text
     assert "event: done" in response.text
     assert service.watch_calls == [{"user_id": "user-1", "job_id": "job-knowledge-1", "include_current": True}]
+
+
+@pytest.mark.parametrize(
+    ("error", "expected_status"),
+    [
+        (KnowledgeJobNotFoundError("missing"), 404),
+        (KnowledgeJobAccessDeniedError("denied"), 403),
+        (KnowledgeUpstreamUnavailableError("unavailable"), 503),
+        (KnowledgeWatchError("failed"), 502),
+    ],
+)
+def test_api_knowledge_watch_maps_domain_errors_to_http(error: Exception, expected_status: int) -> None:
+    principal = UnifiedPrincipal(user_id="user-1", email="u@example.com", display_name="User")
+
+    class ErroringKnowledgeService(FakeKnowledgeService):
+        async def watch_update_job(
+            self,
+            *,
+            user_id: str,
+            job_id: str,
+            include_current: bool = True,
+        ) -> AsyncIterator[dict[str, object]]:
+            self.watch_calls.append({"user_id": user_id, "job_id": job_id, "include_current": include_current})
+            raise error
+            if False:
+                yield {"type": "status", "data": {}}
+
+    service = ErroringKnowledgeService()
+    container = build_test_container({KnowledgeServiceProtocol: service})
+
+    app = FastAPI()
+
+    @app.middleware("http")
+    async def attach_container(request, call_next):
+        request.app.state.container = container
+        return await call_next(request)
+
+    app.dependency_overrides[get_required_auth_context] = lambda: principal
+    app.include_router(knowledge_router.router, prefix="/api")
+
+    with TestClient(app) as client:
+        response = client.get("/api/knowledge/update/job-knowledge-1/watch")
+
+    assert response.status_code == expected_status
+    assert service.watch_calls == [{"user_id": "user-1", "job_id": "job-knowledge-1", "include_current": True}]
+
+
+def test_api_knowledge_watch_requires_auth() -> None:
+    service = FakeKnowledgeService()
+    container = build_test_container({KnowledgeServiceProtocol: service})
+
+    app = FastAPI()
+
+    @app.middleware("http")
+    async def attach_container(request, call_next):
+        request.app.state.container = container
+        return await call_next(request)
+
+    async def deny_auth() -> UnifiedPrincipal:
+        raise HTTPException(status_code=401, detail="authentication required")
+
+    app.dependency_overrides[get_required_auth_context] = deny_auth
+    app.include_router(knowledge_router.router, prefix="/api")
+
+    with TestClient(app) as client:
+        response = client.get("/api/knowledge/update/job-knowledge-1/watch")
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "authentication required"}
+    assert service.watch_calls == []
