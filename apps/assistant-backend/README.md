@@ -2,6 +2,8 @@
 
 FastAPI service for auth, chat orchestration, journal APIs, and knowledge-base update workflows. Includes `/api/knowledge/update` to enqueue updates and `/api/knowledge/update/{job_id}/watch` to stream lifecycle events via SSE from job-orchestrator.
 
+Knowledge update stream contract: [`docs/knowledge-update-sse-contract.md`](docs/knowledge-update-sse-contract.md).
+
 ## What this service is
 
 The backend follows layered boundaries:
