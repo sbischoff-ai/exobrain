@@ -1,0 +1,154 @@
+{
+  "entities": [
+    {
+      "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+      "type_id": "node.task",
+      "universe_id": "__UNIVERSE_ID__",
+      "properties": [
+        {
+          "key": "name",
+          "string_value": "Plan Exobrain mobile app"
+        }
+      ],
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    }
+  ],
+  "blocks": [
+    {
+      "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",
+      "type_id": "node.block",
+      "properties": [
+        {
+          "key": "text",
+          "string_value": "## Plan overview\n\nBuild and ship a focused Exobrain mobile app that captures ideas quickly, turns them into structured knowledge, and keeps context synchronized with the existing assistant experience. The plan should prioritize fast capture, trustworthy retrieval, and clear rollout milestones to de-risk delivery."
+        }
+      ],
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    },
+    {
+      "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2",
+      "type_id": "node.block",
+      "properties": [
+        {
+          "key": "text",
+          "string_value": "## Product goals and success metrics\n\nThe mobile app should optimize for one-handed capture in under ten seconds, including voice-to-text and camera notes. Success is measured by weekly active mobile users, median capture latency under 1.5 seconds, and at least 30% of captured items being revisited through search or assistant recall within 14 days."
+        }
+      ],
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    },
+    {
+      "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb3",
+      "type_id": "node.block",
+      "properties": [
+        {
+          "key": "text",
+          "string_value": "## Technical architecture\n\nUse the existing assistant-backend APIs for auth/session continuity and stream capture events into the knowledge ingestion pipeline. Mobile clients should stage outbound mutations locally, replay on connectivity recovery, and annotate each note with source metadata (platform, capture mode, timestamp) to improve GraphRAG ranking features."
+        }
+      ],
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    },
+    {
+      "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb4",
+      "type_id": "node.block",
+      "properties": [
+        {
+          "key": "text",
+          "string_value": "Prototype should cover iOS first using a thin vertical slice: sign-in, quick capture composer, and timeline retrieval. Instrument onboarding funnel events from install to first successful capture to identify friction before Android development starts."
+        }
+      ],
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    },
+    {
+      "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb5",
+      "type_id": "node.block",
+      "properties": [
+        {
+          "key": "text",
+          "string_value": "Define offline conflict rules so edits made on desktop and mobile merge deterministically. Prefer immutable event append + materialized view reconciliation instead of last-write-wins, which can erase user intent for nuanced notes and task metadata."
+        }
+      ],
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    },
+    {
+      "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb6",
+      "type_id": "node.block",
+      "properties": [
+        {
+          "key": "text",
+          "string_value": "## Delivery roadmap\n\nPhase 1 (4 weeks): discovery + UX prototype. Phase 2 (6 weeks): iOS MVP with capture/retrieval + telemetry. Phase 3 (4 weeks): hardening, beta rollout, and GraphRAG relevance tuning from real usage traces."
+        }
+      ],
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    },
+    {
+      "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb7",
+      "type_id": "node.block",
+      "properties": [
+        {
+          "key": "text",
+          "string_value": "Run a private beta with power users who already rely on journal + knowledge features. Collect qualitative feedback on capture speed, assistant answer relevance, and trust in cross-device consistency before public launch decisions."
+        }
+      ],
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    }
+  ],
+  "edges": [
+    {
+      "from_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+      "to_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",
+      "edge_type": "DESCRIBED_BY",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    },
+    {
+      "from_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",
+      "to_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2",
+      "edge_type": "SUMMARIZES",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    },
+    {
+      "from_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",
+      "to_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb3",
+      "edge_type": "SUMMARIZES",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    },
+    {
+      "from_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",
+      "to_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb6",
+      "edge_type": "SUMMARIZES",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    },
+    {
+      "from_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb3",
+      "to_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb4",
+      "edge_type": "SUMMARIZES",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    },
+    {
+      "from_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb3",
+      "to_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb5",
+      "edge_type": "SUMMARIZES",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    },
+    {
+      "from_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb6",
+      "to_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb7",
+      "edge_type": "SUMMARIZES",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    }
+  ]
+}
