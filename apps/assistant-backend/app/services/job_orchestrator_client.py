@@ -22,9 +22,9 @@ class JobOrchestratorClient(JobPublisherProtocol):
             self._channel = None
             self._stub = None
 
-    async def enqueue_job(self, *, job_type: str, user_id: str, payload: dict[str, object]) -> str:
+    async def enqueue_job(self, *, job_type: str, payload: dict[str, object]) -> str:
         stub = self._get_or_create_stub()
-        request = self._build_request(job_type=job_type, user_id=user_id, payload=payload)
+        request = self._build_request(job_type=job_type, payload=payload)
         response = await stub.EnqueueJob(request)
         return response.job_id
 
@@ -35,33 +35,8 @@ class JobOrchestratorClient(JobPublisherProtocol):
         return self._stub
 
     @staticmethod
-    def _build_request(*, job_type: str, user_id: str, payload: dict[str, object]) -> job_orchestrator_pb2.EnqueueJobRequest:
-        if job_type == "knowledge.update":
-            messages = []
-            for message in payload.get("messages", []):
-                if not isinstance(message, dict):
-                    continue
-                messages.append(
-                    job_orchestrator_pb2.KnowledgeUpdateMessage(
-                        role=str(message.get("role") or ""),
-                        content=str(message.get("content") or ""),
-                        sequence=int(message.get("sequence") or 0),
-                        created_at=str(message.get("created_at") or ""),
-                    )
-                )
-            knowledge_update = job_orchestrator_pb2.KnowledgeUpdatePayload(
-                journal_reference=str(payload.get("journal_reference") or ""),
-                messages=messages,
-                requested_by_user_id=str(payload.get("requested_by_user_id") or ""),
-            )
-            return job_orchestrator_pb2.EnqueueJobRequest(
-                job_type=job_type,
-                user_id=user_id,
-                knowledge_update=knowledge_update,
-            )
-
+    def _build_request(*, job_type: str, payload: dict[str, object]) -> job_orchestrator_pb2.EnqueueJobRequest:
         return job_orchestrator_pb2.EnqueueJobRequest(
             job_type=job_type,
-            user_id=user_id,
             payload_json=json.dumps(payload),
         )

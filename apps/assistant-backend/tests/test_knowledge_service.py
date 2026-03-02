@@ -9,14 +9,20 @@ from app.services.knowledge_service import KnowledgeService
 
 
 class FakeDatabase:
-    def __init__(self, rows: list[dict[str, object]]) -> None:
+    def __init__(self, rows: list[dict[str, object]], *, user_name: str = "Test User") -> None:
         self.rows = rows
+        self.user_name = user_name
         self.fetch_calls: list[tuple[str, tuple[object, ...]]] = []
+        self.fetchrow_calls: list[tuple[str, tuple[object, ...]]] = []
         self.execute_calls: list[tuple[str, tuple[object, ...]]] = []
 
     async def fetch(self, query: str, *args: object):
         self.fetch_calls.append((query, args))
         return self.rows
+
+    async def fetchrow(self, query: str, *args: object):
+        self.fetchrow_calls.append((query, args))
+        return {"name": self.user_name}
 
     async def execute(self, query: str, *args: object):
         self.execute_calls.append((query, args))
@@ -27,11 +33,10 @@ class FakeJobPublisher:
     def __init__(self) -> None:
         self.calls: list[dict[str, object]] = []
 
-    async def enqueue_job(self, *, job_type: str, user_id: str, payload: dict[str, object]) -> str:
+    async def enqueue_job(self, *, job_type: str, payload: dict[str, object]) -> str:
         self.calls.append(
             {
                 "job_type": job_type,
-                "user_id": user_id,
                 "payload": payload,
             }
         )
@@ -82,7 +87,7 @@ async def test_enqueue_update_job_filters_and_splits_uncommitted_sequences() -> 
             "previous_committed": None,
         },
     ]
-    database = FakeDatabase(rows)
+    database = FakeDatabase(rows, user_name="Ada")
     publisher = FakeJobPublisher()
     settings = Settings()
     settings.knowledge_update_max_tokens = 100
@@ -93,11 +98,12 @@ async def test_enqueue_update_job_filters_and_splits_uncommitted_sequences() -> 
     assert job_id == "job-1"
     assert len(publisher.calls) == 3
     assert publisher.calls[0]["payload"]["journal_reference"] == "2026/02/19"
-    assert publisher.calls[0]["user_id"] == "user-1"
+    assert publisher.calls[0]["payload"]["requested_for_user"] == {"user_id": "user-1", "name": "Ada"}
     assert [m["sequence"] for m in publisher.calls[0]["payload"]["messages"]] == [1]
     assert [m["sequence"] for m in publisher.calls[1]["payload"]["messages"]] == [3]
     assert publisher.calls[2]["payload"]["journal_reference"] == "2026/02/20"
     assert database.fetch_calls[0][1] == ("user-1", None)
+    assert database.fetchrow_calls[0][1] == ("user-1",)
     assert len(database.execute_calls) == 3
 
 
