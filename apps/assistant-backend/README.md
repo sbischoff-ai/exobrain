@@ -93,11 +93,11 @@ This keeps enqueue validation and subject mapping centralized in job-orchestrato
 Use a staged cutover so deployments do not run mixed producer behavior (some instances publishing directly while others use gRPC):
 
 1. Deploy job-orchestrator API (`EnqueueJob`) everywhere and verify gRPC readiness.
-2. Enable assistant-backend orchestrator enqueue behind a feature flag (or rollout wave) while direct-producer path remains available for immediate rollback.
+2. Roll out assistant-backend instances in waves only after orchestrator API health checks pass in the target environment.
 3. Complete rollout to 100% of assistant-backend instances and confirm all new jobs are arriving via `EnqueueJob`-validated envelopes.
-4. Remove/disable the legacy direct-producer path only after all environments are fully cut over.
+4. Decommission any legacy direct-producer deployment artifacts only after all environments are fully cut over.
 
-Recommended flag naming pattern: `KNOWLEDGE_UPDATE_USE_ORCHESTRATOR_ENQUEUE=true` during transition windows.
+If your deployment platform supports release flags, use them only as rollout controls (not as a long-term dual-producer mode).
 
 ## Troubleshooting
 
