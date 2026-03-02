@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
@@ -15,10 +17,16 @@ from tests.conftest import build_test_container, build_test_request
 class FakeKnowledgeService:
     def __init__(self) -> None:
         self.calls: list[dict[str, str | None]] = []
+        self.watch_calls: list[str] = []
 
     async def enqueue_update_job(self, *, user_id: str, journal_reference: str | None = None) -> str:
         self.calls.append({"user_id": user_id, "journal_reference": journal_reference})
         return "job-knowledge-1"
+
+    async def watch_update_job(self, *, job_id: str) -> AsyncIterator[dict[str, object]]:
+        self.watch_calls.append(job_id)
+        yield {"type": "status", "data": {"job_id": job_id, "state": "STARTED", "attempt": 1, "detail": "working", "terminal": False, "emitted_at": "2026-02-19T10:00:00Z"}}
+        yield {"type": "done", "data": {"job_id": job_id, "state": "SUCCEEDED", "terminal": True}}
 
 
 @pytest.mark.asyncio
@@ -78,3 +86,29 @@ def test_api_knowledge_update_surfaces_job_id() -> None:
     assert response.status_code == 200
     assert response.json()["job_id"] == "job-knowledge-1"
     assert service.calls == [{"user_id": "user-1", "journal_reference": "2026/02/19"}]
+
+
+def test_api_knowledge_watch_streams_sse_events() -> None:
+    principal = UnifiedPrincipal(user_id="user-1", email="u@example.com", display_name="User")
+    service = FakeKnowledgeService()
+    container = build_test_container({KnowledgeServiceProtocol: service})
+
+    app = FastAPI()
+
+    @app.middleware("http")
+    async def attach_container(request, call_next):
+        request.app.state.container = container
+        return await call_next(request)
+
+    app.dependency_overrides[get_required_auth_context] = lambda: principal
+    app.include_router(knowledge_router.router, prefix="/api")
+
+    with TestClient(app) as client:
+        response = client.get("/api/knowledge/update/job-knowledge-1/watch")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert "event: status" in response.text
+    assert '"state": "STARTED"' in response.text
+    assert "event: done" in response.text
+    assert service.watch_calls == ["job-knowledge-1"]

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
 import pytest
+
+from app.services.grpc import job_orchestrator_pb2
 
 from app.core.settings import Settings
 from app.services.knowledge_service import KnowledgeService
@@ -26,6 +29,7 @@ class FakeDatabase:
 class FakeJobPublisher:
     def __init__(self) -> None:
         self.calls: list[dict[str, object]] = []
+        self.watch_calls: list[dict[str, object]] = []
 
     async def enqueue_job(self, *, user_id: str, job_type: str, payload: dict[str, object]) -> str:
         self.calls.append(
@@ -36,6 +40,25 @@ class FakeJobPublisher:
             }
         )
         return f"job-{len(self.calls)}"
+
+    async def watch_job_status(self, *, job_id: str, include_current: bool = True) -> AsyncIterator[job_orchestrator_pb2.JobStatusEvent]:
+        self.watch_calls.append({"job_id": job_id, "include_current": include_current})
+        yield job_orchestrator_pb2.JobStatusEvent(
+            job_id=job_id,
+            state=job_orchestrator_pb2.STARTED,
+            attempt=1,
+            detail="working",
+            terminal=False,
+            emitted_at="2026-02-19T10:00:00Z",
+        )
+        yield job_orchestrator_pb2.JobStatusEvent(
+            job_id=job_id,
+            state=job_orchestrator_pb2.SUCCEEDED,
+            attempt=1,
+            detail="done",
+            terminal=True,
+            emitted_at="2026-02-19T10:01:00Z",
+        )
 
 
 @pytest.mark.asyncio
@@ -155,3 +178,46 @@ def test_count_text_tokens_rounds_character_division() -> None:
     assert KnowledgeService._count_text_tokens("abcd") == 1
     assert KnowledgeService._count_text_tokens("abcde") == 1
     assert KnowledgeService._count_text_tokens("abcdef") == 2
+
+
+@pytest.mark.asyncio
+async def test_watch_update_job_maps_orchestrator_events_to_stream_events() -> None:
+    database = FakeDatabase([])
+    publisher = FakeJobPublisher()
+    service = KnowledgeService(database=database, job_publisher=publisher, settings=Settings())
+
+    events = [event async for event in service.watch_update_job(job_id="job-1")]
+
+    assert publisher.watch_calls == [{"job_id": "job-1", "include_current": True}]
+    assert events == [
+        {
+            "type": "status",
+            "data": {
+                "job_id": "job-1",
+                "state": "STARTED",
+                "attempt": 1,
+                "detail": "working",
+                "terminal": False,
+                "emitted_at": "2026-02-19T10:00:00Z",
+            },
+        },
+        {
+            "type": "status",
+            "data": {
+                "job_id": "job-1",
+                "state": "SUCCEEDED",
+                "attempt": 1,
+                "detail": "done",
+                "terminal": True,
+                "emitted_at": "2026-02-19T10:01:00Z",
+            },
+        },
+        {
+            "type": "done",
+            "data": {
+                "job_id": "job-1",
+                "state": "SUCCEEDED",
+                "terminal": True,
+            },
+        },
+    ]

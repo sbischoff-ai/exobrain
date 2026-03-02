@@ -1,10 +1,16 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
 from typing import Any
 
 from app.core.settings import Settings
 from app.services.contracts import DatabaseServiceProtocol, JobPublisherProtocol
+from app.services.grpc import job_orchestrator_pb2
+from app.services.knowledge_stream import (
+    KnowledgeUpdateDoneEventData,
+    KnowledgeUpdateStatusEventData,
+    KnowledgeUpdateStreamEvent,
+)
 
 
 class KnowledgeService:
@@ -40,6 +46,29 @@ class KnowledgeService:
             await self._mark_messages_committed([row["id"] for row in sequence])
 
         return job_ids[0]
+
+
+    async def watch_update_job(self, *, job_id: str) -> AsyncIterator[KnowledgeUpdateStreamEvent]:
+        async for event in self._job_publisher.watch_job_status(job_id=job_id, include_current=True):
+            state_name = job_orchestrator_pb2.JobLifecycleState.Name(event.state)
+            status_event: KnowledgeUpdateStatusEventData = {
+                "job_id": event.job_id,
+                "state": state_name,
+                "attempt": event.attempt,
+                "detail": event.detail,
+                "terminal": event.terminal,
+                "emitted_at": event.emitted_at,
+            }
+            yield {"type": "status", "data": status_event}
+
+            if event.terminal:
+                done_event: KnowledgeUpdateDoneEventData = {
+                    "job_id": event.job_id,
+                    "state": state_name,
+                    "terminal": event.terminal,
+                }
+                yield {"type": "done", "data": done_event}
+                return
 
     async def _list_uncommitted_message_sequences(
         self,
