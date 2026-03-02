@@ -57,9 +57,10 @@ On startup, the service checks whether the shared root graph exists in Memgraph 
 
 All graph writes now flow through a single application path (`KnowledgeApplication::upsert_graph_delta`) that:
 
-1. Validates the delta against schema type/property/rule contracts.
-2. Generates embeddings for `node.block` nodes.
-3. Writes to Memgraph and Qdrant as one coordinated operation.
+1. Ensures each distinct `user_id` in the incoming delta has starter graph initialization; when this path must initialize implicitly and no richer profile exists, it deterministically uses `user_id` as `user_name`.
+2. Validates the delta against schema type/property/rule contracts.
+3. Generates embeddings for `node.block` nodes.
+4. Writes to Memgraph and Qdrant as one coordinated operation.
 
 The Memgraph write is held in a transaction until Qdrant upserts complete. If Qdrant fails, Memgraph is rolled back. If Memgraph commit fails after Qdrant upsert, the new Qdrant points are deleted as compensation.
 

@@ -46,10 +46,11 @@ This document is code-oriented: it helps a new contributor quickly navigate the 
 ### 3) `UpsertGraphDelta`
 
 1. gRPC handler maps proto payload into `GraphDelta`.
-2. service validates the delta against canonical schema types/properties/rules.
-3. service extracts block text from typed properties (`text`) and generates embeddings.
-4. service hands both graph delta and embedded blocks to one repository call.
-5. adapter layer writes Memgraph + Qdrant with transaction/rollback behavior.
+2. service pre-processes distinct `user_id` values across universes/entities/blocks/edges and initializes missing user starter graphs before continuing; this implicit path deterministically uses `user_id` as `user_name`.
+3. service validates the delta against canonical schema types/properties/rules.
+4. service extracts block text from typed properties (`text`) and generates embeddings.
+5. service hands both graph delta and embedded blocks to one repository call.
+6. adapter layer writes Memgraph + Qdrant with transaction/rollback behavior.
 
 ### 4) `InitializeUserGraph`
 
