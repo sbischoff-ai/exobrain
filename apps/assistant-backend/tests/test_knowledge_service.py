@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
+import grpc
 import pytest
 
 from app.services.grpc import job_orchestrator_pb2
@@ -186,7 +187,7 @@ async def test_watch_update_job_maps_orchestrator_events_to_stream_events() -> N
     publisher = FakeJobPublisher()
     service = KnowledgeService(database=database, job_publisher=publisher, settings=Settings())
 
-    events = [event async for event in service.watch_update_job(job_id="job-1")]
+    events = [event async for event in service.watch_update_job(user_id="user-1", job_id="job-1")]
 
     assert publisher.watch_calls == [{"job_id": "job-1", "include_current": True}]
     assert events == [
@@ -221,3 +222,35 @@ async def test_watch_update_job_maps_orchestrator_events_to_stream_events() -> N
             },
         },
     ]
+
+
+
+class FakeAioRpcError(grpc.aio.AioRpcError):
+    def __init__(self, code: grpc.StatusCode) -> None:
+        self._status_code = code
+
+    def code(self) -> grpc.StatusCode:
+        return self._status_code
+
+
+class ErroringJobPublisher(FakeJobPublisher):
+    def __init__(self, code: grpc.StatusCode) -> None:
+        super().__init__()
+        self._code = code
+
+    async def watch_job_status(self, *, job_id: str, include_current: bool = True) -> AsyncIterator[job_orchestrator_pb2.JobStatusEvent]:
+        self.watch_calls.append({"job_id": job_id, "include_current": include_current})
+        raise FakeAioRpcError(self._code)
+        if False:
+            yield job_orchestrator_pb2.JobStatusEvent()
+
+
+@pytest.mark.asyncio
+async def test_watch_update_job_maps_grpc_errors_to_domain_errors() -> None:
+    from app.services.knowledge_service import KnowledgeJobNotFoundError
+
+    database = FakeDatabase([])
+    service = KnowledgeService(database=database, job_publisher=ErroringJobPublisher(grpc.StatusCode.NOT_FOUND), settings=Settings())
+
+    with pytest.raises(KnowledgeJobNotFoundError):
+        _ = [event async for event in service.watch_update_job(user_id="user-1", job_id="job-1")]
