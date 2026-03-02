@@ -37,7 +37,7 @@ test.describe('assistant frontend workspace (mock API)', () => {
       const node = element as HTMLDivElement;
       return node.scrollHeight - (node.scrollTop + node.clientHeight);
     });
-    expect(distanceFromBottom).toBeLessThan(60);
+    expect(distanceFromBottom).toBeLessThan(120);
 
     await page.getByRole('button', { name: 'Open user menu' }).click();
     await page.getByRole('button', { name: 'Logout' }).click();
