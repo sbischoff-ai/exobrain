@@ -155,6 +155,7 @@ message ExtractionEntityType {
 
 message GetExtractionSchemaContextReply {
   repeated ExtractionEntityType entity_types = 1;
+  optional string prompt_context_markdown = 2;
 }
 ```
 
@@ -165,6 +166,15 @@ Each `ExtractionEntityType` includes enough information for reasoning models to 
 - what edge types are valid to each entity type (`incoming_edges`)
 
 `inheritance_chain` is returned root → leaf. Cardinality hints are optional and may be absent (`null`) when not defined by schema metadata.
+
+Deterministic ordering guarantees:
+- `entity_types` sorted by `type_id`
+- `inheritance_chain` sorted ancestor → descendant
+- `outgoing_edges` / `incoming_edges` sorted by `(edge_type_id, other_entity_type_id, direction)`
+
+Recommended caller usage:
+- Use structured `entity_types` for programmatic validation and constraints.
+- Use `prompt_context_markdown` for direct LLM prompt context injection. The markdown is generated from the same canonical structured payload to keep both representations consistent.
 
 ## FindEntityCandidates
 
