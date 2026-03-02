@@ -340,3 +340,80 @@ async def test_enqueue_job_validates_payload_schema() -> None:
 
     assert "INVALID_ARGUMENT" in str(exc_info.value)
     assert "required_field" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("status", "is_terminal", "expected_state", "expected_terminal"),
+    [
+        ("requested", False, job_orchestrator_pb2.ENQUEUED_OR_PENDING, False),
+        ("processing", False, job_orchestrator_pb2.STARTED, False),
+        ("retrying", False, job_orchestrator_pb2.RETRYING, False),
+        ("completed", True, job_orchestrator_pb2.SUCCEEDED, True),
+        ("failed", True, job_orchestrator_pb2.FAILED_FINAL, True),
+        ("failed", False, job_orchestrator_pb2.RETRYING, False),
+    ],
+)
+async def test_get_job_status_maps_snapshot_to_proto(
+    grpc_orchestrator_stub: tuple[
+        job_orchestrator_pb2_grpc.JobOrchestratorStub,
+        list[tuple[str, bytes]],
+        dict[str, _StatusSubscription],
+        dict[str, dict[str, object]],
+    ],
+    status: str,
+    is_terminal: bool,
+    expected_state: int,
+    expected_terminal: bool,
+) -> None:
+    stub, _, _, snapshots = grpc_orchestrator_stub
+    job_id = str(uuid4())
+    snapshots[job_id] = {
+        "job_id": job_id,
+        "status": status,
+        "attempt": 2,
+        "last_error": "boom" if status == "failed" else None,
+        "is_terminal": is_terminal,
+        "updated_at": "2026-01-01T00:00:00+00:00",
+    }
+
+    reply = await stub.GetJobStatus(job_orchestrator_pb2.GetJobStatusRequest(job_id=job_id))
+
+    assert reply.job_id == job_id
+    assert reply.state == expected_state
+    assert reply.terminal is expected_terminal
+    assert reply.attempt == 2
+
+
+@pytest.mark.asyncio
+async def test_get_job_status_returns_not_found_for_unknown_job(
+    grpc_orchestrator_stub: tuple[
+        job_orchestrator_pb2_grpc.JobOrchestratorStub,
+        list[tuple[str, bytes]],
+        dict[str, _StatusSubscription],
+        dict[str, dict[str, object]],
+    ]
+) -> None:
+    stub, _, _, _ = grpc_orchestrator_stub
+
+    with pytest.raises(grpc.aio.AioRpcError) as error:
+        await stub.GetJobStatus(job_orchestrator_pb2.GetJobStatusRequest(job_id=str(uuid4())))
+
+    assert error.value.code() == grpc.StatusCode.NOT_FOUND
+
+
+@pytest.mark.asyncio
+async def test_get_job_status_rejects_invalid_job_id(
+    grpc_orchestrator_stub: tuple[
+        job_orchestrator_pb2_grpc.JobOrchestratorStub,
+        list[tuple[str, bytes]],
+        dict[str, _StatusSubscription],
+        dict[str, dict[str, object]],
+    ]
+) -> None:
+    stub, _, _, _ = grpc_orchestrator_stub
+
+    with pytest.raises(grpc.aio.AioRpcError) as error:
+        await stub.GetJobStatus(job_orchestrator_pb2.GetJobStatusRequest(job_id="not-a-uuid"))
+
+    assert error.value.code() == grpc.StatusCode.INVALID_ARGUMENT
