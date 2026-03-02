@@ -8,6 +8,7 @@ import grpc
 from app.database import Database
 from nats.aio.subscription import Subscription
 from app.jetstream import connect_jetstream, ensure_jobs_stream
+from app.job_repository import JobRepository
 from app.logging import configure_logging
 from app.settings import get_settings
 from app.transport.grpc import job_orchestrator_pb2_grpc
@@ -28,16 +29,10 @@ async def main() -> None:
 
     nc, js = await connect_jetstream(settings.exobrain_nats_url)
     await ensure_jobs_stream(js)
+    repository = JobRepository(db)
 
     async def fetch_status(job_id: str):
-        return await db.fetchrow(
-            """
-            SELECT job_id, status, attempt, last_error, is_terminal, updated_at
-            FROM orchestrator_jobs
-            WHERE job_id = $1
-            """,
-            job_id,
-        )
+        return await repository.get_status(job_id)
 
     async def subscribe_status(subject: str):
         sub: Subscription = await js.subscribe(subject)

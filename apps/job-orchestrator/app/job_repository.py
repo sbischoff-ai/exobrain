@@ -82,7 +82,7 @@ class JobRepository:
             terminal_reason,
         )
 
-    async def fetch_status_by_job_id(self, job_id: str):
+    async def get_status(self, job_id: str):
         return await self._db.fetchrow(
             """
             SELECT job_id, status, attempt, last_error, is_terminal, terminal_reason, updated_at
@@ -91,3 +91,6 @@ class JobRepository:
             """,
             job_id,
         )
+
+    async def fetch_status_by_job_id(self, job_id: str):
+        return await self.get_status(job_id)

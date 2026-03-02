@@ -75,7 +75,7 @@ async def test_mark_terminal_failure_persists_terminal_reason() -> None:
 
 
 @pytest.mark.asyncio
-async def test_fetch_status_by_job_id_returns_status_snapshot() -> None:
+async def test_get_status_returns_status_snapshot() -> None:
     database = FakeDatabase()
     database.next_fetchrow_result = {
         "job_id": "job-1",
@@ -88,11 +88,23 @@ async def test_fetch_status_by_job_id_returns_status_snapshot() -> None:
     }
     repository = JobRepository(database)  # type: ignore[arg-type]
 
-    status = await repository.fetch_status_by_job_id("job-1")
+    status = await repository.get_status("job-1")
 
     assert status == database.next_fetchrow_result
     assert database.fetchrow_args is not None
     query = str(database.fetchrow_args[0])
     assert "is_terminal" in query
     assert "terminal_reason" in query
+    assert database.fetchrow_args[1:] == ("job-1",)
+
+
+@pytest.mark.asyncio
+async def test_fetch_status_by_job_id_delegates_to_get_status() -> None:
+    database = FakeDatabase()
+    repository = JobRepository(database)  # type: ignore[arg-type]
+
+    status = await repository.fetch_status_by_job_id("job-1")
+
+    assert status == {"job_id": "job-1"}
+    assert database.fetchrow_args is not None
     assert database.fetchrow_args[1:] == ("job-1",)

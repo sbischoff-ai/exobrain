@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncIterator
 
 import grpc
 
@@ -28,6 +29,19 @@ class JobOrchestratorClient(JobPublisherProtocol):
         request = self._build_request(user_id=user_id, job_type=job_type, payload=payload)
         response = await stub.EnqueueJob(request, timeout=self._connect_timeout_seconds)
         return response.job_id
+
+
+    async def get_job_status(self, *, job_id: str) -> job_orchestrator_pb2.GetJobStatusReply:
+        stub = self._get_or_create_stub()
+        request = job_orchestrator_pb2.GetJobStatusRequest(job_id=job_id)
+        return await stub.GetJobStatus(request, timeout=self._connect_timeout_seconds)
+
+    async def watch_job_status(self, *, job_id: str, include_current: bool = True) -> AsyncIterator[job_orchestrator_pb2.JobStatusEvent]:
+        stub = self._get_or_create_stub()
+        request = job_orchestrator_pb2.WatchJobStatusRequest(job_id=job_id, include_current=include_current)
+        stream = stub.WatchJobStatus(request, timeout=self._connect_timeout_seconds)
+        async for event in stream:
+            yield event
 
     def _get_or_create_stub(self) -> job_orchestrator_pb2_grpc.JobOrchestratorStub:
         if self._stub is None:
