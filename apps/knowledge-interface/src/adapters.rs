@@ -361,7 +361,7 @@ impl Neo4jGraphStore {
         for edge in &delta.edges {
             validate_edge_type(&edge.edge_type)?;
             let allowed_node_visibilities = allowed_node_visibilities(edge.visibility);
-            let cypher = format!("MATCH (a {{id: $from_id}}), (b {{id: $to_id}}) WHERE a.visibility IN $allowed_node_visibilities AND b.visibility IN $allowed_node_visibilities MERGE (a)-[r:{}]->(b) SET r.confidence = $confidence, r.status = $status, r.context = $context, r.user_id = $user_id, r.visibility = $visibility RETURN COUNT(r) AS upserted_count", edge.edge_type);
+            let cypher = format!("MATCH (a {{id: $from_id}}), (b {{id: $to_id}}) WHERE a.visibility IN $allowed_node_visibilities AND b.visibility IN $allowed_node_visibilities MERGE (a)-[r:{}]->(b) SET r.confidence = $confidence, r.status = $status, r.provenance_hint = $provenance_hint, r.user_id = $user_id, r.visibility = $visibility RETURN COUNT(r) AS upserted_count", edge.edge_type);
             let mut result = txn
                 .execute(
                     query(&cypher)
@@ -380,8 +380,8 @@ impl Neo4jGraphStore {
                                 .unwrap_or_else(|| "asserted".to_string()),
                         )
                         .param(
-                            "context",
-                            prop_as_string(&edge.properties, "context").unwrap_or_default(),
+                            "provenance_hint",
+                            prop_as_string(&edge.properties, "provenance_hint").unwrap_or_default(),
                         ),
                 )
                 .await
