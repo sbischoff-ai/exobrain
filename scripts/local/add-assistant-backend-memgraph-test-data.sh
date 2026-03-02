@@ -31,12 +31,13 @@ if ! grpcurl -plaintext -d '{}' "$KNOWLEDGE_GRPC_TARGET" exobrain.knowledge.v1.K
   exit 1
 fi
 
-echo "Initializing graph for assistant-backend test user via $KNOWLEDGE_GRPC_TARGET..."
-init_reply=$(grpcurl -plaintext -d @ "$KNOWLEDGE_GRPC_TARGET" exobrain.knowledge.v1.KnowledgeInterface/InitializeUserGraph < "$INIT_REQUEST_PATH")
-universe_id=$(echo "$init_reply" | jq -r '.universeId // empty')
+echo "Getting/initializing user graph for assistant-backend test user via $KNOWLEDGE_GRPC_TARGET..."
+init_reply=$(grpcurl -plaintext -d @ "$KNOWLEDGE_GRPC_TARGET" exobrain.knowledge.v1.KnowledgeInterface/GetUserInitGraph < "$INIT_REQUEST_PATH")
+person_entity_id=$(echo "$init_reply" | jq -r '.personEntityId // empty')
+assistant_entity_id=$(echo "$init_reply" | jq -r '.assistantEntityId // empty')
 
-if [[ -z "$universe_id" ]]; then
-  echo "error: InitializeUserGraph reply did not include universeId" >&2
+if [[ -z "$person_entity_id" || -z "$assistant_entity_id" ]]; then
+  echo "error: GetUserInitGraph reply did not include expected entity ids" >&2
   echo "$init_reply" >&2
   exit 1
 fi
@@ -60,7 +61,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-jq   --arg universe_id "$universe_id"   --arg task_id "$task_id"   --arg block1_id "$block1_id"   --arg block2_id "$block2_id"   --arg block3_id "$block3_id"   --arg block4_id "$block4_id"   --arg block5_id "$block5_id"   --arg block6_id "$block6_id"   --arg block7_id "$block7_id" '
+jq   --arg task_id "$task_id"   --arg block1_id "$block1_id"   --arg block2_id "$block2_id"   --arg block3_id "$block3_id"   --arg block4_id "$block4_id"   --arg block5_id "$block5_id"   --arg block6_id "$block6_id"   --arg block7_id "$block7_id" '
   def remap_id($id):
     if $id == "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1" then $task_id
     elif $id == "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1" then $block1_id
@@ -74,16 +75,16 @@ jq   --arg universe_id "$universe_id"   --arg task_id "$task_id"   --arg block1_
 
   .entities |= map(
     .id = remap_id(.id)
-    | if .universe_id == "__UNIVERSE_ID__" then .universe_id = $universe_id else . end
+    | if .universe_id == "__UNIVERSE_ID__" then del(.universe_id) else . end
   )
   | .blocks |= map(.id = remap_id(.id))
   | .edges |= map(.from_id = remap_id(.from_id) | .to_id = remap_id(.to_id))
 ' "$DELTA_TEMPLATE_PATH" > "$tmp_delta"
 
-echo "Upserting graph delta with universe_id=$universe_id..."
+echo "Upserting graph delta..."
 upsert_reply=$(grpcurl -plaintext -d @ "$KNOWLEDGE_GRPC_TARGET" exobrain.knowledge.v1.KnowledgeInterface/UpsertGraphDelta < "$tmp_delta")
 
-echo "InitializeUserGraph reply:"
+echo "GetUserInitGraph reply:"
 echo "$init_reply" | jq
 echo
 echo "UpsertGraphDelta reply:"
