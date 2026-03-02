@@ -24,8 +24,11 @@ class FakeRepo:
     async def mark_completed(self, job_id: str) -> None:
         self.calls.append(("completed", job_id))
 
-    async def mark_failed(self, job_id: str, error_message: str) -> None:
-        self.calls.append(("failed", job_id))
+    async def mark_retrying_failure(self, job_id: str, error_message: str) -> None:
+        self.calls.append(("retrying_failed", job_id))
+
+    async def mark_terminal_failure(self, job_id: str, error_message: str, terminal_reason: str) -> None:
+        self.calls.append(("terminal_failed", f"{job_id}:{terminal_reason}"))
 
 
 class FakeRunner:
@@ -184,7 +187,7 @@ async def test_worker_naks_on_retryable_failure() -> None:
 
     assert msg.acked is False
     assert msg.nacked is True
-    assert ("failed", "job-1") in repo.calls
+    assert ("retrying_failed", "job-1") in repo.calls
     assert events == []
 
 
@@ -203,6 +206,7 @@ async def test_worker_dlqs_when_max_attempts_reached() -> None:
 
     assert msg.acked is True
     assert msg.nacked is False
+    assert ("terminal_failed", "job-1:max-attempts") in repo.calls
     assert events == ["jobs.events.knowledge.update.failed", "jobs.dlq"]
 
 
