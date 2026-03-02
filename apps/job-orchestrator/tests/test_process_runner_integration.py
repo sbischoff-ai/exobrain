@@ -7,6 +7,7 @@ import grpc
 import pytest
 
 from app.contracts import JobEnvelope
+from app.services.grpc import knowledge_pb2
 from app.worker.process_runner import LocalProcessWorkerRunner
 
 
@@ -19,6 +20,28 @@ def _free_port() -> int:
 @pytest.mark.asyncio
 async def test_process_runner_executes_knowledge_update_job(monkeypatch: pytest.MonkeyPatch) -> None:
     server = grpc.aio.server()
+
+    async def get_user_init_graph(request: knowledge_pb2.GetUserInitGraphRequest, context) -> knowledge_pb2.GetUserInitGraphReply:
+        return knowledge_pb2.GetUserInitGraphReply(
+            person_entity_id=f"person:{request.user_id}",
+            assistant_entity_id="assistant:knowledge-interface",
+        )
+
+    server.add_generic_rpc_handlers(
+        (
+            grpc.method_handlers_generic_handler(
+                "exobrain.knowledge.v1.KnowledgeInterface",
+                {
+                    "GetUserInitGraph": grpc.unary_unary_rpc_method_handler(
+                        get_user_init_graph,
+                        request_deserializer=knowledge_pb2.GetUserInitGraphRequest.FromString,
+                        response_serializer=knowledge_pb2.GetUserInitGraphReply.SerializeToString,
+                    )
+                },
+            ),
+        )
+    )
+
     port = server.add_insecure_port("127.0.0.1:0")
     await server.start()
     monkeypatch.setenv("KNOWLEDGE_INTERFACE_GRPC_TARGET", f"127.0.0.1:{port}")
@@ -29,7 +52,7 @@ async def test_process_runner_executes_knowledge_update_job(monkeypatch: pytest.
         correlation_id="user-1",
         payload={
             "journal_reference": "2026/02/24",
-            "messages": [{"role": "user", "content": "hello"}],
+            "messages": [{"role": "user", "content": "hello", "created_at": "2026-02-24T00:00:00Z"}],
             "requested_by_user_id": "user-1",
         },
     )
@@ -51,7 +74,7 @@ async def test_process_runner_raises_when_target_unreachable(monkeypatch: pytest
         correlation_id="user-1",
         payload={
             "journal_reference": "2026/02/24",
-            "messages": [{"role": "user", "content": "hello"}],
+            "messages": [{"role": "user", "content": "hello", "created_at": "2026-02-24T00:00:00Z"}],
             "requested_by_user_id": "user-1",
         },
     )

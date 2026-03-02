@@ -101,6 +101,7 @@ assistant-backend
 
 This API ownership keeps producers decoupled from JetStream subject/version details and lets the orchestrator enforce payload validation centrally.
 For `knowledge.update`, clients must provide `user_id` plus the typed `knowledge_update` payload (`journal_reference`, `messages`, and `requested_by_user_id`), and the server uses `user_id` as the envelope correlation id.
+Current worker flow uses two explicit steps: step one builds an `UpsertGraphDelta` request body from message payloads (after one `GetUserInitGraph` lookup), and step two logs that generated request body as a placeholder for later persistence.
 
 ## Common commands
 
