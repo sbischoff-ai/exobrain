@@ -14,7 +14,7 @@
 
 ## Command sequence (exact repo scripts)
 
-1. Start/check native infra required for local agent workflows:
+1. Start/check native infra required for local agent workflows (note: this does **not** start Memgraph):
 
 ```sh
 ./scripts/agent/native-infra-up.sh
@@ -30,7 +30,16 @@
 3. Run knowledge-interface locally (loads `apps/knowledge-interface/.env` if present):
 
 ```sh
-./scripts/local/run-knowledge-interface.sh
+./scripts/agent/run-knowledge-interface-native.sh
+```
+
+
+3a. Ensure knowledge schema DB is bootstrapped/migrated for native Postgres when needed:
+
+```sh
+sudo -u postgres psql -v ON_ERROR_STOP=1 -f infra/docker/metastore/init/03-knowledge-schema-db.sql
+reshape migration start --complete --url 'postgresql://knowledge_schema:knowledge_schema@localhost:5432/knowledge_graph_schema?sslmode=disable' --dirs infra/metastore/knowledge-interface/migrations
+psql 'postgresql://knowledge_schema:knowledge_schema@localhost:5432/knowledge_graph_schema?sslmode=disable' -v ON_ERROR_STOP=1 -f infra/metastore/knowledge-interface/seeds/001_starter_schema_types.sql
 ```
 
 4. If schema setup is required in workstation/docker workflows:
@@ -56,7 +65,7 @@
 ## Expected verification output
 
 - Build script completes without Cargo compile errors.
-- `run-knowledge-interface.sh` logs environment load and starts server process.
+- `run-knowledge-interface-native.sh` validates native deps and starts server process.
 - Health checks show reachable Postgres/Qdrant/NATS when those services are required by changed paths.
 
 ## Rollback / cleanup
