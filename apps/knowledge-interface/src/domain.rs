@@ -170,3 +170,27 @@ pub struct FullSchema {
     pub node_types: Vec<SchemaNodeTypeHydrated>,
     pub edge_types: Vec<SchemaEdgeTypeHydrated>,
 }
+
+#[derive(Debug, Clone)]
+pub struct FindEntityCandidatesQuery {
+    pub names: Vec<String>,
+    pub potential_type_ids: Vec<String>,
+    pub short_description: Option<String>,
+    pub user_id: String,
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Clone)]
+pub struct EntityCandidate {
+    pub id: String,
+    pub name: String,
+    pub described_by_text: Option<String>,
+    pub score: f64,
+    pub type_id: String,
+    pub matched_tokens: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct FindEntityCandidatesResult {
+    pub candidates: Vec<EntityCandidate>,
+}
