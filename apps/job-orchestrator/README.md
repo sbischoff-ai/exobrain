@@ -35,6 +35,8 @@ uv sync --extra dev
 uv run python -m app.main_api
 ```
 
+The gRPC `EnqueueJob` endpoint validates `job_type` and payload schema before publishing `JobEnvelope` messages to JetStream subjects shaped as `jobs.<job_type>.requested`. Job IDs are generated server-side as UUIDs and returned in the RPC response.
+
 ## Common commands
 
 Apply local migrations:

@@ -5,8 +5,7 @@ import logging
 import signal
 
 import grpc
-import nats
-
+from app.jetstream import connect_jetstream, ensure_jobs_stream
 from app.logging import configure_logging
 from app.settings import get_settings
 from app.transport.grpc import job_orchestrator_pb2_grpc
@@ -18,9 +17,8 @@ logger = logging.getLogger(__name__)
 
 
 async def main() -> None:
-    nc = await nats.connect(settings.exobrain_nats_url)
-    js = nc.jetstream()
-    await js.add_stream(name="JOBS", subjects=["jobs.>"])
+    nc, js = await connect_jetstream(settings.exobrain_nats_url)
+    await ensure_jobs_stream(js)
 
     server = grpc.aio.server()
     servicer = JobOrchestratorServicer(js.publish)
