@@ -5,6 +5,7 @@ package exobrain.knowledge.v1;
 service KnowledgeInterface {
   rpc Health(HealthRequest) returns (HealthReply);
   rpc GetSchema(GetSchemaRequest) returns (GetSchemaReply);
+  rpc GetExtractionSchemaContext(GetExtractionSchemaContextRequest) returns (GetExtractionSchemaContextReply);
   rpc UpsertSchemaType(UpsertSchemaTypeRequest) returns (UpsertSchemaTypeReply);
   rpc UpsertGraphDelta(UpsertGraphDeltaRequest) returns (UpsertGraphDeltaReply);
   rpc GetUserInitGraph(GetUserInitGraphRequest) returns (GetUserInitGraphReply);
@@ -65,6 +66,34 @@ message SchemaEdgeType {
 message GetSchemaReply {
   repeated SchemaNodeType node_types = 1;
   repeated SchemaEdgeType edge_types = 2;
+}
+
+message GetExtractionSchemaContextRequest {
+  optional bool include_edge_properties = 1;
+  optional bool include_inactive = 2;
+}
+
+message AllowedEdge {
+  string edge_type_id = 1;
+  string edge_name = 2;
+  string edge_description = 3;
+  string other_entity_type_id = 4;
+  string other_entity_type_name = 5;
+  optional uint32 min_cardinality = 6;
+  optional uint32 max_cardinality = 7;
+}
+
+message ExtractionEntityType {
+  string type_id = 1;
+  string name = 2;
+  string description = 3;
+  repeated string inheritance_chain = 4;
+  repeated AllowedEdge outgoing_edges = 5;
+  repeated AllowedEdge incoming_edges = 6;
+}
+
+message GetExtractionSchemaContextReply {
+  repeated ExtractionEntityType entity_types = 1;
 }
 
 message UpsertSchemaTypeProperty {

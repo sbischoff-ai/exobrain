@@ -1,7 +1,7 @@
 # Knowledge Interface gRPC API and Graph Delta Contract
 
 This document describes what clients must send to `UpsertGraphDelta` and
-`GetUserInitGraph`, plus how to query `FindEntityCandidates` and `GetEntityContext`.
+`GetUserInitGraph`, plus how to query `FindEntityCandidates`, `GetEntityContext`, and `GetExtractionSchemaContext`.
 
 ## Core rule
 
@@ -113,6 +113,58 @@ For interactive request prototyping use `grpcui -plaintext localhost:50051`.
 
 
 Visibility values are accepted as provided per node/edge; scope is carried per universe/entity/block/edge (no top-level request scope fields).
+
+
+## GetExtractionSchemaContext
+
+`GetExtractionSchemaContext` returns an entity-centric schema projection tailored for LLM extraction prompts.
+
+### Request schema
+
+```proto
+message GetExtractionSchemaContextRequest {
+  optional bool include_edge_properties = 1;
+  optional bool include_inactive = 2;
+}
+```
+
+- `include_edge_properties`: reserved control for including richer edge metadata in future iterations.
+- `include_inactive`: includes inactive schema types/rules when `true`; defaults to `false`.
+
+### Response schema
+
+```proto
+message AllowedEdge {
+  string edge_type_id = 1;
+  string edge_name = 2;
+  string edge_description = 3;
+  string other_entity_type_id = 4;
+  string other_entity_type_name = 5;
+  optional uint32 min_cardinality = 6;
+  optional uint32 max_cardinality = 7;
+}
+
+message ExtractionEntityType {
+  string type_id = 1;
+  string name = 2;
+  string description = 3;
+  repeated string inheritance_chain = 4;
+  repeated AllowedEdge outgoing_edges = 5;
+  repeated AllowedEdge incoming_edges = 6;
+}
+
+message GetExtractionSchemaContextReply {
+  repeated ExtractionEntityType entity_types = 1;
+}
+```
+
+Each `ExtractionEntityType` includes enough information for reasoning models to answer:
+
+- what entity types are valid output candidates
+- what edge types are valid from each entity type (`outgoing_edges`)
+- what edge types are valid to each entity type (`incoming_edges`)
+
+`inheritance_chain` is returned root → leaf. Cardinality hints are optional and may be absent (`null`) when not defined by schema metadata.
 
 ## FindEntityCandidates
 
