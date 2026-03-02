@@ -228,10 +228,65 @@ describe('root page', () => {
     await waitFor(() => {
       const input = screen.getByLabelText('Type your message');
       const send = screen.getByRole('button', { name: 'Send message' });
+      const knowledgeUpdate = screen.getByRole('button', { name: 'Update knowledge base' });
       expect(input).toBeDisabled();
       expect(send).toBeDisabled();
+      expect(knowledgeUpdate).toBeDisabled();
+      expect(knowledgeUpdate).toHaveAttribute('title', 'Switch to today to update knowledge base');
       expect(input).toHaveAttribute('title', 'You can not chat with past journals.');
       expect(send).toHaveAttribute('title', 'You can not chat with past journals.');
+    });
+  });
+
+  it('starts knowledge update watch and spins icon until done event', async () => {
+    window.sessionStorage.setItem(
+      'exobrain.assistant.session',
+      JSON.stringify({
+        user: { name: 'Test User', email: 'test.user@exobrain.local' },
+        journalReference: '2026/02/19',
+        messageCount: 0,
+        messages: []
+      })
+    );
+
+    vi.stubGlobal('EventSource', MockEventSource as unknown as typeof EventSource);
+
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(jsonResponse({ name: 'Test User', email: 'test.user@exobrain.local' }))
+      .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19', message_count: 0 }))
+      .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
+      .mockResolvedValueOnce(jsonResponse([{ reference: '2026/02/19' }]))
+      .mockResolvedValueOnce(jsonResponse({ job_id: 'job-123' }));
+
+    render(Page);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Update knowledge base' })).toBeEnabled();
+    });
+
+    const updateButton = screen.getByRole('button', { name: 'Update knowledge base' });
+    await fireEvent.click(updateButton);
+
+    await waitFor(() => {
+      expect(updateButton).toBeDisabled();
+      expect(updateButton).toHaveAttribute('title', 'Knowledge update in progress');
+      expect(updateButton.querySelector('svg')).toHaveClass('spinning');
+    });
+
+    expect(fetchSpy).toHaveBeenCalledWith('/api/knowledge/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ journal_reference: '2026/02/19' })
+    });
+
+    const source = MockEventSource.latest!;
+    source.emit('done', { job_id: 'job-123', state: 'completed', terminal: true });
+
+    await waitFor(() => {
+      expect(updateButton).toBeEnabled();
+      expect(updateButton).toHaveAttribute('title', 'Update knowledge base');
+      expect(updateButton.querySelector('svg')).not.toHaveClass('spinning');
     });
   });
 
