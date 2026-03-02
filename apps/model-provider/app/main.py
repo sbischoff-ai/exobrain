@@ -45,8 +45,28 @@ class ProviderRegistry:
 
 def merge_payload(alias_config: AliasConfig, payload: dict[str, Any]) -> dict[str, Any]:
     merged = {**alias_config.defaults, **payload}
+    response_format = _normalize_structured_output_payload(payload)
+    if response_format is not None:
+        merged["response_format"] = response_format
     merged["model"] = alias_config.upstream_model
     return merged
+
+
+def _normalize_structured_output_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
+    response_format = payload.get("response_format")
+    if response_format is None:
+        return None
+    if not isinstance(response_format, dict):
+        raise HTTPException(status_code=400, detail="response_format must be an object")
+
+    if response_format.get("type") != "json_schema":
+        raise HTTPException(status_code=400, detail="response_format.type must be 'json_schema'")
+
+    json_schema = response_format.get("json_schema")
+    if not isinstance(json_schema, dict) or not json_schema:
+        raise HTTPException(status_code=400, detail="response_format.json_schema must be a non-empty object")
+
+    return {"type": "json_schema", "json_schema": json_schema}
 
 
 def _format_stream_error(exc: Exception, *, alias: str, provider: str) -> str:
