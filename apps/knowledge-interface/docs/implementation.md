@@ -54,8 +54,9 @@ This document is code-oriented: it helps a new contributor quickly navigate the 
 ### 4) `InitializeUserGraph`
 
 1. gRPC handler validates and forwards `user_id` + `user_name`.
-2. `KnowledgeApplication::initialize_user_graph` builds a deterministic starter delta.
-3. starter entities/edge are upserted to Memgraph and assistant block embedding is upserted to Qdrant.
+2. `KnowledgeApplication::initialize_user_graph` first checks a durable Memgraph initialization marker keyed by `user_id`.
+3. when the marker is absent, the service builds a deterministic starter delta and writes graph + embeddings.
+4. after a successful write, the service marks the user graph initialized via an idempotent Memgraph `MERGE` marker write.
 
 ## Startup root graph seeding
 

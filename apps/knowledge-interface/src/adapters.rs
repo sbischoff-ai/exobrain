@@ -391,6 +391,35 @@ impl Neo4jGraphStore {
         Ok(result.next().await?.is_some())
     }
 
+    async fn is_user_graph_initialized(&self, user_id: &str) -> Result<bool> {
+        let mut result = self
+            .graph
+            .execute(
+                query(
+                    "MATCH (:GraphInitialization {user_id: $user_id, visibility: 'SHARED'}) RETURN 1 AS present LIMIT 1",
+                )
+                .param("user_id", user_id.to_string()),
+            )
+            .await
+            .context("failed to query user graph initialization marker")?;
+
+        Ok(result.next().await?.is_some())
+    }
+
+    async fn mark_user_graph_initialized(&self, user_id: &str) -> Result<()> {
+        self.graph
+            .run(
+                query(
+                    "MERGE (m:GraphInitialization {user_id: $user_id}) SET m.visibility = 'SHARED'",
+                )
+                .param("user_id", user_id.to_string()),
+            )
+            .await
+            .context("failed to mark user graph initialized")?;
+
+        Ok(())
+    }
+
     async fn get_existing_block_context(
         &self,
         block_id: &str,
@@ -583,6 +612,14 @@ impl GraphRepository for MemgraphQdrantGraphRepository {
 
     async fn common_root_graph_exists(&self) -> Result<bool> {
         self.graph_store.common_root_graph_exists().await
+    }
+
+    async fn is_user_graph_initialized(&self, user_id: &str) -> Result<bool> {
+        self.graph_store.is_user_graph_initialized(user_id).await
+    }
+
+    async fn mark_user_graph_initialized(&self, user_id: &str) -> Result<()> {
+        self.graph_store.mark_user_graph_initialized(user_id).await
     }
 
     async fn get_existing_block_context(

@@ -201,8 +201,19 @@ impl KnowledgeApplication {
             return Err(anyhow!("user_name is required"));
         }
 
+        if self
+            .graph_repository
+            .is_user_graph_initialized(trimmed_user_id)
+            .await?
+        {
+            return Ok(Self::user_init_delta(trimmed_user_id, trimmed_user_name));
+        }
+
         let delta = Self::user_init_delta(trimmed_user_id, trimmed_user_name);
         self.upsert_graph_delta(delta.clone()).await?;
+        self.graph_repository
+            .mark_user_graph_initialized(trimmed_user_id)
+            .await?;
         Ok(delta)
     }
 
@@ -1468,6 +1479,14 @@ mod tests {
             Ok(self.root_exists)
         }
 
+        async fn is_user_graph_initialized(&self, _user_id: &str) -> Result<bool> {
+            Ok(false)
+        }
+
+        async fn mark_user_graph_initialized(&self, _user_id: &str) -> Result<()> {
+            Ok(())
+        }
+
         async fn get_existing_block_context(
             &self,
             _block_id: &str,
@@ -1497,6 +1516,8 @@ mod tests {
     struct CapturingGraphRepository {
         seen: Arc<Mutex<Vec<EmbeddedBlock>>>,
         root_exists: bool,
+        user_graph_initialized: bool,
+        marked_user_ids: Arc<Mutex<Vec<String>>>,
         block_contexts: HashMap<String, ExistingBlockContext>,
     }
 
@@ -1514,6 +1535,18 @@ mod tests {
 
         async fn common_root_graph_exists(&self) -> Result<bool> {
             Ok(self.root_exists)
+        }
+
+        async fn is_user_graph_initialized(&self, _user_id: &str) -> Result<bool> {
+            Ok(self.user_graph_initialized)
+        }
+
+        async fn mark_user_graph_initialized(&self, user_id: &str) -> Result<()> {
+            self.marked_user_ids
+                .lock()
+                .expect("lock should be available")
+                .push(user_id.to_string());
+            Ok(())
         }
 
         async fn get_existing_block_context(
@@ -1550,6 +1583,14 @@ mod tests {
 
         async fn common_root_graph_exists(&self) -> Result<bool> {
             Ok(false)
+        }
+
+        async fn is_user_graph_initialized(&self, _user_id: &str) -> Result<bool> {
+            Ok(false)
+        }
+
+        async fn mark_user_graph_initialized(&self, _user_id: &str) -> Result<()> {
+            Ok(())
         }
 
         async fn get_existing_block_context(
@@ -1716,6 +1757,8 @@ mod tests {
             Arc::new(CapturingGraphRepository {
                 seen: captured.clone(),
                 root_exists: false,
+                user_graph_initialized: false,
+                marked_user_ids: Arc::new(Mutex::new(vec![])),
                 block_contexts: HashMap::new(),
             }),
             Arc::new(FakeEmbedder),
@@ -1785,6 +1828,8 @@ mod tests {
             Arc::new(CapturingGraphRepository {
                 seen: captured.clone(),
                 root_exists: false,
+                user_graph_initialized: false,
+                marked_user_ids: Arc::new(Mutex::new(vec![])),
                 block_contexts: HashMap::new(),
             }),
             Arc::new(FakeEmbedder),
@@ -1804,11 +1849,14 @@ mod tests {
     #[tokio::test]
     async fn initializes_user_graph() {
         let captured = Arc::new(Mutex::new(vec![]));
+        let marked_user_ids = Arc::new(Mutex::new(vec![]));
         let app = KnowledgeApplication::new(
             Arc::new(FakeSchemaRepo::new()),
             Arc::new(CapturingGraphRepository {
                 seen: captured.clone(),
                 root_exists: true,
+                user_graph_initialized: false,
+                marked_user_ids: marked_user_ids.clone(),
                 block_contexts: HashMap::new(),
             }),
             Arc::new(FakeEmbedder),
@@ -1834,6 +1882,41 @@ mod tests {
         let guard = captured.lock().expect("lock should be available");
         assert_eq!(guard.len(), 1);
         assert_eq!(guard[0].block_level, 0);
+
+        let marked = marked_user_ids.lock().expect("lock should be available");
+        assert_eq!(marked.as_slice(), ["user-1"]);
+    }
+
+    #[tokio::test]
+    async fn skips_user_graph_init_when_marker_already_exists() {
+        let captured = Arc::new(Mutex::new(vec![]));
+        let marked_user_ids = Arc::new(Mutex::new(vec![]));
+        let app = KnowledgeApplication::new(
+            Arc::new(FakeSchemaRepo::new()),
+            Arc::new(CapturingGraphRepository {
+                seen: captured.clone(),
+                root_exists: true,
+                user_graph_initialized: true,
+                marked_user_ids: marked_user_ids.clone(),
+                block_contexts: HashMap::new(),
+            }),
+            Arc::new(FakeEmbedder),
+        );
+
+        let delta = app
+            .initialize_user_graph("user-1", "Alex")
+            .await
+            .expect("user graph init should short-circuit");
+
+        assert_eq!(delta.entities.len(), 2);
+        assert_eq!(delta.blocks.len(), 1);
+        assert_eq!(delta.edges.len(), 4);
+
+        let guard = captured.lock().expect("lock should be available");
+        assert!(guard.is_empty());
+
+        let marked = marked_user_ids.lock().expect("lock should be available");
+        assert!(marked.is_empty());
     }
 
     #[tokio::test]
@@ -1911,6 +1994,8 @@ mod tests {
         let graph_repo = CapturingGraphRepository {
             seen: Arc::new(Mutex::new(vec![])),
             root_exists: false,
+            user_graph_initialized: false,
+            marked_user_ids: Arc::new(Mutex::new(vec![])),
             block_contexts: HashMap::from([(
                 existing_parent_block_id.to_string(),
                 ExistingBlockContext {
