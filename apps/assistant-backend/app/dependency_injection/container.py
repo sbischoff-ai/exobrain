@@ -23,7 +23,7 @@ from app.services.contracts import (
 from app.services.database_service import DatabaseService
 from app.services.journal_cache_store import RedisJournalCacheStore
 from app.services.journal_service import JournalService
-from app.services.job_publisher import NatsJobPublisher
+from app.services.job_orchestrator_client import JobOrchestratorClient
 from app.services.knowledge_service import KnowledgeService
 from app.services.session_store import RedisSessionStore
 from app.services.user_service import UserService
@@ -60,9 +60,8 @@ def build_container(settings: Settings) -> punq.Container:
     )
     container.register(
         JobPublisherProtocol,
-        factory=lambda: NatsJobPublisher(
-            nats_url=settings.exobrain_nats_url,
-            subject_prefix=settings.jobs_subject_prefix,
+        factory=lambda: JobOrchestratorClient(
+            grpc_target=settings.job_orchestrator_grpc_target,
         ),
         scope=punq.Scope.singleton,
     )

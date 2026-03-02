@@ -67,8 +67,10 @@ class Settings(BaseSettings):
         default=5,
         alias="ASSISTANT_JOURNAL_CACHE_JITTER_MAX_SECONDS",
     )
-    exobrain_nats_url: str = Field(default="nats://localhost:14222", alias="EXOBRAIN_NATS_URL")
-    jobs_subject_prefix: str = Field(default="jobs", alias="JOBS_SUBJECT_PREFIX")
+    job_orchestrator_grpc_target: str = Field(
+        default="localhost:50061",
+        alias="JOB_ORCHESTRATOR_GRPC_TARGET",
+    )
     tavily_api_key: str | None = Field(default=None, alias="TAVILY_API_KEY")
     web_tools_use_mock: bool = Field(default=False, alias="WEB_TOOLS_USE_MOCK")
     web_tools_mock_data_file: str | None = Field(default=None, alias="WEB_TOOLS_MOCK_DATA_FILE")
