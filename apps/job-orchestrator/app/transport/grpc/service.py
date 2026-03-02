@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from typing import Awaitable, Callable
+from uuid import uuid4
+
+import grpc
+from pydantic import ValidationError
 
 from app.contracts import JobEnvelope
-import grpc
 from app.transport.grpc import job_orchestrator_pb2, job_orchestrator_pb2_grpc
+from app.worker.job_registry import JOB_PAYLOAD_MODEL_BY_TYPE
 
 
 class JobOrchestratorServicer(job_orchestrator_pb2_grpc.JobOrchestratorServicer):
@@ -21,15 +26,29 @@ class JobOrchestratorServicer(job_orchestrator_pb2_grpc.JobOrchestratorServicer)
             await context.abort(code=grpc.StatusCode.INVALID_ARGUMENT, details="job_type is required")
         if not request.user_id:
             await context.abort(code=grpc.StatusCode.INVALID_ARGUMENT, details="user_id is required")
+        if request.job_type not in JOB_PAYLOAD_MODEL_BY_TYPE:
+            await context.abort(code=grpc.StatusCode.INVALID_ARGUMENT, details=f"unsupported job_type: {request.job_type}")
 
         try:
             payload = self._resolve_payload(request)
-        except (ValueError, json.JSONDecodeError) as exc:
+            payload_model = JOB_PAYLOAD_MODEL_BY_TYPE[request.job_type]
+            validated_payload = payload_model.model_validate(payload).model_dump(mode="json")
+        except (ValueError, json.JSONDecodeError, ValidationError) as exc:
             await context.abort(code=grpc.StatusCode.INVALID_ARGUMENT, details=str(exc))
-        job = JobEnvelope(job_type=request.job_type, correlation_id=request.user_id, payload=payload)
+
+        job_id = str(uuid4())
+        job = JobEnvelope(
+            schema_version=1,
+            job_id=job_id,
+            job_type=request.job_type,
+            correlation_id=request.user_id,
+            payload=validated_payload,
+            attempt=0,
+            created_at=datetime.now(timezone.utc),
+        )
         subject = f"jobs.{job.job_type}.requested"
         await self._publish_job(subject, job.model_dump_json().encode("utf-8"))
-        return job_orchestrator_pb2.EnqueueJobReply(job_id=job.job_id)
+        return job_orchestrator_pb2.EnqueueJobReply(job_id=job_id)
 
     @staticmethod
     def _resolve_payload(request: job_orchestrator_pb2.EnqueueJobRequest) -> dict[str, object]:

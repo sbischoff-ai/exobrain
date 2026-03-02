@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+from uuid import UUID
 
 import grpc
 import pytest
+from pydantic import BaseModel
 
 from app.transport.grpc import job_orchestrator_pb2
 from app.transport.grpc.service import JobOrchestratorServicer
+from app.worker.job_registry import JOB_PAYLOAD_MODEL_BY_TYPE
 
 
 class FakeContext:
@@ -35,12 +38,35 @@ async def test_enqueue_job_publishes_knowledge_update_payload() -> None:
     reply = await servicer.EnqueueJob(request, FakeContext())
 
     assert reply.job_id
+    UUID(reply.job_id)
     assert len(published) == 1
     subject, envelope = published[0]
     assert subject == "jobs.knowledge.update.requested"
     decoded = json.loads(envelope)
+    assert decoded["job_id"] == reply.job_id
+    assert decoded["schema_version"] == 1
+    assert decoded["attempt"] == 0
     assert decoded["correlation_id"] == "user-1"
     assert decoded["payload"]["requested_by_user_id"] == "user-1"
+
+
+@pytest.mark.asyncio
+async def test_enqueue_job_rejects_unknown_job_type() -> None:
+    async def publish(_: str, __: bytes) -> None:
+        return None
+
+    servicer = JobOrchestratorServicer(publish)
+    request = job_orchestrator_pb2.EnqueueJobRequest(
+        job_type="unknown.job",
+        user_id="user-1",
+        payload_json=json.dumps({"value": "x"}),
+    )
+
+    with pytest.raises(RuntimeError) as exc_info:
+        await servicer.EnqueueJob(request, FakeContext())
+
+    assert "INVALID_ARGUMENT" in str(exc_info.value)
+    assert "unsupported job_type" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
@@ -56,3 +82,33 @@ async def test_enqueue_job_rejects_missing_typed_payload_for_knowledge_update() 
 
     assert "INVALID_ARGUMENT" in str(exc_info.value)
     assert "knowledge_update payload is required" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_enqueue_job_validates_payload_schema() -> None:
+    class StrictKnowledgePayload(BaseModel):
+        required_field: str
+
+    async def publish(_: str, __: bytes) -> None:
+        return None
+
+    original_model = JOB_PAYLOAD_MODEL_BY_TYPE["knowledge.update"]
+    JOB_PAYLOAD_MODEL_BY_TYPE["knowledge.update"] = StrictKnowledgePayload
+    try:
+        servicer = JobOrchestratorServicer(publish)
+        request = job_orchestrator_pb2.EnqueueJobRequest(
+            job_type="knowledge.update",
+            user_id="user-1",
+            knowledge_update=job_orchestrator_pb2.KnowledgeUpdatePayload(
+                journal_reference="2026/02/24",
+                requested_by_user_id="user-1",
+            ),
+        )
+
+        with pytest.raises(RuntimeError) as exc_info:
+            await servicer.EnqueueJob(request, FakeContext())
+    finally:
+        JOB_PAYLOAD_MODEL_BY_TYPE["knowledge.update"] = original_model
+
+    assert "INVALID_ARGUMENT" in str(exc_info.value)
+    assert "required_field" in str(exc_info.value)

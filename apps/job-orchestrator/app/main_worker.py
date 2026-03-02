@@ -3,10 +3,9 @@ from __future__ import annotations
 import asyncio
 import logging
 
-import nats
-
 from app.database import Database
 from app.job_repository import JobRepository
+from app.jetstream import connect_jetstream, ensure_jobs_stream
 from app.logging import configure_logging
 from app.orchestrator import JobOrchestrator
 from app.settings import get_settings
@@ -24,11 +23,10 @@ async def main() -> None:
     await db.connect()
     logger.info("job orchestrator database connected")
 
-    nc = await nats.connect(settings.exobrain_nats_url)
-    js = nc.jetstream()
+    nc, js = await connect_jetstream(settings.exobrain_nats_url)
     logger.info("job orchestrator nats connected", extra={"nats_url": settings.exobrain_nats_url})
 
-    await js.add_stream(name="JOBS", subjects=["jobs.>"])
+    await ensure_jobs_stream(js)
 
     repository = JobRepository(db)
     orchestrator = JobOrchestrator(
