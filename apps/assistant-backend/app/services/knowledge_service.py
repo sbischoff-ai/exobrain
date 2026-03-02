@@ -29,7 +29,7 @@ class KnowledgeService:
             payload_journal_reference = sequence[0]["reference"]
             job_id = await self._job_publisher.enqueue_job(
                 job_type="knowledge.update",
-                correlation_id=user_id,
+                user_id=user_id,
                 payload={
                     "journal_reference": payload_journal_reference,
                     "messages": payload_messages,

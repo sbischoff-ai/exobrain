@@ -20,7 +20,8 @@ dependencies = [
   "python-multipart>=0.0.20",
   "redis>=5.0.7",
   "punq>=0.7.0",
-  "nats-py>=2.9.0"
+  "grpcio>=1.74.0",
+  "protobuf>=5.27.0"
 ]
 
 [project.optional-dependencies]

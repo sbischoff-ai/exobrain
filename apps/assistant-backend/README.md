@@ -55,7 +55,7 @@ Core runtime vars:
 
 - `ASSISTANT_DB_DSN` (Postgres metastore)
 - `ASSISTANT_CACHE_REDIS_URL` (session store)
-- `EXOBRAIN_NATS_URL` (job publishing)
+- `JOB_ORCHESTRATOR_GRPC_TARGET` (job-orchestrator enqueue endpoint, default `localhost:50061`)
 - `EXOBRAIN_QDRANT_URL`, `EXOBRAIN_MEMGRAPH_URL` (knowledge dependencies)
 - `KNOWLEDGE_UPDATE_MAX_TOKENS` (max tokens per knowledge-update job payload, default `8000`)
 - `RESHAPE_SCHEMA_QUERY` (migration introspection)

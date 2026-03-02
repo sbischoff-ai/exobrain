@@ -233,16 +233,13 @@ class ChatServiceProtocol(Protocol):
 
 
 class JobPublisherProtocol(Protocol):
-    """Asynchronous job queue publisher contract."""
-
-    async def connect(self) -> None:
-        """Initialize queue client resources during app startup."""
+    """Remote job orchestration client contract."""
 
     async def close(self) -> None:
-        """Release queue client resources during shutdown."""
+        """Release any open transport resources during shutdown."""
 
-    async def enqueue_job(self, *, job_type: str, correlation_id: str, payload: dict[str, object]) -> str:
-        """Publish a new job request envelope and return the generated job id."""
+    async def enqueue_job(self, *, job_type: str, user_id: str, payload: dict[str, object]) -> str:
+        """Request remote enqueue and return the orchestrator-assigned job id."""
 
 
 class KnowledgeServiceProtocol(Protocol):

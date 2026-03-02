@@ -27,11 +27,11 @@ class FakeJobPublisher:
     def __init__(self) -> None:
         self.calls: list[dict[str, object]] = []
 
-    async def enqueue_job(self, *, job_type: str, correlation_id: str, payload: dict[str, object]) -> str:
+    async def enqueue_job(self, *, job_type: str, user_id: str, payload: dict[str, object]) -> str:
         self.calls.append(
             {
                 "job_type": job_type,
-                "correlation_id": correlation_id,
+                "user_id": user_id,
                 "payload": payload,
             }
         )
@@ -93,6 +93,7 @@ async def test_enqueue_update_job_filters_and_splits_uncommitted_sequences() -> 
     assert job_id == "job-1"
     assert len(publisher.calls) == 3
     assert publisher.calls[0]["payload"]["journal_reference"] == "2026/02/19"
+    assert publisher.calls[0]["user_id"] == "user-1"
     assert [m["sequence"] for m in publisher.calls[0]["payload"]["messages"]] == [1]
     assert [m["sequence"] for m in publisher.calls[1]["payload"]["messages"]] == [3]
     assert publisher.calls[2]["payload"]["journal_reference"] == "2026/02/20"

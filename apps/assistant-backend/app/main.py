@@ -34,8 +34,6 @@ async def lifespan(app: FastAPI):
     logger.info("assistant cache connection initialized")
 
     job_publisher = container.resolve(JobPublisherProtocol)
-    await job_publisher.connect()
-    logger.info("job publisher connection initialized")
 
     main_agent = await build_main_agent(settings)
     register_chat_agent(container, main_agent)
