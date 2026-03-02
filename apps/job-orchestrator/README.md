@@ -26,6 +26,15 @@ uv sync --extra dev
 uv run python -m app.main_worker
 ```
 
+To run the orchestrator API only:
+
+```bash
+cd apps/job-orchestrator
+cp .env.example .env
+uv sync --extra dev
+uv run python -m app.main_api
+```
+
 ## Common commands
 
 Apply local migrations:
@@ -45,6 +54,8 @@ Apply local migrations:
 
 Keep request subject patterns narrow enough that they do not also match events/DLQ subjects.
 - `WORKER_REPLICA_COUNT` (default: `1`, max concurrent worker processes)
+- `JOB_ORCHESTRATOR_API_HOST` (default: `0.0.0.0`)
+- `JOB_ORCHESTRATOR_API_PORT` (default: `50061`)
 - `KNOWLEDGE_INTERFACE_GRPC_TARGET` (default: `localhost:50051`)
 - `KNOWLEDGE_INTERFACE_CONNECT_TIMEOUT_SECONDS` (default: `5.0`)
 - `APP_ENV` (default: `local`, influences default logging level)

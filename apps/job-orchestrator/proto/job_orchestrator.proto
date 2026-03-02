@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package exobrain.job_orchestrator.v1;
+
+service JobOrchestrator {
+  rpc EnqueueJob(EnqueueJobRequest) returns (EnqueueJobReply);
+}
+
+message KnowledgeUpdateMessage {
+  string role = 1;
+  string content = 2;
+  int32 sequence = 3;
+  string created_at = 4;
+}
+
+message KnowledgeUpdatePayload {
+  string journal_reference = 1;
+  repeated KnowledgeUpdateMessage messages = 2;
+  string requested_by_user_id = 3;
+}
+
+message EnqueueJobRequest {
+  string job_type = 1;
+  string user_id = 2;
+
+  oneof payload {
+    KnowledgeUpdatePayload knowledge_update = 3;
+    string payload_json = 4;
+  }
+}
+
+message EnqueueJobReply {
+  string job_id = 1;
+}
