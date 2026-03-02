@@ -169,8 +169,7 @@ message FindEntityCandidatesRequest {
   repeated string potential_type_ids = 2;
   string short_description = 3;
   string user_id = 4;
-  Visibility visibility = 5;
-  optional uint32 limit = 6;
+  optional uint32 limit = 5;
 }
 
 message EntityCandidate {
