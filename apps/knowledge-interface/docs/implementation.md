@@ -59,6 +59,12 @@ This document is code-oriented: it helps a new contributor quickly navigate the 
 3. when the marker is absent, the service builds a deterministic starter delta and writes graph + embeddings.
 4. after a successful write, the service marks the user graph initialized via an idempotent Memgraph `MERGE` marker write.
 
+### 5) `GetEntityContext`
+
+1. gRPC handler is present and forwards to application service when wired.
+2. `KnowledgeApplication::get_entity_context` validates required IDs (`entity_id`, `user_id`) and trims input.
+3. service caps `max_block_level` to a safe upper bound before delegating access-aware query semantics to `GraphRepository`.
+
 ## Startup root graph seeding
 
 During service startup (`main.rs`), `KnowledgeApplication::ensure_common_root_graph` checks Memgraph for the shared Exobrain root graph and seeds it when absent. Seeding uses standard ingestion flow so block embeddings are generated with the configured embedding model. Memgraph connection now sets database name from `MEMGRAPH_DB` (default `memgraph`) to avoid Neo4j-driver defaults targeting `neo4j`.

@@ -18,9 +18,9 @@ use tracing::warn;
 use crate::{
     domain::{
         EdgeEndpointRule, EmbeddedBlock, EntityCandidate, ExistingBlockContext,
-        FindEntityCandidatesQuery, GraphDelta, NodeRelationshipCounts, PropertyScalar,
-        PropertyValue, SchemaType, TypeInheritance, TypeProperty, UpsertSchemaTypePropertyInput,
-        Visibility,
+        FindEntityCandidatesQuery, GetEntityContextQuery, GetEntityContextResult, GraphDelta,
+        NodeRelationshipCounts, PropertyScalar, PropertyValue, SchemaType, TypeInheritance,
+        TypeProperty, UpsertSchemaTypePropertyInput, Visibility,
     },
     ports::{Embedder, GraphRepository, SchemaRepository},
 };
@@ -815,6 +815,13 @@ impl GraphRepository for MemgraphQdrantGraphRepository {
         }
 
         Ok(candidates)
+    }
+
+    async fn get_entity_context(
+        &self,
+        _query: &GetEntityContextQuery,
+    ) -> Result<GetEntityContextResult> {
+        anyhow::bail!("get_entity_context is not implemented")
     }
 }
 

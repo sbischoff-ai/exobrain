@@ -194,3 +194,50 @@ pub struct EntityCandidate {
 pub struct FindEntityCandidatesResult {
     pub candidates: Vec<EntityCandidate>,
 }
+
+#[derive(Debug, Clone)]
+pub struct GetEntityContextQuery {
+    pub entity_id: String,
+    pub user_id: String,
+    pub max_block_level: u32,
+}
+
+#[derive(Debug, Clone)]
+pub struct EntityContextEntitySnapshot {
+    pub id: String,
+    pub type_id: String,
+    pub user_id: String,
+    pub visibility: Visibility,
+    pub properties: Vec<PropertyValue>,
+}
+
+#[derive(Debug, Clone)]
+pub struct EntityContextBlockItem {
+    pub id: String,
+    pub type_id: String,
+    pub block_level: u32,
+    pub properties: Vec<PropertyValue>,
+    pub parent_block_id: Option<String>,
+    pub parent_entity_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NeighborDirection {
+    Outgoing,
+    Incoming,
+}
+
+#[derive(Debug, Clone)]
+pub struct EntityContextNeighborItem {
+    pub direction: NeighborDirection,
+    pub edge_type: String,
+    pub edge_properties: Vec<PropertyValue>,
+    pub other_entity_id: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct GetEntityContextResult {
+    pub entity: EntityContextEntitySnapshot,
+    pub blocks: Vec<EntityContextBlockItem>,
+    pub neighbors: Vec<EntityContextNeighborItem>,
+}

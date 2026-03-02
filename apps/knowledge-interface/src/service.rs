@@ -6,8 +6,9 @@ use anyhow::{anyhow, Result};
 use crate::{
     domain::{
         BlockNode, EmbeddedBlock, EntityNode, ExistingBlockContext, FindEntityCandidatesQuery,
-        FindEntityCandidatesResult, FullSchema, GraphDelta, GraphEdge, PropertyScalar,
-        PropertyValue, SchemaType, UniverseNode, UpsertSchemaTypeCommand, Visibility,
+        FindEntityCandidatesResult, FullSchema, GetEntityContextQuery, GetEntityContextResult,
+        GraphDelta, GraphEdge, PropertyScalar, PropertyValue, SchemaType, UniverseNode,
+        UpsertSchemaTypeCommand, Visibility,
     },
     ports::{Embedder, GraphRepository, SchemaRepository},
 };
@@ -419,6 +420,25 @@ impl KnowledgeApplication {
         }
 
         Ok(FindEntityCandidatesResult { candidates })
+    }
+
+    pub async fn get_entity_context(
+        &self,
+        mut query: GetEntityContextQuery,
+    ) -> Result<GetEntityContextResult> {
+        query.entity_id = query.entity_id.trim().to_string();
+        if query.entity_id.is_empty() {
+            return Err(anyhow!("entity_id is required"));
+        }
+
+        query.user_id = query.user_id.trim().to_string();
+        if query.user_id.is_empty() {
+            return Err(anyhow!("user_id is required"));
+        }
+
+        query.max_block_level = query.max_block_level.min(32);
+
+        self.graph_repository.get_entity_context(&query).await
     }
 
     pub async fn upsert_graph_delta(&self, delta: GraphDelta) -> Result<()> {
@@ -1637,6 +1657,13 @@ mod tests {
         ) -> Result<Vec<EntityCandidate>> {
             Ok(Vec::new())
         }
+
+        async fn get_entity_context(
+            &self,
+            _query: &GetEntityContextQuery,
+        ) -> Result<GetEntityContextResult> {
+            Err(anyhow!("not implemented"))
+        }
     }
 
     struct FakeEmbedder;
@@ -1707,6 +1734,13 @@ mod tests {
         ) -> Result<Vec<EntityCandidate>> {
             Ok(Vec::new())
         }
+
+        async fn get_entity_context(
+            &self,
+            _query: &GetEntityContextQuery,
+        ) -> Result<GetEntityContextResult> {
+            Err(anyhow!("not implemented"))
+        }
     }
 
     struct CountingGraphRepository {
@@ -1758,6 +1792,13 @@ mod tests {
             _query_vector: Option<&[f32]>,
         ) -> Result<Vec<EntityCandidate>> {
             Ok(Vec::new())
+        }
+
+        async fn get_entity_context(
+            &self,
+            _query: &GetEntityContextQuery,
+        ) -> Result<GetEntityContextResult> {
+            Err(anyhow!("not implemented"))
         }
     }
 
@@ -1831,6 +1872,13 @@ mod tests {
             _query_vector: Option<&[f32]>,
         ) -> Result<Vec<EntityCandidate>> {
             Ok(Vec::new())
+        }
+
+        async fn get_entity_context(
+            &self,
+            _query: &GetEntityContextQuery,
+        ) -> Result<GetEntityContextResult> {
+            Err(anyhow!("not implemented"))
         }
     }
 
@@ -2707,6 +2755,13 @@ mod tests {
                 .push(query_vector.map(|v| v.to_vec()));
             Ok(self.candidates.clone())
         }
+
+        async fn get_entity_context(
+            &self,
+            _query: &GetEntityContextQuery,
+        ) -> Result<GetEntityContextResult> {
+            Err(anyhow!("not implemented"))
+        }
     }
 
     struct TrackingEmbedder {
@@ -2915,5 +2970,158 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["high".to_string(), "mid".to_string(), "low".to_string()]
         );
+    }
+
+    struct ContextGraphRepository {
+        seen_queries: Arc<Mutex<Vec<GetEntityContextQuery>>>,
+        result: GetEntityContextResult,
+    }
+
+    #[async_trait]
+    impl GraphRepository for ContextGraphRepository {
+        async fn apply_delta_with_blocks(
+            &self,
+            _delta: &GraphDelta,
+            _blocks: &[EmbeddedBlock],
+        ) -> Result<()> {
+            Ok(())
+        }
+
+        async fn common_root_graph_exists(&self) -> Result<bool> {
+            Ok(true)
+        }
+
+        async fn user_graph_needs_initialization(&self, _user_id: &str) -> Result<bool> {
+            Ok(false)
+        }
+
+        async fn mark_user_graph_initialized(&self, _user_id: &str) -> Result<()> {
+            Ok(())
+        }
+
+        async fn get_existing_block_context(
+            &self,
+            _block_id: &str,
+            _user_id: &str,
+            _visibility: Visibility,
+        ) -> Result<Option<ExistingBlockContext>> {
+            Ok(None)
+        }
+
+        async fn get_node_relationship_counts(
+            &self,
+            _node_id: &str,
+        ) -> Result<NodeRelationshipCounts> {
+            Ok(NodeRelationshipCounts::default())
+        }
+
+        async fn find_entity_candidates(
+            &self,
+            _query: &FindEntityCandidatesQuery,
+            _query_vector: Option<&[f32]>,
+        ) -> Result<Vec<EntityCandidate>> {
+            Ok(Vec::new())
+        }
+
+        async fn get_entity_context(
+            &self,
+            query: &GetEntityContextQuery,
+        ) -> Result<GetEntityContextResult> {
+            self.seen_queries
+                .lock()
+                .expect("lock should be available")
+                .push(query.clone());
+            Ok(self.result.clone())
+        }
+    }
+
+    #[tokio::test]
+    async fn get_entity_context_rejects_blank_entity_id() {
+        let app = KnowledgeApplication::new(
+            Arc::new(FakeSchemaRepo::new()),
+            Arc::new(ContextGraphRepository {
+                seen_queries: Arc::new(Mutex::new(Vec::new())),
+                result: sample_entity_context_result(),
+            }),
+            Arc::new(FakeEmbedder),
+        );
+
+        let err = app
+            .get_entity_context(GetEntityContextQuery {
+                entity_id: "   ".to_string(),
+                user_id: "u-1".to_string(),
+                max_block_level: 3,
+            })
+            .await
+            .expect_err("blank entity_id should fail");
+
+        assert!(err.to_string().contains("entity_id is required"));
+    }
+
+    #[tokio::test]
+    async fn get_entity_context_rejects_blank_user_id() {
+        let app = KnowledgeApplication::new(
+            Arc::new(FakeSchemaRepo::new()),
+            Arc::new(ContextGraphRepository {
+                seen_queries: Arc::new(Mutex::new(Vec::new())),
+                result: sample_entity_context_result(),
+            }),
+            Arc::new(FakeEmbedder),
+        );
+
+        let err = app
+            .get_entity_context(GetEntityContextQuery {
+                entity_id: "entity-1".to_string(),
+                user_id: "   ".to_string(),
+                max_block_level: 3,
+            })
+            .await
+            .expect_err("blank user_id should fail");
+
+        assert!(err.to_string().contains("user_id is required"));
+    }
+
+    #[tokio::test]
+    async fn get_entity_context_trims_and_caps_max_block_level() {
+        let seen_queries = Arc::new(Mutex::new(Vec::new()));
+        let app = KnowledgeApplication::new(
+            Arc::new(FakeSchemaRepo::new()),
+            Arc::new(ContextGraphRepository {
+                seen_queries: Arc::clone(&seen_queries),
+                result: sample_entity_context_result(),
+            }),
+            Arc::new(FakeEmbedder),
+        );
+
+        let result = app
+            .get_entity_context(GetEntityContextQuery {
+                entity_id: " entity-1 ".to_string(),
+                user_id: " user-1 ".to_string(),
+                max_block_level: 99,
+            })
+            .await
+            .expect("query should succeed");
+
+        assert_eq!(result.entity.id, "entity-1");
+
+        let seen = seen_queries.lock().expect("lock should be available");
+        assert_eq!(seen.len(), 1);
+        assert_eq!(seen[0].entity_id, "entity-1");
+        assert_eq!(seen[0].user_id, "user-1");
+        assert_eq!(seen[0].max_block_level, 32);
+    }
+
+    fn sample_entity_context_result() -> GetEntityContextResult {
+        GetEntityContextResult {
+            entity: crate::domain::EntityContextEntitySnapshot {
+                id: "entity-1".to_string(),
+                type_id: "node.person".to_string(),
+                user_id: "user-1".to_string(),
+                visibility: Visibility::Private,
+                properties: vec![],
+            },
+            blocks: vec![],
+            neighbors: vec![],
+        }
     }
 }
