@@ -286,10 +286,12 @@ impl Neo4jGraphStore {
             if existing_trigger_names.contains(name) {
                 continue;
             }
-            self.graph
-                .run(query(cypher))
-                .await
-                .context("failed to ensure internal timestamp triggers")?;
+            if let Err(err) = self.graph.run(query(cypher)).await {
+                if is_trigger_already_exists_error(&err) {
+                    continue;
+                }
+                return Err(err).context("failed to ensure internal timestamp triggers");
+            }
         }
 
         Ok(())
@@ -1420,6 +1422,12 @@ fn internal_timestamp_trigger_specs() -> [(&'static str, &'static str); 4] {
     ]
 }
 
+fn is_trigger_already_exists_error(err: &impl std::fmt::Display) -> bool {
+    err.to_string()
+        .to_ascii_lowercase()
+        .contains("trigger with the same name already exists")
+}
+
 fn visibility_as_str(visibility: Visibility) -> &'static str {
     match visibility {
         Visibility::Private => "PRIVATE",
@@ -1454,8 +1462,9 @@ mod tests {
         allowed_node_visibilities, build_get_entity_context_blocks_query,
         build_get_entity_context_entity_query, build_get_entity_context_neighbors_query,
         compute_name_score, internal_timestamp_trigger_specs,
-        memgraph_user_or_shared_access_clause, normalize_qdrant_grpc_url, parse_block_level,
-        parse_neighbor_direction, payload_i64, payload_string, prop_as_aliases,
+        is_trigger_already_exists_error, memgraph_user_or_shared_access_clause,
+        normalize_qdrant_grpc_url, parse_block_level, parse_neighbor_direction, payload_i64,
+        payload_string, prop_as_aliases,
         qdrant_user_or_shared_access_filter, semantic_score_with_block_level,
         upsert_semantic_candidate, validate_edge_type, MockEmbedder,
     };
@@ -1470,6 +1479,17 @@ mod tests {
         assert!(triggers[3].1.contains("ON --> UPDATE"));
         assert!(triggers[1].1.contains("createdEdges"));
         assert!(triggers[3].1.contains("updatedEdges"));
+    }
+
+    #[test]
+    fn detects_trigger_already_exists_error_text_case_insensitively() {
+        assert!(is_trigger_already_exists_error(
+            &"Neo4j error: Trigger with the same name already exists."
+        ));
+        assert!(is_trigger_already_exists_error(
+            &"neo4j error: trigger with THE same NAME already exists"
+        ));
+        assert!(!is_trigger_already_exists_error(&"some other query error"));
     }
 
     #[test]
