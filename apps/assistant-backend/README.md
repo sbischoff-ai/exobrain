@@ -49,6 +49,25 @@ ASSISTANT_BACKEND_INTEGRATION_ENV_FILE=tests/integration/.env.integration \
   uv run --with pytest --with pytest-asyncio --with httpx pytest -m integration
 ```
 
+## Seed Memgraph test data for assistant-backend
+
+Use the canned knowledge-interface gRPC payloads to initialize graph state for the seeded assistant-backend test user (`test.user@exobrain.local`) and upsert a realistic task + block tree for GraphRAG testing.
+
+```bash
+./scripts/local/add-assistant-backend-memgraph-test-data.sh
+```
+
+The script reads:
+
+- `apps/assistant-backend/mock-data/knowledge/initialize-user-graph.request.json`
+- `apps/assistant-backend/mock-data/knowledge/upsert-graph-delta.request.template.json`
+
+Optional overrides:
+
+- `KNOWLEDGE_GRPC_TARGET` (default `127.0.0.1:50051`)
+- `INIT_REQUEST_PATH`
+- `DELTA_TEMPLATE_PATH`
+
 ## Configuration
 
 Core runtime vars:

@@ -97,6 +97,29 @@ workflows:
     offline_compatible: true
 
 
+  - name: knowledge-interface-native
+    purpose: Run knowledge-interface in native agent environments with Postgres/Qdrant and a separately managed Memgraph instance.
+    required_tools:
+      - bash
+      - cargo
+      - grpcurl
+      - psql
+      - reshape
+    required_services:
+      - postgresql
+      - qdrant
+      - memgraph
+    entry_commands:
+      - ./scripts/agent/native-infra-up.sh
+      - ./scripts/agent/run-knowledge-interface-native.sh
+    health_check_commands:
+      - ./scripts/agent/native-infra-health.sh
+      - "grpcurl -plaintext -d '{}' 127.0.0.1:50051 exobrain.knowledge.v1.KnowledgeInterface/Health"
+    teardown_commands:
+      - ./scripts/agent/native-infra-down.sh
+    offline_compatible: true
+
+
   - name: assistant-db-setup-local
     purpose: Bootstrap, migrate, and seed assistant Postgres schema in local workstation workflow.
     required_tools:
