@@ -8,6 +8,7 @@ from typing import Protocol
 import asyncpg
 
 from app.api.schemas.auth import LoginRequest, UnifiedPrincipal, UserResponse
+from app.services.knowledge_stream import KnowledgeUpdateStreamEvent
 from app.services.chat_stream import ChatStreamEvent
 
 
@@ -241,12 +242,18 @@ class JobPublisherProtocol(Protocol):
     async def enqueue_job(self, *, user_id: str, job_type: str, payload: dict[str, object]) -> str:
         """Request remote enqueue and return the orchestrator-assigned job id."""
 
+    async def watch_job_status(self, *, job_id: str, include_current: bool = True) -> AsyncIterator[Any]:
+        """Stream lifecycle status events for a job id from the remote orchestrator."""
+
 
 class KnowledgeServiceProtocol(Protocol):
     """Service contract for knowledge-graph related asynchronous workflows."""
 
     async def enqueue_update_job(self, *, user_id: str, journal_reference: str | None = None) -> str:
         """Queue one or more knowledge update jobs from uncommitted journal messages."""
+
+    async def watch_update_job(self, *, job_id: str) -> AsyncIterator[KnowledgeUpdateStreamEvent]:
+        """Yield typed lifecycle events for one enqueued knowledge update job."""
 
 
 class SessionStoreProtocol(Protocol):
