@@ -11,14 +11,14 @@ Canonical workflow metadata is stored in `.agent/workflows.yaml`. Keep this docu
 
 ## Choose your workflow in 30 seconds
 
-| Task type | Required services | Skill to invoke | Script entrypoint | Verification command |
-| --- | --- | --- | --- | --- |
-| Backend-only bugfix | Postgres, NATS, Qdrant | None (default agent workflow) | `./scripts/agent/assistant-offline-up.sh` then `./scripts/agent/run-assistant-backend-offline.sh` | `cd apps/assistant-backend && uv run python -m pytest -m "not integration"` |
-| Frontend UI tweak | None (mock API mode) | None (default agent workflow) | `./scripts/agent/run-assistant-frontend-mock.sh` | `cd apps/assistant-frontend && npm test` |
-| Frontend E2E validation | None (mock API mode) | None (default agent workflow) | `./scripts/agent/run-assistant-frontend-e2e.sh` | `./scripts/agent/run-assistant-frontend-e2e.sh` |
-| DB migration/schema changes | Postgres | None (default agent workflow) | `./scripts/agent/assistant-db-setup-native.sh` | `./scripts/agent/assistant-db-setup-native.sh` |
-| Knowledge-interface ingestion changes | Postgres, NATS, Qdrant | None (default agent workflow) | `./scripts/agent/native-infra-up.sh` then `./scripts/local/run-knowledge-interface.sh` | `./scripts/agent/native-infra-health.sh` |
-| Docs-only changes | None | None (default agent workflow) | N/A | `pnpm -s prettier --check docs/agents/codex-runbook.agent.md AGENTS.md` |
+| Task type                             | Required services      | Skill to invoke               | Script entrypoint                                                                                                                         | Verification command                                                        |
+| ------------------------------------- | ---------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Backend-only bugfix                   | Postgres, NATS, Qdrant | None (default agent workflow) | `./scripts/agent/assistant-offline-up.sh` then `./scripts/agent/run-assistant-backend-offline.sh` (includes job-orchestrator for enqueue) | `cd apps/assistant-backend && uv run python -m pytest -m "not integration"` |
+| Frontend UI tweak                     | None (mock API mode)   | None (default agent workflow) | `./scripts/agent/run-assistant-frontend-mock.sh`                                                                                          | `cd apps/assistant-frontend && npm test`                                    |
+| Frontend E2E validation               | None (mock API mode)   | None (default agent workflow) | `./scripts/agent/run-assistant-frontend-e2e.sh`                                                                                           | `./scripts/agent/run-assistant-frontend-e2e.sh`                             |
+| DB migration/schema changes           | Postgres               | None (default agent workflow) | `./scripts/agent/assistant-db-setup-native.sh`                                                                                            | `./scripts/agent/assistant-db-setup-native.sh`                              |
+| Knowledge-interface ingestion changes | Postgres, NATS, Qdrant | None (default agent workflow) | `./scripts/agent/native-infra-up.sh` then `./scripts/local/run-knowledge-interface.sh`                                                    | `./scripts/agent/native-infra-health.sh`                                    |
+| Docs-only changes                     | None                   | None (default agent workflow) | N/A                                                                                                                                       | `pnpm -s prettier --check docs/agents/codex-runbook.agent.md AGENTS.md`     |
 
 Use this matrix to pick the fastest path; detailed instructions remain in the sections below.
 
@@ -40,6 +40,14 @@ curl -sS -X POST http://localhost:8000/api/auth/login \
 
 curl -sS http://localhost:8000/api/users/me -b /tmp/exobrain.cookies
 ```
+
+Knowledge update enqueue sequence:
+
+```text
+assistant-backend -> job-orchestrator (gRPC EnqueueJob) -> JetStream jobs.<job_type>.requested -> worker consume/process
+```
+
+Rollout guidance for deploys: avoid mixed producer behavior by deploying orchestrator `EnqueueJob` first, then cutting over assistant-backend instances via feature flag/wave rollout, and removing legacy direct-producer paths only after full cutover.
 
 ## What the agent scripts do
 
@@ -83,7 +91,6 @@ Format responses in markdown and separate each message with:
 
 The mock model cycles through these messages and wraps to the first one when it reaches the end.
 
-
 ## Assistant-backend integration API tests
 
 Run against any reachable backend URL (native local process or k3d ingress):
@@ -97,14 +104,13 @@ ASSISTANT_BACKEND_INTEGRATION_ENV_FILE=tests/integration/.env.integration \
 ```
 
 The suite expects assistant seed user credentials:
-- `test.user@exobrain.local` / `password123`
 
+- `test.user@exobrain.local` / `password123`
 
 ### Python interpreter note for Codex containers
 
 Some containers expose `python3` from a pyenv shim (for example 3.10) even when `/usr/bin/python3.12` is installed.
 Use `uv sync --extra dev` and run tests via `uv run python -m pytest` from `apps/assistant-backend` to force the project `.venv` interpreter and avoid version mismatch errors (for example `datetime.UTC` import failures).
-
 
 ## Frontend-only exploration (no backend)
 
@@ -115,6 +121,7 @@ Run the frontend in mock API mode to bypass backend startup entirely:
 ```
 
 Then open `http://localhost:5173` and login with:
+
 - email: `test.user@exobrain.local`
 - password: `password123`
 
@@ -135,7 +142,6 @@ Use two terminals:
 
 This keeps backend auth/journal/chat APIs real while replacing OpenAI/Tavily calls with local mocks (`MAIN_AGENT_USE_MOCK=true`, `WEB_TOOLS_USE_MOCK=true`).
 
-
 ## Frontend E2E suite (Playwright)
 
 Run end-to-end coverage against mock API mode (recommended for agent workflows):
@@ -145,6 +151,7 @@ Run end-to-end coverage against mock API mode (recommended for agent workflows):
 ```
 
 Script behavior:
+
 - Uses `npm ci` when `e2e/package-lock.json` is present (falls back to `npm install` only when no lockfile exists).
 - Reuses a valid `e2e/node_modules` install by default for faster reruns.
 - Reinstalls deps when `e2e/node_modules` is missing/invalid, or when forced via `--force-reinstall` or `E2E_FORCE_REINSTALL=true`.

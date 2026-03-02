@@ -26,19 +26,25 @@ This guide defines the canonical way to start Exobrain processes for local devel
 
 ## Script ownership matrix
 
-| Script family | Primary use | Notes |
-| --- | --- | --- |
-| `scripts/local/*` | Workstation local development | Uses Docker Compose for infra plus native app processes. |
+| Script family     | Primary use                                | Notes                                                     |
+| ----------------- | ------------------------------------------ | --------------------------------------------------------- |
+| `scripts/local/*` | Workstation local development              | Uses Docker Compose for infra plus native app processes.  |
 | `scripts/agent/*` | Codex/cloud-agent constrained environments | Avoids Docker/k3d assumptions; uses native infra helpers. |
-| `scripts/k3d/*` | Local Kubernetes verification | Complements `docs/development/k3d-workflow.md`. |
+| `scripts/k3d/*`   | Local Kubernetes verification              | Complements `docs/development/k3d-workflow.md`.           |
 
 ## Operational checklist
 
 1. Start infra (`./scripts/local/infra-up.sh`).
 2. Run per-database setup scripts needed for your profile (`assistant-db-setup.sh`, `job-orchestrator-db-setup.sh`, `knowledge-schema-setup.sh`).
-3. Start app processes via mprocs wrapper script.
+3. Start app processes via mprocs wrapper script (ensure `job-orchestrator` is up before testing assistant knowledge updates).
 4. Use `Ctrl+C` in mprocs to stop app processes.
 5. Stop infra (`./scripts/local/infra-down.sh`).
+
+Knowledge update enqueue path (canonical):
+
+```text
+assistant-backend -> job-orchestrator (gRPC EnqueueJob) -> JetStream jobs.<job_type>.requested -> worker consume/process
+```
 
 ## Troubleshooting quick hits
 
