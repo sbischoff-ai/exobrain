@@ -50,7 +50,19 @@ cd apps/assistant-frontend && npm test
 - Auto-scroll responds to all message updates, including streaming chunk updates.
 - Chat bubbles show per-message `hh:mm` timestamps sourced from message `created_at` values.
 - Logout clears `sessionStorage` snapshot state and returns users to intro gate.
-- Knowledge update action is exposed as an accessible circular header control (`aria-label` + tooltip) and is disabled for past journals while animating during active watch.
+- Knowledge update action appears in the top-right header actions cluster, immediately next to the user menu.
+- Knowledge update action is exposed as an accessible circular header control (`aria-label` + tooltip).
+- Knowledge update is disabled when viewing a past journal, while app state is loading/syncing, while an update is already in progress, and whenever there are no new messages since the last successful update (`title="nothing to update"`).
+
+### Knowledge update flow (high-level)
+
+1. User clicks the header update button for today's journal with new messages available.
+2. Frontend enqueues the job via `POST /api/knowledge/update/enqueue`.
+3. Frontend opens a watch stream via `GET /api/knowledge/update/{job_id}/watch` (SSE) and tracks status events.
+4. Button enters in-progress mode: disabled with `Knowledge update in progress` tooltip and spinner animation.
+5. On terminal watch state:
+   - `SUCCEEDED`: show success status (`Knowledge base updated successfully.`), stop spinner, and mark current message count as synced.
+   - failure/disconnect: show error feedback (`Could not update knowledge base. Please try again.`), stop spinner, and allow retry.
 
 ## Related docs
 
