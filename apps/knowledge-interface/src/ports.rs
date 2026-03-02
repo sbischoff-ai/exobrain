@@ -38,6 +38,8 @@ pub trait GraphRepository: Send + Sync {
         blocks: &[EmbeddedBlock],
     ) -> Result<()>;
     async fn common_root_graph_exists(&self) -> Result<bool>;
+    async fn is_user_graph_initialized(&self, user_id: &str) -> Result<bool>;
+    async fn mark_user_graph_initialized(&self, user_id: &str) -> Result<()>;
     async fn get_existing_block_context(
         &self,
         block_id: &str,
