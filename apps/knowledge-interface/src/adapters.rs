@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use anyhow::{Context, Result};
 use async_trait::async_trait;
-use neo4rs::{query, ConfigBuilder, Graph, Txn};
+use neo4rs::{query, BoltMap, BoltType, ConfigBuilder, Graph, Txn};
 use qdrant_client::{
     qdrant::{
         value::Kind, Condition, CreateCollectionBuilder, DeletePointsBuilder, Distance, Filter,
@@ -17,10 +17,12 @@ use tracing::warn;
 
 use crate::{
     domain::{
-        EdgeEndpointRule, EmbeddedBlock, EntityCandidate, ExistingBlockContext,
+        EdgeEndpointRule, EmbeddedBlock, EntityCandidate, EntityContextBlockItem,
+        EntityContextEntitySnapshot, EntityContextNeighborItem, ExistingBlockContext,
         FindEntityCandidatesQuery, GetEntityContextQuery, GetEntityContextResult, GraphDelta,
-        NodeRelationshipCounts, PropertyScalar, PropertyValue, SchemaType, TypeInheritance,
-        TypeProperty, UpsertSchemaTypePropertyInput, UserInitGraphNodeIds, Visibility,
+        NeighborDirection, NodeRelationshipCounts, PropertyScalar, PropertyValue, SchemaType,
+        TypeInheritance, TypeProperty, UpsertSchemaTypePropertyInput, UserInitGraphNodeIds,
+        Visibility,
     },
     ports::{Embedder, GraphRepository, SchemaRepository},
 };
@@ -547,6 +549,150 @@ impl Neo4jGraphStore {
             block_parent_edges: row.get::<i64>("block_parent_edges")? as usize,
         })
     }
+
+    async fn get_entity_context(
+        &self,
+        query_input: &GetEntityContextQuery,
+    ) -> Result<GetEntityContextResult> {
+        let mut entity_rows = self
+            .graph
+            .execute(
+                query(&format!(
+                    "MATCH (e:Entity {{id: $entity_id}}) WHERE {} RETURN e.id AS id, e.type_id AS type_id, e.user_id AS user_id, e.visibility AS visibility",
+                    memgraph_user_or_shared_access_clause("e")
+                ))
+                .param("entity_id", query_input.entity_id.clone())
+                .param("user_id", query_input.user_id.clone()),
+            )
+            .await
+            .context("failed to query target entity context")?;
+
+        let Some(entity_row) = entity_rows.next().await? else {
+            anyhow::bail!("entity not found or inaccessible")
+        };
+
+        let entity = EntityContextEntitySnapshot {
+            id: entity_row.get("id").context("missing entity.id")?,
+            type_id: entity_row
+                .get("type_id")
+                .context("missing entity.type_id")?,
+            user_id: entity_row
+                .get("user_id")
+                .context("missing entity.user_id")?,
+            visibility: visibility_from_str(
+                &entity_row
+                    .get::<String>("visibility")
+                    .context("missing entity.visibility")?,
+            )?,
+            properties: Vec::new(),
+        };
+
+        let mut block_rows = self
+            .graph
+            .execute(
+                query(&format!(
+                    "MATCH (e:Entity {{id: $entity_id}})-[:DESCRIBED_BY]->(root:Block)
+                     WHERE {entity_access} AND {root_access}
+                     MATCH p=(root)-[:SUMMARIZES*0..$max_block_level]->(b:Block)
+                     WHERE {block_access}
+                     OPTIONAL MATCH (parent:Block)-[:SUMMARIZES]->(b)
+                     WHERE {parent_access}
+                     RETURN b.id AS block_id,
+                            b.type_id AS type_id,
+                            length(p) AS block_level,
+                            parent.id AS parent_block_id,
+                            e.id AS parent_entity_id
+                     ORDER BY block_level ASC, block_id ASC",
+                    entity_access = memgraph_user_or_shared_access_clause("e"),
+                    root_access = memgraph_user_or_shared_access_clause("root"),
+                    block_access = memgraph_user_or_shared_access_clause("b"),
+                    parent_access = memgraph_user_or_shared_access_clause("parent"),
+                ))
+                .param("entity_id", query_input.entity_id.clone())
+                .param("user_id", query_input.user_id.clone())
+                .param("max_block_level", query_input.max_block_level as i64),
+            )
+            .await
+            .context("failed to query entity context blocks")?;
+
+        let mut blocks = Vec::new();
+        while let Some(row) = block_rows.next().await? {
+            let block_level: i64 = row
+                .get("block_level")
+                .context("missing block.block_level")?;
+            blocks.push(EntityContextBlockItem {
+                id: row.get("block_id").context("missing block.id")?,
+                type_id: row.get("type_id").context("missing block.type_id")?,
+                block_level: block_level as u32,
+                properties: Vec::new(),
+                parent_block_id: row.get("parent_block_id").ok(),
+                parent_entity_id: row.get("parent_entity_id").ok(),
+            });
+        }
+
+        let neighbor_query = format!(
+            "MATCH (e:Entity {{id: $entity_id}})
+             WHERE {entity_access}
+             MATCH (e)-[r]->(other:Entity)
+             WHERE {other_access} AND {edge_access}
+             RETURN 'OUTGOING' AS direction,
+                    type(r) AS edge_type,
+                    properties(r) AS edge_props,
+                    other.id AS other_entity_id
+             UNION ALL
+             MATCH (e:Entity {{id: $entity_id}})
+             WHERE {entity_access}
+             MATCH (e)<-[r]-(other:Entity)
+             WHERE {other_access} AND {edge_access}
+             RETURN 'INCOMING' AS direction,
+                    type(r) AS edge_type,
+                    properties(r) AS edge_props,
+                    other.id AS other_entity_id
+             ORDER BY direction ASC, edge_type ASC, other_entity_id ASC",
+            entity_access = memgraph_user_or_shared_access_clause("e"),
+            other_access = memgraph_user_or_shared_access_clause("other"),
+            edge_access = memgraph_user_or_shared_access_clause("r"),
+        );
+
+        let mut neighbor_rows = self
+            .graph
+            .execute(
+                query(&neighbor_query)
+                    .param("entity_id", query_input.entity_id.clone())
+                    .param("user_id", query_input.user_id.clone()),
+            )
+            .await
+            .context("failed to query entity context neighbors")?;
+
+        let mut neighbors = Vec::new();
+        while let Some(row) = neighbor_rows.next().await? {
+            let direction_raw: String =
+                row.get("direction").context("missing neighbor.direction")?;
+            let direction = match direction_raw.as_str() {
+                "OUTGOING" => NeighborDirection::Outgoing,
+                "INCOMING" => NeighborDirection::Incoming,
+                _ => anyhow::bail!("invalid neighbor direction: {direction_raw}"),
+            };
+            let edge_props: BoltMap = row
+                .get("edge_props")
+                .context("missing neighbor.edge_props")?;
+
+            neighbors.push(EntityContextNeighborItem {
+                direction,
+                edge_type: row.get("edge_type").context("missing neighbor.edge_type")?,
+                edge_properties: bolt_map_to_property_values(edge_props),
+                other_entity_id: row
+                    .get("other_entity_id")
+                    .context("missing neighbor.other_entity_id")?,
+            });
+        }
+
+        Ok(GetEntityContextResult {
+            entity,
+            blocks,
+            neighbors,
+        })
+    }
 }
 
 fn allowed_node_visibilities(edge_visibility: Visibility) -> Vec<String> {
@@ -888,9 +1034,32 @@ impl GraphRepository for MemgraphQdrantGraphRepository {
 
     async fn get_entity_context(
         &self,
-        _query: &GetEntityContextQuery,
+        query: &GetEntityContextQuery,
     ) -> Result<GetEntityContextResult> {
-        anyhow::bail!("get_entity_context is not implemented")
+        self.graph_store.get_entity_context(query).await
+    }
+}
+
+fn bolt_map_to_property_values(map: BoltMap) -> Vec<PropertyValue> {
+    let mut properties: Vec<PropertyValue> = map
+        .value
+        .into_iter()
+        .map(|(key, value)| PropertyValue {
+            key: key.value,
+            value: bolt_type_to_property_scalar(value),
+        })
+        .collect();
+    properties.sort_by(|a, b| a.key.cmp(&b.key));
+    properties
+}
+
+fn bolt_type_to_property_scalar(value: BoltType) -> PropertyScalar {
+    match value {
+        BoltType::String(v) => PropertyScalar::String(v.value),
+        BoltType::Boolean(v) => PropertyScalar::Bool(v.value),
+        BoltType::Integer(v) => PropertyScalar::Int(v.value),
+        BoltType::Float(v) => PropertyScalar::Float(v.value),
+        other => PropertyScalar::Json(format!("{other:?}")),
     }
 }
 
@@ -1228,6 +1397,14 @@ fn visibility_as_str(visibility: Visibility) -> &'static str {
     match visibility {
         Visibility::Private => "PRIVATE",
         Visibility::Shared => "SHARED",
+    }
+}
+
+fn visibility_from_str(visibility: &str) -> Result<Visibility> {
+    match visibility {
+        "PRIVATE" => Ok(Visibility::Private),
+        "SHARED" => Ok(Visibility::Shared),
+        _ => anyhow::bail!("invalid visibility: {visibility}"),
     }
 }
 
