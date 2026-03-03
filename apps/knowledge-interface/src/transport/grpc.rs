@@ -6,9 +6,8 @@ use crate::domain::{
     SchemaKind, SchemaType, UpsertSchemaTypeCommand, UpsertSchemaTypePropertyInput,
 };
 use crate::presentation::extraction_prompt::ExtractionContextView;
-use crate::presentation::upsert_delta_json_schema::{
-    upsert_graph_delta_json_schema_string, UPSERT_GRAPH_DELTA_SCHEMA_ID,
-};
+use crate::presentation::upsert_delta_json_schema::UPSERT_GRAPH_DELTA_SCHEMA_ID;
+use crate::presentation::upsert_delta_json_schema_generator::generate_upsert_graph_delta_json_schema_string;
 use crate::service::{
     build_extraction_entity_types, EntityTypePropertyContextOptions,
     ExtractionAllowedEdge as ServiceAllowedEdge,
@@ -82,6 +81,19 @@ fn to_proto_extraction_entity_type(entity: ServiceExtractionEntityType) -> Extra
     }
 }
 
+fn build_upsert_graph_delta_json_schema_reply() -> Result<GetUpsertGraphDeltaJsonSchemaReply, Status>
+{
+    let json_schema = generate_upsert_graph_delta_json_schema_string()
+        .map_err(|err| Status::internal(err.to_string()))?;
+
+    Ok(GetUpsertGraphDeltaJsonSchemaReply {
+        json_schema,
+        schema_id: Some(UPSERT_GRAPH_DELTA_SCHEMA_ID.to_string()),
+        draft: Some("2020-12".to_string()),
+        version: Some("1.0.0".to_string()),
+    })
+}
+
 fn to_proto_extraction_universe(universe: ServiceExtractionUniverseContext) -> ExtractionUniverse {
     ExtractionUniverse {
         id: universe.id,
@@ -153,12 +165,7 @@ impl KnowledgeInterface for KnowledgeGrpcService {
         &self,
         _request: Request<GetUpsertGraphDeltaJsonSchemaRequest>,
     ) -> Result<Response<GetUpsertGraphDeltaJsonSchemaReply>, Status> {
-        Ok(Response::new(GetUpsertGraphDeltaJsonSchemaReply {
-            json_schema: upsert_graph_delta_json_schema_string(),
-            schema_id: Some(UPSERT_GRAPH_DELTA_SCHEMA_ID.to_string()),
-            draft: Some("2020-12".to_string()),
-            version: Some("1.0.0".to_string()),
-        }))
+        Ok(Response::new(build_upsert_graph_delta_json_schema_reply()?))
     }
 
     async fn get_extraction_schema_context(
@@ -430,8 +437,8 @@ pub async fn run_server(
 #[cfg(test)]
 mod tests {
     use super::{
-        extraction_options_from_request, to_proto_extraction_entity_type,
-        to_proto_extraction_universe, upsert_graph_delta_json_schema_string,
+        build_upsert_graph_delta_json_schema_reply, extraction_options_from_request,
+        to_proto_extraction_entity_type, to_proto_extraction_universe,
     };
     use crate::domain::{
         EdgeEndpointRule, FullSchema, SchemaEdgeTypeHydrated, SchemaNodeTypeHydrated, SchemaType,
@@ -444,6 +451,7 @@ mod tests {
     use crate::transport::proto::{
         GetEntityTypePropertyContextRequest, GetExtractionSchemaContextRequest,
     };
+    use serde_json::Value;
 
     #[test]
     fn extraction_schema_context_filters_inactive_types_and_rules_by_default() {
@@ -904,14 +912,86 @@ mod tests {
         assert_eq!(reply.properties[1].declared_on_type_id, "node.entity");
     }
 
+    fn schema_reply_json() -> Value {
+        let reply = build_upsert_graph_delta_json_schema_reply()
+            .expect("schema endpoint payload should be generated");
+        serde_json::from_str(&reply.json_schema)
+            .expect("schema endpoint should return parseable json")
+    }
+
     #[test]
-    fn upsert_graph_delta_json_schema_contains_core_sections() {
-        let schema = upsert_graph_delta_json_schema_string();
-        assert!(schema.contains("$schema"));
-        assert!(schema.contains("$id"));
-        assert!(schema.contains("universes"));
-        assert!(schema.contains("entities"));
-        assert!(schema.contains("blocks"));
-        assert!(schema.contains("edges"));
+    fn upsert_graph_delta_schema_endpoint_returns_parseable_json_payload() {
+        let schema = schema_reply_json();
+        assert_eq!(
+            schema["$schema"],
+            serde_json::json!("https://json-schema.org/draft/2020-12/schema")
+        );
+    }
+
+    #[test]
+    fn upsert_graph_delta_schema_root_includes_required_sections() {
+        let schema = schema_reply_json();
+        let properties = schema["properties"]
+            .as_object()
+            .expect("schema properties should be an object");
+
+        assert!(properties.contains_key("universes"));
+        assert!(properties.contains_key("entities"));
+        assert!(properties.contains_key("blocks"));
+        assert!(properties.contains_key("edges"));
+    }
+
+    #[test]
+    fn upsert_graph_delta_schema_property_value_uses_one_of_typed_fields() {
+        let schema = schema_reply_json();
+        let property_value =
+            &schema["properties"]["entities"]["items"]["properties"]["properties"]["items"];
+
+        assert_eq!(property_value["required"], serde_json::json!(["key"]));
+        assert_eq!(
+            property_value["oneOf"].as_array().map(std::vec::Vec::len),
+            Some(6)
+        );
+        assert_eq!(property_value["minProperties"], serde_json::json!(2));
+        assert_eq!(property_value["maxProperties"], serde_json::json!(2));
+    }
+
+    #[test]
+    fn upsert_graph_delta_schema_includes_visibility_enum_values() {
+        let schema = schema_reply_json();
+        let visibility = &schema["properties"]["entities"]["items"]["properties"]["visibility"];
+        let values = visibility["enum"]
+            .as_array()
+            .expect("visibility enum should be an array")
+            .iter()
+            .map(|value| value.as_str().unwrap_or_default())
+            .collect::<Vec<_>>();
+
+        assert!(values.contains(&"PRIVATE"));
+        assert!(values.contains(&"SHARED"));
+    }
+
+    #[test]
+    fn upsert_graph_delta_schema_snapshot_like_fragments_remain_stable() {
+        let reply = build_upsert_graph_delta_json_schema_reply()
+            .expect("schema endpoint payload should be generated");
+
+        let fragments = [
+            r#""required": [
+    "universes",
+    "entities",
+    "blocks",
+    "edges""#,
+            r#""oneOf": ["#,
+            r#""format": "date-time""#,
+            r#""visibility": {"#,
+        ];
+
+        for fragment in fragments {
+            assert!(
+                reply.json_schema.contains(fragment),
+                "expected fragment missing from schema: {fragment}"
+            );
+        }
     }
 }
