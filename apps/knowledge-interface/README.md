@@ -56,6 +56,7 @@ grpcui -plaintext localhost:50051
 On startup, the service checks whether the shared root graph exists in Memgraph and seeds it if missing. The seed is written through the same validated ingestion pipeline used by gRPC requests, including Qdrant projection updates.
 
 Internal Memgraph timestamp triggers are ensured idempotently during startup by checking `SHOW TRIGGERS` and creating only missing triggers, so pre-existing triggers are treated as already-initialized state instead of a fatal error.
+Update triggers target Memgraph update-event payloads (`event.vertex` / `event.edge`) to avoid invalid property writes during node or edge updates.
 
 ## Write consistency guarantees
 

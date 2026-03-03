@@ -1438,11 +1438,11 @@ fn internal_timestamp_trigger_specs() -> [(&'static str, &'static str); 4] {
         ),
         (
             "set_node_updated_at_on_update",
-            "CREATE TRIGGER set_node_updated_at_on_update ON () UPDATE BEFORE COMMIT EXECUTE UNWIND updatedVertices AS n SET n.updated_at = datetime()",
+            "CREATE TRIGGER set_node_updated_at_on_update ON () UPDATE BEFORE COMMIT EXECUTE UNWIND updatedVertices AS event SET event.vertex.updated_at = datetime()",
         ),
         (
             "set_edge_updated_at_on_update",
-            "CREATE TRIGGER set_edge_updated_at_on_update ON --> UPDATE BEFORE COMMIT EXECUTE UNWIND updatedEdges AS e SET e.updated_at = datetime()",
+            "CREATE TRIGGER set_edge_updated_at_on_update ON --> UPDATE BEFORE COMMIT EXECUTE UNWIND updatedEdges AS event SET event.edge.updated_at = datetime()",
         ),
     ]
 }
@@ -1510,6 +1510,8 @@ mod tests {
         assert!(triggers[3].1.contains("ON --> UPDATE"));
         assert!(triggers[1].1.contains("createdEdges"));
         assert!(triggers[3].1.contains("updatedEdges"));
+        assert!(triggers[2].1.contains("event.vertex.updated_at"));
+        assert!(triggers[3].1.contains("event.edge.updated_at"));
         assert!(triggers.iter().all(|(_, cypher)| !cypher.contains("IF NOT EXISTS")));
     }
 
