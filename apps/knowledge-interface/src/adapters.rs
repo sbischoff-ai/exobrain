@@ -29,7 +29,6 @@ use crate::{
     ports::{Embedder, GraphRepository, SchemaRepository},
 };
 
-const ENTITY_RECENCY_WEIGHT: f64 = 0.45;
 const ENTITY_BLOCK_VOLUME_WEIGHT: f64 = 0.30;
 const ENTITY_OWNERSHIP_WEIGHT: f64 = 0.15;
 const ENTITY_NEIGHBOR_COUNT_WEIGHT: f64 = 0.10;
@@ -888,12 +887,10 @@ fn build_list_entities_by_type_query() -> String {
               updated_at,
               block_volume,
               COUNT(DISTINCT rel) AS neighbor_count,
-              CASE WHEN e.user_id = $user_id THEN 1.0 ELSE 0.0 END AS ownership_boost,
-              duration.between(datetime('{default_updated_at_epoch}'), updated_at_value).seconds AS recency_seconds
+              CASE WHEN e.user_id = $user_id THEN 1.0 ELSE 0.0 END AS ownership_boost
          WITH e,
               description,
               updated_at,
-              ({recency_weight} * toFloat(recency_seconds)) +
               ({block_volume_weight} * log10(toFloat(1 + block_volume))) +
               ({ownership_weight} * ownership_boost) +
               ({neighbor_count_weight} * log10(toFloat(1 + neighbor_count))) AS relevance
@@ -903,15 +900,14 @@ fn build_list_entities_by_type_query() -> String {
                 description,
                 relevance
          ORDER BY relevance DESC, updated_at DESC, id ASC
-         LIMIT $limit
-         SKIP $offset",
+         SKIP $offset
+         LIMIT $limit",
         entity_access = memgraph_user_or_shared_access_clause("e"),
         root_access = memgraph_user_or_shared_access_clause("root"),
         described_root_access = memgraph_user_or_shared_access_clause("described_root"),
         block_access = memgraph_user_or_shared_access_clause("b"),
         relationship_access = memgraph_user_or_shared_access_clause("rel"),
         default_updated_at_epoch = ENTITY_LIST_DEFAULT_UPDATED_AT_EPOCH,
-        recency_weight = ENTITY_RECENCY_WEIGHT,
         block_volume_weight = ENTITY_BLOCK_VOLUME_WEIGHT,
         ownership_weight = ENTITY_OWNERSHIP_WEIGHT,
         neighbor_count_weight = ENTITY_NEIGHBOR_COUNT_WEIGHT,
@@ -2122,6 +2118,8 @@ mod tests {
         assert!(list_query.contains("COUNT(DISTINCT rel) AS neighbor_count"));
         assert!(list_query.contains("CASE WHEN e.user_id = $user_id THEN 1.0 ELSE 0.0 END"));
         assert!(list_query.contains("ORDER BY relevance DESC, updated_at DESC, id ASC"));
+        assert!(list_query.contains("SKIP $offset\n         LIMIT $limit"));
+        assert!(!list_query.contains("duration.between"));
         assert!(list_query.contains("LIMIT $limit"));
         assert!(list_query.contains("SKIP $offset"));
     }
