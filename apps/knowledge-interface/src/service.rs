@@ -706,7 +706,19 @@ impl KnowledgeApplication {
             .map(|token| token.trim().to_string())
             .filter(|token| !token.is_empty());
 
-        query.offset = Some(query.offset.unwrap_or_default());
+        query.offset = Some(match query.offset {
+            Some(offset) => offset,
+            None => query
+                .page_token
+                .as_deref()
+                .map(|token| {
+                    token
+                        .parse::<u64>()
+                        .map_err(|_| anyhow!("page_token must be a valid pagination cursor"))
+                })
+                .transpose()?
+                .unwrap_or_default(),
+        });
 
         self.graph_repository.list_entities_by_type(&query).await
     }
@@ -3971,6 +3983,60 @@ mod tests {
         assert_eq!(seen[0].offset, Some(0));
     }
 
+    #[tokio::test]
+    async fn list_entities_by_type_derives_offset_from_page_token() {
+        let seen_queries = Arc::new(Mutex::new(Vec::new()));
+        let app = KnowledgeApplication::new(
+            Arc::new(FakeSchemaRepo::new()),
+            Arc::new(ListByTypeGraphRepository {
+                seen_queries: Arc::clone(&seen_queries),
+                result: sample_list_entities_by_type_result(),
+            }),
+            Arc::new(FakeEmbedder),
+        );
+
+        app.list_entities_by_type(ListEntitiesByTypeQuery {
+            user_id: "user-1".to_string(),
+            type_id: "node.person".to_string(),
+            page_size: Some(20),
+            page_token: Some(" 77 ".to_string()),
+            offset: None,
+        })
+        .await
+        .expect("query should succeed");
+
+        let seen = seen_queries.lock().expect("lock should be available");
+        assert_eq!(seen.len(), 1);
+        assert_eq!(seen[0].page_token, Some("77".to_string()));
+        assert_eq!(seen[0].offset, Some(77));
+    }
+
+    #[tokio::test]
+    async fn list_entities_by_type_rejects_invalid_page_token() {
+        let app = KnowledgeApplication::new(
+            Arc::new(FakeSchemaRepo::new()),
+            Arc::new(ListByTypeGraphRepository {
+                seen_queries: Arc::new(Mutex::new(Vec::new())),
+                result: sample_list_entities_by_type_result(),
+            }),
+            Arc::new(FakeEmbedder),
+        );
+
+        let err = app
+            .list_entities_by_type(ListEntitiesByTypeQuery {
+                user_id: "user-1".to_string(),
+                type_id: "node.person".to_string(),
+                page_size: Some(20),
+                page_token: Some("cursor-not-a-number".to_string()),
+                offset: None,
+            })
+            .await
+            .expect_err("invalid cursor should fail");
+
+        assert!(err
+            .to_string()
+            .contains("page_token must be a valid pagination cursor"));
+    }
     #[tokio::test]
     async fn list_entities_by_type_applies_default_page_size() {
         let seen_queries = Arc::new(Mutex::new(Vec::new()));

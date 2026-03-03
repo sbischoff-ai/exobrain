@@ -229,30 +229,108 @@ Response behavior:
 
 ## ListEntitiesByType
 
-`ListEntitiesByType` returns paginated entities for a specific type and user scope.
+`ListEntitiesByType` returns paginated entities for a specific type and requester visibility scope.
 
 ### Request schema
 
-- `user_id`: required requester scope
-- `type_id`: required entity type id filter (for example `node.person`)
-- `page_size`: optional page size; defaults and bounds are enforced in service implementation
-- `page_token`: optional opaque cursor for forward pagination
+```proto
+message ListEntitiesByTypeRequest {
+  string user_id = 1;
+  string type_id = 2;
+  optional uint32 page_size = 3;
+  optional string page_token = 4;
+}
+```
+
+- `user_id` (required): requester identity.
+- `type_id` (required): entity type id filter (for example `node.person`).
+- `page_size` (optional): requested page size; service clamps into `[1, 200]` and defaults to `50`.
+- `page_token` (optional): opaque forward cursor currently encoded as a decimal offset string.
 
 ### Response schema
 
-Each `ListEntitiesByTypeItem` includes:
+```proto
+message ListEntitiesByTypeItem {
+  string id = 1;
+  string name = 2;
+  optional string updated_at = 3;
+  optional string description = 4;
+  optional double score = 5;
+}
 
-- `id`
-- `name`
-- `updated_at` (optional)
-- `description` (optional)
-- `score` (optional, for observability/debug use)
+message ListEntitiesByTypeReply {
+  repeated ListEntitiesByTypeItem entities = 1;
+  optional string next_page_token = 2;
+  optional uint32 total_count = 3;
+}
+```
 
-`ListEntitiesByTypeReply` includes:
+- `entities[]`: ordered page of matching entities.
+- `next_page_token`: present when another page is available.
+- `total_count`: running count (`offset + entities.len`) for the current page window.
 
-- `entities[]`
-- `next_page_token` (optional)
-- `total_count` (optional)
+### Visibility semantics
+
+Results include entities visible to the requester:
+
+- private entities where `entity.user_id == request.user_id`
+- shared entities where `visibility == SHARED`
+
+The same visibility scope is enforced for description blocks and relationship-derived ranking signals.
+
+### Ranking and ordering factors
+
+Items are ranked with a relevance score and then ordered by:
+
+1. computed relevance (descending)
+2. `updated_at` (descending)
+3. `id` (ascending)
+
+Current relevance combines:
+
+- recency weight from `updated_at`
+- block volume (`DESCRIBED_BY` + `SUMMARIZES` depth-adjusted evidence)
+- ownership boost for requester-owned entities
+- relationship neighborhood volume
+
+`score` is currently reserved/optional in the public response payload.
+
+### Pagination behavior
+
+- First page: omit `page_token`.
+- Next page: send the previous `next_page_token`.
+- Cursors are forward-only and represent the backing query offset.
+- Invalid cursor format returns `INVALID_ARGUMENT`.
+
+### Compact example
+
+```json
+{
+  "user_id": "user-123",
+  "type_id": "node.person",
+  "page_size": 2,
+  "page_token": "0"
+}
+```
+
+```json
+{
+  "entities": [
+    {
+      "id": "e-1",
+      "name": "Ada Lovelace",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "description": "English mathematician"
+    },
+    {
+      "id": "e-2",
+      "name": "Charles Babbage"
+    }
+  ],
+  "next_page_token": "2",
+  "total_count": 2
+}
+```
 
 ## FindEntityCandidates
 

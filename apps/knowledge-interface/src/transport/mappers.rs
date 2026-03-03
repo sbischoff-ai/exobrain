@@ -4,8 +4,9 @@ use tonic::Status;
 
 use crate::domain::{
     BlockNode, EdgeEndpointRule, EntityCandidate, EntityNode, FindEntityCandidatesQuery,
-    GetEntityContextQuery, GetEntityContextResult, GraphEdge, NeighborDirection, PropertyScalar,
-    PropertyValue, SchemaType, TypeInheritance, TypeProperty, UniverseNode, Visibility,
+    GetEntityContextQuery, GetEntityContextResult, GraphEdge, ListEntitiesByTypeQuery,
+    ListEntitiesByTypeResult, NeighborDirection, PropertyScalar, PropertyValue, SchemaType,
+    TypeInheritance, TypeProperty, TypedEntityListItem, UniverseNode, Visibility,
 };
 
 use super::proto;
@@ -145,6 +146,47 @@ pub(crate) fn to_domain_get_entity_context_query(
         entity_id: request.entity_id,
         user_id: request.user_id,
         max_block_level: request.max_block_level,
+    }
+}
+
+pub(crate) fn to_domain_list_entities_by_type_query(
+    request: proto::ListEntitiesByTypeRequest,
+) -> ListEntitiesByTypeQuery {
+    ListEntitiesByTypeQuery {
+        user_id: request.user_id,
+        type_id: request.type_id,
+        page_size: request.page_size,
+        page_token: request.page_token,
+        offset: None,
+    }
+}
+
+pub(crate) fn to_proto_list_entities_by_type_item(
+    item: TypedEntityListItem,
+) -> proto::ListEntitiesByTypeItem {
+    proto::ListEntitiesByTypeItem {
+        id: item.id,
+        name: item.name.unwrap_or_default(),
+        updated_at: item.updated_at,
+        description: item.description,
+        score: None,
+    }
+}
+
+pub(crate) fn to_proto_list_entities_by_type_reply(
+    result: ListEntitiesByTypeResult,
+) -> proto::ListEntitiesByTypeReply {
+    let total_count =
+        (result.offset.saturating_add(result.entities.len() as u64)).min(u64::from(u32::MAX));
+
+    proto::ListEntitiesByTypeReply {
+        entities: result
+            .entities
+            .into_iter()
+            .map(to_proto_list_entities_by_type_item)
+            .collect(),
+        next_page_token: result.next_page_token,
+        total_count: Some(total_count as u32),
     }
 }
 
@@ -314,13 +356,15 @@ mod tests {
 
     use super::{
         map_visibility, to_domain_find_entity_candidates_query, to_domain_get_entity_context_query,
-        to_domain_property_value, to_proto_entity_candidate, to_proto_get_entity_context_reply,
+        to_domain_list_entities_by_type_query, to_domain_property_value, to_proto_entity_candidate,
+        to_proto_get_entity_context_reply, to_proto_list_entities_by_type_reply,
         to_proto_property_value,
     };
     use crate::domain::{
         EntityCandidate, EntityContextBlockItem, EntityContextEntitySnapshot,
         EntityContextNeighborItem, EntityContextOtherEntity, GetEntityContextResult,
-        NeighborDirection, PropertyScalar, PropertyValue, Visibility,
+        ListEntitiesByTypeResult, NeighborDirection, PropertyScalar, PropertyValue,
+        TypedEntityListItem, Visibility,
     };
     use crate::transport::proto;
 
@@ -485,5 +529,53 @@ mod tests {
             reply.neighbors[1].direction,
             proto::NeighborDirection::Incoming as i32
         );
+    }
+
+    #[test]
+    fn to_domain_list_entities_by_type_query_maps_pagination_fields() {
+        let query = to_domain_list_entities_by_type_query(proto::ListEntitiesByTypeRequest {
+            user_id: "user-1".to_string(),
+            type_id: "node.person".to_string(),
+            page_size: Some(30),
+            page_token: Some("token-1".to_string()),
+        });
+
+        assert_eq!(query.user_id, "user-1");
+        assert_eq!(query.type_id, "node.person");
+        assert_eq!(query.page_size, Some(30));
+        assert_eq!(query.page_token.as_deref(), Some("token-1"));
+        assert_eq!(query.offset, None);
+    }
+
+    #[test]
+    fn to_proto_list_entities_by_type_reply_maps_optional_fields_and_metadata() {
+        let reply = to_proto_list_entities_by_type_reply(ListEntitiesByTypeResult {
+            entities: vec![
+                TypedEntityListItem {
+                    id: "e-1".to_string(),
+                    name: Some("Ada".to_string()),
+                    updated_at: Some("2026-01-01T00:00:00Z".to_string()),
+                    description: Some("Mathematician".to_string()),
+                },
+                TypedEntityListItem {
+                    id: "e-2".to_string(),
+                    name: None,
+                    updated_at: None,
+                    description: None,
+                },
+            ],
+            page_size: 25,
+            offset: 10,
+            next_page_token: Some("next-25".to_string()),
+        });
+
+        assert_eq!(reply.entities.len(), 2);
+        assert_eq!(reply.entities[0].id, "e-1");
+        assert_eq!(reply.entities[0].name, "Ada");
+        assert_eq!(reply.entities[1].name, "");
+        assert_eq!(reply.entities[1].updated_at, None);
+        assert_eq!(reply.entities[1].description, None);
+        assert_eq!(reply.next_page_token.as_deref(), Some("next-25"));
+        assert_eq!(reply.total_count, Some(12));
     }
 }
