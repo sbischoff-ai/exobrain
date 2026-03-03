@@ -159,7 +159,7 @@ class JobOrchestratorServicer(job_orchestrator_pb2_grpc.JobOrchestratorServicer)
     def _status_snapshot_to_reply(status: dict[str, Any]) -> job_orchestrator_pb2.GetJobStatusReply:
         state = _to_lifecycle_state(status["status"], bool(status.get("is_terminal")))
         return job_orchestrator_pb2.GetJobStatusReply(
-            job_id=status["job_id"],
+            job_id=str(status["job_id"]),
             state=state,
             attempt=int(status.get("attempt") or 0),
             detail=status.get("last_error") or "",
@@ -171,7 +171,7 @@ class JobOrchestratorServicer(job_orchestrator_pb2_grpc.JobOrchestratorServicer)
     def _status_snapshot_to_event(status: dict[str, Any]) -> job_orchestrator_pb2.JobStatusEvent:
         state = _to_lifecycle_state(status["status"], bool(status.get("is_terminal")))
         return job_orchestrator_pb2.JobStatusEvent(
-            job_id=status["job_id"],
+            job_id=str(status["job_id"]),
             state=state,
             attempt=int(status.get("attempt") or 0),
             detail=status.get("last_error") or "",

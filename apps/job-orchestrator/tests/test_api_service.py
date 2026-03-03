@@ -307,6 +307,37 @@ async def test_watch_job_status_include_current_not_found_returns_not_found(
 
 
 @pytest.mark.asyncio
+async def test_watch_job_status_include_current_handles_uuid_job_id_in_snapshot(
+    grpc_orchestrator_stub: tuple[
+        job_orchestrator_pb2_grpc.JobOrchestratorStub,
+        list[tuple[str, bytes]],
+        dict[str, _StatusSubscription],
+        dict[str, dict[str, object]],
+    ]
+) -> None:
+    stub, _, subscriptions, snapshots = grpc_orchestrator_stub
+    job_id = str(uuid4())
+    snapshots[job_id] = {
+        "job_id": UUID(job_id),
+        "status": "completed",
+        "attempt": 1,
+        "last_error": None,
+        "is_terminal": True,
+        "updated_at": "2026-01-01T00:00:00+00:00",
+    }
+
+    stream = stub.WatchJobStatus(job_orchestrator_pb2.WatchJobStatusRequest(job_id=job_id, include_current=True))
+    event = await stream.read()
+    done = await stream.read()
+
+    assert event.job_id == job_id
+    assert event.state == job_orchestrator_pb2.SUCCEEDED
+    assert event.terminal is True
+    assert done == grpc.aio.EOF
+    assert f"jobs.status.{job_id}" not in subscriptions
+
+
+@pytest.mark.asyncio
 async def test_enqueue_job_validates_payload_schema() -> None:
     class StrictKnowledgePayload(BaseModel):
         required_field: str
