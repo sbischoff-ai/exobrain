@@ -18,8 +18,8 @@ use tracing::warn;
 use crate::{
     domain::{
         EdgeEndpointRule, EmbeddedBlock, EntityCandidate, EntityContextBlockItem,
-        EntityContextEntitySnapshot, EntityContextNeighborItem, ExistingBlockContext,
-        ExtractionUniverse, FindEntityCandidatesQuery, GetEntityContextQuery,
+        EntityContextEntitySnapshot, EntityContextNeighborItem, EntityContextOtherEntity,
+        ExistingBlockContext, ExtractionUniverse, FindEntityCandidatesQuery, GetEntityContextQuery,
         GetEntityContextResult, GraphDelta, NeighborDirection, NodeRelationshipCounts,
         PropertyScalar, PropertyValue, SchemaType, TypeInheritance, TypeProperty,
         UpsertSchemaTypePropertyInput, UserInitGraphNodeIds, Visibility,
@@ -571,6 +571,15 @@ impl Neo4jGraphStore {
             return Err(entity_not_found_or_inaccessible_error());
         };
 
+        let mut entity_properties: BoltMap = entity_row
+            .get("entity_props")
+            .context("missing entity.entity_props")?;
+
+        let entity_name = bolt_map_remove_string(&mut entity_properties, "name");
+        let entity_aliases = bolt_map_remove_aliases(&mut entity_properties, "aliases");
+        let entity_created_at = entity_row.get("created_at").ok();
+        let entity_updated_at = entity_row.get("updated_at").ok();
+
         let entity = EntityContextEntitySnapshot {
             id: entity_row.get("id").context("missing entity.id")?,
             type_id: entity_row
@@ -584,7 +593,11 @@ impl Neo4jGraphStore {
                     .get::<String>("visibility")
                     .context("missing entity.visibility")?,
             )?,
-            properties: Vec::new(),
+            name: entity_name,
+            aliases: entity_aliases,
+            created_at: entity_created_at,
+            updated_at: entity_updated_at,
+            properties: bolt_map_to_property_values(entity_properties),
         };
 
         let block_query = build_get_entity_context_blocks_query();
@@ -604,14 +617,78 @@ impl Neo4jGraphStore {
             let block_level: i64 = row
                 .get("block_level")
                 .context("missing block.block_level")?;
+            let mut block_props: BoltMap = row
+                .get("block_props")
+                .context("missing block.block_props")?;
+            let block_text = bolt_map_remove_string(&mut block_props, "text");
+            let block_created_at = row.get("created_at").ok();
+            let block_updated_at = row.get("updated_at").ok();
+
             blocks.push(EntityContextBlockItem {
                 id: row.get("block_id").context("missing block.id")?,
                 type_id: row.get("type_id").context("missing block.type_id")?,
                 block_level: parse_block_level(block_level)?,
-                properties: Vec::new(),
+                text: block_text,
+                created_at: block_created_at,
+                updated_at: block_updated_at,
+                properties: bolt_map_to_property_values(block_props),
                 parent_block_id: row.get("parent_block_id").ok(),
-                parent_entity_id: row.get("parent_entity_id").ok(),
+                neighbors: Vec::new(),
             });
+        }
+
+        let block_neighbor_query = build_get_entity_context_block_neighbors_query();
+
+        let mut block_neighbor_rows = self
+            .graph
+            .execute(
+                query(&block_neighbor_query)
+                    .param("entity_id", query_input.entity_id.clone())
+                    .param("user_id", query_input.user_id.clone())
+                    .param("max_block_level", query_input.max_block_level as i64),
+            )
+            .await
+            .context("failed to query entity context block neighbors")?;
+
+        let mut block_neighbors_by_id: HashMap<String, Vec<EntityContextNeighborItem>> =
+            HashMap::new();
+        while let Some(row) = block_neighbor_rows.next().await? {
+            let direction_raw: String = row
+                .get("direction")
+                .context("missing block_neighbor.direction")?;
+            let direction = parse_neighbor_direction(&direction_raw)?;
+            let edge_props: BoltMap = row
+                .get("edge_props")
+                .context("missing block_neighbor.edge_props")?;
+            let other_entity = EntityContextOtherEntity {
+                id: row
+                    .get("other_entity_id")
+                    .context("missing block_neighbor.other_entity_id")?,
+                description: row.get("other_entity_description").ok(),
+            };
+
+            let item = EntityContextNeighborItem {
+                direction,
+                edge_type: row
+                    .get("edge_type")
+                    .context("missing block_neighbor.edge_type")?,
+                edge_properties: bolt_map_to_property_values(edge_props),
+                other_entity,
+            };
+
+            let block_id: String = row
+                .get("block_id")
+                .context("missing block_neighbor.block_id")?;
+            block_neighbors_by_id
+                .entry(block_id)
+                .or_default()
+                .push(item);
+        }
+
+        for block in &mut blocks {
+            if let Some(neighbors) = block_neighbors_by_id.remove(&block.id) {
+                block.neighbors = neighbors;
+            }
         }
 
         let neighbor_query = build_get_entity_context_neighbors_query();
@@ -639,9 +716,12 @@ impl Neo4jGraphStore {
                 direction,
                 edge_type: row.get("edge_type").context("missing neighbor.edge_type")?,
                 edge_properties: bolt_map_to_property_values(edge_props),
-                other_entity_id: row
-                    .get("other_entity_id")
-                    .context("missing neighbor.other_entity_id")?,
+                other_entity: EntityContextOtherEntity {
+                    id: row
+                        .get("other_entity_id")
+                        .context("missing neighbor.other_entity_id")?,
+                    description: row.get("other_entity_description").ok(),
+                },
             });
         }
 
@@ -666,7 +746,7 @@ fn allowed_node_visibilities(edge_visibility: Visibility) -> Vec<String> {
 
 fn build_get_entity_context_entity_query() -> String {
     format!(
-        "MATCH (e:Entity {{id: $entity_id}}) WHERE {} RETURN e.id AS id, e.type_id AS type_id, e.user_id AS user_id, e.visibility AS visibility",
+        "MATCH (e:Entity {{id: $entity_id}}) WHERE {} RETURN e.id AS id, e.type_id AS type_id, e.user_id AS user_id, e.visibility AS visibility, properties(e) AS entity_props, toString(e.created_at) AS created_at, toString(e.updated_at) AS updated_at",
         memgraph_user_or_shared_access_clause("e")
     )
 }
@@ -683,7 +763,9 @@ fn build_get_entity_context_blocks_query() -> String {
                 b.type_id AS type_id,
                 length(p) AS block_level,
                 parent.id AS parent_block_id,
-                e.id AS parent_entity_id
+                properties(b) AS block_props,
+                toString(b.created_at) AS created_at,
+                toString(b.updated_at) AS updated_at
          ORDER BY block_level ASC, block_id ASC",
         entity_access = memgraph_user_or_shared_access_clause("e"),
         root_access = memgraph_user_or_shared_access_clause("root"),
@@ -692,29 +774,77 @@ fn build_get_entity_context_blocks_query() -> String {
     )
 }
 
+fn build_get_entity_context_block_neighbors_query() -> String {
+    format!(
+        "MATCH (e:Entity {{id: $entity_id}})-[:DESCRIBED_BY]->(root:Block)
+         WHERE {entity_access} AND {root_access}
+         MATCH p=(root)-[:SUMMARIZES*0..]->(b:Block)
+         WHERE {block_access} AND length(p) <= $max_block_level
+         MATCH (b)-[r]->(other:Entity)
+         WHERE {other_access} AND {edge_access} AND type(r) <> 'DESCRIBED_BY' AND type(r) <> 'SUMMARIZES'
+         OPTIONAL MATCH (other)-[:DESCRIBED_BY]->(described_by:Block)
+         WHERE {described_access}
+         RETURN b.id AS block_id,
+                'OUTGOING' AS direction,
+                type(r) AS edge_type,
+                properties(r) AS edge_props,
+                other.id AS other_entity_id,
+                described_by.text AS other_entity_description
+         UNION ALL
+         MATCH (e:Entity {{id: $entity_id}})-[:DESCRIBED_BY]->(root:Block)
+         WHERE {entity_access} AND {root_access}
+         MATCH p=(root)-[:SUMMARIZES*0..]->(b:Block)
+         WHERE {block_access} AND length(p) <= $max_block_level
+         MATCH (b)<-[r]-(other:Entity)
+         WHERE {other_access} AND {edge_access} AND type(r) <> 'DESCRIBED_BY' AND type(r) <> 'SUMMARIZES'
+         OPTIONAL MATCH (other)-[:DESCRIBED_BY]->(described_by:Block)
+         WHERE {described_access}
+         RETURN b.id AS block_id,
+                'INCOMING' AS direction,
+                type(r) AS edge_type,
+                properties(r) AS edge_props,
+                other.id AS other_entity_id,
+                described_by.text AS other_entity_description
+         ORDER BY block_id ASC, direction ASC, edge_type ASC, other_entity_id ASC",
+        entity_access = memgraph_user_or_shared_access_clause("e"),
+        root_access = memgraph_user_or_shared_access_clause("root"),
+        block_access = memgraph_user_or_shared_access_clause("b"),
+        other_access = memgraph_user_or_shared_access_clause("other"),
+        edge_access = memgraph_user_or_shared_access_clause("r"),
+        described_access = memgraph_user_or_shared_access_clause("described_by"),
+    )
+}
+
 fn build_get_entity_context_neighbors_query() -> String {
     format!(
         "MATCH (e:Entity {{id: $entity_id}})
          WHERE {entity_access}
          MATCH (e)-[r]->(other:Entity)
-         WHERE {other_access} AND {edge_access}
+         WHERE {other_access} AND {edge_access} AND type(r) <> 'DESCRIBED_BY' AND type(r) <> 'SUMMARIZES'
+         OPTIONAL MATCH (other)-[:DESCRIBED_BY]->(described_by:Block)
+         WHERE {described_access}
          RETURN 'OUTGOING' AS direction,
                 type(r) AS edge_type,
                 properties(r) AS edge_props,
-                other.id AS other_entity_id
+                other.id AS other_entity_id,
+                described_by.text AS other_entity_description
          UNION ALL
          MATCH (e:Entity {{id: $entity_id}})
          WHERE {entity_access}
          MATCH (e)<-[r]-(other:Entity)
-         WHERE {other_access} AND {edge_access}
+         WHERE {other_access} AND {edge_access} AND type(r) <> 'DESCRIBED_BY' AND type(r) <> 'SUMMARIZES'
+         OPTIONAL MATCH (other)-[:DESCRIBED_BY]->(described_by:Block)
+         WHERE {described_access}
          RETURN 'INCOMING' AS direction,
                 type(r) AS edge_type,
                 properties(r) AS edge_props,
-                other.id AS other_entity_id
+                other.id AS other_entity_id,
+                described_by.text AS other_entity_description
          ORDER BY direction ASC, edge_type ASC, other_entity_id ASC",
         entity_access = memgraph_user_or_shared_access_clause("e"),
         other_access = memgraph_user_or_shared_access_clause("other"),
         edge_access = memgraph_user_or_shared_access_clause("r"),
+        described_access = memgraph_user_or_shared_access_clause("described_by"),
     )
 }
 
@@ -1091,6 +1221,51 @@ impl GraphRepository for MemgraphQdrantGraphRepository {
         query: &GetEntityContextQuery,
     ) -> Result<GetEntityContextResult> {
         self.graph_store.get_entity_context(query).await
+    }
+}
+
+fn bolt_map_remove_string(map: &mut BoltMap, key: &str) -> Option<String> {
+    let value = map.value.remove(key)?;
+    match value {
+        BoltType::String(v) => Some(v.value),
+        BoltType::Null(_) => None,
+        other => Some(format!("{other:?}")),
+    }
+}
+
+fn bolt_map_remove_aliases(map: &mut BoltMap, key: &str) -> Vec<String> {
+    let Some(value) = map.value.remove(key) else {
+        return Vec::new();
+    };
+
+    match value {
+        BoltType::List(list) => list
+            .value
+            .into_iter()
+            .filter_map(|entry| match entry {
+                BoltType::String(v) => Some(v.value),
+                _ => None,
+            })
+            .collect(),
+        BoltType::String(v) => {
+            let raw = v.value.trim().to_string();
+            if raw.starts_with('[') && raw.ends_with(']') {
+                let parsed: Vec<String> = raw[1..raw.len() - 1]
+                    .split(',')
+                    .map(|item| item.trim().trim_matches('"').to_string())
+                    .filter(|item| !item.is_empty())
+                    .collect();
+                if !parsed.is_empty() {
+                    return parsed;
+                }
+            }
+            if raw.is_empty() {
+                Vec::new()
+            } else {
+                vec![raw]
+            }
+        }
+        _ => Vec::new(),
     }
 }
 
@@ -1490,14 +1665,14 @@ fn validate_edge_type(edge_type: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        allowed_node_visibilities, build_get_entity_context_blocks_query,
-        build_get_entity_context_entity_query, build_get_entity_context_neighbors_query,
-        compute_name_score, internal_timestamp_trigger_specs,
-        memgraph_user_or_shared_access_clause, normalize_qdrant_grpc_url, parse_block_level,
-        parse_neighbor_direction, payload_i64, payload_string, prop_as_aliases,
-        qdrant_user_or_shared_access_filter, semantic_score_with_block_level,
-        trigger_name_column_candidates, upsert_semantic_candidate, validate_edge_type,
-        MockEmbedder,
+        allowed_node_visibilities, build_get_entity_context_block_neighbors_query,
+        build_get_entity_context_blocks_query, build_get_entity_context_entity_query,
+        build_get_entity_context_neighbors_query, compute_name_score,
+        internal_timestamp_trigger_specs, memgraph_user_or_shared_access_clause,
+        normalize_qdrant_grpc_url, parse_block_level, parse_neighbor_direction, payload_i64,
+        payload_string, prop_as_aliases, qdrant_user_or_shared_access_filter,
+        semantic_score_with_block_level, trigger_name_column_candidates, upsert_semantic_candidate,
+        validate_edge_type, MockEmbedder,
     };
     use crate::domain::Visibility;
     use crate::ports::Embedder;
@@ -1512,7 +1687,9 @@ mod tests {
         assert!(triggers[3].1.contains("updatedEdges"));
         assert!(triggers[2].1.contains("event.vertex.updated_at"));
         assert!(triggers[3].1.contains("event.edge.updated_at"));
-        assert!(triggers.iter().all(|(_, cypher)| !cypher.contains("IF NOT EXISTS")));
+        assert!(triggers
+            .iter()
+            .all(|(_, cypher)| !cypher.contains("IF NOT EXISTS")));
     }
 
     #[test]
@@ -1638,11 +1815,19 @@ mod tests {
         assert!(block_query.contains("length(p) <= $max_block_level"));
         assert!(block_query.contains("[:SUMMARIZES*0..]"));
 
+        let block_neighbor_query = build_get_entity_context_block_neighbors_query();
+        assert!(block_neighbor_query
+            .contains("(other.user_id = $user_id OR other.visibility = 'SHARED')"));
+        assert!(block_neighbor_query.contains("type(r) <> 'DESCRIBED_BY'"));
+        assert!(block_neighbor_query.contains("type(r) <> 'SUMMARIZES'"));
+
         let neighbor_query = build_get_entity_context_neighbors_query();
         assert!(
             neighbor_query.contains("(other.user_id = $user_id OR other.visibility = 'SHARED')")
         );
         assert!(neighbor_query.contains("(r.user_id = $user_id OR r.visibility = 'SHARED')"));
+        assert!(neighbor_query.contains("type(r) <> 'DESCRIBED_BY'"));
+        assert!(neighbor_query.contains("type(r) <> 'SUMMARIZES'"));
     }
 
     #[test]

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use tonic::Status;
 
 use crate::domain::{
@@ -155,13 +157,12 @@ pub(crate) fn to_proto_get_entity_context_reply(
             type_id: result.entity.type_id,
             user_id: result.entity.user_id,
             visibility: to_proto_visibility(result.entity.visibility) as i32,
+            name: result.entity.name,
+            aliases: result.entity.aliases,
+            created_at: result.entity.created_at,
+            updated_at: result.entity.updated_at,
         }),
-        entity_properties: result
-            .entity
-            .properties
-            .into_iter()
-            .map(to_proto_property_value)
-            .collect(),
+        entity_properties: to_proto_property_scalar_map(result.entity.properties),
         blocks: result
             .blocks
             .into_iter()
@@ -169,42 +170,90 @@ pub(crate) fn to_proto_get_entity_context_reply(
                 id: block.id,
                 type_id: block.type_id,
                 block_level: block.block_level,
-                properties: block
-                    .properties
-                    .into_iter()
-                    .map(to_proto_property_value)
-                    .collect(),
+                properties: to_proto_property_scalar_map(block.properties),
                 parent_block_id: block.parent_block_id,
-                parent_entity_id: block.parent_entity_id,
+                text: block.text,
+                created_at: block.created_at,
+                updated_at: block.updated_at,
+                neighbors: block
+                    .neighbors
+                    .into_iter()
+                    .map(to_proto_entity_context_neighbor)
+                    .collect(),
             })
             .collect(),
         neighbors: result
             .neighbors
             .into_iter()
-            .map(|neighbor| proto::EntityContextNeighbor {
-                direction: to_proto_neighbor_direction(neighbor.direction) as i32,
-                edge_type: neighbor.edge_type,
-                edge_properties: neighbor
-                    .edge_properties
-                    .into_iter()
-                    .map(to_proto_property_value)
-                    .collect(),
-                other_entity_id: neighbor.other_entity_id,
-            })
+            .map(to_proto_entity_context_neighbor)
             .collect(),
     }
+}
+
+fn to_proto_entity_context_neighbor(
+    neighbor: crate::domain::EntityContextNeighborItem,
+) -> proto::EntityContextNeighbor {
+    proto::EntityContextNeighbor {
+        direction: to_proto_neighbor_direction(neighbor.direction) as i32,
+        edge_type: neighbor.edge_type,
+        edge_properties: to_proto_property_scalar_map(neighbor.edge_properties),
+        other_entity: Some(proto::EntityContextOtherEntity {
+            id: neighbor.other_entity.id,
+            description: neighbor.other_entity.description,
+        }),
+    }
+}
+
+fn to_proto_property_scalar_map(
+    values: Vec<PropertyValue>,
+) -> HashMap<String, proto::PropertyScalarValue> {
+    values
+        .into_iter()
+        .map(|value| {
+            let PropertyValue { key, value } = value;
+            (key, to_proto_property_scalar_value(value))
+        })
+        .collect()
+}
+
+fn to_proto_property_scalar_value(value: PropertyScalar) -> proto::PropertyScalarValue {
+    let value = match value {
+        PropertyScalar::String(v) => proto::property_scalar_value::Value::StringValue(v),
+        PropertyScalar::Float(v) => proto::property_scalar_value::Value::FloatValue(v),
+        PropertyScalar::Int(v) => proto::property_scalar_value::Value::IntValue(v),
+        PropertyScalar::Bool(v) => proto::property_scalar_value::Value::BoolValue(v),
+        PropertyScalar::Datetime(v) => proto::property_scalar_value::Value::DatetimeValue(v),
+        PropertyScalar::Json(v) => proto::property_scalar_value::Value::JsonValue(v),
+    };
+
+    proto::PropertyScalarValue { value: Some(value) }
 }
 
 pub(crate) fn to_proto_property_value(value: PropertyValue) -> proto::PropertyValue {
     let PropertyValue { key, value } = value;
 
-    let value = match value {
-        PropertyScalar::String(v) => proto::property_value::Value::StringValue(v),
-        PropertyScalar::Float(v) => proto::property_value::Value::FloatValue(v),
-        PropertyScalar::Int(v) => proto::property_value::Value::IntValue(v),
-        PropertyScalar::Bool(v) => proto::property_value::Value::BoolValue(v),
-        PropertyScalar::Datetime(v) => proto::property_value::Value::DatetimeValue(v),
-        PropertyScalar::Json(v) => proto::property_value::Value::JsonValue(v),
+    let value = match to_proto_property_scalar_value(value)
+        .value
+        .expect("property scalar value should be present")
+    {
+        proto::property_scalar_value::Value::StringValue(v) => {
+            proto::property_value::Value::StringValue(v)
+        }
+        proto::property_scalar_value::Value::FloatValue(v) => {
+            proto::property_value::Value::FloatValue(v)
+        }
+        proto::property_scalar_value::Value::IntValue(v) => {
+            proto::property_value::Value::IntValue(v)
+        }
+        proto::property_scalar_value::Value::BoolValue(v) => {
+            proto::property_value::Value::BoolValue(v)
+        }
+        proto::property_scalar_value::Value::DatetimeValue(v) => {
+            proto::property_value::Value::DatetimeValue(v)
+        }
+        proto::property_scalar_value::Value::JsonValue(v) => {
+            proto::property_value::Value::JsonValue(v)
+        }
     };
 
     proto::PropertyValue {
@@ -270,8 +319,8 @@ mod tests {
     };
     use crate::domain::{
         EntityCandidate, EntityContextBlockItem, EntityContextEntitySnapshot,
-        EntityContextNeighborItem, GetEntityContextResult, NeighborDirection, PropertyScalar,
-        PropertyValue, Visibility,
+        EntityContextNeighborItem, EntityContextOtherEntity, GetEntityContextResult,
+        NeighborDirection, PropertyScalar, PropertyValue, Visibility,
     };
     use crate::transport::proto;
 
@@ -363,37 +412,50 @@ mod tests {
                 type_id: "node.person".to_string(),
                 user_id: "u-1".to_string(),
                 visibility: Visibility::Shared,
+                name: Some("Ada".to_string()),
+                aliases: vec!["Augusta Ada King".to_string()],
+                created_at: Some("2026-01-01T00:00:00Z".to_string()),
+                updated_at: Some("2026-01-01T00:00:01Z".to_string()),
                 properties: vec![PropertyValue {
-                    key: "name".to_string(),
-                    value: PropertyScalar::String("Ada".to_string()),
+                    key: "age".to_string(),
+                    value: PropertyScalar::Int(36),
                 }],
             },
             blocks: vec![EntityContextBlockItem {
                 id: "b-1".to_string(),
                 type_id: "block.note".to_string(),
                 block_level: 0,
+                text: Some("Root summary".to_string()),
+                created_at: Some("2026-01-01T00:00:02Z".to_string()),
+                updated_at: Some("2026-01-01T00:00:03Z".to_string()),
                 properties: vec![PropertyValue {
-                    key: "text".to_string(),
-                    value: PropertyScalar::String("Root summary".to_string()),
+                    key: "source".to_string(),
+                    value: PropertyScalar::String("import".to_string()),
                 }],
                 parent_block_id: None,
-                parent_entity_id: Some("e-1".to_string()),
+                neighbors: vec![],
             }],
             neighbors: vec![
                 EntityContextNeighborItem {
                     direction: NeighborDirection::Outgoing,
-                    edge_type: "DESCRIBED_BY".to_string(),
+                    edge_type: "RELATED_TO".to_string(),
                     edge_properties: vec![PropertyValue {
                         key: "confidence".to_string(),
                         value: PropertyScalar::Float(0.9),
                     }],
-                    other_entity_id: "e-2".to_string(),
+                    other_entity: EntityContextOtherEntity {
+                        id: "e-2".to_string(),
+                        description: Some("Mathematician".to_string()),
+                    },
                 },
                 EntityContextNeighborItem {
                     direction: NeighborDirection::Incoming,
                     edge_type: "MENTIONS".to_string(),
                     edge_properties: vec![],
-                    other_entity_id: "e-3".to_string(),
+                    other_entity: EntityContextOtherEntity {
+                        id: "e-3".to_string(),
+                        description: None,
+                    },
                 },
             ],
         });
@@ -401,16 +463,20 @@ mod tests {
         let entity = reply.entity.expect("entity should be present");
         assert_eq!(entity.id, "e-1");
         assert_eq!(entity.visibility, proto::Visibility::Shared as i32);
+        assert_eq!(entity.name.as_deref(), Some("Ada"));
         assert_eq!(reply.blocks[0].parent_block_id, None);
-        assert_eq!(reply.blocks[0].parent_entity_id.as_deref(), Some("e-1"));
-        assert!(matches!(
-            reply.blocks[0].properties[0].value,
-            Some(proto::property_value::Value::StringValue(ref v)) if v == "Root summary"
-        ));
-        assert!(matches!(
-            reply.neighbors[0].edge_properties[0].value,
-            Some(proto::property_value::Value::FloatValue(v)) if (v - 0.9).abs() < f64::EPSILON
-        ));
+        assert_eq!(reply.blocks[0].text.as_deref(), Some("Root summary"));
+        assert!(reply.blocks[0].properties.contains_key("source"));
+        assert!(reply.neighbors[0]
+            .edge_properties
+            .contains_key("confidence"));
+        assert_eq!(
+            reply.neighbors[0]
+                .other_entity
+                .as_ref()
+                .map(|e| e.id.as_str()),
+            Some("e-2")
+        );
         assert_eq!(
             reply.neighbors[0].direction,
             proto::NeighborDirection::Outgoing as i32
