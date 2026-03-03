@@ -227,6 +227,33 @@ Response behavior:
 - Inject only relevant entity types/edges for the current extraction task to reduce token usage.
 - Re-fetch when schema might have changed; ordering is deterministic so prompt diffs are meaningful.
 
+## ListEntitiesByType
+
+`ListEntitiesByType` returns paginated entities for a specific type and user scope.
+
+### Request schema
+
+- `user_id`: required requester scope
+- `type_id`: required entity type id filter (for example `node.person`)
+- `page_size`: optional page size; defaults and bounds are enforced in service implementation
+- `page_token`: optional opaque cursor for forward pagination
+
+### Response schema
+
+Each `ListEntitiesByTypeItem` includes:
+
+- `id`
+- `name`
+- `updated_at` (optional)
+- `description` (optional)
+- `score` (optional, for observability/debug use)
+
+`ListEntitiesByTypeReply` includes:
+
+- `entities[]`
+- `next_page_token` (optional)
+- `total_count` (optional)
+
 ## FindEntityCandidates
 
 `FindEntityCandidates` returns candidate entities by combining lexical name matching and
