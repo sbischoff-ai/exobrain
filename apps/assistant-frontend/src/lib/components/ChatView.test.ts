@@ -132,6 +132,10 @@ describe('ChatView', () => {
     const appCss = readFileSync(join(process.cwd(), 'src', 'app.css'), 'utf8');
     expect(appCss).toContain(".assistant-markdown [data-streamdown-mermaid] > [data-expanded='false'] [data-mermaid-svg]");
     expect(appCss).toContain('max-height: 75vh;');
+    expect(appCss).toContain(".assistant-markdown [data-streamdown-mermaid] > [data-expanded='true']");
+    expect(appCss).toContain('inset: 0.75rem;');
+    expect(appCss).toContain('margin: auto;');
+    expect(appCss).toContain('border-radius: 0.55rem;');
   });
 
   it('expands Mermaid block using toggle expand control', async () => {

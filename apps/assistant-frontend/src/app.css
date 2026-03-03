@@ -653,11 +653,11 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
 
 .assistant-markdown [data-streamdown-mermaid] > [data-expanded='true'] {
   position: fixed;
-  inset: 0;
+  inset: 0.75rem;
   z-index: 9999;
-  margin: 0;
+  margin: auto;
   isolation: isolate;
-  border-radius: 0;
+  border-radius: 0.55rem;
   background: #a89984;
   padding: 1rem;
   overflow: auto;
