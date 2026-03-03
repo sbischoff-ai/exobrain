@@ -4,8 +4,8 @@ use async_trait::async_trait;
 use crate::domain::{
     EdgeEndpointRule, EmbeddedBlock, EntityCandidate, ExistingBlockContext, ExtractionUniverse,
     FindEntityCandidatesQuery, GetEntityContextQuery, GetEntityContextResult, GraphDelta,
-    NodeRelationshipCounts, SchemaType, TypeInheritance, TypeProperty,
-    UpsertSchemaTypePropertyInput, UserInitGraphNodeIds,
+    ListEntitiesByTypeQuery, ListEntitiesByTypeResult, NodeRelationshipCounts, SchemaType,
+    TypeInheritance, TypeProperty, UpsertSchemaTypePropertyInput, UserInitGraphNodeIds,
 };
 
 #[async_trait]
@@ -67,6 +67,10 @@ pub trait GraphRepository: Send + Sync {
         &self,
         query: &GetEntityContextQuery,
     ) -> Result<GetEntityContextResult>;
+    async fn list_entities_by_type(
+        &self,
+        query: &ListEntitiesByTypeQuery,
+    ) -> Result<ListEntitiesByTypeResult>;
     async fn get_extraction_universes(&self, user_id: &str) -> Result<Vec<ExtractionUniverse>>;
 }
 

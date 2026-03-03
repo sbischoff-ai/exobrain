@@ -269,3 +269,28 @@ pub struct GetEntityContextResult {
     pub blocks: Vec<EntityContextBlockItem>,
     pub neighbors: Vec<EntityContextNeighborItem>,
 }
+
+#[derive(Debug, Clone)]
+pub struct ListEntitiesByTypeQuery {
+    pub user_id: String,
+    pub type_id: String,
+    pub page_size: Option<u32>,
+    pub page_token: Option<String>,
+    pub offset: Option<u64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TypedEntityListItem {
+    pub id: String,
+    pub name: Option<String>,
+    pub updated_at: Option<String>,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ListEntitiesByTypeResult {
+    pub entities: Vec<TypedEntityListItem>,
+    pub page_size: u32,
+    pub offset: u64,
+    pub next_page_token: Option<String>,
+}
