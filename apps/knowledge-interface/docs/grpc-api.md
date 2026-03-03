@@ -288,16 +288,16 @@ message GetEntityContextRequest {
 ```proto
 message GetEntityContextReply {
   EntityContextCore entity = 1;
-  repeated PropertyValue entity_properties = 2;
+  map<string, PropertyScalarValue> entity_properties = 2;
   repeated EntityContextBlock blocks = 3;
   repeated EntityContextNeighbor neighbors = 4;
 }
 ```
 
-- `entity`: core fields (`id`, `type_id`, `user_id`, `visibility`)
-- `entity_properties[]`: typed properties (`PropertyValue`)
-- `blocks[]`: typed block entries (`id`, `type_id`, `block_level`, `properties`) with parent linkage (`parent_block_id` and `parent_entity_id`)
-- `neighbors[]`: outgoing and incoming entity neighbors with edge metadata (`direction`, `edge_type`, `edge_properties`, `other_entity_id`)
+- `entity`: core fields (`id`, `type_id`, `user_id`, `visibility`) plus `name`, `aliases`, `created_at`, and `updated_at`.
+- `entity_properties`: additional typed properties as a map (`{ "key": value }`) excluding `name`, `aliases`, `created_at`, and `updated_at`.
+- `blocks[]`: typed block entries (`id`, `type_id`, `block_level`) plus root-level `text`, `created_at`, `updated_at`, optional `parent_block_id`, additional `properties`, and block-level `neighbors`.
+- `neighbors[]`: outgoing and incoming entity neighbors with edge metadata (`direction`, `edge_type`, `edge_properties`) and `other_entity` (`id`, optional `description`).
 
 ### Block level semantics
 
@@ -310,7 +310,7 @@ message GetEntityContextReply {
 
 - `OUTGOING`: returned for `(entity)-[edge]->(other_entity)`.
 - `INCOMING`: returned for `(other_entity)-[edge]->(entity)`.
-- Results include both directions and preserve edge metadata (`edge_type`, `edge_properties`).
+- Results include both directions and preserve edge metadata (`edge_type`, `edge_properties`) while resolving `other_entity.description` from that entity's `DESCRIBED_BY` block text when available.
 
 ### Access policy behavior
 

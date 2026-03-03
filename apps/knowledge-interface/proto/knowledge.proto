@@ -230,20 +230,31 @@ message GetEntityContextRequest {
   uint32 max_block_level = 3;
 }
 
+message PropertyScalarValue {
+  oneof value {
+    string string_value = 1;
+    double float_value = 2;
+    int64 int_value = 3;
+    bool bool_value = 4;
+    string datetime_value = 5;
+    string json_value = 6;
+  }
+}
+
 message EntityContextCore {
   string id = 1;
   string type_id = 2;
   string user_id = 3;
   Visibility visibility = 4;
+  optional string name = 5;
+  repeated string aliases = 6;
+  optional string created_at = 7;
+  optional string updated_at = 8;
 }
 
-message EntityContextBlock {
+message EntityContextOtherEntity {
   string id = 1;
-  string type_id = 2;
-  uint32 block_level = 3;
-  repeated PropertyValue properties = 4;
-  optional string parent_block_id = 5;
-  optional string parent_entity_id = 6;
+  optional string description = 2;
 }
 
 enum NeighborDirection {
@@ -255,13 +266,25 @@ enum NeighborDirection {
 message EntityContextNeighbor {
   NeighborDirection direction = 1;
   string edge_type = 2;
-  repeated PropertyValue edge_properties = 3;
-  string other_entity_id = 4;
+  map<string, PropertyScalarValue> edge_properties = 3;
+  EntityContextOtherEntity other_entity = 4;
+}
+
+message EntityContextBlock {
+  string id = 1;
+  string type_id = 2;
+  uint32 block_level = 3;
+  map<string, PropertyScalarValue> properties = 4;
+  optional string parent_block_id = 5;
+  optional string text = 6;
+  optional string created_at = 7;
+  optional string updated_at = 8;
+  repeated EntityContextNeighbor neighbors = 9;
 }
 
 message GetEntityContextReply {
   EntityContextCore entity = 1;
-  repeated PropertyValue entity_properties = 2;
+  map<string, PropertyScalarValue> entity_properties = 2;
   repeated EntityContextBlock blocks = 3;
   repeated EntityContextNeighbor neighbors = 4;
 }

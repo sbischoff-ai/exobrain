@@ -223,7 +223,17 @@ pub struct EntityContextEntitySnapshot {
     pub type_id: String,
     pub user_id: String,
     pub visibility: Visibility,
+    pub name: Option<String>,
+    pub aliases: Vec<String>,
+    pub created_at: Option<String>,
+    pub updated_at: Option<String>,
     pub properties: Vec<PropertyValue>,
+}
+
+#[derive(Debug, Clone)]
+pub struct EntityContextOtherEntity {
+    pub id: String,
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -231,9 +241,12 @@ pub struct EntityContextBlockItem {
     pub id: String,
     pub type_id: String,
     pub block_level: u32,
+    pub text: Option<String>,
+    pub created_at: Option<String>,
+    pub updated_at: Option<String>,
     pub properties: Vec<PropertyValue>,
     pub parent_block_id: Option<String>,
-    pub parent_entity_id: Option<String>,
+    pub neighbors: Vec<EntityContextNeighborItem>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -247,7 +260,7 @@ pub struct EntityContextNeighborItem {
     pub direction: NeighborDirection,
     pub edge_type: String,
     pub edge_properties: Vec<PropertyValue>,
-    pub other_entity_id: String,
+    pub other_entity: EntityContextOtherEntity,
 }
 
 #[derive(Debug, Clone)]
