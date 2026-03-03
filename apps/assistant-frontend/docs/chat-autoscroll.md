@@ -43,3 +43,10 @@ flowchart TD
   K -->|Yes| C
   K -->|No| E
 ```
+
+
+## Mermaid viewport contract
+
+- Collapsed Mermaid diagrams keep the existing container width rule (`.assistant-markdown [data-streamdown-mermaid] { width: 90%; }`).
+- Collapsed diagram viewports use `.assistant-markdown [data-streamdown-mermaid] > [data-expanded='false'] [data-mermaid-svg]` with a taller `max-height` and scroll-friendly overflow so larger diagrams remain navigable without entering expanded mode.
+- Expanded/fullscreen Mermaid sizing remains controlled by the `[data-expanded='true']` rules.

@@ -1,4 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 import ChatView from './ChatView.svelte';
@@ -110,6 +112,27 @@ describe('ChatView', () => {
     });
   });
 
+
+
+  it('applies collapsed Mermaid viewport max-height contract in styles', async () => {
+    const markdown = ['```mermaid', 'flowchart TD', 'A[Start] --> B[Done]', '```'].join('\n');
+
+    const { container } = render(ChatView, {
+      props: {
+        reference: '2026/02/19',
+        messages: [{ role: 'assistant', content: markdown, clientMessageId: 'a-mermaid-collapsed-1' }]
+      }
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-streamdown-mermaid]')).toBeTruthy();
+      expect(container.querySelector('[data-streamdown-mermaid] > [data-expanded="false"] [data-mermaid-svg]')).toBeTruthy();
+    });
+
+    const appCss = readFileSync(join(process.cwd(), 'src', 'app.css'), 'utf8');
+    expect(appCss).toContain(".assistant-markdown [data-streamdown-mermaid] > [data-expanded='false'] [data-mermaid-svg]");
+    expect(appCss).toContain('max-height: 75vh;');
+  });
 
   it('expands Mermaid block using toggle expand control', async () => {
     const markdown = ['```mermaid', 'flowchart TD', 'A[Start] --> B[Done]', '```'].join('\n');
