@@ -33,56 +33,6 @@ pub trait SchemaRepository: Send + Sync {
 }
 
 #[async_trait]
-pub trait GraphWriteRepository: Send + Sync {
-    async fn apply_delta_with_blocks(
-        &self,
-        delta: &GraphDelta,
-        blocks: &[EmbeddedBlock],
-    ) -> Result<()>;
-    async fn get_existing_block_context(
-        &self,
-        block_id: &str,
-        user_id: &str,
-        visibility: crate::domain::Visibility,
-    ) -> Result<Option<ExistingBlockContext>>;
-    async fn get_node_relationship_counts(&self, node_id: &str) -> Result<NodeRelationshipCounts>;
-}
-
-#[async_trait]
-pub trait GraphReadRepository: Send + Sync {
-    async fn find_entity_candidates(
-        &self,
-        query: &FindEntityCandidatesQuery,
-        query_vector: Option<&[f32]>,
-    ) -> Result<Vec<EntityCandidate>>;
-    async fn get_entity_context(
-        &self,
-        query: &GetEntityContextQuery,
-    ) -> Result<GetEntityContextResult>;
-    async fn list_entities_by_type(
-        &self,
-        query: &ListEntitiesByTypeQuery,
-    ) -> Result<ListEntitiesByTypeResult>;
-    async fn get_extraction_universes(&self, user_id: &str) -> Result<Vec<ExtractionUniverse>>;
-}
-
-#[async_trait]
-pub trait GraphBootstrapRepository: Send + Sync {
-    async fn common_root_graph_exists(&self) -> Result<bool>;
-    async fn user_graph_needs_initialization(&self, user_id: &str) -> Result<bool>;
-    async fn mark_user_graph_initialized(
-        &self,
-        user_id: &str,
-        node_ids: &UserInitGraphNodeIds,
-    ) -> Result<()>;
-    async fn get_user_init_graph_node_ids(
-        &self,
-        user_id: &str,
-    ) -> Result<Option<UserInitGraphNodeIds>>;
-    async fn update_person_name(&self, person_entity_id: &str, user_name: &str) -> Result<()>;
-}
-
-#[async_trait]
 pub trait GraphRepository: Send + Sync {
     async fn apply_delta_with_blocks(
         &self,
