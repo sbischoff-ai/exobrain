@@ -684,6 +684,12 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
   overflow: hidden;
 }
 
+.assistant-markdown [data-streamdown-mermaid] > [data-expanded='false'] [data-mermaid-svg] {
+  max-height: 75vh;
+  overflow-y: auto;
+  overflow-x: auto;
+}
+
 
 .assistant-markdown [data-streamdown-mermaid] [data-mermaid-svg] > svg,
 .assistant-markdown [data-streamdown-mermaid] svg.flowchart {
