@@ -36,7 +36,15 @@ Use this path for fast feature iteration with Docker Compose for infra and `mpro
 
 This starts PostgreSQL, Redis, NATS, Qdrant, Memgraph, and Memgraph Lab.
 
-### 2) Apply required schema setup
+### 2) (Recommended) Run the catch-all reset + setup script
+
+```bash
+./scripts/local/reset-and-setup.sh
+```
+
+This script starts local infrastructure, resets graph stores, applies database migrations, reseeds test data, and builds all applications.
+
+### 3) Manual setup/build commands (if you want individual control)
 
 ```bash
 ./scripts/local/assistant-db-setup.sh
@@ -45,18 +53,15 @@ This starts PostgreSQL, Redis, NATS, Qdrant, Memgraph, and Memgraph Lab.
 # optional full reset helpers:
 ./scripts/local/knowledge-schema-reset-and-seed.sh
 ./scripts/local/knowledge-graph-reset.sh
-```
 
-`knowledge-graph-reset.sh` preserves prior running state for memgraph/qdrant/memgraph-lab (does not auto-start if they were down).
-
-### 3) Build applications (when dependencies or source changed)
-
-```bash
 ./scripts/local/build-assistant-backend.sh
 ./scripts/local/build-job-orchestrator.sh
 ./scripts/local/build-knowledge-interface.sh
 ./scripts/local/build-assistant-frontend.sh
+./scripts/local/build-model-provider.sh
 ```
+
+`knowledge-graph-reset.sh` preserves prior running state for memgraph/qdrant/memgraph-lab (does not auto-start if they were down).
 
 ### 4) Start app processes with mprocs
 
