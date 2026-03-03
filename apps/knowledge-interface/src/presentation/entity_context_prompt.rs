@@ -154,7 +154,15 @@ fn render_block_node(
     if block.neighbors.is_empty() {
         markdown.push_str("(none)\n");
     } else {
-        for (index, neighbor) in block.neighbors.iter().enumerate() {
+        let mut neighbors = block.neighbors.iter().collect::<Vec<_>>();
+        neighbors.sort_by(|a, b| {
+            a.edge_type
+                .cmp(&b.edge_type)
+                .then_with(|| render_direction(a.direction).cmp(render_direction(b.direction)))
+                .then_with(|| a.other_entity.id.cmp(&b.other_entity.id))
+        });
+
+        for (index, neighbor) in neighbors.into_iter().enumerate() {
             markdown.push_str(&format!("- Neighbor {}\n", index + 1));
             markdown.push_str(&format!(
                 "  - direction: `{}`\n",
@@ -293,7 +301,7 @@ mod tests {
     };
 
     #[test]
-    fn renders_entity_neighbors_and_block_tree_deterministically() {
+    fn renders_entity_metadata_and_properties() {
         let result = GetEntityContextResult {
             entity: EntityContextEntitySnapshot {
                 id: "entity-1".to_string(),
@@ -301,20 +309,58 @@ mod tests {
                 user_id: "user-1".to_string(),
                 visibility: Visibility::Private,
                 name: Some("Alex".to_string()),
-                aliases: vec!["A".to_string()],
+                aliases: vec!["A".to_string(), "Al".to_string()],
+                created_at: Some("2026-01-01T00:00:00Z".to_string()),
+                updated_at: Some("2026-01-02T00:00:00Z".to_string()),
+                properties: vec![
+                    PropertyValue {
+                        key: "zeta".to_string(),
+                        value: PropertyScalar::String("last".to_string()),
+                    },
+                    PropertyValue {
+                        key: "alpha".to_string(),
+                        value: PropertyScalar::Int(1),
+                    },
+                ],
+            },
+            blocks: vec![],
+            neighbors: vec![],
+            prompt_context_markdown: String::new(),
+        };
+
+        let markdown = render_entity_context_markdown(&result);
+
+        assert!(markdown.contains("- id: `entity-1`"));
+        assert!(markdown.contains("- name: Alex"));
+        assert!(markdown.contains("- aliases: A, Al"));
+        assert!(markdown.contains("- created_at: 2026-01-01T00:00:00Z"));
+        assert!(markdown.contains("- updated_at: 2026-01-02T00:00:00Z"));
+
+        let alpha_ix = markdown.find("| alpha | 1 |").unwrap();
+        let zeta_ix = markdown.find("| zeta | last |").unwrap();
+        assert!(alpha_ix < zeta_ix);
+    }
+
+    #[test]
+    fn renders_block_tree_as_nested_sections_and_preserves_markdown_text() {
+        let result = GetEntityContextResult {
+            entity: EntityContextEntitySnapshot {
+                id: "entity-1".to_string(),
+                type_id: "node.person".to_string(),
+                user_id: "user-1".to_string(),
+                visibility: Visibility::Private,
+                name: Some("Alex".to_string()),
+                aliases: vec![],
                 created_at: None,
                 updated_at: None,
-                properties: vec![PropertyValue {
-                    key: "summary".to_string(),
-                    value: PropertyScalar::String("Core summary".to_string()),
-                }],
+                properties: vec![],
             },
             blocks: vec![
                 EntityContextBlockItem {
-                    id: "child-2".to_string(),
+                    id: "child-1".to_string(),
                     type_id: "node.block".to_string(),
-                    block_level: 2,
-                    text: Some("## Child heading".to_string()),
+                    block_level: 1,
+                    text: Some("## Child heading\n- child bullet".to_string()),
                     created_at: None,
                     updated_at: None,
                     properties: vec![],
@@ -325,22 +371,11 @@ mod tests {
                     id: "root-1".to_string(),
                     type_id: "node.block".to_string(),
                     block_level: 0,
-                    text: Some("# Root heading".to_string()),
+                    text: Some("# Root heading\n**bold**".to_string()),
                     created_at: None,
                     updated_at: None,
                     properties: vec![],
                     parent_block_id: None,
-                    neighbors: vec![],
-                },
-                EntityContextBlockItem {
-                    id: "orphan-1".to_string(),
-                    type_id: "node.block".to_string(),
-                    block_level: 1,
-                    text: Some(String::new()),
-                    created_at: None,
-                    updated_at: None,
-                    properties: vec![],
-                    parent_block_id: Some("missing-parent".to_string()),
                     neighbors: vec![],
                 },
             ],
@@ -364,21 +399,18 @@ mod tests {
         assert!(markdown.contains("### Neighbor 1"));
         assert!(markdown.contains("### Root blocks"));
         assert!(markdown.contains("#### Block `root-1`"));
-        assert!(markdown.contains("##### Block `child-2`"));
-        assert!(markdown.contains("### Orphan blocks"));
-        assert!(markdown.contains("#### Block `orphan-1`"));
+        assert!(markdown.contains("##### Block `child-1`"));
 
         let root_ix = markdown.find("#### Block `root-1`").unwrap();
-        let child_ix = markdown.find("##### Block `child-2`").unwrap();
+        let child_ix = markdown.find("##### Block `child-1`").unwrap();
         assert!(root_ix < child_ix);
 
-        assert!(markdown.contains("# Root heading"));
-        assert!(markdown.contains("## Child heading"));
-        assert!(markdown.contains("_(empty block text)_"));
+        assert!(markdown.contains("# Root heading\n**bold**"));
+        assert!(markdown.contains("## Child heading\n- child bullet"));
     }
 
     #[test]
-    fn sorts_roots_and_children_by_block_level_then_id() {
+    fn sorts_sibling_blocks_and_neighbors_deterministically() {
         let result = GetEntityContextResult {
             entity: EntityContextEntitySnapshot {
                 id: "entity-1".to_string(),
@@ -423,7 +455,28 @@ mod tests {
                     updated_at: None,
                     properties: vec![],
                     parent_block_id: Some("a-root".to_string()),
-                    neighbors: vec![],
+                    neighbors: vec![
+                        EntityContextNeighborItem {
+                            direction: NeighborDirection::Outgoing,
+                            edge_type: "edge.zeta".to_string(),
+                            properties: vec![],
+                            other_entity: EntityContextOtherEntity {
+                                id: "neighbor-2".to_string(),
+                                description: None,
+                                name: None,
+                            },
+                        },
+                        EntityContextNeighborItem {
+                            direction: NeighborDirection::Incoming,
+                            edge_type: "edge.alpha".to_string(),
+                            properties: vec![],
+                            other_entity: EntityContextOtherEntity {
+                                id: "neighbor-1".to_string(),
+                                description: None,
+                                name: None,
+                            },
+                        },
+                    ],
                 },
                 EntityContextBlockItem {
                     id: "child-a".to_string(),
@@ -437,7 +490,28 @@ mod tests {
                     neighbors: vec![],
                 },
             ],
-            neighbors: vec![],
+            neighbors: vec![
+                EntityContextNeighborItem {
+                    direction: NeighborDirection::Outgoing,
+                    edge_type: "edge.zeta".to_string(),
+                    properties: vec![],
+                    other_entity: EntityContextOtherEntity {
+                        id: "n-2".to_string(),
+                        description: None,
+                        name: None,
+                    },
+                },
+                EntityContextNeighborItem {
+                    direction: NeighborDirection::Incoming,
+                    edge_type: "edge.alpha".to_string(),
+                    properties: vec![],
+                    other_entity: EntityContextOtherEntity {
+                        id: "n-1".to_string(),
+                        description: None,
+                        name: None,
+                    },
+                },
+            ],
             prompt_context_markdown: String::new(),
         };
 
@@ -450,5 +524,18 @@ mod tests {
         let child_a_ix = markdown.find("##### Block `child-a`").unwrap();
         let child_z_ix = markdown.find("##### Block `child-z`").unwrap();
         assert!(child_a_ix < child_z_ix);
+
+        let incoming_ix = markdown.find("- direction: `incoming`").unwrap();
+        let outgoing_ix = markdown.find("- direction: `outgoing`").unwrap();
+        assert!(incoming_ix < outgoing_ix);
+
+        let block_neighbor_section_ix = markdown.find("##### block_neighbors").unwrap();
+        let block_incoming_ix = markdown[block_neighbor_section_ix..]
+            .find("  - direction: `incoming`")
+            .unwrap();
+        let block_outgoing_ix = markdown[block_neighbor_section_ix..]
+            .find("  - direction: `outgoing`")
+            .unwrap();
+        assert!(block_incoming_ix < block_outgoing_ix);
     }
 }

@@ -556,6 +556,7 @@ mod tests {
             reply.neighbors[1].direction,
             proto::NeighborDirection::Incoming as i32
         );
+        assert!(reply.prompt_context_markdown.is_some());
         assert_eq!(
             reply.prompt_context_markdown.as_deref(),
             Some("# Entity Context")
