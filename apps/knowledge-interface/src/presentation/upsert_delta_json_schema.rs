@@ -33,8 +33,12 @@ pub fn upsert_graph_delta_json_schema_value() -> Value {
 }
 
 pub fn upsert_graph_delta_json_schema_string() -> String {
-    serde_json::to_string_pretty(&upsert_graph_delta_json_schema_value())
+    try_upsert_graph_delta_json_schema_string()
         .expect("upsert graph delta json schema should always serialize")
+}
+
+pub fn try_upsert_graph_delta_json_schema_string() -> Result<String, serde_json::Error> {
+    serde_json::to_string_pretty(&upsert_graph_delta_json_schema_value())
 }
 
 fn universe_node_schema() -> Value {
