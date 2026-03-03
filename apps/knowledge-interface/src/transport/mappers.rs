@@ -204,7 +204,7 @@ pub(crate) fn to_proto_get_entity_context_reply(
             created_at: result.entity.created_at,
             updated_at: result.entity.updated_at,
         }),
-        entity_properties: to_proto_property_scalar_map(result.entity.properties),
+        entity_properties: to_proto_flat_property_map(result.entity.properties),
         blocks: result
             .blocks
             .into_iter()
@@ -212,7 +212,7 @@ pub(crate) fn to_proto_get_entity_context_reply(
                 id: block.id,
                 type_id: block.type_id,
                 block_level: block.block_level,
-                properties: to_proto_property_scalar_map(block.properties),
+                properties: to_proto_flat_property_map(block.properties),
                 parent_block_id: block.parent_block_id,
                 text: block.text,
                 created_at: block.created_at,
@@ -246,6 +246,27 @@ fn to_proto_entity_context_neighbor(
     }
 }
 
+fn to_proto_flat_property_map(values: Vec<PropertyValue>) -> HashMap<String, String> {
+    values
+        .into_iter()
+        .map(|value| {
+            let PropertyValue { key, value } = value;
+            (key, to_proto_json_scalar_string(value))
+        })
+        .collect()
+}
+
+fn to_proto_json_scalar_string(value: PropertyScalar) -> String {
+    match value {
+        PropertyScalar::String(v) => v,
+        PropertyScalar::Float(v) => v.to_string(),
+        PropertyScalar::Int(v) => v.to_string(),
+        PropertyScalar::Bool(v) => v.to_string(),
+        PropertyScalar::Datetime(v) => v,
+        PropertyScalar::Json(v) => v,
+    }
+}
+
 fn to_proto_property_scalar_map(
     values: Vec<PropertyValue>,
 ) -> HashMap<String, proto::PropertyScalarValue> {
@@ -274,28 +295,13 @@ fn to_proto_property_scalar_value(value: PropertyScalar) -> proto::PropertyScala
 pub(crate) fn to_proto_property_value(value: PropertyValue) -> proto::PropertyValue {
     let PropertyValue { key, value } = value;
 
-    let value = match to_proto_property_scalar_value(value)
-        .value
-        .expect("property scalar value should be present")
-    {
-        proto::property_scalar_value::Value::StringValue(v) => {
-            proto::property_value::Value::StringValue(v)
-        }
-        proto::property_scalar_value::Value::FloatValue(v) => {
-            proto::property_value::Value::FloatValue(v)
-        }
-        proto::property_scalar_value::Value::IntValue(v) => {
-            proto::property_value::Value::IntValue(v)
-        }
-        proto::property_scalar_value::Value::BoolValue(v) => {
-            proto::property_value::Value::BoolValue(v)
-        }
-        proto::property_scalar_value::Value::DatetimeValue(v) => {
-            proto::property_value::Value::DatetimeValue(v)
-        }
-        proto::property_scalar_value::Value::JsonValue(v) => {
-            proto::property_value::Value::JsonValue(v)
-        }
+    let value = match value {
+        PropertyScalar::String(v) => proto::property_value::Value::StringValue(v),
+        PropertyScalar::Float(v) => proto::property_value::Value::FloatValue(v),
+        PropertyScalar::Int(v) => proto::property_value::Value::IntValue(v),
+        PropertyScalar::Bool(v) => proto::property_value::Value::BoolValue(v),
+        PropertyScalar::Datetime(v) => proto::property_value::Value::DatetimeValue(v),
+        PropertyScalar::Json(v) => proto::property_value::Value::JsonValue(v),
     };
 
     proto::PropertyValue {
@@ -527,10 +533,19 @@ mod tests {
         assert_eq!(entity.name.as_deref(), Some("Ada"));
         assert_eq!(reply.blocks[0].parent_block_id, None);
         assert_eq!(reply.blocks[0].text.as_deref(), Some("Root summary"));
-        assert!(reply.blocks[0].properties.contains_key("source"));
-        assert!(reply.neighbors[0]
-            .edge_properties
-            .contains_key("confidence"));
+        assert_eq!(reply.entity_properties.get("age"), Some(&"36".to_string()));
+        assert_eq!(
+            reply.blocks[0].properties.get("source"),
+            Some(&"import".to_string())
+        );
+        assert!(matches!(
+            reply.neighbors[0]
+                .edge_properties
+                .get("confidence")
+                .and_then(|value| value.value.as_ref()),
+            Some(proto::property_scalar_value::Value::FloatValue(v))
+                if (*v - 0.9).abs() < f64::EPSILON
+        ));
         assert_eq!(
             reply.neighbors[0]
                 .other_entity

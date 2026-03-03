@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package exobrain.knowledge.v1;
 
+
 service KnowledgeInterface {
   rpc Health(HealthRequest) returns (HealthReply);
   rpc GetSchema(GetSchemaRequest) returns (GetSchemaReply);
@@ -296,7 +297,7 @@ message EntityContextBlock {
   string id = 1;
   string type_id = 2;
   uint32 block_level = 3;
-  map<string, PropertyScalarValue> properties = 4;
+  map<string, string> properties = 4;
   optional string parent_block_id = 5;
   optional string text = 6;
   optional string created_at = 7;
@@ -306,7 +307,7 @@ message EntityContextBlock {
 
 message GetEntityContextReply {
   EntityContextCore entity = 1;
-  map<string, PropertyScalarValue> entity_properties = 2;
+  map<string, string> entity_properties = 2;
   repeated EntityContextBlock blocks = 3;
   repeated EntityContextNeighbor neighbors = 4;
 }

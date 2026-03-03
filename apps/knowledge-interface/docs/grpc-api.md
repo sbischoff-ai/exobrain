@@ -374,6 +374,8 @@ Each `EntityCandidate` includes:
 
 `GetEntityContext` is a schema-driven read contract for entity context hydration.
 
+> ⚠️ **Breaking change (pre-launch):** `GetEntityContextReply.entity_properties` and `EntityContextBlock.properties` now use `map<string, string>` instead of `PropertyScalarValue` so JSON clients receive flat scalar maps without oneof-wrapper ambiguity.
+
 ### Request schema
 
 ```proto
@@ -393,15 +395,15 @@ message GetEntityContextRequest {
 ```proto
 message GetEntityContextReply {
   EntityContextCore entity = 1;
-  map<string, PropertyScalarValue> entity_properties = 2;
+  map<string, string> entity_properties = 2;
   repeated EntityContextBlock blocks = 3;
   repeated EntityContextNeighbor neighbors = 4;
 }
 ```
 
 - `entity`: core fields (`id`, `type_id`, `user_id`, `visibility`) plus `name`, `aliases`, `created_at`, and `updated_at`.
-- `entity_properties`: additional typed properties as a map (`{ "key": value }`) excluding `name`, `aliases`, `created_at`, and `updated_at`.
-- `blocks[]`: typed block entries (`id`, `type_id`, `block_level`) plus root-level `text`, `created_at`, `updated_at`, optional `parent_block_id`, additional `properties`, and block-level `neighbors`.
+- `entity_properties`: additional flat scalar properties as string values (`{ "key": "value" }`) excluding `name`, `aliases`, `created_at`, and `updated_at`.
+- `blocks[]`: typed block entries (`id`, `type_id`, `block_level`) plus root-level `text`, `created_at`, `updated_at`, optional `parent_block_id`, additional `properties` (`map<string, string>`), and block-level `neighbors`.
 - `neighbors[]`: outgoing and incoming entity neighbors with edge metadata (`direction`, `edge_type`, `edge_properties`) and `other_entity` (`id`, optional `description`).
 
 ### Block level semantics
