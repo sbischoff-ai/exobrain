@@ -61,6 +61,7 @@ This starts PostgreSQL, Redis, NATS, Qdrant, Memgraph, and Memgraph Lab.
 ### 4) Start app processes with mprocs
 
 Startup dependency note: start `job-orchestrator` alongside `assistant-backend` before validating `/api/knowledge/update`, because assistant-backend now enqueues work through orchestrator `EnqueueJob` gRPC instead of publishing directly to NATS.
+The `job-orchestrator` mprocs process starts both API and worker by default (`scripts/local/run-job-orchestrator.sh`).
 
 Backend + knowledge profile:
 
