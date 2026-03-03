@@ -677,8 +677,8 @@ fn build_get_entity_context_blocks_query() -> String {
     format!(
         "MATCH (e:Entity {{id: $entity_id}})-[:DESCRIBED_BY]->(root:Block)
          WHERE {entity_access} AND {root_access}
-         MATCH p=(root)-[:SUMMARIZES*0..$max_block_level]->(b:Block)
-         WHERE {block_access}
+         MATCH p=(root)-[:SUMMARIZES*0..]->(b:Block)
+         WHERE {block_access} AND length(p) <= $max_block_level
          OPTIONAL MATCH (parent:Block)-[:SUMMARIZES]->(b)
          WHERE {parent_access}
          RETURN b.id AS block_id,
@@ -1630,6 +1630,8 @@ mod tests {
         assert!(block_query.contains("(root.user_id = $user_id OR root.visibility = 'SHARED')"));
         assert!(block_query.contains("(b.user_id = $user_id OR b.visibility = 'SHARED')"));
         assert!(block_query.contains("(parent.user_id = $user_id OR parent.visibility = 'SHARED')"));
+        assert!(block_query.contains("length(p) <= $max_block_level"));
+        assert!(block_query.contains("[:SUMMARIZES*0..]"));
 
         let neighbor_query = build_get_entity_context_neighbors_query();
         assert!(
