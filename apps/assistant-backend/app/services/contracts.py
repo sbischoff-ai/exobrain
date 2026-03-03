@@ -10,6 +10,7 @@ import asyncpg
 from app.api.schemas.auth import LoginRequest, UnifiedPrincipal, UserResponse
 from app.services.knowledge_stream import KnowledgeUpdateStreamEvent
 from app.services.chat_stream import ChatStreamEvent
+from app.services.grpc import knowledge_pb2
 
 
 class DatabaseServiceProtocol(Protocol):
@@ -255,6 +256,35 @@ class KnowledgeJobStatusSSEPayload(TypedDict):
     detail: str
     terminal: bool
     emitted_at: str
+
+
+class KnowledgeInterfaceClientProtocol(Protocol):
+    """Read-oriented gRPC client contract for knowledge-interface."""
+
+    async def close(self) -> None:
+        """Release open gRPC transport resources during shutdown."""
+
+    async def get_schema(self, *, universe_id: str) -> knowledge_pb2.GetSchemaReply:
+        """Load schema metadata for one universe id."""
+
+    async def list_entities_by_type(
+        self,
+        *,
+        user_id: str,
+        type_id: str,
+        page_size: int | None = None,
+        page_token: str | None = None,
+    ) -> knowledge_pb2.ListEntitiesByTypeReply:
+        """List entities for a type with optional cursor pagination."""
+
+    async def get_entity_context(
+        self,
+        *,
+        entity_id: str,
+        user_id: str,
+        max_block_level: int,
+    ) -> knowledge_pb2.GetEntityContextReply:
+        """Fetch context graph details for one entity id."""
 
 
 class KnowledgeServiceProtocol(Protocol):

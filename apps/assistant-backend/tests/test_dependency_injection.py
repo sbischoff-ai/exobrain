@@ -3,6 +3,7 @@ from __future__ import annotations
 from app.core.settings import Settings
 from app.dependency_injection import build_container
 from app.services.job_orchestrator_client import JobOrchestratorClient
+from app.services.knowledge_interface_client import KnowledgeInterfaceClient
 from app.services.contracts import (
     AuthServiceProtocol,
     ConversationServiceProtocol,
@@ -10,6 +11,7 @@ from app.services.contracts import (
     JournalCacheProtocol,
     JournalServiceProtocol,
     JobPublisherProtocol,
+    KnowledgeInterfaceClientProtocol,
     KnowledgeServiceProtocol,
     SessionStoreProtocol,
     UserServiceProtocol,
@@ -27,6 +29,7 @@ def test_container_resolves_singleton_services() -> None:
     assert container.resolve(ConversationServiceProtocol) is container.resolve(ConversationServiceProtocol)
     assert container.resolve(JournalServiceProtocol) is container.resolve(JournalServiceProtocol)
     assert container.resolve(JobPublisherProtocol) is container.resolve(JobPublisherProtocol)
+    assert container.resolve(KnowledgeInterfaceClientProtocol) is container.resolve(KnowledgeInterfaceClientProtocol)
     assert container.resolve(KnowledgeServiceProtocol) is container.resolve(KnowledgeServiceProtocol)
 
 
@@ -34,3 +37,9 @@ def test_container_wires_job_publisher_to_job_orchestrator_client() -> None:
     container = build_container(Settings())
 
     assert isinstance(container.resolve(JobPublisherProtocol), JobOrchestratorClient)
+
+
+def test_container_wires_knowledge_interface_client() -> None:
+    container = build_container(Settings())
+
+    assert isinstance(container.resolve(KnowledgeInterfaceClientProtocol), KnowledgeInterfaceClient)
