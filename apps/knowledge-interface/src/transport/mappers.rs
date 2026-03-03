@@ -199,20 +199,26 @@ pub(crate) fn to_proto_list_entities_by_type_reply(
 pub(crate) fn to_proto_get_entity_context_reply(
     result: GetEntityContextResult,
 ) -> proto::GetEntityContextReply {
+    let GetEntityContextResult {
+        entity,
+        blocks,
+        neighbors,
+        prompt_context_markdown,
+    } = result;
+
     proto::GetEntityContextReply {
         entity: Some(proto::EntityContextCore {
-            id: result.entity.id,
-            type_id: result.entity.type_id,
-            user_id: result.entity.user_id,
-            visibility: to_proto_visibility(result.entity.visibility) as i32,
-            name: result.entity.name,
-            aliases: result.entity.aliases,
-            created_at: result.entity.created_at,
-            updated_at: result.entity.updated_at,
+            id: entity.id,
+            type_id: entity.type_id,
+            user_id: entity.user_id,
+            visibility: to_proto_visibility(entity.visibility) as i32,
+            name: entity.name,
+            aliases: entity.aliases,
+            created_at: entity.created_at,
+            updated_at: entity.updated_at,
         }),
-        entity_properties: to_proto_flat_property_map(result.entity.properties),
-        blocks: result
-            .blocks
+        entity_properties: to_proto_flat_property_map(entity.properties),
+        blocks: blocks
             .into_iter()
             .map(|block| proto::EntityContextBlock {
                 id: block.id,
@@ -230,11 +236,11 @@ pub(crate) fn to_proto_get_entity_context_reply(
                     .collect(),
             })
             .collect(),
-        neighbors: result
-            .neighbors
+        neighbors: neighbors
             .into_iter()
             .map(to_proto_entity_context_neighbor)
             .collect(),
+        prompt_context_markdown: Some(prompt_context_markdown),
     }
 }
 
@@ -510,6 +516,7 @@ mod tests {
                     },
                 },
             ],
+            prompt_context_markdown: "# Entity Context".to_string(),
         });
 
         let entity = reply.entity.expect("entity should be present");
@@ -548,6 +555,10 @@ mod tests {
         assert_eq!(
             reply.neighbors[1].direction,
             proto::NeighborDirection::Incoming as i32
+        );
+        assert_eq!(
+            reply.prompt_context_markdown.as_deref(),
+            Some("# Entity Context")
         );
     }
 
