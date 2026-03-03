@@ -9,6 +9,7 @@ Rust + tonic gRPC service for GraphRAG ingestion and canonical KG schema registr
 - Accepts schema-driven graph writes through `UpsertGraphDelta`.
 - Exposes `GetUserInitGraph` to seed a new user-scoped starter subgraph.
 - Exposes `GetEntityContext` to read an entity's typed context graph payload.
+- Exposes `ListEntitiesByType` for paginated, visibility-aware entity browsing by type.
 - Uses typed property payloads instead of hardcoded event/task fields.
 
 ## Quick start
@@ -77,6 +78,11 @@ The Memgraph write is held in a transaction until Qdrant upserts complete. If Qd
 - AI agent entity (`node.ai_agent`, UUID id) named `Exobrain Assistant`
 - one descriptive assistant block (embedded + upserted to Qdrant)
 - `RELATED_TO` edge from assistant -> person
+
+
+## ListEntitiesByType gRPC
+
+`ListEntitiesByType` returns entities filtered by `type_id` and requester visibility (`user_id` private + shared), with cursor pagination via `next_page_token`.
 
 ## FindEntityCandidates gRPC
 
