@@ -25,6 +25,7 @@ use super::proto::knowledge_interface_server::{KnowledgeInterface, KnowledgeInte
 use super::proto::{
     AllowedEdge, ExtractionEntityType, ExtractionUniverse, FindEntityCandidatesReply,
     FindEntityCandidatesRequest, GetEntityContextReply, GetEntityContextRequest,
+    GetEntityTypePropertyContextReply, GetEntityTypePropertyContextRequest,
     GetExtractionSchemaContextReply, GetExtractionSchemaContextRequest, GetSchemaReply,
     GetSchemaRequest, GetUpsertGraphDeltaJsonSchemaReply, GetUpsertGraphDeltaJsonSchemaRequest,
     GetUserInitGraphReply, GetUserInitGraphRequest, HealthReply, HealthRequest,
@@ -96,6 +97,135 @@ fn to_proto_extraction_universe(universe: ServiceExtractionUniverseContext) -> E
         name: universe.name,
         described_by_text: universe.described_by_text,
     }
+}
+
+fn entity_type_inheritance_chain(
+    type_id: &str,
+    parent_by_child: &std::collections::HashMap<String, String>,
+) -> Vec<String> {
+    let mut chain = Vec::new();
+    let mut current = type_id.to_string();
+    let mut seen = std::collections::HashSet::new();
+
+    loop {
+        if !seen.insert(current.clone()) {
+            break;
+        }
+        chain.push(current.clone());
+        let Some(parent) = parent_by_child.get(&current).cloned() else {
+            break;
+        };
+        current = parent;
+    }
+
+    chain.reverse();
+    chain
+}
+
+fn build_entity_type_property_context_reply(
+    schema: crate::domain::FullSchema,
+    request: &GetEntityTypePropertyContextRequest,
+) -> Result<GetEntityTypePropertyContextReply, Status> {
+    let type_id = request.type_id.trim();
+    if type_id.is_empty() {
+        return Err(Status::invalid_argument("type_id is required"));
+    }
+
+    let include_inactive = request.include_inactive.unwrap_or(false);
+    let include_inherited = request.include_inherited.unwrap_or(true);
+
+    let mut nodes_by_id = std::collections::HashMap::new();
+    for node in &schema.node_types {
+        if include_inactive || node.schema_type.active {
+            nodes_by_id.insert(node.schema_type.id.clone(), node);
+        }
+    }
+
+    let Some(target) = nodes_by_id.get(type_id) else {
+        return Err(Status::invalid_argument("unknown type_id"));
+    };
+
+    let mut parent_by_child = std::collections::HashMap::new();
+    for node in nodes_by_id.values() {
+        for inheritance in &node.parents {
+            if (include_inactive || inheritance.active)
+                && nodes_by_id.contains_key(&inheritance.parent_type_id)
+            {
+                parent_by_child.insert(
+                    node.schema_type.id.clone(),
+                    inheritance.parent_type_id.clone(),
+                );
+            }
+        }
+    }
+
+    let inheritance_chain = entity_type_inheritance_chain(&target.schema_type.id, &parent_by_child);
+
+    let mut owner_type_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
+    owner_type_ids.insert("node".to_string());
+    if include_inherited {
+        for owner in &inheritance_chain {
+            owner_type_ids.insert(owner.clone());
+        }
+    } else {
+        owner_type_ids.insert(target.schema_type.id.clone());
+    }
+
+    let specificity: std::collections::HashMap<String, usize> = inheritance_chain
+        .iter()
+        .enumerate()
+        .map(|(idx, id)| (id.clone(), idx))
+        .collect();
+
+    let mut selected_by_name: std::collections::HashMap<String, crate::domain::TypeProperty> =
+        std::collections::HashMap::new();
+
+    for node in nodes_by_id.values() {
+        for prop in &node.properties {
+            if !owner_type_ids.contains(&prop.owner_type_id) {
+                continue;
+            }
+            if !include_inactive && !prop.active {
+                continue;
+            }
+
+            let existing = selected_by_name.get(&prop.prop_name);
+            let new_score = *specificity.get(&prop.owner_type_id).unwrap_or(&0);
+            let replace = match existing {
+                None => true,
+                Some(existing_prop) => {
+                    let old_score = *specificity.get(&existing_prop.owner_type_id).unwrap_or(&0);
+                    new_score > old_score
+                        || (new_score == old_score
+                            && prop.owner_type_id < existing_prop.owner_type_id)
+                }
+            };
+            if replace {
+                selected_by_name.insert(prop.prop_name.clone(), prop.clone());
+            }
+        }
+    }
+
+    let mut properties: Vec<super::proto::PropertyContext> = selected_by_name
+        .into_values()
+        .map(|prop| super::proto::PropertyContext {
+            prop_name: prop.prop_name,
+            value_type: prop.value_type,
+            required: prop.required,
+            readable: prop.readable,
+            writable: prop.writable,
+            description: prop.description,
+            declared_on_type_id: prop.owner_type_id,
+        })
+        .collect();
+    properties.sort_by(|a, b| a.prop_name.cmp(&b.prop_name));
+
+    Ok(GetEntityTypePropertyContextReply {
+        type_id: target.schema_type.id.clone(),
+        type_name: target.schema_type.name.clone(),
+        inheritance_chain,
+        properties,
+    })
 }
 
 #[tonic::async_trait]
@@ -215,6 +345,22 @@ impl KnowledgeInterface for KnowledgeGrpcService {
                 .map(to_proto_extraction_universe)
                 .collect(),
         }))
+    }
+
+    async fn get_entity_type_property_context(
+        &self,
+        request: Request<GetEntityTypePropertyContextRequest>,
+    ) -> Result<Response<GetEntityTypePropertyContextReply>, Status> {
+        let payload = request.into_inner();
+        let schema = self
+            .app
+            .get_schema()
+            .await
+            .map_err(|e| Status::internal(e.to_string()))?;
+
+        let reply = build_entity_type_property_context_reply(schema, &payload)?;
+
+        Ok(Response::new(reply))
     }
 
     async fn upsert_schema_type(
@@ -404,8 +550,9 @@ pub async fn run_server(
 #[cfg(test)]
 mod tests {
     use super::{
-        extraction_options_from_request, to_proto_extraction_entity_type,
-        to_proto_extraction_universe, UPSERT_GRAPH_DELTA_JSON_SCHEMA,
+        build_entity_type_property_context_reply, extraction_options_from_request,
+        to_proto_extraction_entity_type, to_proto_extraction_universe,
+        UPSERT_GRAPH_DELTA_JSON_SCHEMA,
     };
     use crate::domain::{
         EdgeEndpointRule, FullSchema, SchemaEdgeTypeHydrated, SchemaNodeTypeHydrated, SchemaType,
@@ -415,7 +562,9 @@ mod tests {
         build_extraction_entity_types, ExtractionAllowedEdge, ExtractionEntityType,
         ExtractionSchemaOptions, ExtractionUniverseContext,
     };
-    use crate::transport::proto::GetExtractionSchemaContextRequest;
+    use crate::transport::proto::{
+        GetEntityTypePropertyContextRequest, GetExtractionSchemaContextRequest,
+    };
 
     #[test]
     fn extraction_schema_context_filters_inactive_types_and_rules_by_default() {
@@ -731,6 +880,132 @@ mod tests {
         assert_eq!(proto.outgoing_edges[0].min_cardinality, Some(1));
         assert_eq!(proto.outgoing_edges[0].max_cardinality, Some(2));
     }
+
+    #[test]
+    fn entity_type_property_context_rejects_blank_type_id() {
+        let schema = FullSchema {
+            node_types: vec![],
+            edge_types: vec![],
+        };
+        let request = GetEntityTypePropertyContextRequest {
+            type_id: "   ".to_string(),
+            include_inactive: None,
+            include_inherited: None,
+            user_id: None,
+        };
+
+        let err = build_entity_type_property_context_reply(schema, &request)
+            .expect_err("blank type_id should fail");
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+        assert!(err.message().contains("type_id is required"));
+    }
+
+    #[test]
+    fn entity_type_property_context_rejects_unknown_type_id() {
+        let schema = FullSchema {
+            node_types: vec![SchemaNodeTypeHydrated {
+                schema_type: SchemaType {
+                    id: "node.person".to_string(),
+                    kind: "node".to_string(),
+                    name: "Person".to_string(),
+                    description: "Person".to_string(),
+                    active: true,
+                },
+                properties: vec![],
+                parents: vec![],
+            }],
+            edge_types: vec![],
+        };
+        let request = GetEntityTypePropertyContextRequest {
+            type_id: "node.unknown".to_string(),
+            include_inactive: None,
+            include_inherited: None,
+            user_id: None,
+        };
+
+        let err = build_entity_type_property_context_reply(schema, &request)
+            .expect_err("unknown type_id should fail");
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+        assert!(err.message().contains("unknown type_id"));
+    }
+
+    #[test]
+    fn entity_type_property_context_sorts_properties_and_includes_inherited() {
+        let schema = FullSchema {
+            node_types: vec![
+                SchemaNodeTypeHydrated {
+                    schema_type: SchemaType {
+                        id: "node.entity".to_string(),
+                        kind: "node".to_string(),
+                        name: "Entity".to_string(),
+                        description: "Root".to_string(),
+                        active: true,
+                    },
+                    properties: vec![crate::domain::TypeProperty {
+                        owner_type_id: "node.entity".to_string(),
+                        prop_name: "zeta".to_string(),
+                        value_type: "string".to_string(),
+                        required: false,
+                        readable: true,
+                        writable: true,
+                        active: true,
+                        description: "z".to_string(),
+                    }],
+                    parents: vec![],
+                },
+                SchemaNodeTypeHydrated {
+                    schema_type: SchemaType {
+                        id: "node.person".to_string(),
+                        kind: "node".to_string(),
+                        name: "Person".to_string(),
+                        description: "Person".to_string(),
+                        active: true,
+                    },
+                    properties: vec![crate::domain::TypeProperty {
+                        owner_type_id: "node.person".to_string(),
+                        prop_name: "alpha".to_string(),
+                        value_type: "string".to_string(),
+                        required: true,
+                        readable: true,
+                        writable: false,
+                        active: true,
+                        description: "a".to_string(),
+                    }],
+                    parents: vec![crate::domain::TypeInheritance {
+                        child_type_id: "node.person".to_string(),
+                        parent_type_id: "node.entity".to_string(),
+                        description: "inherits".to_string(),
+                        active: true,
+                    }],
+                },
+            ],
+            edge_types: vec![],
+        };
+        let request = GetEntityTypePropertyContextRequest {
+            type_id: "node.person".to_string(),
+            include_inactive: Some(false),
+            include_inherited: Some(true),
+            user_id: None,
+        };
+
+        let reply = build_entity_type_property_context_reply(schema, &request)
+            .expect("valid request should succeed");
+
+        assert_eq!(reply.type_id, "node.person");
+        assert_eq!(reply.type_name, "Person");
+        assert_eq!(reply.inheritance_chain, vec!["node.entity", "node.person"]);
+        assert_eq!(
+            reply
+                .properties
+                .iter()
+                .map(|prop| prop.prop_name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["alpha", "zeta"]
+        );
+        assert_eq!(reply.properties[0].declared_on_type_id, "node.person");
+        assert_eq!(reply.properties[1].declared_on_type_id, "node.entity");
+    }
+
     #[test]
     fn upsert_graph_delta_json_schema_constant_includes_core_sections() {
         assert!(UPSERT_GRAPH_DELTA_JSON_SCHEMA.contains("$schema"));

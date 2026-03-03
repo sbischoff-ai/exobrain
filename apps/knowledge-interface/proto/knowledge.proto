@@ -8,6 +8,7 @@ service KnowledgeInterface {
   rpc GetSchema(GetSchemaRequest) returns (GetSchemaReply);
   rpc GetUpsertGraphDeltaJsonSchema(GetUpsertGraphDeltaJsonSchemaRequest) returns (GetUpsertGraphDeltaJsonSchemaReply);
   rpc GetExtractionSchemaContext(GetExtractionSchemaContextRequest) returns (GetExtractionSchemaContextReply);
+  rpc GetEntityTypePropertyContext(GetEntityTypePropertyContextRequest) returns (GetEntityTypePropertyContextReply);
   rpc UpsertSchemaType(UpsertSchemaTypeRequest) returns (UpsertSchemaTypeReply);
   rpc UpsertGraphDelta(UpsertGraphDeltaRequest) returns (UpsertGraphDeltaReply);
   rpc GetUserInitGraph(GetUserInitGraphRequest) returns (GetUserInitGraphReply);
@@ -109,6 +110,30 @@ message GetExtractionSchemaContextReply {
   repeated ExtractionEntityType entity_types = 1;
   optional string prompt_context_markdown = 2;
   repeated ExtractionUniverse universes = 3;
+}
+
+message GetEntityTypePropertyContextRequest {
+  string type_id = 1;
+  optional bool include_inactive = 2;
+  optional bool include_inherited = 3;
+  optional string user_id = 4;
+}
+
+message PropertyContext {
+  string prop_name = 1;
+  string value_type = 2;
+  bool required = 3;
+  bool readable = 4;
+  bool writable = 5;
+  string description = 6;
+  string declared_on_type_id = 7;
+}
+
+message GetEntityTypePropertyContextReply {
+  string type_id = 1;
+  string type_name = 2;
+  repeated string inheritance_chain = 3;
+  repeated PropertyContext properties = 4;
 }
 
 message ExtractionUniverse {
