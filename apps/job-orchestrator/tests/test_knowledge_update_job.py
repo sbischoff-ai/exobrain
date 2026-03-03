@@ -6,7 +6,11 @@ import pytest
 
 from app.contracts import KnowledgeUpdatePayload
 from app.services.grpc import knowledge_pb2
-from app.worker.jobs.knowledge_update import _build_upsert_graph_delta_step_one, _step_two_placeholder_log
+from app.worker.jobs.knowledge_update import (
+    _build_batch_document,
+    _build_upsert_graph_delta_step_one,
+    _step_two_store_batch_document,
+)
 
 
 class FakeChannel:
@@ -75,8 +79,83 @@ async def test_step_one_requires_created_at() -> None:
     assert "missing created_at" in str(exc_info.value)
 
 
-def test_step_two_logs_placeholder_request(caplog: pytest.LogCaptureFixture) -> None:
-    with caplog.at_level(logging.INFO):
-        _step_two_placeholder_log({"entities": []})
+def test_build_batch_document_formats_header_and_turns() -> None:
+    payload = KnowledgeUpdatePayload(
+        journal_reference="journal-1",
+        requested_by_user_id="user-1",
+        messages=[
+            {
+                "role": "assistant",
+                "content": "hi",
+                "sequence": 7,
+                "created_at": "2026-03-02T12:00:00Z",
+            },
+            {
+                "role": " user role ",
+                "content": None,
+                "created_at": "2026-03-02T12:05:00Z",
+            },
+        ],
+    )
 
-    assert "knowledge.update step two placeholder" in caplog.text
+    assert _build_batch_document(payload) == """=== BATCH DOCUMENT ===
+conversation_id: journal-1
+user_id: user-1
+time_range_start: 2026-03-02T12:00:00Z
+time_range_end: 2026-03-02T12:05:00Z
+
+--- TURN 7 ---
+speaker: ASSISTANT
+timestamp: 2026-03-02T12:00:00Z
+content:
+hi
+
+--- TURN 2 ---
+speaker: USER_ROLE
+timestamp: 2026-03-02T12:05:00Z
+content:
+"""
+
+
+def test_build_batch_document_without_header_and_missing_timestamps() -> None:
+    payload = KnowledgeUpdatePayload(
+        journal_reference="journal-1",
+        requested_by_user_id="user-1",
+        messages=[
+            {
+                "role": "",
+                "content": "first",
+            },
+            {
+                "role": "assistant-reply",
+                "content": "second",
+                "sequence": 4,
+            },
+        ],
+    )
+
+    assert _build_batch_document(payload, include_header=False) == """--- TURN 1 ---
+speaker: UNKNOWN
+timestamp: unknown
+content:
+first
+
+--- TURN 4 ---
+speaker: ASSISTANT_REPLY
+timestamp: unknown
+content:
+second"""
+
+
+def test_step_two_logs_batch_document(caplog: pytest.LogCaptureFixture) -> None:
+    payload = KnowledgeUpdatePayload(
+        journal_reference="journal-1",
+        requested_by_user_id="user-1",
+        messages=[{"role": "user", "content": "hello"}],
+    )
+
+    with caplog.at_level(logging.INFO):
+        document = _step_two_store_batch_document(payload)
+
+    assert "knowledge.update step two batch document" in caplog.text
+    assert "conversation_id: journal-1" in document
