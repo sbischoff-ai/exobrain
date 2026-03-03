@@ -22,7 +22,8 @@ use super::proto::{
     FindEntityCandidatesRequest, GetEntityContextReply, GetEntityContextRequest,
     GetExtractionSchemaContextReply, GetExtractionSchemaContextRequest, GetSchemaReply,
     GetSchemaRequest, GetUserInitGraphReply, GetUserInitGraphRequest, HealthReply, HealthRequest,
-    UpsertGraphDeltaReply, UpsertGraphDeltaRequest, UpsertSchemaTypeReply, UpsertSchemaTypeRequest,
+    ListEntitiesByTypeReply, ListEntitiesByTypeRequest, UpsertGraphDeltaReply,
+    UpsertGraphDeltaRequest, UpsertSchemaTypeReply, UpsertSchemaTypeRequest,
 };
 use super::FILE_DESCRIPTOR_SET;
 
@@ -318,6 +319,15 @@ impl KnowledgeInterface for KnowledgeGrpcService {
                 .map(to_proto_entity_candidate)
                 .collect(),
         }))
+    }
+
+    async fn list_entities_by_type(
+        &self,
+        _request: Request<ListEntitiesByTypeRequest>,
+    ) -> Result<Response<ListEntitiesByTypeReply>, Status> {
+        Err(Status::unimplemented(
+            "ListEntitiesByType is defined in proto but not implemented yet",
+        ))
     }
 
     async fn get_entity_context(
