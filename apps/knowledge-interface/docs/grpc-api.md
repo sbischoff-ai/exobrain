@@ -119,7 +119,11 @@ Visibility values are accepted as provided per node/edge; scope is carried per u
 
 ## GetUpsertGraphDeltaJsonSchema
 
-`GetUpsertGraphDeltaJsonSchema` returns a JSON Schema document for the `UpsertGraphDeltaRequest` payload so clients can pre-validate ingestion payloads before sending gRPC writes.
+`GetUpsertGraphDeltaJsonSchema` returns a JSON Schema document for the `UpsertGraphDeltaRequest` payload.
+
+### Primary use case
+
+Use this endpoint to configure LLM structured output so model-generated graph deltas already match the expected request shape before calling `UpsertGraphDelta`.
 
 ### Full request/response schema
 
@@ -136,7 +140,8 @@ message GetUpsertGraphDeltaJsonSchemaReply {
 
 Response behavior:
 
-- `json_schema` contains a deterministic Draft 2020-12 JSON Schema document string generated from a single serializer path for cache/snapshot stability.
+- `json_schema` contains a deterministic JSON Schema **Draft 2020-12** document string generated from a single serializer path for cache/snapshot stability.
+- `json_schema` uses **proto field names** (snake_case), matching `UpsertGraphDeltaRequest` field naming expectations.
 - schema root is an object with required arrays: `universes`, `entities`, `blocks`, `edges`.
 - node/edge records require proto-aligned fields and UUID-constrained IDs are marked with `format: "uuid"`.
 - `PropertyValue` requires `key` plus exactly one typed value (`string_value`, `float_value`, `int_value`, `bool_value`, `datetime_value`, `json_value`) via `oneOf`.
@@ -144,6 +149,31 @@ Response behavior:
 - `schema_id` identifies the canonical schema document URI.
 - `draft` reports the JSON Schema draft the response uses.
 - `version` reports the schema payload version.
+
+### Important limitation
+
+This schema validates **request shape only**. Runtime semantic checks in ingestion still run server-side when `UpsertGraphDelta` executes, including:
+
+- type compatibility checks
+- property allow/required checks
+- edge rule endpoint checks
+- graph-state cardinality validation
+
+Passing JSON Schema validation does not guarantee the delta is semantically valid against current graph state.
+
+### Minimal usage pattern
+
+1. Fetch schema via gRPC (`GetUpsertGraphDeltaJsonSchema`).
+2. Provide `json_schema` to your LLM structured output configuration.
+3. Submit the model-produced payload to `UpsertGraphDelta`.
+
+Pseudo-flow:
+
+```text
+GetUpsertGraphDeltaJsonSchema() -> { json_schema }
+LLM.generate(structured_output_schema=json_schema) -> upsert_payload
+UpsertGraphDelta(upsert_payload)
+```
 
 ## GetExtractionSchemaContext
 
