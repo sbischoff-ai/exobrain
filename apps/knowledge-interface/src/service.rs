@@ -22,6 +22,17 @@ const COMMON_EXOBRAIN_ENTITY_ID: &str = "8c75cc89-6204-4fed-aec1-34d032ff95ee";
 const COMMON_EXOBRAIN_BLOCK_ID: &str = "ea5ca80f-346b-4f66-bff2-d307ce5d7da9";
 const LIST_ENTITIES_BY_TYPE_DEFAULT_PAGE_SIZE: u32 = 50;
 const LIST_ENTITIES_BY_TYPE_MAX_PAGE_SIZE: u32 = 200;
+const CONTEXT_CORE_FIELD_DENYLIST: [&str; 9] = [
+    "created_at",
+    "id",
+    "type_id",
+    "updated_at",
+    "user_id",
+    "visibility",
+    "name",
+    "aliases",
+    "text",
+];
 
 #[derive(Debug, Clone)]
 pub(crate) struct ExtractionSchemaOptions {
@@ -739,7 +750,31 @@ impl KnowledgeApplication {
 
         query.max_block_level = query.max_block_level.min(32);
 
-        self.graph_repository.get_entity_context(&query).await
+        let mut result = self.graph_repository.get_entity_context(&query).await?;
+        let property_allowlist = self
+            .schema_repository
+            .get_all_properties()
+            .await?
+            .into_iter()
+            .filter(|property| property.active && property.readable)
+            .fold(HashMap::new(), |mut allowlist, property| {
+                allowlist
+                    .entry(property.owner_type_id)
+                    .or_insert_with(HashSet::new)
+                    .insert(property.prop_name);
+                allowlist
+            });
+
+        let allowed_entity_properties = property_allowlist
+            .get(&result.entity.type_id)
+            .cloned()
+            .unwrap_or_default();
+        result.entity.properties.retain(|property| {
+            allowed_entity_properties.contains(&property.key)
+                && !CONTEXT_CORE_FIELD_DENYLIST.contains(&property.key.as_str())
+        });
+
+        Ok(result)
     }
 
     pub async fn upsert_graph_delta(&self, delta: GraphDelta) -> Result<()> {
@@ -1555,6 +1590,7 @@ mod tests {
     struct FakeSchemaRepo {
         types: Mutex<HashMap<String, SchemaType>>,
         parents: Mutex<HashMap<String, String>>,
+        properties: Mutex<Vec<TypeProperty>>,
     }
 
     impl FakeSchemaRepo {
@@ -1573,8 +1609,80 @@ mod tests {
             Self {
                 types: Mutex::new(types),
                 parents: Mutex::new(HashMap::new()),
+                properties: Mutex::new(default_schema_properties()),
             }
         }
+
+        fn with_properties(properties: Vec<TypeProperty>) -> Self {
+            let mut repo = Self::new();
+            repo.properties = Mutex::new(properties);
+            repo
+        }
+    }
+
+    fn default_schema_properties() -> Vec<TypeProperty> {
+        vec![
+            TypeProperty {
+                owner_type_id: "node.entity".to_string(),
+                prop_name: "name".to_string(),
+                value_type: "string".to_string(),
+                required: true,
+                readable: true,
+                writable: true,
+                active: true,
+                description: String::new(),
+            },
+            TypeProperty {
+                owner_type_id: "node.entity".to_string(),
+                prop_name: "aliases".to_string(),
+                value_type: "json".to_string(),
+                required: false,
+                readable: true,
+                writable: true,
+                active: true,
+                description: String::new(),
+            },
+            TypeProperty {
+                owner_type_id: "node.block".to_string(),
+                prop_name: "text".to_string(),
+                value_type: "string".to_string(),
+                required: true,
+                readable: true,
+                writable: true,
+                active: true,
+                description: String::new(),
+            },
+            TypeProperty {
+                owner_type_id: "edge".to_string(),
+                prop_name: "confidence".to_string(),
+                value_type: "float".to_string(),
+                required: true,
+                readable: true,
+                writable: true,
+                active: true,
+                description: String::new(),
+            },
+            TypeProperty {
+                owner_type_id: "edge".to_string(),
+                prop_name: "status".to_string(),
+                value_type: "string".to_string(),
+                required: true,
+                readable: true,
+                writable: true,
+                active: true,
+                description: String::new(),
+            },
+            TypeProperty {
+                owner_type_id: "edge".to_string(),
+                prop_name: "provenance_hint".to_string(),
+                value_type: "string".to_string(),
+                required: true,
+                readable: true,
+                writable: true,
+                active: true,
+                description: String::new(),
+            },
+        ]
     }
 
     #[async_trait]
@@ -1791,68 +1899,7 @@ mod tests {
         }
 
         async fn get_all_properties(&self) -> Result<Vec<TypeProperty>> {
-            Ok(vec![
-                TypeProperty {
-                    owner_type_id: "node.entity".to_string(),
-                    prop_name: "name".to_string(),
-                    value_type: "string".to_string(),
-                    required: true,
-                    readable: true,
-                    writable: true,
-                    active: true,
-                    description: String::new(),
-                },
-                TypeProperty {
-                    owner_type_id: "node.entity".to_string(),
-                    prop_name: "aliases".to_string(),
-                    value_type: "json".to_string(),
-                    required: false,
-                    readable: true,
-                    writable: true,
-                    active: true,
-                    description: String::new(),
-                },
-                TypeProperty {
-                    owner_type_id: "node.block".to_string(),
-                    prop_name: "text".to_string(),
-                    value_type: "string".to_string(),
-                    required: true,
-                    readable: true,
-                    writable: true,
-                    active: true,
-                    description: String::new(),
-                },
-                TypeProperty {
-                    owner_type_id: "edge".to_string(),
-                    prop_name: "confidence".to_string(),
-                    value_type: "float".to_string(),
-                    required: true,
-                    readable: true,
-                    writable: true,
-                    active: true,
-                    description: String::new(),
-                },
-                TypeProperty {
-                    owner_type_id: "edge".to_string(),
-                    prop_name: "status".to_string(),
-                    value_type: "string".to_string(),
-                    required: true,
-                    readable: true,
-                    writable: true,
-                    active: true,
-                    description: String::new(),
-                },
-                TypeProperty {
-                    owner_type_id: "edge".to_string(),
-                    prop_name: "provenance_hint".to_string(),
-                    value_type: "string".to_string(),
-                    required: true,
-                    readable: true,
-                    writable: true,
-                    active: true,
-                    description: String::new(),
-                },
-            ])
+            Ok(self.properties.lock().expect("lock").clone())
         }
 
         async fn get_edge_endpoint_rules(&self) -> Result<Vec<EdgeEndpointRule>> {
@@ -3723,7 +3770,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn get_entity_context_passes_max_block_level_and_result_unchanged() {
+    async fn get_entity_context_passes_max_block_level_and_keeps_top_level_fields() {
         let seen_queries = Arc::new(Mutex::new(Vec::new()));
         let expected = sample_entity_context_result();
         let app = KnowledgeApplication::new(
@@ -3746,6 +3793,9 @@ mod tests {
 
         assert_eq!(result.entity.id, expected.entity.id);
         assert_eq!(result.entity.type_id, expected.entity.type_id);
+        assert_eq!(result.entity.user_id, expected.entity.user_id);
+        assert_eq!(result.entity.name, expected.entity.name);
+        assert_eq!(result.entity.aliases, expected.entity.aliases);
         assert_eq!(
             format!("{:?}", result.entity.visibility),
             format!("{:?}", expected.entity.visibility)
@@ -3756,6 +3806,73 @@ mod tests {
         let seen = seen_queries.lock().expect("lock should be available");
         assert_eq!(seen.len(), 1);
         assert_eq!(seen[0].max_block_level, 7);
+    }
+
+    #[tokio::test]
+    async fn get_entity_context_filters_entity_properties_using_schema_and_core_denylist() {
+        let seen_queries = Arc::new(Mutex::new(Vec::new()));
+        let schema_repo = FakeSchemaRepo::with_properties(vec![
+            TypeProperty {
+                owner_type_id: "node.person".to_string(),
+                prop_name: "favorite_color".to_string(),
+                value_type: "string".to_string(),
+                required: false,
+                readable: true,
+                writable: true,
+                active: true,
+                description: String::new(),
+            },
+            TypeProperty {
+                owner_type_id: "node.person".to_string(),
+                prop_name: "created_at".to_string(),
+                value_type: "string".to_string(),
+                required: false,
+                readable: true,
+                writable: true,
+                active: true,
+                description: String::new(),
+            },
+            TypeProperty {
+                owner_type_id: "node.person".to_string(),
+                prop_name: "secret_note".to_string(),
+                value_type: "string".to_string(),
+                required: false,
+                readable: false,
+                writable: true,
+                active: true,
+                description: String::new(),
+            },
+            TypeProperty {
+                owner_type_id: "node.person".to_string(),
+                prop_name: "inactive_field".to_string(),
+                value_type: "string".to_string(),
+                required: false,
+                readable: true,
+                writable: true,
+                active: false,
+                description: String::new(),
+            },
+        ]);
+        let app = KnowledgeApplication::new(
+            Arc::new(schema_repo),
+            Arc::new(ContextGraphRepository {
+                seen_queries: Arc::clone(&seen_queries),
+                result: sample_entity_context_result(),
+            }),
+            Arc::new(FakeEmbedder),
+        );
+
+        let result = app
+            .get_entity_context(GetEntityContextQuery {
+                entity_id: "entity-1".to_string(),
+                user_id: "user-1".to_string(),
+                max_block_level: 7,
+            })
+            .await
+            .expect("query should succeed");
+
+        assert_eq!(result.entity.properties.len(), 1);
+        assert_eq!(result.entity.properties[0].key, "favorite_color");
     }
 
     #[tokio::test]
@@ -4426,7 +4543,22 @@ mod tests {
                 aliases: vec![],
                 created_at: None,
                 updated_at: None,
-                properties: vec![],
+                properties: vec![
+                    PropertyValue {
+                        key: "favorite_color".to_string(),
+                        value: crate::domain::PropertyScalar::String("blue".to_string()),
+                    },
+                    PropertyValue {
+                        key: "created_at".to_string(),
+                        value: crate::domain::PropertyScalar::String(
+                            "2024-01-01T00:00:00Z".to_string(),
+                        ),
+                    },
+                    PropertyValue {
+                        key: "non_schema_extra".to_string(),
+                        value: crate::domain::PropertyScalar::String("extra".to_string()),
+                    },
+                ],
             },
             blocks: vec![],
             neighbors: vec![],
