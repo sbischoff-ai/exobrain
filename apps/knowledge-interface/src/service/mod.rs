@@ -3149,10 +3149,43 @@ mod tests {
         );
         assert_eq!(result.blocks.len(), expected.blocks.len());
         assert_eq!(result.neighbors.len(), expected.neighbors.len());
+        assert!(result
+            .prompt_context_markdown
+            .starts_with("# Entity context"));
 
         let seen = seen_queries.lock().expect("lock should be available");
         assert_eq!(seen.len(), 1);
         assert_eq!(seen[0].max_block_level, 7);
+    }
+
+    #[tokio::test]
+    async fn get_entity_context_sets_prompt_context_markdown_from_renderer() {
+        let app = KnowledgeApplication::new(
+            Arc::new(FakeSchemaRepo::new()),
+            Arc::new(ContextGraphRepository {
+                seen_queries: Arc::new(Mutex::new(Vec::new())),
+                result: sample_entity_context_result(),
+            }),
+            Arc::new(FakeEmbedder),
+        );
+
+        let result = app
+            .get_entity_context(GetEntityContextQuery {
+                entity_id: "entity-1".to_string(),
+                user_id: "user-1".to_string(),
+                max_block_level: 7,
+            })
+            .await
+            .expect("query should succeed");
+
+        assert!(result
+            .prompt_context_markdown
+            .starts_with("# Entity context"));
+        assert!(result
+            .prompt_context_markdown
+            .contains("## Entity core summary"));
+        assert!(result.prompt_context_markdown.contains("## Blocks"));
+        assert_ne!(result.prompt_context_markdown, "# Sample context");
     }
 
     #[tokio::test]
