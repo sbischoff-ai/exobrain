@@ -4,13 +4,13 @@ use async_trait::async_trait;
 use crate::domain::{
     EdgeEndpointRule, EmbeddedBlock, EntityCandidate, ExistingBlockContext, ExtractionUniverse,
     FindEntityCandidatesQuery, GetEntityContextQuery, GetEntityContextResult, GraphDelta,
-    ListEntitiesByTypeQuery, ListEntitiesByTypeResult, NodeRelationshipCounts, SchemaType,
-    TypeInheritance, TypeProperty, UpsertSchemaTypePropertyInput, UserInitGraphNodeIds,
+    ListEntitiesByTypeQuery, ListEntitiesByTypeResult, NodeRelationshipCounts, SchemaKind,
+    SchemaType, TypeInheritance, TypeProperty, UpsertSchemaTypePropertyInput, UserInitGraphNodeIds,
 };
 
 #[async_trait]
 pub trait SchemaRepository: Send + Sync {
-    async fn get_by_kind(&self, kind: &str) -> Result<Vec<SchemaType>>;
+    async fn get_by_kind(&self, kind: SchemaKind) -> Result<Vec<SchemaType>>;
     async fn upsert(&self, schema_type: &SchemaType) -> Result<SchemaType>;
     async fn get_type_inheritance(&self) -> Result<Vec<TypeInheritance>>;
     async fn get_all_properties(&self) -> Result<Vec<TypeProperty>>;
@@ -34,8 +34,11 @@ pub trait SchemaRepository: Send + Sync {
 
 #[async_trait]
 pub trait GraphWriteRepository: Send + Sync {
-    async fn apply_delta_with_blocks(&self, delta: &GraphDelta, blocks: &[EmbeddedBlock])
-        -> Result<()>;
+    async fn apply_delta_with_blocks(
+        &self,
+        delta: &GraphDelta,
+        blocks: &[EmbeddedBlock],
+    ) -> Result<()>;
     async fn get_existing_block_context(
         &self,
         block_id: &str,
@@ -52,7 +55,10 @@ pub trait GraphReadRepository: Send + Sync {
         query: &FindEntityCandidatesQuery,
         query_vector: Option<&[f32]>,
     ) -> Result<Vec<EntityCandidate>>;
-    async fn get_entity_context(&self, query: &GetEntityContextQuery) -> Result<GetEntityContextResult>;
+    async fn get_entity_context(
+        &self,
+        query: &GetEntityContextQuery,
+    ) -> Result<GetEntityContextResult>;
     async fn list_entities_by_type(
         &self,
         query: &ListEntitiesByTypeQuery,
@@ -69,14 +75,20 @@ pub trait GraphBootstrapRepository: Send + Sync {
         user_id: &str,
         node_ids: &UserInitGraphNodeIds,
     ) -> Result<()>;
-    async fn get_user_init_graph_node_ids(&self, user_id: &str) -> Result<Option<UserInitGraphNodeIds>>;
+    async fn get_user_init_graph_node_ids(
+        &self,
+        user_id: &str,
+    ) -> Result<Option<UserInitGraphNodeIds>>;
     async fn update_person_name(&self, person_entity_id: &str, user_name: &str) -> Result<()>;
 }
 
 #[async_trait]
 pub trait GraphRepository: Send + Sync {
-    async fn apply_delta_with_blocks(&self, delta: &GraphDelta, blocks: &[EmbeddedBlock])
-        -> Result<()>;
+    async fn apply_delta_with_blocks(
+        &self,
+        delta: &GraphDelta,
+        blocks: &[EmbeddedBlock],
+    ) -> Result<()>;
     async fn common_root_graph_exists(&self) -> Result<bool>;
     async fn user_graph_needs_initialization(&self, user_id: &str) -> Result<bool>;
     async fn mark_user_graph_initialized(
@@ -84,7 +96,10 @@ pub trait GraphRepository: Send + Sync {
         user_id: &str,
         node_ids: &UserInitGraphNodeIds,
     ) -> Result<()>;
-    async fn get_user_init_graph_node_ids(&self, user_id: &str) -> Result<Option<UserInitGraphNodeIds>>;
+    async fn get_user_init_graph_node_ids(
+        &self,
+        user_id: &str,
+    ) -> Result<Option<UserInitGraphNodeIds>>;
     async fn update_person_name(&self, person_entity_id: &str, user_name: &str) -> Result<()>;
     async fn get_existing_block_context(
         &self,
@@ -98,7 +113,10 @@ pub trait GraphRepository: Send + Sync {
         query: &FindEntityCandidatesQuery,
         query_vector: Option<&[f32]>,
     ) -> Result<Vec<EntityCandidate>>;
-    async fn get_entity_context(&self, query: &GetEntityContextQuery) -> Result<GetEntityContextResult>;
+    async fn get_entity_context(
+        &self,
+        query: &GetEntityContextQuery,
+    ) -> Result<GetEntityContextResult>;
     async fn list_entities_by_type(
         &self,
         query: &ListEntitiesByTypeQuery,

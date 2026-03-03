@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};
 
-use crate::domain::FullSchema;
+use crate::domain::{FullSchema, SchemaKind};
 
 #[derive(Debug, Clone)]
 pub(crate) struct ExtractionSchemaOptions {
@@ -85,7 +85,7 @@ pub(crate) fn build_extraction_entity_types(
 
     let mut entity_types = node_types
         .into_iter()
-        .filter(|node| node.schema_type.kind == "node")
+        .filter(|node| matches!(node.schema_type.schema_kind(), Some(SchemaKind::Node)))
         .filter(|node| node.schema_type.id != "node")
         .filter(|node| options.include_inactive || node.schema_type.active)
         .map(|node| {

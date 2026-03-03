@@ -5,16 +5,22 @@ use tonic::Status;
 use crate::domain::{
     BlockNode, EdgeEndpointRule, EntityCandidate, EntityNode, FindEntityCandidatesQuery,
     GetEntityContextQuery, GetEntityContextResult, GraphEdge, ListEntitiesByTypeQuery,
-    ListEntitiesByTypeResult, NeighborDirection, PropertyScalar, PropertyValue, SchemaType,
-    TypeInheritance, TypeProperty, TypedEntityListItem, UniverseNode, Visibility,
+    ListEntitiesByTypeResult, NeighborDirection, PropertyScalar, PropertyValue, SchemaKind,
+    SchemaType, TypeInheritance, TypeProperty, TypedEntityListItem, UniverseNode, Visibility,
 };
 
 use super::proto;
 
 pub(crate) fn to_proto_schema_type(schema_type: SchemaType) -> proto::SchemaType {
+    let kind = schema_type
+        .schema_kind()
+        .map(SchemaKind::as_proto_str)
+        .unwrap_or(schema_type.kind.as_str())
+        .to_string();
+
     proto::SchemaType {
         id: schema_type.id,
-        kind: schema_type.kind,
+        kind,
         name: schema_type.name,
         description: schema_type.description,
         active: schema_type.active,

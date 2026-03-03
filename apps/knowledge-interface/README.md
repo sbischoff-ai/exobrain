@@ -53,6 +53,15 @@ grpcui -plaintext localhost:50051
 - `entity_listing.rs` for paginated list-by-type query normalization.
 - `candidate_search.rs` for candidate resolution query handling.
 
+## Domain typing boundaries
+
+Schema kind values are represented internally via `SchemaKind` (`Node`/`Edge`) and converted to/from wire/database strings only in:
+
+- `src/transport/mappers.rs` (proto boundary)
+- `src/adapters.rs` (database boundary)
+
+High-risk IDs now have lightweight primitives (`TypeId`, `EntityId`, `UniverseId`) for service-level validation paths to reduce accidental ID mixups.
+
 ## Configuration
 
 - Copy env template: `cp apps/knowledge-interface/.env.example apps/knowledge-interface/.env`
