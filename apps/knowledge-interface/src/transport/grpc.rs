@@ -5,6 +5,7 @@ use tonic::{transport::Server, Request, Response, Status};
 use crate::domain::{
     SchemaKind, SchemaType, UpsertSchemaTypeCommand, UpsertSchemaTypePropertyInput,
 };
+use crate::presentation::extraction_prompt::ExtractionContextView;
 use crate::service::{
     build_extraction_entity_types, ExtractionAllowedEdge as ServiceAllowedEdge,
     ExtractionEntityType as ServiceExtractionEntityType, ExtractionSchemaOptions,
@@ -81,75 +82,6 @@ fn to_proto_extraction_universe(universe: ServiceExtractionUniverseContext) -> E
         name: universe.name,
         described_by_text: universe.described_by_text,
     }
-}
-
-fn render_prompt_context_markdown(entity_types: &[ServiceExtractionEntityType]) -> String {
-    let mut markdown = String::from("# Extraction schema context\n\n");
-
-    markdown.push_str("## Entity types\n\n");
-    markdown.push_str("| Type ID | Name | Description | Inheritance |\n");
-    markdown.push_str("| --- | --- | --- | --- |\n");
-    for entity in entity_types {
-        let inheritance = if entity.inheritance_chain.is_empty() {
-            "-".to_string()
-        } else {
-            entity.inheritance_chain.join(" → ")
-        };
-        markdown.push_str(&format!(
-            "| {} | {} | {} | {} |\n",
-            entity.type_id, entity.name, entity.description, inheritance
-        ));
-    }
-
-    markdown.push_str("\n## Allowed edges\n\n");
-    markdown.push_str("| Entity Type | Direction | Edge Type | Edge Name | Other Entity Type | Other Entity Name | Description |\n");
-    markdown.push_str("| --- | --- | --- | --- | --- | --- | --- |\n");
-
-    let mut all_edges: Vec<(&str, &ServiceAllowedEdge, &str)> = entity_types
-        .iter()
-        .flat_map(|entity| {
-            entity
-                .outgoing_edges
-                .iter()
-                .map(move |edge| (entity.type_id.as_str(), edge, "outgoing"))
-                .chain(
-                    entity
-                        .incoming_edges
-                        .iter()
-                        .map(move |edge| (entity.type_id.as_str(), edge, "incoming")),
-                )
-        })
-        .collect();
-
-    all_edges.sort_by(
-        |(a_type, a_edge, a_direction), (b_type, b_edge, b_direction)| {
-            a_type
-                .cmp(b_type)
-                .then_with(|| a_edge.edge_type_id.cmp(&b_edge.edge_type_id))
-                .then_with(|| {
-                    a_edge
-                        .other_entity_type_id
-                        .cmp(&b_edge.other_entity_type_id)
-                })
-                .then_with(|| a_direction.cmp(b_direction))
-                .then_with(|| a_edge.edge_name.cmp(&b_edge.edge_name))
-        },
-    );
-
-    for (entity_type, edge, direction) in all_edges {
-        markdown.push_str(&format!(
-            "| {} | {} | {} | {} | {} | {} | {} |\n",
-            entity_type,
-            direction,
-            edge.edge_type_id,
-            edge.edge_name,
-            edge.other_entity_type_id,
-            edge.other_entity_type_name,
-            edge.edge_description,
-        ));
-    }
-
-    markdown
 }
 
 #[tonic::async_trait]
@@ -229,15 +161,27 @@ impl KnowledgeInterface for KnowledgeGrpcService {
             .get_extraction_universes(&payload.user_id)
             .await
             .map_err(|e| Status::invalid_argument(e.to_string()))?;
-        let prompt_context_markdown = render_prompt_context_markdown(&entity_types);
+        let structured_context_view = ExtractionContextView::structured(entity_types, universes);
+        let prompt_context_markdown = match structured_context_view.to_rendered_markdown() {
+            ExtractionContextView::RenderedMarkdown(markdown) => markdown,
+            ExtractionContextView::Structured(_) => String::new(),
+        };
+        let structured_context = match structured_context_view {
+            ExtractionContextView::Structured(structured) => structured,
+            ExtractionContextView::RenderedMarkdown(_) => {
+                unreachable!("context view should remain structured")
+            }
+        };
 
         Ok(Response::new(GetExtractionSchemaContextReply {
-            entity_types: entity_types
+            entity_types: structured_context
+                .entity_types
                 .into_iter()
                 .map(to_proto_extraction_entity_type)
                 .collect(),
             prompt_context_markdown: Some(prompt_context_markdown),
-            universes: universes
+            universes: structured_context
+                .universes
                 .into_iter()
                 .map(to_proto_extraction_universe)
                 .collect(),
@@ -431,12 +375,13 @@ pub async fn run_server(
 #[cfg(test)]
 mod tests {
     use super::{
-        extraction_options_from_request, render_prompt_context_markdown,
-        to_proto_extraction_entity_type, to_proto_extraction_universe,
+        extraction_options_from_request, to_proto_extraction_entity_type,
+        to_proto_extraction_universe,
     };
     use crate::domain::{
         EdgeEndpointRule, FullSchema, SchemaEdgeTypeHydrated, SchemaNodeTypeHydrated, SchemaType,
     };
+    use crate::presentation::extraction_prompt::render_prompt_context_markdown;
     use crate::service::{
         build_extraction_entity_types, ExtractionAllowedEdge, ExtractionEntityType,
         ExtractionSchemaOptions, ExtractionUniverseContext,
