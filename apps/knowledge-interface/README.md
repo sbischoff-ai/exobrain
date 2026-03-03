@@ -138,6 +138,22 @@ How to interpret scores:
 - Use `GetSchema` when clients need the canonical, lossless schema model (types, properties, inheritance, and edge rules) for admin tooling, migrations, or schema UIs.
 - Use `GetExtractionSchemaContext` when clients need a prompt-ready, deterministic view for entity/relationship extraction (flattened inheritance + incoming/outgoing edge expansions per entity type, plus caller-visible universe context).
 
+## GetUpsertGraphDeltaJsonSchema for LLM structured output
+
+Use `GetUpsertGraphDeltaJsonSchema` when clients need a machine-consumable schema for generating `UpsertGraphDelta` payloads.
+
+- **Primary use case:** pass the returned `json_schema` to LLM structured output configuration so generated payloads match request shape.
+- **Artifact semantics:** `json_schema` is deterministic JSON Schema Draft 2020-12 and uses proto field naming (`snake_case`) aligned with `UpsertGraphDeltaRequest`.
+- **Limitation:** schema validation only checks request shape. Ingestion still enforces server-side semantic validations (`type/property/rule/cardinality`) at `UpsertGraphDelta` runtime.
+
+Minimal usage pattern:
+
+```text
+GetUpsertGraphDeltaJsonSchema() -> { json_schema }
+LLM.generate(structured_output_schema=json_schema) -> upsert_payload
+UpsertGraphDelta(upsert_payload)
+```
+
 ## Graph delta constraints for clients
 
 See detailed contract docs here:
