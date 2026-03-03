@@ -103,7 +103,7 @@ Current unit tests are colocated with modules:
 
 - `main.rs`: config/reflection behavior tests
 - `service.rs`: schema/orchestration tests
-- `adapters.rs`: Cypher edge type validation tests
+- `adapters.rs`: Memgraph/Qdrant adapter helper tests (including Cypher validation and Bolt temporal scalar mapping)
 
 When extending logic, prefer adding tests beside the module under change unless shared fixtures justify extraction.
 

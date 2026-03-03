@@ -449,6 +449,23 @@ mod tests {
     }
 
     #[test]
+    fn to_proto_property_value_maps_datetime_to_datetime_value() {
+        let value = to_proto_property_value(PropertyValue {
+            key: "updated_at".to_string(),
+            value: PropertyScalar::Datetime(
+                "2026-03-03T15:56:25.155889+00:00[Etc/UTC]".to_string(),
+            ),
+        });
+
+        assert_eq!(value.key, "updated_at");
+        assert!(matches!(
+            value.value,
+            Some(proto::property_value::Value::DatetimeValue(v))
+                if v == "2026-03-03T15:56:25.155889+00:00[Etc/UTC]"
+        ));
+    }
+
+    #[test]
     fn to_proto_get_entity_context_reply_maps_optional_fields_and_directions() {
         let reply = to_proto_get_entity_context_reply(GetEntityContextResult {
             entity: EntityContextEntitySnapshot {
