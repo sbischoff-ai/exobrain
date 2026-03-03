@@ -303,6 +303,7 @@ message GetEntityContextReply {
 
 - `block_level = 0`: the root block directly connected by `DESCRIBED_BY` from the entity.
 - `block_level = N (> 0)`: a block reached in `N` `SUMMARIZES` hops from the root block.
+- Depth filtering is inclusive (`block_level <= max_block_level`).
 - The API returns blocks ordered by `block_level ASC`, then by block id.
 
 ### Neighbor direction semantics
