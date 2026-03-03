@@ -256,6 +256,53 @@ Response behavior:
 - Inject only relevant entity types/edges for the current extraction task to reduce token usage.
 - Re-fetch when schema might have changed; ordering is deterministic so prompt diffs are meaningful.
 
+
+## GetEntityTypePropertyContext
+
+`GetEntityTypePropertyContext` returns the flattened property contract for a specific entity type.
+
+### Request schema
+
+```proto
+message GetEntityTypePropertyContextRequest {
+  string type_id = 1;
+  optional bool include_inactive = 2;
+  optional bool include_inherited = 3;
+  optional string user_id = 4;
+}
+```
+
+### Response schema
+
+```proto
+message PropertyContext {
+  string prop_name = 1;
+  string value_type = 2;
+  bool required = 3;
+  bool readable = 4;
+  bool writable = 5;
+  string description = 6;
+  string declared_on_type_id = 7;
+}
+
+message GetEntityTypePropertyContextReply {
+  string type_id = 1;
+  string type_name = 2;
+  repeated string inheritance_chain = 3;
+  repeated PropertyContext properties = 4;
+}
+```
+
+Behavior notes:
+
+- Inheritance is resolved root-to-leaf and returned in deterministic order (`inheritance_chain`).
+- `properties` include directly declared and inherited properties when `include_inherited=true` (default).
+- Inactive types/properties are filtered unless `include_inactive=true`.
+- Override precedence for duplicate `prop_name` is deterministic:
+  1. the most specific declaration (closest to the leaf type) wins;
+  2. if specificity ties, lexicographically smaller `owner_type_id` wins.
+- Returned `properties` are sorted by `prop_name`.
+
 ## ListEntitiesByType
 
 `ListEntitiesByType` returns paginated entities for a specific type and requester visibility scope.

@@ -24,7 +24,8 @@ mod extraction_schema;
 mod ingestion;
 
 pub(crate) use extraction_schema::{
-    build_extraction_entity_types, ExtractionAllowedEdge, ExtractionEntityType,
+    build_entity_type_property_context, build_extraction_entity_types, EntityTypePropertyContext,
+    EntityTypePropertyContextOptions, ExtractionAllowedEdge, ExtractionEntityType,
     ExtractionSchemaOptions, ExtractionUniverseContext,
 };
 
@@ -152,6 +153,15 @@ impl KnowledgeApplication {
             .collect::<Vec<_>>();
         universes.sort_by(|a, b| a.id.cmp(&b.id));
         Ok(universes)
+    }
+
+    pub async fn get_entity_type_property_context(
+        &self,
+        type_id: &str,
+        options: EntityTypePropertyContextOptions,
+    ) -> Result<EntityTypePropertyContext> {
+        let schema = self.get_schema().await?;
+        build_entity_type_property_context(schema, type_id, options)
     }
 
     pub async fn upsert_schema_type(&self, command: UpsertSchemaTypeCommand) -> Result<SchemaType> {

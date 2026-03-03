@@ -1,6 +1,8 @@
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};
 
+use anyhow::{anyhow, Result};
+
 use crate::domain::{FullSchema, SchemaKind};
 
 #[derive(Debug, Clone)]
@@ -35,6 +37,31 @@ pub(crate) struct ExtractionEntityType {
     pub inheritance_chain: Vec<String>,
     pub outgoing_edges: Vec<ExtractionAllowedEdge>,
     pub incoming_edges: Vec<ExtractionAllowedEdge>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct EntityTypePropertyContextOptions {
+    pub include_inactive: bool,
+    pub include_inherited: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ExtractionPropertyContext {
+    pub prop_name: String,
+    pub value_type: String,
+    pub required: bool,
+    pub readable: bool,
+    pub writable: bool,
+    pub description: String,
+    pub declared_on_type_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct EntityTypePropertyContext {
+    pub type_id: String,
+    pub type_name: String,
+    pub inheritance_chain: Vec<String>,
+    pub properties: Vec<ExtractionPropertyContext>,
 }
 
 pub(crate) fn build_extraction_entity_types(
@@ -170,6 +197,139 @@ pub(crate) fn build_extraction_entity_types(
     entity_types
 }
 
+/// Builds property context for a node type using root-to-leaf inheritance resolution.
+///
+/// Override precedence for duplicate property names is deterministic:
+/// 1. A property declared on a more specific type (closer to the leaf) wins.
+/// 2. If specificity ties, lexicographically smaller `owner_type_id` wins.
+pub(crate) fn build_entity_type_property_context(
+    schema: FullSchema,
+    type_id: &str,
+    options: EntityTypePropertyContextOptions,
+) -> Result<EntityTypePropertyContext> {
+    let trimmed_type_id = type_id.trim();
+    if trimmed_type_id.is_empty() {
+        return Err(anyhow!("type_id is required"));
+    }
+
+    let mut nodes_by_id = HashMap::new();
+    for node in &schema.node_types {
+        if options.include_inactive || node.schema_type.active {
+            nodes_by_id.insert(node.schema_type.id.clone(), node);
+        }
+    }
+
+    let Some(target) = nodes_by_id.get(trimmed_type_id) else {
+        return Err(anyhow!("unknown type_id"));
+    };
+
+    let mut parent_by_child = HashMap::new();
+    for node in nodes_by_id.values() {
+        for inheritance in &node.parents {
+            if (options.include_inactive || inheritance.active)
+                && nodes_by_id.contains_key(&inheritance.parent_type_id)
+            {
+                parent_by_child.insert(
+                    node.schema_type.id.clone(),
+                    inheritance.parent_type_id.clone(),
+                );
+            }
+        }
+    }
+
+    let inheritance_chain =
+        extraction_entity_type_inheritance_chain(&target.schema_type.id, &parent_by_child);
+
+    let mut owner_type_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
+    owner_type_ids.insert("node".to_string());
+    if options.include_inherited {
+        for owner in &inheritance_chain {
+            owner_type_ids.insert(owner.clone());
+        }
+    } else {
+        owner_type_ids.insert(target.schema_type.id.clone());
+    }
+
+    let specificity: HashMap<String, usize> = inheritance_chain
+        .iter()
+        .enumerate()
+        .map(|(idx, id)| (id.clone(), idx))
+        .collect();
+
+    let mut selected_by_name: HashMap<String, crate::domain::TypeProperty> = HashMap::new();
+
+    for node in nodes_by_id.values() {
+        for prop in &node.properties {
+            if !owner_type_ids.contains(&prop.owner_type_id) {
+                continue;
+            }
+            if !options.include_inactive && !prop.active {
+                continue;
+            }
+
+            let existing = selected_by_name.get(&prop.prop_name);
+            let new_score = *specificity.get(&prop.owner_type_id).unwrap_or(&0);
+            let replace = match existing {
+                None => true,
+                Some(existing_prop) => {
+                    let old_score = *specificity.get(&existing_prop.owner_type_id).unwrap_or(&0);
+                    new_score > old_score
+                        || (new_score == old_score
+                            && prop.owner_type_id < existing_prop.owner_type_id)
+                }
+            };
+
+            if replace {
+                selected_by_name.insert(prop.prop_name.clone(), prop.clone());
+            }
+        }
+    }
+
+    let mut properties: Vec<ExtractionPropertyContext> = selected_by_name
+        .into_values()
+        .map(|prop| ExtractionPropertyContext {
+            prop_name: prop.prop_name,
+            value_type: prop.value_type,
+            required: prop.required,
+            readable: prop.readable,
+            writable: prop.writable,
+            description: prop.description,
+            declared_on_type_id: prop.owner_type_id,
+        })
+        .collect();
+    properties.sort_by(|a, b| a.prop_name.cmp(&b.prop_name));
+
+    Ok(EntityTypePropertyContext {
+        type_id: target.schema_type.id.clone(),
+        type_name: target.schema_type.name.clone(),
+        inheritance_chain,
+        properties,
+    })
+}
+
+fn extraction_entity_type_inheritance_chain(
+    type_id: &str,
+    parent_by_child: &HashMap<String, String>,
+) -> Vec<String> {
+    let mut chain = Vec::new();
+    let mut current = type_id.to_string();
+    let mut seen = std::collections::HashSet::new();
+
+    loop {
+        if !seen.insert(current.clone()) {
+            break;
+        }
+        chain.push(current.clone());
+        let Some(parent) = parent_by_child.get(&current).cloned() else {
+            break;
+        };
+        current = parent;
+    }
+
+    chain.reverse();
+    chain
+}
+
 fn extraction_type_is_assignable(
     node_type_id: &str,
     target_type_id: &str,
@@ -199,4 +359,129 @@ fn extraction_allowed_edge_sort_key(
         .then_with(|| a.other_entity_type_id.cmp(&b.other_entity_type_id))
         .then_with(|| a.edge_name.cmp(&b.edge_name))
         .then_with(|| a.other_entity_type_name.cmp(&b.other_entity_type_name))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{build_entity_type_property_context, EntityTypePropertyContextOptions};
+    use crate::domain::{
+        FullSchema, SchemaNodeTypeHydrated, SchemaType, TypeInheritance, TypeProperty,
+    };
+
+    #[test]
+    fn entity_type_property_context_prefers_more_specific_override() {
+        let schema = FullSchema {
+            node_types: vec![
+                SchemaNodeTypeHydrated {
+                    schema_type: SchemaType {
+                        id: "node.entity".to_string(),
+                        kind: "node".to_string(),
+                        name: "Entity".to_string(),
+                        description: "Root".to_string(),
+                        active: true,
+                    },
+                    properties: vec![TypeProperty {
+                        owner_type_id: "node.entity".to_string(),
+                        prop_name: "name".to_string(),
+                        value_type: "string".to_string(),
+                        required: false,
+                        readable: true,
+                        writable: false,
+                        active: true,
+                        description: "root".to_string(),
+                    }],
+                    parents: vec![],
+                },
+                SchemaNodeTypeHydrated {
+                    schema_type: SchemaType {
+                        id: "node.person".to_string(),
+                        kind: "node".to_string(),
+                        name: "Person".to_string(),
+                        description: "Leaf".to_string(),
+                        active: true,
+                    },
+                    properties: vec![TypeProperty {
+                        owner_type_id: "node.person".to_string(),
+                        prop_name: "name".to_string(),
+                        value_type: "text".to_string(),
+                        required: true,
+                        readable: true,
+                        writable: true,
+                        active: true,
+                        description: "leaf".to_string(),
+                    }],
+                    parents: vec![TypeInheritance {
+                        child_type_id: "node.person".to_string(),
+                        parent_type_id: "node.entity".to_string(),
+                        description: "inherits".to_string(),
+                        active: true,
+                    }],
+                },
+            ],
+            edge_types: vec![],
+        };
+
+        let context = build_entity_type_property_context(
+            schema,
+            "node.person",
+            EntityTypePropertyContextOptions {
+                include_inactive: false,
+                include_inherited: true,
+            },
+        )
+        .expect("context should build");
+
+        assert_eq!(context.properties.len(), 1);
+        assert_eq!(context.properties[0].declared_on_type_id, "node.person");
+        assert_eq!(context.properties[0].value_type, "text");
+    }
+
+    #[test]
+    fn entity_type_property_context_filters_inactive_when_disabled() {
+        let schema = FullSchema {
+            node_types: vec![SchemaNodeTypeHydrated {
+                schema_type: SchemaType {
+                    id: "node.person".to_string(),
+                    kind: "node".to_string(),
+                    name: "Person".to_string(),
+                    description: "Leaf".to_string(),
+                    active: true,
+                },
+                properties: vec![TypeProperty {
+                    owner_type_id: "node.person".to_string(),
+                    prop_name: "legacy".to_string(),
+                    value_type: "string".to_string(),
+                    required: false,
+                    readable: true,
+                    writable: true,
+                    active: false,
+                    description: "legacy".to_string(),
+                }],
+                parents: vec![],
+            }],
+            edge_types: vec![],
+        };
+
+        let filtered = build_entity_type_property_context(
+            schema.clone(),
+            "node.person",
+            EntityTypePropertyContextOptions {
+                include_inactive: false,
+                include_inherited: true,
+            },
+        )
+        .expect("context should build");
+        assert!(filtered.properties.is_empty());
+
+        let included = build_entity_type_property_context(
+            schema,
+            "node.person",
+            EntityTypePropertyContextOptions {
+                include_inactive: true,
+                include_inherited: true,
+            },
+        )
+        .expect("context should build");
+        assert_eq!(included.properties.len(), 1);
+    }
 }
