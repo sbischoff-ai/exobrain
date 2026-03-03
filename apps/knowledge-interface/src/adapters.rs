@@ -274,7 +274,7 @@ impl Neo4jGraphStore {
         let mut existing_trigger_names = std::collections::HashSet::new();
         if let Ok(mut rows) = self.graph.execute(query("SHOW TRIGGERS")).await {
             while let Some(row) = rows.next().await? {
-                for key in ["trigger_name", "name", "trigger"] {
+                for key in trigger_name_column_candidates() {
                     if let Ok(value) = row.get::<String>(key) {
                         existing_trigger_names.insert(value);
                     }
@@ -1449,6 +1449,18 @@ fn internal_timestamp_trigger_specs() -> [(&'static str, &'static str); 4] {
     ]
 }
 
+fn trigger_name_column_candidates() -> [&'static str; 7] {
+    [
+        "trigger_name",
+        "trigger name",
+        "Trigger name",
+        "name",
+        "Name",
+        "trigger",
+        "Trigger",
+    ]
+}
+
 fn is_trigger_already_exists_error(err: &impl std::fmt::Display) -> bool {
     err.to_string()
         .to_ascii_lowercase()
@@ -1492,7 +1504,8 @@ mod tests {
         memgraph_user_or_shared_access_clause, normalize_qdrant_grpc_url, parse_block_level,
         parse_neighbor_direction, payload_i64, payload_string, prop_as_aliases,
         qdrant_user_or_shared_access_filter, semantic_score_with_block_level,
-        upsert_semantic_candidate, validate_edge_type, MockEmbedder,
+        trigger_name_column_candidates, upsert_semantic_candidate, validate_edge_type,
+        MockEmbedder,
     };
     use crate::domain::Visibility;
     use crate::ports::Embedder;
@@ -1516,6 +1529,14 @@ mod tests {
             &"neo4j error: trigger with THE same NAME already exists"
         ));
         assert!(!is_trigger_already_exists_error(&"some other query error"));
+    }
+
+    #[test]
+    fn supports_memgraph_trigger_name_column_variants() {
+        let candidates = trigger_name_column_candidates();
+        assert!(candidates.contains(&"trigger_name"));
+        assert!(candidates.contains(&"trigger name"));
+        assert!(candidates.contains(&"Trigger name"));
     }
 
     #[test]
