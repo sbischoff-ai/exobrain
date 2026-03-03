@@ -116,6 +116,31 @@ For interactive request prototyping use `grpcui -plaintext localhost:50051`.
 Visibility values are accepted as provided per node/edge; scope is carried per universe/entity/block/edge (no top-level request scope fields).
 
 
+
+## GetUpsertGraphDeltaJsonSchema
+
+`GetUpsertGraphDeltaJsonSchema` returns a JSON Schema document for the `UpsertGraphDeltaRequest` payload so clients can pre-validate ingestion payloads before sending gRPC writes.
+
+### Full request/response schema
+
+```proto
+message GetUpsertGraphDeltaJsonSchemaRequest {}
+
+message GetUpsertGraphDeltaJsonSchemaReply {
+  string json_schema = 1;
+  optional string schema_id = 2;
+  optional string draft = 3;
+  optional string version = 4;
+}
+```
+
+Response behavior:
+
+- `json_schema` contains a JSON Schema document string.
+- `schema_id` identifies the canonical schema document URI.
+- `draft` reports the JSON Schema draft the response uses.
+- `version` reports the schema payload version.
+
 ## GetExtractionSchemaContext
 
 `GetExtractionSchemaContext` returns a normalized, deterministic, LLM-focused view of the schema. Use it when a caller needs:

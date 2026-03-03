@@ -26,11 +26,25 @@ use super::proto::{
     AllowedEdge, ExtractionEntityType, ExtractionUniverse, FindEntityCandidatesReply,
     FindEntityCandidatesRequest, GetEntityContextReply, GetEntityContextRequest,
     GetExtractionSchemaContextReply, GetExtractionSchemaContextRequest, GetSchemaReply,
-    GetSchemaRequest, GetUserInitGraphReply, GetUserInitGraphRequest, HealthReply, HealthRequest,
+    GetSchemaRequest, GetUpsertGraphDeltaJsonSchemaReply, GetUpsertGraphDeltaJsonSchemaRequest,
+    GetUserInitGraphReply, GetUserInitGraphRequest, HealthReply, HealthRequest,
     ListEntitiesByTypeReply, ListEntitiesByTypeRequest, UpsertGraphDeltaReply,
     UpsertGraphDeltaRequest, UpsertSchemaTypeReply, UpsertSchemaTypeRequest,
 };
 use super::FILE_DESCRIPTOR_SET;
+
+const UPSERT_GRAPH_DELTA_JSON_SCHEMA: &str = r#"{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://exobrain.dev/schemas/knowledge/upsert-graph-delta-request.json",
+  "title": "UpsertGraphDeltaRequest",
+  "type": "object",
+  "properties": {
+    "universes": { "type": "array" },
+    "entities": { "type": "array" },
+    "blocks": { "type": "array" },
+    "edges": { "type": "array" }
+  }
+}"#;
 
 pub struct KnowledgeGrpcService {
     pub app: Arc<KnowledgeApplication>,
@@ -140,6 +154,21 @@ impl KnowledgeInterface for KnowledgeGrpcService {
                         .collect(),
                 })
                 .collect(),
+        }))
+    }
+
+    async fn get_upsert_graph_delta_json_schema(
+        &self,
+        _request: Request<GetUpsertGraphDeltaJsonSchemaRequest>,
+    ) -> Result<Response<GetUpsertGraphDeltaJsonSchemaReply>, Status> {
+        Ok(Response::new(GetUpsertGraphDeltaJsonSchemaReply {
+            json_schema: UPSERT_GRAPH_DELTA_JSON_SCHEMA.to_string(),
+            schema_id: Some(
+                "https://exobrain.dev/schemas/knowledge/upsert-graph-delta-request.json"
+                    .to_string(),
+            ),
+            draft: Some("2020-12".to_string()),
+            version: Some("1.0.0".to_string()),
         }))
     }
 
@@ -376,7 +405,7 @@ pub async fn run_server(
 mod tests {
     use super::{
         extraction_options_from_request, to_proto_extraction_entity_type,
-        to_proto_extraction_universe,
+        to_proto_extraction_universe, UPSERT_GRAPH_DELTA_JSON_SCHEMA,
     };
     use crate::domain::{
         EdgeEndpointRule, FullSchema, SchemaEdgeTypeHydrated, SchemaNodeTypeHydrated, SchemaType,
@@ -701,5 +730,14 @@ mod tests {
         assert_eq!(proto.outgoing_edges[0].edge_type_id, "edge.related_to");
         assert_eq!(proto.outgoing_edges[0].min_cardinality, Some(1));
         assert_eq!(proto.outgoing_edges[0].max_cardinality, Some(2));
+    }
+    #[test]
+    fn upsert_graph_delta_json_schema_constant_includes_core_sections() {
+        assert!(UPSERT_GRAPH_DELTA_JSON_SCHEMA.contains("$schema"));
+        assert!(UPSERT_GRAPH_DELTA_JSON_SCHEMA.contains("$id"));
+        assert!(UPSERT_GRAPH_DELTA_JSON_SCHEMA.contains("universes"));
+        assert!(UPSERT_GRAPH_DELTA_JSON_SCHEMA.contains("entities"));
+        assert!(UPSERT_GRAPH_DELTA_JSON_SCHEMA.contains("blocks"));
+        assert!(UPSERT_GRAPH_DELTA_JSON_SCHEMA.contains("edges"));
     }
 }

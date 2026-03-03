@@ -6,6 +6,7 @@ package exobrain.knowledge.v1;
 service KnowledgeInterface {
   rpc Health(HealthRequest) returns (HealthReply);
   rpc GetSchema(GetSchemaRequest) returns (GetSchemaReply);
+  rpc GetUpsertGraphDeltaJsonSchema(GetUpsertGraphDeltaJsonSchemaRequest) returns (GetUpsertGraphDeltaJsonSchemaReply);
   rpc GetExtractionSchemaContext(GetExtractionSchemaContextRequest) returns (GetExtractionSchemaContextReply);
   rpc UpsertSchemaType(UpsertSchemaTypeRequest) returns (UpsertSchemaTypeReply);
   rpc UpsertGraphDelta(UpsertGraphDeltaRequest) returns (UpsertGraphDeltaReply);
@@ -68,6 +69,15 @@ message SchemaEdgeType {
 message GetSchemaReply {
   repeated SchemaNodeType node_types = 1;
   repeated SchemaEdgeType edge_types = 2;
+}
+
+message GetUpsertGraphDeltaJsonSchemaRequest {}
+
+message GetUpsertGraphDeltaJsonSchemaReply {
+  string json_schema = 1;
+  optional string schema_id = 2;
+  optional string draft = 3;
+  optional string version = 4;
 }
 
 message GetExtractionSchemaContextRequest {
