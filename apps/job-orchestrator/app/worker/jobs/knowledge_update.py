@@ -101,8 +101,52 @@ async def _build_upsert_graph_delta_step_one(
     return MessageToDict(request, preserving_proto_field_name=True)
 
 
-def _step_two_placeholder_log(request_body: dict[str, object]) -> None:
-    logger.info("knowledge.update step two placeholder: %s", request_body)
+def _canonicalize_speaker(role: str | None) -> str:
+    if not role:
+        return "UNKNOWN"
+    normalized = "_".join(role.strip().split()).replace("-", "_")
+    return normalized.upper() or "UNKNOWN"
+
+
+def _build_batch_document(payload: KnowledgeUpdatePayload, include_header: bool = True) -> str:
+    available_timestamps = [message.created_at for message in payload.messages if message.created_at]
+    start = min(available_timestamps) if available_timestamps else "unknown"
+    end = max(available_timestamps) if available_timestamps else "unknown"
+
+    lines: list[str] = []
+
+    if include_header:
+        lines.extend(
+            [
+                "=== BATCH DOCUMENT ===",
+                f"conversation_id: {payload.journal_reference}",
+                f"user_id: {payload.requested_by_user_id}",
+                f"time_range_start: {start}",
+                f"time_range_end: {end}",
+                "",
+            ]
+        )
+
+    for index, message in enumerate(payload.messages, start=1):
+        turn_label = message.sequence if message.sequence is not None else index
+        lines.extend(
+            [
+                f"--- TURN {turn_label} ---",
+                f"speaker: {_canonicalize_speaker(message.role)}",
+                f"timestamp: {message.created_at or 'unknown'}",
+                "content:",
+                message.content or "",
+                "",
+            ]
+        )
+
+    return "\n".join(lines).rstrip()
+
+
+def _step_two_store_batch_document(payload: KnowledgeUpdatePayload) -> str:
+    batch_document = _build_batch_document(payload)
+    logger.info("knowledge.update step two batch document:\n%s", batch_document)
+    return batch_document
 
 
 async def run(job: JobEnvelope) -> None:
@@ -125,8 +169,8 @@ async def run(job: JobEnvelope) -> None:
                 f"{settings.knowledge_interface_connect_timeout_seconds}s"
             ) from exc
 
-        step_one_request_body = await _build_upsert_graph_delta_step_one(channel, payload)
-        _step_two_placeholder_log(step_one_request_body)
+        await _build_upsert_graph_delta_step_one(channel, payload)
+        _step_two_store_batch_document(payload)
 
 
 def main() -> None:
