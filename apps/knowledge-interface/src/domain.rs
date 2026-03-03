@@ -328,6 +328,7 @@ pub struct EntityContextEntitySnapshot {
 pub struct EntityContextOtherEntity {
     pub id: String,
     pub description: Option<String>,
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -353,7 +354,7 @@ pub enum NeighborDirection {
 pub struct EntityContextNeighborItem {
     pub direction: NeighborDirection,
     pub edge_type: String,
-    pub edge_properties: Vec<PropertyValue>,
+    pub properties: Vec<PropertyValue>,
     pub other_entity: EntityContextOtherEntity,
 }
 

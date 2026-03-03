@@ -3309,11 +3309,8 @@ mod tests {
         assert_eq!(result.blocks[0].properties.len(), 1);
         assert_eq!(result.blocks[0].properties[0].key, "summary");
         assert_eq!(result.blocks[0].neighbors.len(), 1);
-        assert_eq!(result.blocks[0].neighbors[0].edge_properties.len(), 1);
-        assert_eq!(
-            result.blocks[0].neighbors[0].edge_properties[0].key,
-            "since"
-        );
+        assert_eq!(result.blocks[0].neighbors[0].properties.len(), 1);
+        assert_eq!(result.blocks[0].neighbors[0].properties[0].key, "since");
     }
 
     #[tokio::test]
@@ -4030,13 +4027,14 @@ mod tests {
                 neighbors: vec![crate::domain::EntityContextNeighborItem {
                     direction: crate::domain::NeighborDirection::Outgoing,
                     edge_type: "edge.related_to".to_string(),
-                    edge_properties: vec![PropertyValue {
+                    properties: vec![PropertyValue {
                         key: "since".to_string(),
                         value: PropertyScalar::String("2024".to_string()),
                     }],
                     other_entity: crate::domain::EntityContextOtherEntity {
                         id: "entity-2".to_string(),
                         description: Some("neighbor".to_string()),
+                        name: Some("Neighbor Entity".to_string()),
                     },
                 }],
             }],

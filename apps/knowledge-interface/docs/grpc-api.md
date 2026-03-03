@@ -404,7 +404,7 @@ message GetEntityContextReply {
 - `entity`: core fields (`id`, `type_id`, `user_id`, `visibility`) plus `name`, `aliases`, `created_at`, and `updated_at`.
 - `entity_properties`: additional flat scalar properties as string values (`{ "key": "value" }`) excluding `name`, `aliases`, `created_at`, and `updated_at`.
 - `blocks[]`: typed block entries (`id`, `type_id`, `block_level`) plus root-level `text`, `created_at`, `updated_at`, optional `parent_block_id`, additional `properties` (`map<string, string>`), and block-level `neighbors`.
-- `neighbors[]`: outgoing and incoming entity neighbors with edge metadata (`direction`, `edge_type`, `edge_properties`) and `other_entity` (`id`, optional `description`).
+- `neighbors[]`: outgoing and incoming entity neighbors with edge metadata (`direction`, `edge_type`, `properties`) where `properties` is a flat `map<string, string>`, plus `other_entity` (`id`, optional `description`, optional `name`).
 
 ### Block level semantics
 
@@ -417,7 +417,7 @@ message GetEntityContextReply {
 
 - `OUTGOING`: returned for `(entity)-[edge]->(other_entity)`.
 - `INCOMING`: returned for `(other_entity)-[edge]->(entity)`.
-- Results include both directions and preserve edge metadata (`edge_type`, `edge_properties`) while resolving `other_entity.description` from that entity's `DESCRIBED_BY` block text when available.
+- Results include both directions and preserve edge metadata (`edge_type`, `properties`) while resolving `other_entity.description` from that entity's `DESCRIBED_BY` block text when available. `other_entity.name` is also returned from the neighbor entity node when present. The same shape applies to block-level neighbors (`blocks[].neighbors[]`).
 
 ### Access policy behavior
 

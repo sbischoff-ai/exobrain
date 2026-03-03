@@ -244,10 +244,11 @@ fn to_proto_entity_context_neighbor(
     proto::EntityContextNeighbor {
         direction: to_proto_neighbor_direction(neighbor.direction) as i32,
         edge_type: neighbor.edge_type,
-        edge_properties: to_proto_property_scalar_map(neighbor.edge_properties),
+        properties: to_proto_flat_property_map(neighbor.properties),
         other_entity: Some(proto::EntityContextOtherEntity {
             id: neighbor.other_entity.id,
             description: neighbor.other_entity.description,
+            name: neighbor.other_entity.name,
         }),
     }
 }
@@ -271,31 +272,6 @@ fn to_proto_json_scalar_string(value: PropertyScalar) -> String {
         PropertyScalar::Datetime(v) => v,
         PropertyScalar::Json(v) => v,
     }
-}
-
-fn to_proto_property_scalar_map(
-    values: Vec<PropertyValue>,
-) -> HashMap<String, proto::PropertyScalarValue> {
-    values
-        .into_iter()
-        .map(|value| {
-            let PropertyValue { key, value } = value;
-            (key, to_proto_property_scalar_value(value))
-        })
-        .collect()
-}
-
-fn to_proto_property_scalar_value(value: PropertyScalar) -> proto::PropertyScalarValue {
-    let value = match value {
-        PropertyScalar::String(v) => proto::property_scalar_value::Value::StringValue(v),
-        PropertyScalar::Float(v) => proto::property_scalar_value::Value::FloatValue(v),
-        PropertyScalar::Int(v) => proto::property_scalar_value::Value::IntValue(v),
-        PropertyScalar::Bool(v) => proto::property_scalar_value::Value::BoolValue(v),
-        PropertyScalar::Datetime(v) => proto::property_scalar_value::Value::DatetimeValue(v),
-        PropertyScalar::Json(v) => proto::property_scalar_value::Value::JsonValue(v),
-    };
-
-    proto::PropertyScalarValue { value: Some(value) }
 }
 
 #[cfg(test)]
@@ -513,22 +489,24 @@ mod tests {
                 EntityContextNeighborItem {
                     direction: NeighborDirection::Outgoing,
                     edge_type: "RELATED_TO".to_string(),
-                    edge_properties: vec![PropertyValue {
+                    properties: vec![PropertyValue {
                         key: "confidence".to_string(),
                         value: PropertyScalar::Float(0.9),
                     }],
                     other_entity: EntityContextOtherEntity {
                         id: "e-2".to_string(),
                         description: Some("Mathematician".to_string()),
+                        name: Some("Grace".to_string()),
                     },
                 },
                 EntityContextNeighborItem {
                     direction: NeighborDirection::Incoming,
                     edge_type: "MENTIONS".to_string(),
-                    edge_properties: vec![],
+                    properties: vec![],
                     other_entity: EntityContextOtherEntity {
                         id: "e-3".to_string(),
                         description: None,
+                        name: None,
                     },
                 },
             ],
@@ -545,20 +523,23 @@ mod tests {
             reply.blocks[0].properties.get("source"),
             Some(&"import".to_string())
         );
-        assert!(matches!(
-            reply.neighbors[0]
-                .edge_properties
-                .get("confidence")
-                .and_then(|value| value.value.as_ref()),
-            Some(proto::property_scalar_value::Value::FloatValue(v))
-                if (*v - 0.9).abs() < f64::EPSILON
-        ));
+        assert_eq!(
+            reply.neighbors[0].properties.get("confidence"),
+            Some(&"0.9".to_string())
+        );
         assert_eq!(
             reply.neighbors[0]
                 .other_entity
                 .as_ref()
                 .map(|e| e.id.as_str()),
             Some("e-2")
+        );
+        assert_eq!(
+            reply.neighbors[0]
+                .other_entity
+                .as_ref()
+                .and_then(|e| e.name.as_deref()),
+            Some("Grace")
         );
         assert_eq!(
             reply.neighbors[0].direction,

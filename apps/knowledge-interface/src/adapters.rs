@@ -673,6 +673,7 @@ impl Neo4jGraphStore {
                     .get("other_entity_id")
                     .context("missing block_neighbor.other_entity_id")?,
                 description: row.get("other_entity_description").ok(),
+                name: row.get("other_entity_name").ok(),
             };
 
             let item = EntityContextNeighborItem {
@@ -680,7 +681,7 @@ impl Neo4jGraphStore {
                 edge_type: row
                     .get("edge_type")
                     .context("missing block_neighbor.edge_type")?,
-                edge_properties: bolt_map_to_property_values(edge_props),
+                properties: bolt_map_to_property_values(edge_props),
                 other_entity,
             };
 
@@ -723,12 +724,13 @@ impl Neo4jGraphStore {
             neighbors.push(EntityContextNeighborItem {
                 direction,
                 edge_type: row.get("edge_type").context("missing neighbor.edge_type")?,
-                edge_properties: bolt_map_to_property_values(edge_props),
+                properties: bolt_map_to_property_values(edge_props),
                 other_entity: EntityContextOtherEntity {
                     id: row
                         .get("other_entity_id")
                         .context("missing neighbor.other_entity_id")?,
                     description: row.get("other_entity_description").ok(),
+                    name: row.get("other_entity_name").ok(),
                 },
             });
         }
@@ -797,7 +799,8 @@ fn build_get_entity_context_block_neighbors_query() -> String {
                 type(r) AS edge_type,
                 properties(r) AS edge_props,
                 other.id AS other_entity_id,
-                described_by.text AS other_entity_description
+                described_by.text AS other_entity_description,
+                other.name AS other_entity_name
          UNION ALL
          MATCH (e:Entity {{id: $entity_id}})-[:DESCRIBED_BY]->(root:Block)
          WHERE {entity_access} AND {root_access}
@@ -812,7 +815,8 @@ fn build_get_entity_context_block_neighbors_query() -> String {
                 type(r) AS edge_type,
                 properties(r) AS edge_props,
                 other.id AS other_entity_id,
-                described_by.text AS other_entity_description
+                described_by.text AS other_entity_description,
+                other.name AS other_entity_name
          ORDER BY block_id ASC, direction ASC, edge_type ASC, other_entity_id ASC",
         entity_access = memgraph_user_or_shared_access_clause("e"),
         root_access = memgraph_user_or_shared_access_clause("root"),
@@ -835,7 +839,8 @@ fn build_get_entity_context_neighbors_query() -> String {
                 type(r) AS edge_type,
                 properties(r) AS edge_props,
                 other.id AS other_entity_id,
-                described_by.text AS other_entity_description
+                described_by.text AS other_entity_description,
+                other.name AS other_entity_name
          UNION ALL
          MATCH (e:Entity {{id: $entity_id}})
          WHERE {entity_access}
@@ -847,7 +852,8 @@ fn build_get_entity_context_neighbors_query() -> String {
                 type(r) AS edge_type,
                 properties(r) AS edge_props,
                 other.id AS other_entity_id,
-                described_by.text AS other_entity_description
+                described_by.text AS other_entity_description,
+                other.name AS other_entity_name
          ORDER BY direction ASC, edge_type ASC, other_entity_id ASC",
         entity_access = memgraph_user_or_shared_access_clause("e"),
         other_access = memgraph_user_or_shared_access_clause("other"),
@@ -2085,6 +2091,7 @@ mod tests {
             .contains("(other.user_id = $user_id OR other.visibility = 'SHARED')"));
         assert!(block_neighbor_query.contains("type(r) <> 'DESCRIBED_BY'"));
         assert!(block_neighbor_query.contains("type(r) <> 'SUMMARIZES'"));
+        assert!(block_neighbor_query.contains("other.name AS other_entity_name"));
 
         let neighbor_query = build_get_entity_context_neighbors_query();
         assert!(
@@ -2093,6 +2100,7 @@ mod tests {
         assert!(neighbor_query.contains("(r.user_id = $user_id OR r.visibility = 'SHARED')"));
         assert!(neighbor_query.contains("type(r) <> 'DESCRIBED_BY'"));
         assert!(neighbor_query.contains("type(r) <> 'SUMMARIZES'"));
+        assert!(neighbor_query.contains("other.name AS other_entity_name"));
     }
 
     #[test]

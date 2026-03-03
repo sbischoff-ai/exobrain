@@ -278,6 +278,7 @@ message EntityContextCore {
 message EntityContextOtherEntity {
   string id = 1;
   optional string description = 2;
+  optional string name = 3;
 }
 
 enum NeighborDirection {
@@ -289,7 +290,7 @@ enum NeighborDirection {
 message EntityContextNeighbor {
   NeighborDirection direction = 1;
   string edge_type = 2;
-  map<string, PropertyScalarValue> edge_properties = 3;
+  map<string, string> properties = 3;
   EntityContextOtherEntity other_entity = 4;
 }
 
