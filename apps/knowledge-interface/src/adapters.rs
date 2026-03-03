@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use anyhow::{Context, Result};
 use async_trait::async_trait;
+use chrono::{DateTime, FixedOffset, NaiveDate, NaiveDateTime, NaiveTime};
 use neo4rs::{query, BoltMap, BoltType, ConfigBuilder, Graph, Txn};
 use qdrant_client::{
     qdrant::{
@@ -1408,7 +1409,57 @@ fn bolt_type_to_property_scalar(value: BoltType) -> PropertyScalar {
         BoltType::Boolean(v) => PropertyScalar::Bool(v.value),
         BoltType::Integer(v) => PropertyScalar::Int(v.value),
         BoltType::Float(v) => PropertyScalar::Float(v.value),
+        BoltType::Date(v) => temporal_scalar_from_date(v),
+        BoltType::Time(v) => temporal_scalar_from_time(v),
+        BoltType::LocalTime(v) => temporal_scalar_from_local_time(v),
+        BoltType::DateTime(v) => temporal_scalar_from_datetime(v),
+        BoltType::LocalDateTime(v) => temporal_scalar_from_local_datetime(v),
+        BoltType::DateTimeZoneId(v) => temporal_scalar_from_datetime_zone_id(v),
         other => PropertyScalar::Json(format!("{other:?}")),
+    }
+}
+
+fn temporal_scalar_from_date(value: neo4rs::BoltDate) -> PropertyScalar {
+    let date: Result<NaiveDate, _> = (&value).try_into();
+    match date {
+        Ok(v) => PropertyScalar::Datetime(v.to_string()),
+        Err(_) => PropertyScalar::Json(format!("{:?}", BoltType::Date(value))),
+    }
+}
+
+fn temporal_scalar_from_time(value: neo4rs::BoltTime) -> PropertyScalar {
+    let (time, offset): (NaiveTime, FixedOffset) = (&value).into();
+    let value = format!("{}{}", time.format("%H:%M:%S%.f"), offset);
+    PropertyScalar::Datetime(value)
+}
+
+fn temporal_scalar_from_local_time(value: neo4rs::BoltLocalTime) -> PropertyScalar {
+    let time: NaiveTime = (&value).into();
+    PropertyScalar::Datetime(time.format("%H:%M:%S%.f").to_string())
+}
+
+fn temporal_scalar_from_datetime(value: neo4rs::BoltDateTime) -> PropertyScalar {
+    let datetime: Result<DateTime<FixedOffset>, _> = (&value).try_into();
+    match datetime {
+        Ok(v) => PropertyScalar::Datetime(v.to_rfc3339()),
+        Err(_) => PropertyScalar::Json(format!("{:?}", BoltType::DateTime(value))),
+    }
+}
+
+fn temporal_scalar_from_local_datetime(value: neo4rs::BoltLocalDateTime) -> PropertyScalar {
+    let datetime: Result<NaiveDateTime, _> = (&value).try_into();
+    match datetime {
+        Ok(v) => PropertyScalar::Datetime(v.format("%Y-%m-%dT%H:%M:%S%.f").to_string()),
+        Err(_) => PropertyScalar::Json(format!("{:?}", BoltType::LocalDateTime(value))),
+    }
+}
+
+fn temporal_scalar_from_datetime_zone_id(value: neo4rs::BoltDateTimeZoneId) -> PropertyScalar {
+    let tz_id = value.tz_id().to_string();
+    let datetime: Result<DateTime<FixedOffset>, _> = (&value).try_into();
+    match datetime {
+        Ok(v) => PropertyScalar::Datetime(format!("{}[{tz_id}]", v.to_rfc3339())),
+        Err(_) => PropertyScalar::Json(format!("{:?}", BoltType::DateTimeZoneId(value))),
     }
 }
 
@@ -1785,10 +1836,10 @@ fn validate_edge_type(edge_type: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        allowed_node_visibilities, build_get_entity_context_block_neighbors_query,
-        build_get_entity_context_blocks_query, build_get_entity_context_entity_query,
-        build_get_entity_context_neighbors_query, build_list_entities_by_type_query,
-        compute_name_score, internal_timestamp_trigger_specs,
+        allowed_node_visibilities, bolt_type_to_property_scalar,
+        build_get_entity_context_block_neighbors_query, build_get_entity_context_blocks_query,
+        build_get_entity_context_entity_query, build_get_entity_context_neighbors_query,
+        build_list_entities_by_type_query, compute_name_score, internal_timestamp_trigger_specs,
         memgraph_user_or_shared_access_clause, normalize_qdrant_grpc_url, parse_block_level,
         parse_neighbor_direction, payload_i64, payload_string, prop_as_aliases,
         qdrant_user_or_shared_access_filter, semantic_score_with_block_level,
@@ -1797,6 +1848,8 @@ mod tests {
     };
     use crate::domain::Visibility;
     use crate::ports::Embedder;
+    use chrono::{DateTime, FixedOffset, NaiveDate, NaiveDateTime, NaiveTime};
+    use neo4rs::BoltType;
     use std::collections::HashMap;
 
     #[test]
@@ -1886,6 +1939,82 @@ mod tests {
             value: PropertyScalar::String("alpha".to_string()),
         }];
         assert_eq!(prop_as_aliases(&plain_alias), vec!["alpha"]);
+    }
+
+    #[test]
+    fn maps_bolt_datetime_to_datetime_scalar() {
+        let datetime = DateTime::parse_from_rfc3339("2026-03-03T15:56:25.155889+00:00")
+            .expect("datetime should parse");
+
+        let scalar = bolt_type_to_property_scalar(BoltType::DateTime(datetime.into()));
+
+        assert!(matches!(
+            scalar,
+            crate::domain::PropertyScalar::Datetime(v)
+                if v == "2026-03-03T15:56:25.155889+00:00"
+        ));
+    }
+
+    #[test]
+    fn maps_bolt_local_datetime_to_datetime_scalar() {
+        let local_datetime =
+            NaiveDateTime::parse_from_str("2026-03-03T15:56:25.155889", "%Y-%m-%dT%H:%M:%S%.f")
+                .expect("local datetime should parse");
+
+        let scalar = bolt_type_to_property_scalar(BoltType::LocalDateTime(local_datetime.into()));
+
+        assert!(matches!(
+            scalar,
+            crate::domain::PropertyScalar::Datetime(v) if v == "2026-03-03T15:56:25.155889"
+        ));
+    }
+
+    #[test]
+    fn maps_bolt_datetime_zone_id_to_datetime_scalar() {
+        let local_datetime =
+            NaiveDateTime::parse_from_str("2026-03-03T15:56:25.155889", "%Y-%m-%dT%H:%M:%S%.f")
+                .expect("local datetime should parse");
+
+        let scalar = bolt_type_to_property_scalar(BoltType::DateTimeZoneId(
+            (local_datetime, "Etc/UTC").into(),
+        ));
+
+        assert!(matches!(
+            scalar,
+            crate::domain::PropertyScalar::Datetime(v)
+                if v == "2026-03-03T15:56:25.155889+00:00[Etc/UTC]"
+        ));
+    }
+
+    #[test]
+    fn maps_bolt_date_to_datetime_scalar() {
+        let date = NaiveDate::from_ymd_opt(2026, 3, 3).expect("date should parse");
+
+        let scalar = bolt_type_to_property_scalar(BoltType::Date(date.into()));
+
+        assert!(matches!(
+            scalar,
+            crate::domain::PropertyScalar::Datetime(v) if v == "2026-03-03"
+        ));
+    }
+
+    #[test]
+    fn maps_bolt_time_variants_to_datetime_scalar() {
+        let time =
+            NaiveTime::from_hms_nano_opt(15, 56, 25, 155_889_000).expect("time should parse");
+        let utc = FixedOffset::east_opt(0).expect("utc offset should parse");
+
+        let zoned_scalar = bolt_type_to_property_scalar(BoltType::Time((time, utc).into()));
+        let local_scalar = bolt_type_to_property_scalar(BoltType::LocalTime(time.into()));
+
+        assert!(matches!(
+            zoned_scalar,
+            crate::domain::PropertyScalar::Datetime(v) if v == "15:56:25.155889+00:00"
+        ));
+        assert!(matches!(
+            local_scalar,
+            crate::domain::PropertyScalar::Datetime(v) if v == "15:56:25.155889"
+        ));
     }
 
     #[test]
