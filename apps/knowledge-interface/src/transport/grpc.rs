@@ -7,7 +7,7 @@ use crate::domain::{
 };
 use crate::presentation::extraction_prompt::ExtractionContextView;
 use crate::presentation::upsert_delta_json_schema::{
-    upsert_graph_delta_json_schema_string, UPSERT_GRAPH_DELTA_SCHEMA_ID,
+    try_upsert_graph_delta_json_schema_string, UPSERT_GRAPH_DELTA_SCHEMA_ID,
 };
 use crate::service::{
     build_extraction_entity_types, EntityTypePropertyContextOptions,
@@ -175,8 +175,11 @@ impl KnowledgeInterface for KnowledgeGrpcService {
         &self,
         _request: Request<GetUpsertGraphDeltaJsonSchemaRequest>,
     ) -> Result<Response<GetUpsertGraphDeltaJsonSchemaReply>, Status> {
+        let json_schema = try_upsert_graph_delta_json_schema_string()
+            .map_err(|err| Status::internal(format!("failed to serialize json schema: {err}")))?;
+
         Ok(Response::new(GetUpsertGraphDeltaJsonSchemaReply {
-            json_schema: upsert_graph_delta_json_schema_string(),
+            json_schema,
             schema_id: Some(UPSERT_GRAPH_DELTA_SCHEMA_ID.to_string()),
             draft: Some("2020-12".to_string()),
             version: Some("1.0.0".to_string()),
@@ -443,19 +446,171 @@ mod tests {
     use super::{
         entity_type_property_context_options_from_request, extraction_options_from_request,
         to_proto_extraction_entity_type, to_proto_extraction_universe, to_proto_property_context,
-        upsert_graph_delta_json_schema_string,
+        KnowledgeGrpcService,
     };
     use crate::domain::{
         EdgeEndpointRule, FullSchema, SchemaEdgeTypeHydrated, SchemaNodeTypeHydrated, SchemaType,
     };
+    use crate::ports::{Embedder, GraphRepository, SchemaRepository};
     use crate::presentation::extraction_prompt::render_prompt_context_markdown;
+    use crate::presentation::upsert_delta_json_schema::UPSERT_GRAPH_DELTA_SCHEMA_ID;
+    use crate::service::KnowledgeApplication;
     use crate::service::{
         build_extraction_entity_types, ExtractionAllowedEdge, ExtractionEntityType,
         ExtractionPropertyContext, ExtractionSchemaOptions, ExtractionUniverseContext,
     };
+    use crate::transport::proto::knowledge_interface_server::KnowledgeInterface;
     use crate::transport::proto::{
         GetEntityTypePropertyContextRequest, GetExtractionSchemaContextRequest,
+        GetUpsertGraphDeltaJsonSchemaRequest,
     };
+    use anyhow::{anyhow, Result};
+    use async_trait::async_trait;
+    use serde_json::Value;
+    use std::sync::Arc;
+    use tonic::Request;
+
+    struct NoopSchemaRepository;
+
+    #[async_trait]
+    impl SchemaRepository for NoopSchemaRepository {
+        async fn get_by_kind(&self, _kind: crate::domain::SchemaKind) -> Result<Vec<SchemaType>> {
+            Err(anyhow!("not implemented"))
+        }
+        async fn upsert(&self, _schema_type: &SchemaType) -> Result<SchemaType> {
+            Err(anyhow!("not implemented"))
+        }
+        async fn get_type_inheritance(&self) -> Result<Vec<crate::domain::TypeInheritance>> {
+            Err(anyhow!("not implemented"))
+        }
+        async fn get_all_properties(&self) -> Result<Vec<crate::domain::TypeProperty>> {
+            Err(anyhow!("not implemented"))
+        }
+        async fn get_edge_endpoint_rules(&self) -> Result<Vec<EdgeEndpointRule>> {
+            Err(anyhow!("not implemented"))
+        }
+        async fn get_schema_type(&self, _id: &str) -> Result<Option<SchemaType>> {
+            Err(anyhow!("not implemented"))
+        }
+        async fn get_parent_for_child(&self, _child_type_id: &str) -> Result<Option<String>> {
+            Err(anyhow!("not implemented"))
+        }
+        async fn is_descendant_of_entity(&self, _node_type_id: &str) -> Result<bool> {
+            Err(anyhow!("not implemented"))
+        }
+        async fn upsert_inheritance(
+            &self,
+            _child_type_id: &str,
+            _parent_type_id: &str,
+            _description: &str,
+        ) -> Result<()> {
+            Err(anyhow!("not implemented"))
+        }
+        async fn upsert_type_property(
+            &self,
+            _owner_type_id: &str,
+            _property: &crate::domain::UpsertSchemaTypePropertyInput,
+        ) -> Result<()> {
+            Err(anyhow!("not implemented"))
+        }
+    }
+
+    struct NoopGraphRepository;
+
+    #[async_trait]
+    impl GraphRepository for NoopGraphRepository {
+        async fn apply_delta_with_blocks(
+            &self,
+            _delta: &crate::domain::GraphDelta,
+            _blocks: &[crate::domain::EmbeddedBlock],
+        ) -> Result<()> {
+            Err(anyhow!("not implemented"))
+        }
+        async fn common_root_graph_exists(&self) -> Result<bool> {
+            Err(anyhow!("not implemented"))
+        }
+        async fn user_graph_needs_initialization(&self, _user_id: &str) -> Result<bool> {
+            Err(anyhow!("not implemented"))
+        }
+        async fn mark_user_graph_initialized(
+            &self,
+            _user_id: &str,
+            _node_ids: &crate::domain::UserInitGraphNodeIds,
+        ) -> Result<()> {
+            Err(anyhow!("not implemented"))
+        }
+        async fn get_user_init_graph_node_ids(
+            &self,
+            _user_id: &str,
+        ) -> Result<Option<crate::domain::UserInitGraphNodeIds>> {
+            Err(anyhow!("not implemented"))
+        }
+        async fn update_person_name(
+            &self,
+            _person_entity_id: &str,
+            _user_name: &str,
+        ) -> Result<()> {
+            Err(anyhow!("not implemented"))
+        }
+        async fn get_existing_block_context(
+            &self,
+            _block_id: &str,
+            _user_id: &str,
+            _visibility: crate::domain::Visibility,
+        ) -> Result<Option<crate::domain::ExistingBlockContext>> {
+            Err(anyhow!("not implemented"))
+        }
+        async fn get_node_relationship_counts(
+            &self,
+            _node_id: &str,
+        ) -> Result<crate::domain::NodeRelationshipCounts> {
+            Err(anyhow!("not implemented"))
+        }
+        async fn find_entity_candidates(
+            &self,
+            _query: &crate::domain::FindEntityCandidatesQuery,
+            _query_vector: Option<&[f32]>,
+        ) -> Result<Vec<crate::domain::EntityCandidate>> {
+            Err(anyhow!("not implemented"))
+        }
+        async fn get_entity_context(
+            &self,
+            _query: &crate::domain::GetEntityContextQuery,
+        ) -> Result<crate::domain::GetEntityContextResult> {
+            Err(anyhow!("not implemented"))
+        }
+        async fn list_entities_by_type(
+            &self,
+            _query: &crate::domain::ListEntitiesByTypeQuery,
+        ) -> Result<crate::domain::ListEntitiesByTypeResult> {
+            Err(anyhow!("not implemented"))
+        }
+        async fn get_extraction_universes(
+            &self,
+            _user_id: &str,
+        ) -> Result<Vec<crate::domain::ExtractionUniverse>> {
+            Err(anyhow!("not implemented"))
+        }
+    }
+
+    struct NoopEmbedder;
+
+    #[async_trait]
+    impl Embedder for NoopEmbedder {
+        async fn embed_texts(&self, _texts: &[String]) -> Result<Vec<Vec<f32>>> {
+            Err(anyhow!("not implemented"))
+        }
+    }
+
+    fn make_service() -> KnowledgeGrpcService {
+        KnowledgeGrpcService {
+            app: Arc::new(KnowledgeApplication::new(
+                Arc::new(NoopSchemaRepository),
+                Arc::new(NoopGraphRepository),
+                Arc::new(NoopEmbedder),
+            )),
+        }
+    }
 
     #[test]
     fn extraction_schema_context_filters_inactive_types_and_rules_by_default() {
@@ -952,14 +1107,122 @@ mod tests {
         assert_eq!(reply.properties[1].declared_on_type_id, "node.entity");
     }
 
-    #[test]
-    fn upsert_graph_delta_json_schema_contains_core_sections() {
-        let schema = upsert_graph_delta_json_schema_string();
-        assert!(schema.contains("$schema"));
-        assert!(schema.contains("$id"));
-        assert!(schema.contains("universes"));
-        assert!(schema.contains("entities"));
-        assert!(schema.contains("blocks"));
-        assert!(schema.contains("edges"));
+    fn parse_schema_json(schema: &str) -> Value {
+        serde_json::from_str(schema).expect("schema payload should be valid JSON")
+    }
+
+    #[tokio::test]
+    async fn get_upsert_graph_delta_json_schema_returns_parseable_json_payload() {
+        let service = make_service();
+
+        let reply = service
+            .get_upsert_graph_delta_json_schema(Request::new(
+                GetUpsertGraphDeltaJsonSchemaRequest {},
+            ))
+            .await
+            .expect("rpc should succeed")
+            .into_inner();
+
+        let parsed = parse_schema_json(&reply.json_schema);
+        assert!(parsed.is_object());
+        assert_eq!(
+            reply.schema_id.as_deref(),
+            Some(UPSERT_GRAPH_DELTA_SCHEMA_ID)
+        );
+    }
+
+    #[tokio::test]
+    async fn get_upsert_graph_delta_json_schema_includes_core_root_fields() {
+        let service = make_service();
+
+        let reply = service
+            .get_upsert_graph_delta_json_schema(Request::new(
+                GetUpsertGraphDeltaJsonSchemaRequest {},
+            ))
+            .await
+            .expect("rpc should succeed")
+            .into_inner();
+
+        let schema = parse_schema_json(&reply.json_schema);
+        let properties = schema["properties"]
+            .as_object()
+            .expect("schema properties must be an object");
+        for key in ["universes", "entities", "blocks", "edges"] {
+            assert!(properties.contains_key(key), "missing root property {key}");
+        }
+    }
+
+    #[tokio::test]
+    async fn get_upsert_graph_delta_json_schema_property_value_uses_oneof() {
+        let service = make_service();
+
+        let reply = service
+            .get_upsert_graph_delta_json_schema(Request::new(
+                GetUpsertGraphDeltaJsonSchemaRequest {},
+            ))
+            .await
+            .expect("rpc should succeed")
+            .into_inner();
+
+        let property_value = &parse_schema_json(&reply.json_schema)["properties"]["entities"]
+            ["items"]["properties"]["properties"]["items"];
+
+        assert_eq!(property_value["required"], serde_json::json!(["key"]));
+        let one_of = property_value["oneOf"]
+            .as_array()
+            .expect("property value oneOf must be an array");
+        assert_eq!(one_of.len(), 6);
+    }
+
+    #[tokio::test]
+    async fn get_upsert_graph_delta_json_schema_includes_visibility_enum_values() {
+        let service = make_service();
+
+        let reply = service
+            .get_upsert_graph_delta_json_schema(Request::new(
+                GetUpsertGraphDeltaJsonSchemaRequest {},
+            ))
+            .await
+            .expect("rpc should succeed")
+            .into_inner();
+
+        let schema = parse_schema_json(&reply.json_schema);
+        let enum_values = schema["properties"]["entities"]["items"]["properties"]["visibility"]
+            ["enum"]
+            .as_array()
+            .expect("visibility enum should be an array")
+            .iter()
+            .filter_map(|value| value.as_str())
+            .collect::<Vec<_>>();
+
+        assert!(enum_values.contains(&"PRIVATE"));
+        assert!(enum_values.contains(&"SHARED"));
+    }
+
+    #[tokio::test]
+    async fn get_upsert_graph_delta_json_schema_snapshot_stability_fragments() {
+        let service = make_service();
+
+        let reply = service
+            .get_upsert_graph_delta_json_schema(Request::new(
+                GetUpsertGraphDeltaJsonSchemaRequest {},
+            ))
+            .await
+            .expect("rpc should succeed")
+            .into_inner();
+
+        assert!(reply.json_schema.contains(
+            r#""required": [
+    "universes",
+    "entities",
+    "blocks",
+    "edges"
+  ]"#
+        ));
+        assert!(reply.json_schema.contains(r#""oneOf": ["#));
+        assert!(reply.json_schema.contains(r#""string_value""#));
+        assert!(reply.json_schema.contains(r#""enum": ["#));
+        assert!(reply.json_schema.contains(r#""PRIVATE""#));
+        assert!(reply.json_schema.contains(r#""SHARED""#));
     }
 }
