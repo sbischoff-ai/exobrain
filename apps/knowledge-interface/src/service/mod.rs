@@ -3,13 +3,16 @@ use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
 
+#[cfg(test)]
+use crate::domain::EmbeddedBlock;
+
 use crate::{
     domain::{
-        BlockNode, EmbeddedBlock, EntityNode, ExistingBlockContext, ExtractionUniverse,
-        FindEntityCandidatesQuery, FindEntityCandidatesResult, FullSchema, GetEntityContextQuery,
-        GetEntityContextResult, GraphDelta, GraphEdge, ListEntitiesByTypeQuery,
-        ListEntitiesByTypeResult, PropertyScalar, PropertyValue, SchemaKind, SchemaType, TypeId,
-        UniverseNode, UpsertSchemaTypeCommand, UserInitGraphNodeIds, Visibility,
+        BlockNode, EntityNode, ExistingBlockContext, ExtractionUniverse, FindEntityCandidatesQuery,
+        FindEntityCandidatesResult, FullSchema, GetEntityContextQuery, GetEntityContextResult,
+        GraphDelta, GraphEdge, ListEntitiesByTypeQuery, ListEntitiesByTypeResult, PropertyScalar,
+        PropertyValue, SchemaKind, SchemaType, TypeId, UniverseNode, UpsertSchemaTypeCommand,
+        UserInitGraphNodeIds, Visibility,
     },
     ports::{Embedder, GraphRepository, SchemaRepository},
 };

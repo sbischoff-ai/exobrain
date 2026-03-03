@@ -298,6 +298,7 @@ fn to_proto_property_scalar_value(value: PropertyScalar) -> proto::PropertyScala
     proto::PropertyScalarValue { value: Some(value) }
 }
 
+#[cfg(test)]
 pub(crate) fn to_proto_property_value(value: PropertyValue) -> proto::PropertyValue {
     let PropertyValue { key, value } = value;
 
