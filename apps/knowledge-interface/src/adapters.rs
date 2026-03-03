@@ -897,7 +897,7 @@ fn build_list_entities_by_type_query() -> String {
                 relevance
          ORDER BY relevance DESC, updated_at DESC, id ASC
          LIMIT $limit
-         OFFSET $offset",
+         SKIP $offset",
         entity_access = memgraph_user_or_shared_access_clause("e"),
         root_access = memgraph_user_or_shared_access_clause("root"),
         described_root_access = memgraph_user_or_shared_access_clause("described_root"),
@@ -1301,6 +1301,9 @@ impl GraphRepository for MemgraphQdrantGraphRepository {
         let offset = query_input.offset.unwrap_or_default();
 
         let cypher = build_list_entities_by_type_query();
+        let limit = i64::from(page_size) + 1;
+        let offset_i64 = offset as i64;
+
         let mut rows = self
             .graph_store
             .graph
@@ -1308,10 +1311,22 @@ impl GraphRepository for MemgraphQdrantGraphRepository {
                 query(&cypher)
                     .param("user_id", query_input.user_id.clone())
                     .param("type_id", query_input.type_id.clone())
-                    .param("limit", i64::from(page_size) + 1)
-                    .param("offset", offset as i64),
+                    .param("limit", limit)
+                    .param("offset", offset_i64),
             )
             .await
+            .map_err(|err| {
+                warn!(
+                    error = ?err,
+                    user_id = %query_input.user_id,
+                    type_id = %query_input.type_id,
+                    page_size,
+                    limit,
+                    offset = offset_i64,
+                    "failed to execute list_entities_by_type query"
+                );
+                err
+            })
             .context("failed to list entities by type from memgraph")?;
 
         let mut entities = Vec::new();
@@ -2099,7 +2114,7 @@ mod tests {
         assert!(list_query.contains("CASE WHEN e.user_id = $user_id THEN 1.0 ELSE 0.0 END"));
         assert!(list_query.contains("ORDER BY relevance DESC, updated_at DESC, id ASC"));
         assert!(list_query.contains("LIMIT $limit"));
-        assert!(list_query.contains("OFFSET $offset"));
+        assert!(list_query.contains("SKIP $offset"));
     }
 
     #[test]
