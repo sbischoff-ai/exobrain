@@ -34,6 +34,14 @@ class KnowledgeJobAccessDeniedError(KnowledgeWatchError):
 class KnowledgeUpstreamUnavailableError(KnowledgeWatchError):
     """Raised when the job orchestrator is unavailable during stream watch."""
 
+
+class KnowledgeNoPendingMessagesError(Exception):
+    """Raised when there are no uncommitted messages to enqueue for knowledge updates."""
+
+
+class KnowledgeEnqueueError(Exception):
+    """Raised when knowledge update jobs cannot be enqueued."""
+
 class KnowledgeService:
     def __init__(
         self,
@@ -48,21 +56,26 @@ class KnowledgeService:
     async def enqueue_update_job(self, *, user_id: str, journal_reference: str | None = None) -> str:
         message_sequences = await self._list_uncommitted_message_sequences(user_id=user_id, journal_reference=journal_reference)
         if not message_sequences:
-            return ""
+            raise KnowledgeNoPendingMessagesError("no uncommitted messages found for knowledge update")
 
         job_ids: list[str] = []
         for sequence in message_sequences:
             payload_messages = [self._message_payload(row) for row in sequence]
             payload_journal_reference = sequence[0]["reference"]
-            job_id = await self._job_publisher.enqueue_job(
-                user_id=user_id,
-                job_type="knowledge.update",
-                payload={
-                    "journal_reference": payload_journal_reference,
-                    "messages": payload_messages,
-                    "requested_by_user_id": user_id,
-                },
-            )
+            try:
+                job_id = await self._job_publisher.enqueue_job(
+                    user_id=user_id,
+                    job_type="knowledge.update",
+                    payload={
+                        "journal_reference": payload_journal_reference,
+                        "messages": payload_messages,
+                        "requested_by_user_id": user_id,
+                    },
+                )
+            except grpc.aio.AioRpcError as exc:
+                if exc.code() in (grpc.StatusCode.DEADLINE_EXCEEDED, grpc.StatusCode.UNAVAILABLE):
+                    raise KnowledgeUpstreamUnavailableError("knowledge update enqueue unavailable") from exc
+                raise KnowledgeEnqueueError("failed to enqueue knowledge update job") from exc
             job_ids.append(job_id)
             await self._mark_messages_committed([row["id"] for row in sequence])
 

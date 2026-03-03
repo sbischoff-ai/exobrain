@@ -10,8 +10,10 @@ from app.services.grpc import job_orchestrator_pb2
 
 from app.core.settings import Settings
 from app.services.knowledge_service import (
+    KnowledgeEnqueueError,
     KnowledgeJobAccessDeniedError,
     KnowledgeJobNotFoundError,
+    KnowledgeNoPendingMessagesError,
     KnowledgeService,
     KnowledgeUpstreamUnavailableError,
     KnowledgeWatchError,
@@ -180,17 +182,61 @@ async def test_enqueue_update_job_respects_token_limit() -> None:
 
 
 @pytest.mark.asyncio
-async def test_enqueue_update_job_returns_empty_when_no_uncommitted_messages() -> None:
+async def test_enqueue_update_job_raises_when_no_uncommitted_messages() -> None:
     database = FakeDatabase([])
     publisher = FakeJobPublisher()
     service = KnowledgeService(database=database, job_publisher=publisher, settings=Settings())
 
-    job_id = await service.enqueue_update_job(user_id="user-1", journal_reference="2026/02/19")
+    with pytest.raises(KnowledgeNoPendingMessagesError):
+        await service.enqueue_update_job(user_id="user-1", journal_reference="2026/02/19")
 
-    assert job_id == ""
     assert publisher.calls == []
     assert database.execute_calls == []
 
+
+class EnqueueErroringJobPublisher(FakeJobPublisher):
+    def __init__(self, code: grpc.StatusCode) -> None:
+        super().__init__()
+        self._code = code
+
+    async def enqueue_job(self, *, user_id: str, job_type: str, payload: dict[str, object]) -> str:
+        self.calls.append({"user_id": user_id, "job_type": job_type, "payload": payload})
+        raise FakeAioRpcError(self._code)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("status_code", "expected_error"),
+    [
+        (grpc.StatusCode.DEADLINE_EXCEEDED, KnowledgeUpstreamUnavailableError),
+        (grpc.StatusCode.UNAVAILABLE, KnowledgeUpstreamUnavailableError),
+        (grpc.StatusCode.INTERNAL, KnowledgeEnqueueError),
+    ],
+)
+async def test_enqueue_update_job_maps_grpc_errors_to_domain_errors(status_code: grpc.StatusCode, expected_error: type[Exception]) -> None:
+    rows = [
+        {
+            "id": "m-1",
+            "reference": "2026/02/19",
+            "role": "user",
+            "content": "hello",
+            "sequence": 1,
+            "created_at": datetime(2026, 2, 19, 10, 0, tzinfo=UTC),
+            "committed_to_knowledge_base": False,
+            "previous_committed": None,
+        }
+    ]
+    database = FakeDatabase(rows)
+    service = KnowledgeService(
+        database=database,
+        job_publisher=EnqueueErroringJobPublisher(status_code),
+        settings=Settings(),
+    )
+
+    with pytest.raises(expected_error):
+        await service.enqueue_update_job(user_id="user-1", journal_reference="2026/02/19")
+
+    assert database.execute_calls == []
 
 def test_count_text_tokens_rounds_character_division() -> None:
     assert KnowledgeService._count_text_tokens("abcd") == 1
