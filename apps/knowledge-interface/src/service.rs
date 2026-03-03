@@ -8,8 +8,9 @@ use crate::{
     domain::{
         BlockNode, EmbeddedBlock, EntityNode, ExistingBlockContext, ExtractionUniverse,
         FindEntityCandidatesQuery, FindEntityCandidatesResult, FullSchema, GetEntityContextQuery,
-        GetEntityContextResult, GraphDelta, GraphEdge, PropertyScalar, PropertyValue, SchemaType,
-        UniverseNode, UpsertSchemaTypeCommand, UserInitGraphNodeIds, Visibility,
+        GetEntityContextResult, GraphDelta, GraphEdge, ListEntitiesByTypeQuery,
+        ListEntitiesByTypeResult, PropertyScalar, PropertyValue, SchemaType, UniverseNode,
+        UpsertSchemaTypeCommand, UserInitGraphNodeIds, Visibility,
     },
     ports::{Embedder, GraphRepository, SchemaRepository},
 };
@@ -19,6 +20,8 @@ const COMMON_UNIVERSE_ID: &str = "9d7f0fa5-78c1-4805-9efb-3f8f16090d7f";
 const COMMON_UNIVERSE_NAME: &str = "Real World";
 const COMMON_EXOBRAIN_ENTITY_ID: &str = "8c75cc89-6204-4fed-aec1-34d032ff95ee";
 const COMMON_EXOBRAIN_BLOCK_ID: &str = "ea5ca80f-346b-4f66-bff2-d307ce5d7da9";
+const LIST_ENTITIES_BY_TYPE_DEFAULT_PAGE_SIZE: u32 = 50;
+const LIST_ENTITIES_BY_TYPE_MAX_PAGE_SIZE: u32 = 200;
 
 #[derive(Debug, Clone)]
 pub(crate) struct ExtractionSchemaOptions {
@@ -674,6 +677,38 @@ impl KnowledgeApplication {
         }
 
         Ok(FindEntityCandidatesResult { candidates })
+    }
+
+    pub async fn list_entities_by_type(
+        &self,
+        mut query: ListEntitiesByTypeQuery,
+    ) -> Result<ListEntitiesByTypeResult> {
+        query.user_id = query.user_id.trim().to_string();
+        if query.user_id.is_empty() {
+            return Err(anyhow!("user_id is required"));
+        }
+
+        query.type_id = query.type_id.trim().to_string();
+        if query.type_id.is_empty() {
+            return Err(anyhow!("type_id is required"));
+        }
+
+        query.page_size = Some(
+            query
+                .page_size
+                .unwrap_or(LIST_ENTITIES_BY_TYPE_DEFAULT_PAGE_SIZE)
+                .clamp(1, LIST_ENTITIES_BY_TYPE_MAX_PAGE_SIZE),
+        );
+
+        query.page_token = query
+            .page_token
+            .as_ref()
+            .map(|token| token.trim().to_string())
+            .filter(|token| !token.is_empty());
+
+        query.offset = Some(query.offset.unwrap_or_default());
+
+        self.graph_repository.list_entities_by_type(&query).await
     }
 
     pub async fn get_entity_context(
@@ -1981,6 +2016,13 @@ mod tests {
             Ok(Vec::new())
         }
 
+        async fn list_entities_by_type(
+            &self,
+            _query: &ListEntitiesByTypeQuery,
+        ) -> Result<ListEntitiesByTypeResult> {
+            Err(anyhow!("not implemented"))
+        }
+
         async fn get_entity_context(
             &self,
             _query: &GetEntityContextQuery,
@@ -2095,6 +2137,13 @@ mod tests {
             Ok(Vec::new())
         }
 
+        async fn list_entities_by_type(
+            &self,
+            _query: &ListEntitiesByTypeQuery,
+        ) -> Result<ListEntitiesByTypeResult> {
+            Err(anyhow!("not implemented"))
+        }
+
         async fn get_entity_context(
             &self,
             _query: &GetEntityContextQuery,
@@ -2178,6 +2227,13 @@ mod tests {
             _query_vector: Option<&[f32]>,
         ) -> Result<Vec<EntityCandidate>> {
             Ok(Vec::new())
+        }
+
+        async fn list_entities_by_type(
+            &self,
+            _query: &ListEntitiesByTypeQuery,
+        ) -> Result<ListEntitiesByTypeResult> {
+            Err(anyhow!("not implemented"))
         }
 
         async fn get_entity_context(
@@ -2284,6 +2340,13 @@ mod tests {
             _query_vector: Option<&[f32]>,
         ) -> Result<Vec<EntityCandidate>> {
             Ok(Vec::new())
+        }
+
+        async fn list_entities_by_type(
+            &self,
+            _query: &ListEntitiesByTypeQuery,
+        ) -> Result<ListEntitiesByTypeResult> {
+            Err(anyhow!("not implemented"))
         }
 
         async fn get_entity_context(
@@ -3275,6 +3338,13 @@ mod tests {
             Ok(self.candidates.clone())
         }
 
+        async fn list_entities_by_type(
+            &self,
+            _query: &ListEntitiesByTypeQuery,
+        ) -> Result<ListEntitiesByTypeResult> {
+            Err(anyhow!("not implemented"))
+        }
+
         async fn get_entity_context(
             &self,
             _query: &GetEntityContextQuery,
@@ -3568,6 +3638,13 @@ mod tests {
             Ok(Vec::new())
         }
 
+        async fn list_entities_by_type(
+            &self,
+            _query: &ListEntitiesByTypeQuery,
+        ) -> Result<ListEntitiesByTypeResult> {
+            Err(anyhow!("not implemented"))
+        }
+
         async fn get_entity_context(
             &self,
             query: &GetEntityContextQuery,
@@ -3694,6 +3771,236 @@ mod tests {
         assert_eq!(seen[0].entity_id, "entity-1");
         assert_eq!(seen[0].user_id, "user-1");
         assert_eq!(seen[0].max_block_level, 32);
+    }
+
+    struct ListByTypeGraphRepository {
+        seen_queries: Arc<Mutex<Vec<ListEntitiesByTypeQuery>>>,
+        result: ListEntitiesByTypeResult,
+    }
+
+    #[async_trait]
+    impl GraphRepository for ListByTypeGraphRepository {
+        async fn apply_delta_with_blocks(
+            &self,
+            _delta: &GraphDelta,
+            _blocks: &[EmbeddedBlock],
+        ) -> Result<()> {
+            Ok(())
+        }
+
+        async fn common_root_graph_exists(&self) -> Result<bool> {
+            Ok(true)
+        }
+
+        async fn user_graph_needs_initialization(&self, _user_id: &str) -> Result<bool> {
+            Ok(false)
+        }
+
+        async fn mark_user_graph_initialized(
+            &self,
+            _user_id: &str,
+            _node_ids: &UserInitGraphNodeIds,
+        ) -> Result<()> {
+            Ok(())
+        }
+
+        async fn get_user_init_graph_node_ids(
+            &self,
+            _user_id: &str,
+        ) -> Result<Option<UserInitGraphNodeIds>> {
+            Ok(None)
+        }
+
+        async fn update_person_name(
+            &self,
+            _person_entity_id: &str,
+            _user_name: &str,
+        ) -> Result<()> {
+            Ok(())
+        }
+
+        async fn get_existing_block_context(
+            &self,
+            _block_id: &str,
+            _user_id: &str,
+            _visibility: Visibility,
+        ) -> Result<Option<ExistingBlockContext>> {
+            Ok(None)
+        }
+
+        async fn get_node_relationship_counts(
+            &self,
+            _node_id: &str,
+        ) -> Result<NodeRelationshipCounts> {
+            Ok(NodeRelationshipCounts::default())
+        }
+
+        async fn find_entity_candidates(
+            &self,
+            _query: &FindEntityCandidatesQuery,
+            _query_vector: Option<&[f32]>,
+        ) -> Result<Vec<EntityCandidate>> {
+            Ok(Vec::new())
+        }
+
+        async fn list_entities_by_type(
+            &self,
+            query: &ListEntitiesByTypeQuery,
+        ) -> Result<ListEntitiesByTypeResult> {
+            self.seen_queries
+                .lock()
+                .expect("lock should be available")
+                .push(query.clone());
+            Ok(self.result.clone())
+        }
+
+        async fn get_entity_context(
+            &self,
+            _query: &GetEntityContextQuery,
+        ) -> Result<GetEntityContextResult> {
+            Err(anyhow!("not implemented"))
+        }
+
+        async fn get_extraction_universes(
+            &self,
+            _user_id: &str,
+        ) -> Result<Vec<ExtractionUniverse>> {
+            Ok(Vec::new())
+        }
+    }
+
+    fn sample_list_entities_by_type_result() -> ListEntitiesByTypeResult {
+        ListEntitiesByTypeResult {
+            entities: vec![crate::domain::TypedEntityListItem {
+                id: "entity-1".to_string(),
+                name: Some("Entity One".to_string()),
+                updated_at: Some("2025-01-01T00:00:00Z".to_string()),
+                description: Some("Example entity".to_string()),
+            }],
+            page_size: 25,
+            offset: 10,
+            next_page_token: Some("next-token".to_string()),
+        }
+    }
+
+    #[tokio::test]
+    async fn list_entities_by_type_rejects_blank_user_id() {
+        let app = KnowledgeApplication::new(
+            Arc::new(FakeSchemaRepo::new()),
+            Arc::new(ListByTypeGraphRepository {
+                seen_queries: Arc::new(Mutex::new(Vec::new())),
+                result: sample_list_entities_by_type_result(),
+            }),
+            Arc::new(FakeEmbedder),
+        );
+
+        let err = app
+            .list_entities_by_type(ListEntitiesByTypeQuery {
+                user_id: "   ".to_string(),
+                type_id: "node.person".to_string(),
+                page_size: Some(10),
+                page_token: None,
+                offset: Some(0),
+            })
+            .await
+            .expect_err("blank user_id should fail");
+
+        assert!(err.to_string().contains("user_id is required"));
+    }
+
+    #[tokio::test]
+    async fn list_entities_by_type_rejects_blank_type_id() {
+        let app = KnowledgeApplication::new(
+            Arc::new(FakeSchemaRepo::new()),
+            Arc::new(ListByTypeGraphRepository {
+                seen_queries: Arc::new(Mutex::new(Vec::new())),
+                result: sample_list_entities_by_type_result(),
+            }),
+            Arc::new(FakeEmbedder),
+        );
+
+        let err = app
+            .list_entities_by_type(ListEntitiesByTypeQuery {
+                user_id: "user-1".to_string(),
+                type_id: "   ".to_string(),
+                page_size: Some(10),
+                page_token: None,
+                offset: Some(0),
+            })
+            .await
+            .expect_err("blank type_id should fail");
+
+        assert!(err.to_string().contains("type_id is required"));
+    }
+
+    #[tokio::test]
+    async fn list_entities_by_type_normalizes_and_clamps_pagination() {
+        let seen_queries = Arc::new(Mutex::new(Vec::new()));
+        let expected = sample_list_entities_by_type_result();
+        let app = KnowledgeApplication::new(
+            Arc::new(FakeSchemaRepo::new()),
+            Arc::new(ListByTypeGraphRepository {
+                seen_queries: Arc::clone(&seen_queries),
+                result: expected.clone(),
+            }),
+            Arc::new(FakeEmbedder),
+        );
+
+        let result = app
+            .list_entities_by_type(ListEntitiesByTypeQuery {
+                user_id: " user-1 ".to_string(),
+                type_id: " node.person ".to_string(),
+                page_size: Some(999),
+                page_token: Some("   ".to_string()),
+                offset: None,
+            })
+            .await
+            .expect("query should succeed");
+
+        assert_eq!(result.entities.len(), expected.entities.len());
+        assert_eq!(result.page_size, expected.page_size);
+        assert_eq!(result.offset, expected.offset);
+        assert_eq!(result.next_page_token, expected.next_page_token);
+
+        let seen = seen_queries.lock().expect("lock should be available");
+        assert_eq!(seen.len(), 1);
+        assert_eq!(seen[0].user_id, "user-1");
+        assert_eq!(seen[0].type_id, "node.person");
+        assert_eq!(seen[0].page_size, Some(LIST_ENTITIES_BY_TYPE_MAX_PAGE_SIZE));
+        assert_eq!(seen[0].page_token, None);
+        assert_eq!(seen[0].offset, Some(0));
+    }
+
+    #[tokio::test]
+    async fn list_entities_by_type_applies_default_page_size() {
+        let seen_queries = Arc::new(Mutex::new(Vec::new()));
+        let app = KnowledgeApplication::new(
+            Arc::new(FakeSchemaRepo::new()),
+            Arc::new(ListByTypeGraphRepository {
+                seen_queries: Arc::clone(&seen_queries),
+                result: sample_list_entities_by_type_result(),
+            }),
+            Arc::new(FakeEmbedder),
+        );
+
+        app.list_entities_by_type(ListEntitiesByTypeQuery {
+            user_id: "user-1".to_string(),
+            type_id: "node.person".to_string(),
+            page_size: None,
+            page_token: Some(" tok-1 ".to_string()),
+            offset: Some(42),
+        })
+        .await
+        .expect("query should succeed");
+
+        let seen = seen_queries.lock().expect("lock should be available");
+        assert_eq!(seen.len(), 1);
+        assert_eq!(
+            seen[0].page_size,
+            Some(LIST_ENTITIES_BY_TYPE_DEFAULT_PAGE_SIZE)
+        );
+        assert_eq!(seen[0].page_token, Some("tok-1".to_string()));
+        assert_eq!(seen[0].offset, Some(42));
     }
 
     #[test]

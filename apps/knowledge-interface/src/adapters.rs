@@ -20,9 +20,10 @@ use crate::{
         EdgeEndpointRule, EmbeddedBlock, EntityCandidate, EntityContextBlockItem,
         EntityContextEntitySnapshot, EntityContextNeighborItem, EntityContextOtherEntity,
         ExistingBlockContext, ExtractionUniverse, FindEntityCandidatesQuery, GetEntityContextQuery,
-        GetEntityContextResult, GraphDelta, NeighborDirection, NodeRelationshipCounts,
-        PropertyScalar, PropertyValue, SchemaType, TypeInheritance, TypeProperty,
-        UpsertSchemaTypePropertyInput, UserInitGraphNodeIds, Visibility,
+        GetEntityContextResult, GraphDelta, ListEntitiesByTypeQuery, ListEntitiesByTypeResult,
+        NeighborDirection, NodeRelationshipCounts, PropertyScalar, PropertyValue, SchemaType,
+        TypeInheritance, TypeProperty, UpsertSchemaTypePropertyInput, UserInitGraphNodeIds,
+        Visibility,
     },
     ports::{Embedder, GraphRepository, SchemaRepository},
 };
@@ -1214,6 +1215,13 @@ impl GraphRepository for MemgraphQdrantGraphRepository {
         }
 
         Ok(candidates)
+    }
+
+    async fn list_entities_by_type(
+        &self,
+        _query: &ListEntitiesByTypeQuery,
+    ) -> Result<ListEntitiesByTypeResult> {
+        Err(anyhow::anyhow!("list_entities_by_type is not implemented"))
     }
 
     async fn get_entity_context(
