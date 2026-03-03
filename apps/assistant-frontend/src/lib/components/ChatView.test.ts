@@ -110,6 +110,31 @@ describe('ChatView', () => {
     });
   });
 
+
+  it('expands Mermaid block using toggle expand control', async () => {
+    const markdown = ['```mermaid', 'flowchart TD', 'A[Start] --> B[Done]', '```'].join('\n');
+
+    const { container } = render(ChatView, {
+      props: {
+        reference: '2026/02/19',
+        messages: [{ role: 'assistant', content: markdown, clientMessageId: 'a-mermaid-expand-1' }]
+      }
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-streamdown-mermaid] > [data-expanded="false"]')).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Toggle expand' })).toBeInTheDocument();
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Toggle expand' }));
+
+    await waitFor(() => {
+      const expandedContainer = container.querySelector('[data-streamdown-mermaid] > [data-expanded="true"]');
+      expect(expandedContainer).toBeTruthy();
+      expect(expandedContainer?.getAttribute('data-expanded')).toBe('true');
+    });
+  });
+
   it('preserves line breaks in fenced code blocks', async () => {
     const codeBlockMessage = '```ts\nconst status = "ready";\nconsole.log(status);\n```';
 

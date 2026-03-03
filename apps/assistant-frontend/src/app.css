@@ -642,13 +642,25 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
   margin: 0.85rem auto;
 }
 
-.assistant-markdown [data-streamdown-mermaid] > [data-expanded] {
+.assistant-markdown [data-streamdown-mermaid] > [data-expanded='false'] {
   position: relative;
   isolation: isolate;
   border-radius: 0.55rem;
   background: #a89984;
   padding: 0.45rem;
   overflow: hidden;
+}
+
+.assistant-markdown [data-streamdown-mermaid] > [data-expanded='true'] {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  margin: 0;
+  isolation: isolate;
+  border-radius: 0;
+  background: #a89984;
+  padding: 1rem;
+  overflow: auto;
 }
 
 .assistant-markdown [data-streamdown-mermaid] [data-expanded] > div:first-child {
