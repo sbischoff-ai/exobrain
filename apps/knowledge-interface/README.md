@@ -102,6 +102,7 @@ The Memgraph write is held in a transaction until Qdrant upserts complete. If Qd
 ## ListEntitiesByType gRPC
 
 `ListEntitiesByType` returns entities filtered by `type_id` and requester visibility (`user_id` private + shared), with cursor pagination via `next_page_token`.
+On Memgraph query failures, the service logs `user_id`, `type_id`, and pagination parameters to make production debugging actionable.
 
 ## FindEntityCandidates gRPC
 
