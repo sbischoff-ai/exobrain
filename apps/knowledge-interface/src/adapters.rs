@@ -1426,24 +1426,12 @@ fn normalize_qdrant_grpc_url(url: &str) -> String {
     normalized
 }
 
-fn internal_timestamp_trigger_specs() -> [(&'static str, &'static str); 4] {
+fn internal_timestamp_trigger_specs() -> [&'static str; 4] {
     [
-        (
-            "set_node_timestamps_on_create",
-            "CREATE TRIGGER set_node_timestamps_on_create ON () CREATE BEFORE COMMIT EXECUTE UNWIND createdVertices AS n SET n.created_at = coalesce(n.created_at, datetime()), n.updated_at = datetime()",
-        ),
-        (
-            "set_edge_timestamps_on_create",
-            "CREATE TRIGGER set_edge_timestamps_on_create ON --> CREATE BEFORE COMMIT EXECUTE UNWIND createdEdges AS e SET e.created_at = coalesce(e.created_at, datetime()), e.updated_at = datetime()",
-        ),
-        (
-            "set_node_updated_at_on_update",
-            "CREATE TRIGGER set_node_updated_at_on_update ON () UPDATE BEFORE COMMIT EXECUTE UNWIND updatedVertices AS n SET n.updated_at = datetime()",
-        ),
-        (
-            "set_edge_updated_at_on_update",
-            "CREATE TRIGGER set_edge_updated_at_on_update ON --> UPDATE BEFORE COMMIT EXECUTE UNWIND updatedEdges AS e SET e.updated_at = datetime()",
-        ),
+        "CREATE TRIGGER set_node_timestamps_on_create IF NOT EXISTS ON () CREATE BEFORE COMMIT EXECUTE UNWIND createdVertices AS n SET n.created_at = coalesce(n.created_at, datetime()), n.updated_at = datetime()",
+        "CREATE TRIGGER set_edge_timestamps_on_create IF NOT EXISTS ON --> CREATE BEFORE COMMIT EXECUTE UNWIND createdEdges AS e SET e.created_at = coalesce(e.created_at, datetime()), e.updated_at = datetime()",
+        "CREATE TRIGGER set_node_updated_at_on_update IF NOT EXISTS ON () UPDATE BEFORE COMMIT EXECUTE UNWIND updatedVertices AS n SET n.updated_at = datetime()",
+        "CREATE TRIGGER set_edge_updated_at_on_update IF NOT EXISTS ON --> UPDATE BEFORE COMMIT EXECUTE UNWIND updatedEdges AS e SET e.updated_at = datetime()",
     ]
 }
 
@@ -1506,10 +1494,10 @@ mod tests {
     #[test]
     fn uses_edge_event_patterns_for_edge_timestamp_triggers() {
         let triggers = internal_timestamp_trigger_specs();
-        assert!(triggers[1].1.contains("ON --> CREATE"));
-        assert!(triggers[3].1.contains("ON --> UPDATE"));
-        assert!(triggers[1].1.contains("createdEdges"));
-        assert!(triggers[3].1.contains("updatedEdges"));
+        assert!(triggers[1].contains("ON --> CREATE"));
+        assert!(triggers[3].contains("ON --> UPDATE"));
+        assert!(triggers[1].contains("createdEdges"));
+        assert!(triggers[3].contains("updatedEdges"));
     }
 
     #[test]
