@@ -7,8 +7,10 @@ from app.api.schemas.knowledge import KnowledgeUpdateRequest, KnowledgeUpdateRes
 from app.dependency_injection import get_container
 from app.services.contracts import KnowledgeServiceProtocol
 from app.services.knowledge_service import (
+    KnowledgeEnqueueError,
     KnowledgeJobAccessDeniedError,
     KnowledgeJobNotFoundError,
+    KnowledgeNoPendingMessagesError,
     KnowledgeUpstreamUnavailableError,
     KnowledgeWatchError,
 )
@@ -22,6 +24,11 @@ router = APIRouter(prefix="/knowledge", tags=["knowledge"])
     response_model=KnowledgeUpdateResponse,
     summary="Update the knowledge base using uncommitted messages",
     description="Starts one or more knowledge-base update jobs from uncommitted journal messages, optionally scoped to a journal reference.",
+    responses={
+        409: {"description": "No uncommitted messages were found for the requested scope"},
+        503: {"description": "Job orchestrator unavailable while attempting to enqueue"},
+        502: {"description": "Unexpected enqueue error from job orchestrator"},
+    },
 )
 async def enqueue_knowledge_update(
     payload: KnowledgeUpdateRequest,
@@ -29,10 +36,24 @@ async def enqueue_knowledge_update(
     auth_context: UnifiedPrincipal = Depends(get_required_auth_context),
 ) -> KnowledgeUpdateResponse:
     service = get_container(request).resolve(KnowledgeServiceProtocol)
-    job_id = await service.enqueue_update_job(
-        user_id=auth_context.user_id,
-        journal_reference=payload.journal_reference,
-    )
+    try:
+        job_id = await service.enqueue_update_job(
+            user_id=auth_context.user_id,
+            journal_reference=payload.journal_reference,
+        )
+    except KnowledgeNoPendingMessagesError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="no uncommitted messages available for knowledge update",
+        ) from exc
+    except KnowledgeUpstreamUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="knowledge update enqueue unavailable",
+        ) from exc
+    except KnowledgeEnqueueError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="knowledge update enqueue failed") from exc
+
     return KnowledgeUpdateResponse(job_id=job_id)
 
 

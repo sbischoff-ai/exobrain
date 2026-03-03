@@ -12,8 +12,10 @@ from app.api.schemas.auth import UnifiedPrincipal
 from app.api.schemas.knowledge import KnowledgeUpdateRequest
 from app.services.contracts import KnowledgeServiceProtocol
 from app.services.knowledge_service import (
+    KnowledgeEnqueueError,
     KnowledgeJobAccessDeniedError,
     KnowledgeJobNotFoundError,
+    KnowledgeNoPendingMessagesError,
     KnowledgeUpstreamUnavailableError,
     KnowledgeWatchError,
 )
@@ -24,9 +26,12 @@ class FakeKnowledgeService:
     def __init__(self) -> None:
         self.calls: list[dict[str, str | None]] = []
         self.watch_calls: list[dict[str, object]] = []
+        self.enqueue_error: Exception | None = None
 
     async def enqueue_update_job(self, *, user_id: str, journal_reference: str | None = None) -> str:
         self.calls.append({"user_id": user_id, "journal_reference": journal_reference})
+        if self.enqueue_error is not None:
+            raise self.enqueue_error
         return "job-knowledge-1"
 
     async def watch_update_job(
@@ -99,6 +104,38 @@ def test_api_knowledge_update_surfaces_job_id() -> None:
     assert response.json()["job_id"] == "job-knowledge-1"
     assert service.calls == [{"user_id": "user-1", "journal_reference": "2026/02/19"}]
 
+
+
+
+@pytest.mark.parametrize(
+    ("error", "expected_status", "expected_detail"),
+    [
+        (KnowledgeNoPendingMessagesError("empty"), 409, "no uncommitted messages available for knowledge update"),
+        (KnowledgeUpstreamUnavailableError("unavailable"), 503, "knowledge update enqueue unavailable"),
+        (KnowledgeEnqueueError("failed"), 502, "knowledge update enqueue failed"),
+    ],
+)
+def test_api_knowledge_update_maps_enqueue_domain_errors(error: Exception, expected_status: int, expected_detail: str) -> None:
+    principal = UnifiedPrincipal(user_id="user-1", email="u@example.com", display_name="User")
+    service = FakeKnowledgeService()
+    service.enqueue_error = error
+    container = build_test_container({KnowledgeServiceProtocol: service})
+
+    app = FastAPI()
+
+    @app.middleware("http")
+    async def attach_container(request, call_next):
+        request.app.state.container = container
+        return await call_next(request)
+
+    app.dependency_overrides[get_required_auth_context] = lambda: principal
+    app.include_router(knowledge_router.router, prefix="/api")
+
+    with TestClient(app) as client:
+        response = client.post("/api/knowledge/update", json={"journal_reference": "2026/02/19"})
+
+    assert response.status_code == expected_status
+    assert response.json() == {"detail": expected_detail}
 
 def test_api_knowledge_watch_streams_sse_events() -> None:
     principal = UnifiedPrincipal(user_id="user-1", email="u@example.com", display_name="User")

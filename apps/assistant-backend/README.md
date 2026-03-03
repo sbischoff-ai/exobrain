@@ -76,9 +76,10 @@ Core runtime vars:
 
 - `ASSISTANT_DB_DSN` (Postgres metastore)
 - `ASSISTANT_CACHE_REDIS_URL` (session store)
-- `JOB_ORCHESTRATOR_GRPC_TARGET` (required orchestrator `EnqueueJob` gRPC endpoint, default `localhost:50061`)
+- `JOB_ORCHESTRATOR_GRPC_TARGET` (required orchestrator `EnqueueJob` gRPC endpoint, default `localhost:50061`; examples: local dev/codex `localhost:50061`, Kubernetes `exobrain-job-orchestrator-api:50061`)
 - Knowledge update requests do **not** publish to NATS directly from assistant-backend. The backend calls orchestrator `EnqueueJob` with `user_id`, `job_type=knowledge.update`, and a typed payload containing `journal_reference`, message entries, and `requested_by_user_id`.
 - `JOB_ORCHESTRATOR_CONNECT_TIMEOUT_SECONDS` (gRPC request timeout in seconds, default `5.0`)
+- `POST /api/knowledge/update` returns `409` when there are no uncommitted messages in scope, `503` when orchestrator is unavailable, and `502` for other enqueue failures.
 - `EXOBRAIN_QDRANT_URL`, `EXOBRAIN_MEMGRAPH_URL` (knowledge dependencies)
 - `KNOWLEDGE_UPDATE_MAX_TOKENS` (max tokens per knowledge-update job payload, default `8000`)
 - `RESHAPE_SCHEMA_QUERY` (migration introspection)
