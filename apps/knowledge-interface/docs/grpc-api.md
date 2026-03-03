@@ -474,6 +474,7 @@ message GetEntityContextReply {
   map<string, string> entity_properties = 2;
   repeated EntityContextBlock blocks = 3;
   repeated EntityContextNeighbor neighbors = 4;
+  optional string prompt_context_markdown = 5;
 }
 ```
 
@@ -481,6 +482,7 @@ message GetEntityContextReply {
 - `entity_properties`: additional flat scalar properties as string values (`{ "key": "value" }`) excluding `name`, `aliases`, `created_at`, and `updated_at`.
 - `blocks[]`: typed block entries (`id`, `type_id`, `block_level`) plus root-level `text`, `created_at`, `updated_at`, optional `parent_block_id`, additional `properties` (`map<string, string>`), and block-level `neighbors`.
 - `neighbors[]`: outgoing and incoming entity neighbors with edge metadata (`direction`, `edge_type`, `properties`) where `properties` is a flat `map<string, string>`, plus `other_entity` (`id`, optional `description`, optional `name`).
+- `prompt_context_markdown`: deterministic markdown rendering of the same payload, including entity metadata/properties, neighbors, and nested block tree sections with preserved block markdown text.
 
 ### Block level semantics
 
@@ -488,6 +490,8 @@ message GetEntityContextReply {
 - `block_level = N (> 0)`: a block reached in `N` `SUMMARIZES` hops from the root block.
 - Depth filtering is inclusive (`block_level <= max_block_level`).
 - The API returns blocks ordered by `block_level ASC`, then by block id.
+- Sibling block sections are deterministic (`block_level ASC`, then block id) and rendered as nested markdown headings.
+- Neighbor lists (entity-level and block-level) are deterministic (`edge_type`, then direction, then other entity id).
 
 ### Neighbor direction semantics
 
@@ -508,12 +512,37 @@ message GetEntityContextReply {
 grpcui -plaintext localhost:50051
 ```
 
-Example JSON request payload:
+Example JSON response payload:
 
 ```json
 {
-  "entityId": "550e8400-e29b-41d4-a716-446655440010",
-  "userId": "u-123",
-  "maxBlockLevel": 2
+  "entity": {
+    "id": "550e8400-e29b-41d4-a716-446655440010",
+    "typeId": "node.person",
+    "userId": "u-123",
+    "visibility": "PRIVATE",
+    "name": "Ada",
+    "aliases": ["Ada Lovelace"]
+  },
+  "entityProperties": {
+    "summary": "Pioneer of computing"
+  },
+  "blocks": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440020",
+      "typeId": "node.block",
+      "blockLevel": 0,
+      "text": "# Bio\nMathematician and writer."
+    },
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440021",
+      "typeId": "node.block",
+      "blockLevel": 1,
+      "parentBlockId": "550e8400-e29b-41d4-a716-446655440020",
+      "text": "## Notes\n- Worked on the Analytical Engine"
+    }
+  ],
+  "neighbors": [],
+  "promptContextMarkdown": "# Entity context\n\n## Entity core summary\n..."
 }
 ```
