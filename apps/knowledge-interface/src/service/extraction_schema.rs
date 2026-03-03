@@ -484,4 +484,190 @@ mod tests {
         .expect("context should build");
         assert_eq!(included.properties.len(), 1);
     }
+
+    #[test]
+    fn entity_type_property_context_includes_inherited_when_enabled() {
+        let schema = FullSchema {
+            node_types: vec![
+                SchemaNodeTypeHydrated {
+                    schema_type: SchemaType {
+                        id: "node.entity".to_string(),
+                        kind: "node".to_string(),
+                        name: "Entity".to_string(),
+                        description: "Root".to_string(),
+                        active: true,
+                    },
+                    properties: vec![TypeProperty {
+                        owner_type_id: "node.entity".to_string(),
+                        prop_name: "name".to_string(),
+                        value_type: "string".to_string(),
+                        required: true,
+                        readable: true,
+                        writable: true,
+                        active: true,
+                        description: "entity name".to_string(),
+                    }],
+                    parents: vec![],
+                },
+                SchemaNodeTypeHydrated {
+                    schema_type: SchemaType {
+                        id: "node.person".to_string(),
+                        kind: "node".to_string(),
+                        name: "Person".to_string(),
+                        description: "Leaf".to_string(),
+                        active: true,
+                    },
+                    properties: vec![TypeProperty {
+                        owner_type_id: "node.person".to_string(),
+                        prop_name: "birthdate".to_string(),
+                        value_type: "datetime".to_string(),
+                        required: false,
+                        readable: true,
+                        writable: true,
+                        active: true,
+                        description: "date of birth".to_string(),
+                    }],
+                    parents: vec![TypeInheritance {
+                        child_type_id: "node.person".to_string(),
+                        parent_type_id: "node.entity".to_string(),
+                        description: "inherits".to_string(),
+                        active: true,
+                    }],
+                },
+            ],
+            edge_types: vec![],
+        };
+
+        let context = build_entity_type_property_context(
+            schema,
+            "node.person",
+            EntityTypePropertyContextOptions {
+                include_inactive: false,
+                include_inherited: true,
+            },
+        )
+        .expect("context should build");
+
+        assert_eq!(
+            context.inheritance_chain,
+            vec!["node.entity", "node.person"]
+        );
+        assert_eq!(context.properties.len(), 2);
+        assert_eq!(
+            context
+                .properties
+                .iter()
+                .map(|p| p.prop_name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["birthdate", "name"]
+        );
+    }
+
+    #[test]
+    fn entity_type_property_context_excludes_inactive_types_by_default() {
+        let schema = FullSchema {
+            node_types: vec![SchemaNodeTypeHydrated {
+                schema_type: SchemaType {
+                    id: "node.person".to_string(),
+                    kind: "node".to_string(),
+                    name: "Person".to_string(),
+                    description: "Leaf".to_string(),
+                    active: false,
+                },
+                properties: vec![],
+                parents: vec![],
+            }],
+            edge_types: vec![],
+        };
+
+        let err = build_entity_type_property_context(
+            schema,
+            "node.person",
+            EntityTypePropertyContextOptions {
+                include_inactive: false,
+                include_inherited: true,
+            },
+        )
+        .expect_err("inactive type should be excluded");
+
+        assert!(err.to_string().contains("unknown type_id"));
+    }
+
+    #[test]
+    fn entity_type_property_context_properties_are_stably_sorted() {
+        let schema = FullSchema {
+            node_types: vec![SchemaNodeTypeHydrated {
+                schema_type: SchemaType {
+                    id: "node.person".to_string(),
+                    kind: "node".to_string(),
+                    name: "Person".to_string(),
+                    description: "Leaf".to_string(),
+                    active: true,
+                },
+                properties: vec![
+                    TypeProperty {
+                        owner_type_id: "node.person".to_string(),
+                        prop_name: "zeta".to_string(),
+                        value_type: "string".to_string(),
+                        required: false,
+                        readable: true,
+                        writable: true,
+                        active: true,
+                        description: "z".to_string(),
+                    },
+                    TypeProperty {
+                        owner_type_id: "node.person".to_string(),
+                        prop_name: "alpha".to_string(),
+                        value_type: "string".to_string(),
+                        required: false,
+                        readable: true,
+                        writable: true,
+                        active: true,
+                        description: "a".to_string(),
+                    },
+                ],
+                parents: vec![],
+            }],
+            edge_types: vec![],
+        };
+
+        let context = build_entity_type_property_context(
+            schema,
+            "node.person",
+            EntityTypePropertyContextOptions {
+                include_inactive: false,
+                include_inherited: true,
+            },
+        )
+        .expect("context should build");
+
+        assert_eq!(
+            context
+                .properties
+                .iter()
+                .map(|p| p.prop_name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["alpha", "zeta"]
+        );
+    }
+
+    #[test]
+    fn entity_type_property_context_rejects_unknown_type_id() {
+        let schema = FullSchema {
+            node_types: vec![],
+            edge_types: vec![],
+        };
+
+        let err = build_entity_type_property_context(
+            schema,
+            "node.unknown",
+            EntityTypePropertyContextOptions {
+                include_inactive: false,
+                include_inherited: true,
+            },
+        )
+        .expect_err("unknown type should fail");
+
+        assert!(err.to_string().contains("unknown type_id"));
+    }
 }

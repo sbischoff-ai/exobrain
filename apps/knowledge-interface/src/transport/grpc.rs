@@ -12,8 +12,9 @@ use crate::presentation::upsert_delta_json_schema::{
 use crate::service::{
     build_extraction_entity_types, EntityTypePropertyContextOptions,
     ExtractionAllowedEdge as ServiceAllowedEdge,
-    ExtractionEntityType as ServiceExtractionEntityType, ExtractionSchemaOptions,
-    ExtractionUniverseContext as ServiceExtractionUniverseContext, KnowledgeApplication,
+    ExtractionEntityType as ServiceExtractionEntityType, ExtractionPropertyContext,
+    ExtractionSchemaOptions, ExtractionUniverseContext as ServiceExtractionUniverseContext,
+    KnowledgeApplication,
 };
 
 use super::errors::map_ingest_error;
@@ -48,6 +49,27 @@ fn extraction_options_from_request(
     ExtractionSchemaOptions {
         include_edge_properties: request.include_edge_properties.unwrap_or(false),
         include_inactive: request.include_inactive.unwrap_or(false),
+    }
+}
+
+fn entity_type_property_context_options_from_request(
+    request: &GetEntityTypePropertyContextRequest,
+) -> EntityTypePropertyContextOptions {
+    EntityTypePropertyContextOptions {
+        include_inactive: request.include_inactive.unwrap_or(false),
+        include_inherited: request.include_inherited.unwrap_or(true),
+    }
+}
+
+fn to_proto_property_context(prop: ExtractionPropertyContext) -> super::proto::PropertyContext {
+    super::proto::PropertyContext {
+        prop_name: prop.prop_name,
+        value_type: prop.value_type,
+        required: prop.required,
+        readable: prop.readable,
+        writable: prop.writable,
+        description: prop.description,
+        declared_on_type_id: prop.declared_on_type_id,
     }
 }
 
@@ -215,10 +237,7 @@ impl KnowledgeInterface for KnowledgeGrpcService {
             .app
             .get_entity_type_property_context(
                 &payload.type_id,
-                EntityTypePropertyContextOptions {
-                    include_inactive: payload.include_inactive.unwrap_or(false),
-                    include_inherited: payload.include_inherited.unwrap_or(true),
-                },
+                entity_type_property_context_options_from_request(&payload),
             )
             .await
             .map_err(|e| Status::invalid_argument(e.to_string()))?;
@@ -230,15 +249,7 @@ impl KnowledgeInterface for KnowledgeGrpcService {
             properties: reply
                 .properties
                 .into_iter()
-                .map(|prop| super::proto::PropertyContext {
-                    prop_name: prop.prop_name,
-                    value_type: prop.value_type,
-                    required: prop.required,
-                    readable: prop.readable,
-                    writable: prop.writable,
-                    description: prop.description,
-                    declared_on_type_id: prop.declared_on_type_id,
-                })
+                .map(to_proto_property_context)
                 .collect(),
         }))
     }
@@ -430,8 +441,9 @@ pub async fn run_server(
 #[cfg(test)]
 mod tests {
     use super::{
-        extraction_options_from_request, to_proto_extraction_entity_type,
-        to_proto_extraction_universe, upsert_graph_delta_json_schema_string,
+        entity_type_property_context_options_from_request, extraction_options_from_request,
+        to_proto_extraction_entity_type, to_proto_extraction_universe, to_proto_property_context,
+        upsert_graph_delta_json_schema_string,
     };
     use crate::domain::{
         EdgeEndpointRule, FullSchema, SchemaEdgeTypeHydrated, SchemaNodeTypeHydrated, SchemaType,
@@ -439,7 +451,7 @@ mod tests {
     use crate::presentation::extraction_prompt::render_prompt_context_markdown;
     use crate::service::{
         build_extraction_entity_types, ExtractionAllowedEdge, ExtractionEntityType,
-        ExtractionSchemaOptions, ExtractionUniverseContext,
+        ExtractionPropertyContext, ExtractionSchemaOptions, ExtractionUniverseContext,
     };
     use crate::transport::proto::{
         GetEntityTypePropertyContextRequest, GetExtractionSchemaContextRequest,
@@ -715,6 +727,42 @@ mod tests {
 
         assert!(options.include_edge_properties);
         assert!(options.include_inactive);
+    }
+
+    #[test]
+    fn entity_type_property_context_request_defaults_include_inherited() {
+        let request = GetEntityTypePropertyContextRequest {
+            type_id: "node.person".to_string(),
+            include_inactive: None,
+            include_inherited: None,
+            user_id: None,
+        };
+
+        let options = entity_type_property_context_options_from_request(&request);
+
+        assert!(!options.include_inactive);
+        assert!(options.include_inherited);
+    }
+
+    #[test]
+    fn proto_mapping_preserves_property_context_shape() {
+        let proto = to_proto_property_context(ExtractionPropertyContext {
+            prop_name: "name".to_string(),
+            value_type: "string".to_string(),
+            required: true,
+            readable: true,
+            writable: false,
+            description: "Display name".to_string(),
+            declared_on_type_id: "node.entity".to_string(),
+        });
+
+        assert_eq!(proto.prop_name, "name");
+        assert_eq!(proto.value_type, "string");
+        assert!(proto.required);
+        assert!(proto.readable);
+        assert!(!proto.writable);
+        assert_eq!(proto.description, "Display name");
+        assert_eq!(proto.declared_on_type_id, "node.entity");
     }
 
     #[test]

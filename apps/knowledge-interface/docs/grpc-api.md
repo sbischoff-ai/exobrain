@@ -259,9 +259,19 @@ Response behavior:
 
 ## GetEntityTypePropertyContext
 
-`GetEntityTypePropertyContext` returns the flattened property contract for a specific entity type.
+`GetEntityTypePropertyContext` returns a deterministic, schema-driven property contract for one entity type.
 
-### Request schema
+> ⚠️ **Breaking change (pre-launch):** This endpoint is optimized for agent/LLM entity-population workflows and may take clean contract changes before GA to preserve deterministic prompt+validation behavior.
+
+### Endpoint purpose
+
+Use this endpoint when an agent/LLM needs to populate entity fields safely:
+
+- fetch the exact property keys and value types allowed for a `type_id`
+- include inherited fields (default) so prompt builders do not need to resolve inheritance client-side
+- enforce deterministic ordering for stable prompt templates, response diffs, and cache keys
+
+### Full proto request/response schema
 
 ```proto
 message GetEntityTypePropertyContextRequest {
@@ -270,11 +280,7 @@ message GetEntityTypePropertyContextRequest {
   optional bool include_inherited = 3;
   optional string user_id = 4;
 }
-```
 
-### Response schema
-
-```proto
 message PropertyContext {
   string prop_name = 1;
   string value_type = 2;
@@ -293,15 +299,46 @@ message GetEntityTypePropertyContextReply {
 }
 ```
 
-Behavior notes:
+### Deterministic ordering and inheritance behavior
 
-- Inheritance is resolved root-to-leaf and returned in deterministic order (`inheritance_chain`).
-- `properties` include directly declared and inherited properties when `include_inherited=true` (default).
-- Inactive types/properties are filtered unless `include_inactive=true`.
-- Override precedence for duplicate `prop_name` is deterministic:
-  1. the most specific declaration (closest to the leaf type) wins;
-  2. if specificity ties, lexicographically smaller `owner_type_id` wins.
-- Returned `properties` are sorted by `prop_name`.
+- `include_inherited` defaults to `true` when omitted.
+- `include_inactive` defaults to `false` when omitted.
+- `inheritance_chain` is resolved root-to-leaf in stable order.
+- `properties` are returned in deterministic `prop_name` ascending order.
+- Duplicate property names across inheritance are resolved deterministically:
+  1. declaration on the most specific type wins;
+  2. when specificity ties, lexicographically smaller `owner_type_id` wins.
+- Unknown or inactive-filtered `type_id` returns `INVALID_ARGUMENT` (`unknown type_id`).
+
+### Example JSON response
+
+```json
+{
+  "typeId": "node.person",
+  "typeName": "Person",
+  "inheritanceChain": ["node.entity", "node.person"],
+  "properties": [
+    {
+      "propName": "aliases",
+      "valueType": "json",
+      "required": false,
+      "readable": true,
+      "writable": true,
+      "description": "Alternate names",
+      "declaredOnTypeId": "node.entity"
+    },
+    {
+      "propName": "name",
+      "valueType": "string",
+      "required": true,
+      "readable": true,
+      "writable": true,
+      "description": "Canonical display name",
+      "declaredOnTypeId": "node.person"
+    }
+  ]
+}
+```
 
 ## ListEntitiesByType
 

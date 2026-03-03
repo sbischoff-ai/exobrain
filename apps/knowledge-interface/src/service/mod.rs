@@ -26,7 +26,7 @@ mod ingestion;
 pub(crate) use extraction_schema::{
     build_entity_type_property_context, build_extraction_entity_types, EntityTypePropertyContext,
     EntityTypePropertyContextOptions, ExtractionAllowedEdge, ExtractionEntityType,
-    ExtractionSchemaOptions, ExtractionUniverseContext,
+    ExtractionPropertyContext, ExtractionSchemaOptions, ExtractionUniverseContext,
 };
 
 const EXOBRAIN_USER_ID: &str = "exobrain";
