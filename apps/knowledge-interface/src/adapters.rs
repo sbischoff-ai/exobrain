@@ -22,11 +22,17 @@ use crate::{
         ExistingBlockContext, ExtractionUniverse, FindEntityCandidatesQuery, GetEntityContextQuery,
         GetEntityContextResult, GraphDelta, ListEntitiesByTypeQuery, ListEntitiesByTypeResult,
         NeighborDirection, NodeRelationshipCounts, PropertyScalar, PropertyValue, SchemaType,
-        TypeInheritance, TypeProperty, UpsertSchemaTypePropertyInput, UserInitGraphNodeIds,
-        Visibility,
+        TypeInheritance, TypeProperty, TypedEntityListItem, UpsertSchemaTypePropertyInput,
+        UserInitGraphNodeIds, Visibility,
     },
     ports::{Embedder, GraphRepository, SchemaRepository},
 };
+
+const ENTITY_RECENCY_WEIGHT: f64 = 0.45;
+const ENTITY_BLOCK_VOLUME_WEIGHT: f64 = 0.30;
+const ENTITY_OWNERSHIP_WEIGHT: f64 = 0.15;
+const ENTITY_NEIGHBOR_COUNT_WEIGHT: f64 = 0.10;
+const ENTITY_LIST_DEFAULT_UPDATED_AT_EPOCH: &str = "1970-01-01T00:00:00Z";
 
 pub struct PostgresSchemaRepository {
     pool: PgPool,
@@ -849,6 +855,61 @@ fn build_get_entity_context_neighbors_query() -> String {
     )
 }
 
+fn build_list_entities_by_type_query() -> String {
+    format!(
+        "MATCH (e:Entity)
+         WHERE {entity_access} AND e.type_id = $type_id
+         OPTIONAL MATCH (e)-[:DESCRIBED_BY]->(root:Block)
+         WHERE {root_access}
+         WITH e, root
+         ORDER BY root.updated_at DESC, root.id ASC
+         WITH e,
+              head(collect(root.text)) AS description,
+              coalesce(e.updated_at, datetime('{default_updated_at_epoch}')) AS updated_at_value,
+              toString(e.updated_at) AS updated_at
+         OPTIONAL MATCH (e)-[:DESCRIBED_BY]->(described_root:Block)
+         WHERE {described_root_access}
+         OPTIONAL MATCH (described_root)-[:SUMMARIZES*0..]->(b:Block)
+         WHERE {block_access}
+         WITH e, description, updated_at_value, updated_at, COUNT(DISTINCT b) AS block_volume
+         OPTIONAL MATCH (e)-[rel]-()
+         WHERE type(rel) <> 'DESCRIBED_BY' AND type(rel) <> 'SUMMARIZES'
+           AND {relationship_access}
+         WITH e,
+              description,
+              updated_at,
+              block_volume,
+              COUNT(DISTINCT rel) AS neighbor_count,
+              CASE WHEN e.user_id = $user_id THEN 1.0 ELSE 0.0 END AS ownership_boost,
+              duration.between(datetime('{default_updated_at_epoch}'), updated_at_value).seconds AS recency_seconds
+         WITH e,
+              description,
+              updated_at,
+              ({recency_weight} * toFloat(recency_seconds)) +
+              ({block_volume_weight} * log10(toFloat(1 + block_volume))) +
+              ({ownership_weight} * ownership_boost) +
+              ({neighbor_count_weight} * log10(toFloat(1 + neighbor_count))) AS relevance
+         RETURN e.id AS id,
+                e.name AS name,
+                updated_at,
+                description,
+                relevance
+         ORDER BY relevance DESC, updated_at DESC, id ASC
+         LIMIT $limit
+         OFFSET $offset",
+        entity_access = memgraph_user_or_shared_access_clause("e"),
+        root_access = memgraph_user_or_shared_access_clause("root"),
+        described_root_access = memgraph_user_or_shared_access_clause("described_root"),
+        block_access = memgraph_user_or_shared_access_clause("b"),
+        relationship_access = memgraph_user_or_shared_access_clause("rel"),
+        default_updated_at_epoch = ENTITY_LIST_DEFAULT_UPDATED_AT_EPOCH,
+        recency_weight = ENTITY_RECENCY_WEIGHT,
+        block_volume_weight = ENTITY_BLOCK_VOLUME_WEIGHT,
+        ownership_weight = ENTITY_OWNERSHIP_WEIGHT,
+        neighbor_count_weight = ENTITY_NEIGHBOR_COUNT_WEIGHT,
+    )
+}
+
 fn parse_neighbor_direction(direction: &str) -> Result<NeighborDirection> {
     match direction {
         "OUTGOING" => Ok(NeighborDirection::Outgoing),
@@ -859,6 +920,20 @@ fn parse_neighbor_direction(direction: &str) -> Result<NeighborDirection> {
 
 fn parse_block_level(block_level: i64) -> Result<u32> {
     u32::try_from(block_level).map_err(|_| anyhow::anyhow!("invalid block level: {block_level}"))
+}
+
+fn to_typed_entity_list_item(
+    id: String,
+    name: Option<String>,
+    updated_at: Option<String>,
+    description: Option<String>,
+) -> TypedEntityListItem {
+    TypedEntityListItem {
+        id,
+        name,
+        updated_at,
+        description,
+    }
 }
 
 pub struct QdrantVectorStore {
@@ -1219,9 +1294,46 @@ impl GraphRepository for MemgraphQdrantGraphRepository {
 
     async fn list_entities_by_type(
         &self,
-        _query: &ListEntitiesByTypeQuery,
+        query_input: &ListEntitiesByTypeQuery,
     ) -> Result<ListEntitiesByTypeResult> {
-        Err(anyhow::anyhow!("list_entities_by_type is not implemented"))
+        let page_size = query_input.page_size.unwrap_or(20);
+        let offset = query_input.offset.unwrap_or_default();
+
+        let cypher = build_list_entities_by_type_query();
+        let mut rows = self
+            .graph_store
+            .graph
+            .execute(
+                query(&cypher)
+                    .param("user_id", query_input.user_id.clone())
+                    .param("type_id", query_input.type_id.clone())
+                    .param("limit", i64::from(page_size) + 1)
+                    .param("offset", offset as i64),
+            )
+            .await
+            .context("failed to list entities by type from memgraph")?;
+
+        let mut entities = Vec::new();
+        while let Some(row) = rows.next().await? {
+            entities.push(to_typed_entity_list_item(
+                row.get("id").context("missing list_entities.id")?,
+                row.get("name").ok(),
+                row.get("updated_at").ok(),
+                row.get("description").ok(),
+            ));
+        }
+
+        let has_next_page = entities.len() > page_size as usize;
+        if has_next_page {
+            entities.truncate(page_size as usize);
+        }
+
+        Ok(ListEntitiesByTypeResult {
+            entities,
+            page_size,
+            offset,
+            next_page_token: has_next_page.then(|| (offset + u64::from(page_size)).to_string()),
+        })
     }
 
     async fn get_entity_context(
@@ -1675,11 +1787,12 @@ mod tests {
     use super::{
         allowed_node_visibilities, build_get_entity_context_block_neighbors_query,
         build_get_entity_context_blocks_query, build_get_entity_context_entity_query,
-        build_get_entity_context_neighbors_query, compute_name_score,
-        internal_timestamp_trigger_specs, memgraph_user_or_shared_access_clause,
-        normalize_qdrant_grpc_url, parse_block_level, parse_neighbor_direction, payload_i64,
-        payload_string, prop_as_aliases, qdrant_user_or_shared_access_filter,
-        semantic_score_with_block_level, trigger_name_column_candidates, upsert_semantic_candidate,
+        build_get_entity_context_neighbors_query, build_list_entities_by_type_query,
+        compute_name_score, internal_timestamp_trigger_specs,
+        memgraph_user_or_shared_access_clause, normalize_qdrant_grpc_url, parse_block_level,
+        parse_neighbor_direction, payload_i64, payload_string, prop_as_aliases,
+        qdrant_user_or_shared_access_filter, semantic_score_with_block_level,
+        to_typed_entity_list_item, trigger_name_column_candidates, upsert_semantic_candidate,
         validate_edge_type, MockEmbedder,
     };
     use crate::domain::Visibility;
@@ -1836,6 +1949,43 @@ mod tests {
         assert!(neighbor_query.contains("(r.user_id = $user_id OR r.visibility = 'SHARED')"));
         assert!(neighbor_query.contains("type(r) <> 'DESCRIBED_BY'"));
         assert!(neighbor_query.contains("type(r) <> 'SUMMARIZES'"));
+    }
+
+    #[test]
+    fn list_entities_by_type_query_applies_access_scoring_and_ordering() {
+        let list_query = build_list_entities_by_type_query();
+
+        assert!(list_query.contains("(e.user_id = $user_id OR e.visibility = 'SHARED')"));
+        assert!(list_query.contains("e.type_id = $type_id"));
+        assert!(list_query.contains("(root.user_id = $user_id OR root.visibility = 'SHARED')"));
+        assert!(list_query.contains(
+            "(described_root.user_id = $user_id OR described_root.visibility = 'SHARED')"
+        ));
+        assert!(list_query.contains("(b.user_id = $user_id OR b.visibility = 'SHARED')"));
+        assert!(list_query.contains("(rel.user_id = $user_id OR rel.visibility = 'SHARED')"));
+        assert!(list_query.contains("type(rel) <> 'DESCRIBED_BY'"));
+        assert!(list_query.contains("type(rel) <> 'SUMMARIZES'"));
+        assert!(list_query.contains("COUNT(DISTINCT b) AS block_volume"));
+        assert!(list_query.contains("COUNT(DISTINCT rel) AS neighbor_count"));
+        assert!(list_query.contains("CASE WHEN e.user_id = $user_id THEN 1.0 ELSE 0.0 END"));
+        assert!(list_query.contains("ORDER BY relevance DESC, updated_at DESC, id ASC"));
+        assert!(list_query.contains("LIMIT $limit"));
+        assert!(list_query.contains("OFFSET $offset"));
+    }
+
+    #[test]
+    fn maps_typed_entity_list_item_fields() {
+        let item = to_typed_entity_list_item(
+            "entity-1".to_string(),
+            Some("Ada Lovelace".to_string()),
+            Some("2024-01-01T00:00:00Z".to_string()),
+            Some("Pioneer".to_string()),
+        );
+
+        assert_eq!(item.id, "entity-1");
+        assert_eq!(item.name.as_deref(), Some("Ada Lovelace"));
+        assert_eq!(item.updated_at.as_deref(), Some("2024-01-01T00:00:00Z"));
+        assert_eq!(item.description.as_deref(), Some("Pioneer"));
     }
 
     #[test]
