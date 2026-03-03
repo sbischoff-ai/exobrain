@@ -43,6 +43,16 @@ Inspect gRPC APIs locally:
 grpcui -plaintext localhost:50051
 ```
 
+## Service module layout
+
+`src/service/mod.rs` is the public application facade (`KnowledgeApplication`) and delegates feature logic to focused modules under `src/service/`:
+
+- `extraction_schema.rs` for extraction schema projection builders and sorting helpers.
+- `ingestion.rs` for graph-delta ingestion + schema/state validation routines.
+- `entity_context.rs` for entity-context query shaping.
+- `entity_listing.rs` for paginated list-by-type query normalization.
+- `candidate_search.rs` for candidate resolution query handling.
+
 ## Configuration
 
 - Copy env template: `cp apps/knowledge-interface/.env.example apps/knowledge-interface/.env`
