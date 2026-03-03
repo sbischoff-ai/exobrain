@@ -253,17 +253,6 @@ message GetEntityContextRequest {
   uint32 max_block_level = 3;
 }
 
-message PropertyScalarValue {
-  oneof value {
-    string string_value = 1;
-    double float_value = 2;
-    int64 int_value = 3;
-    bool bool_value = 4;
-    string datetime_value = 5;
-    string json_value = 6;
-  }
-}
-
 message EntityContextCore {
   string id = 1;
   string type_id = 2;
