@@ -739,6 +739,7 @@ impl Neo4jGraphStore {
             entity,
             blocks,
             neighbors,
+            prompt_context_markdown: String::new(),
         })
     }
 }

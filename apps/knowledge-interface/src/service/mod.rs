@@ -4039,6 +4039,7 @@ mod tests {
                 }],
             }],
             neighbors: vec![],
+            prompt_context_markdown: "# Sample context".to_string(),
         }
     }
 }
