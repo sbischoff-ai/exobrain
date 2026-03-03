@@ -53,6 +53,11 @@ grpcui -plaintext localhost:50051
 - `entity_listing.rs` for paginated list-by-type query normalization.
 - `candidate_search.rs` for candidate resolution query handling.
 
+Presentation renderers under `src/presentation/` format domain context into markdown prompts:
+
+- `extraction_prompt.rs` for extraction schema prompt markdown.
+- `entity_context_prompt.rs` for `GetEntityContextResult` markdown rendering with deterministic block trees.
+
 ## Domain typing boundaries
 
 Schema kind values are represented internally via `SchemaKind` (`Node`/`Edge`) and converted to/from wire/database strings only in:
