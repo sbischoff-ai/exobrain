@@ -31,6 +31,7 @@ pkgs.mkShell {
     openssl
     protobuf
     grpcui
+    grpcurl
 
     # Data store CLIs
     postgresql_16 # psql
