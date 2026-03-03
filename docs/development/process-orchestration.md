@@ -24,6 +24,8 @@ This guide defines the canonical way to start Exobrain processes for local devel
 - `.mprocs/backend-knowledge.yml`: model-provider + assistant-backend + knowledge-interface + job-orchestrator
 - `.mprocs/fullstack.yml`: model-provider + assistant-backend + knowledge-interface + job-orchestrator + assistant-frontend
 
+`job-orchestrator` is launched via `scripts/local/run-job-orchestrator.sh`, which starts both the gRPC API (`app.main_api`) and worker (`app.main_worker`) unless disabled via `JOB_ORCHESTRATOR_API_ENABLED=false` or `JOB_ORCHESTRATOR_WORKER_ENABLED=false`.
+
 ## Script ownership matrix
 
 | Script family     | Primary use                                | Notes                                                     |
