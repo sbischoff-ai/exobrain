@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use anyhow::{anyhow, Result};
 
-use crate::domain::{EmbeddedBlock, GraphDelta};
+use crate::domain::{EmbeddedBlock, GraphDelta, SchemaKind};
 
 use super::{
     block_levels_for_blocks, extract_text, is_assignable, resolve_block_universe_id,
@@ -67,14 +67,14 @@ async fn validate_delta_against_schema(
 ) -> Result<Vec<crate::domain::TypeInheritance>> {
     let schema_types = app
         .schema_repository
-        .get_by_kind("node")
+        .get_by_kind(SchemaKind::Node)
         .await?
         .into_iter()
         .map(|t| (t.id.clone(), t))
         .collect::<HashMap<_, _>>();
     let edge_types = app
         .schema_repository
-        .get_by_kind("edge")
+        .get_by_kind(SchemaKind::Edge)
         .await?
         .into_iter()
         .map(|t| (t.id.clone(), t))

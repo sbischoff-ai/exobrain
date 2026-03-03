@@ -1,5 +1,93 @@
 #![allow(dead_code)]
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SchemaKind {
+    Node,
+    Edge,
+}
+
+impl SchemaKind {
+    pub fn as_db_str(self) -> &'static str {
+        match self {
+            Self::Node => "node",
+            Self::Edge => "edge",
+        }
+    }
+
+    pub fn from_db_str(value: &str) -> Option<Self> {
+        match value {
+            "node" => Some(Self::Node),
+            "edge" => Some(Self::Edge),
+            _ => None,
+        }
+    }
+
+    pub fn as_proto_str(self) -> &'static str {
+        self.as_db_str()
+    }
+
+    pub fn from_proto_str(value: &str) -> Option<Self> {
+        Self::from_db_str(value)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct TypeId(String);
+
+impl TypeId {
+    pub fn parse(value: &str) -> Result<Self, String> {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            return Err("type id is required".to_string());
+        }
+        Ok(Self(trimmed.to_string()))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct EntityId(String);
+
+impl EntityId {
+    pub fn parse(value: &str) -> Result<Self, String> {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            return Err("entity id is required".to_string());
+        }
+        if uuid::Uuid::parse_str(trimmed).is_err() {
+            return Err(format!("entity id '{}' must be a valid UUID", value));
+        }
+        Ok(Self(trimmed.to_string()))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct UniverseId(String);
+
+impl UniverseId {
+    pub fn parse(value: &str) -> Result<Self, String> {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            return Err("universe id is required".to_string());
+        }
+        if uuid::Uuid::parse_str(trimmed).is_err() {
+            return Err(format!("universe id '{}' must be a valid UUID", value));
+        }
+        Ok(Self(trimmed.to_string()))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct SchemaType {
     pub id: String,
@@ -7,6 +95,12 @@ pub struct SchemaType {
     pub name: String,
     pub description: String,
     pub active: bool,
+}
+
+impl SchemaType {
+    pub fn schema_kind(&self) -> Option<SchemaKind> {
+        SchemaKind::from_db_str(&self.kind)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -293,4 +387,33 @@ pub struct ListEntitiesByTypeResult {
     pub page_size: u32,
     pub offset: u64,
     pub next_page_token: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{EntityId, SchemaKind, TypeId, UniverseId};
+
+    #[test]
+    fn schema_kind_rejects_invalid_value() {
+        assert!(SchemaKind::from_db_str("invalid").is_none());
+        assert!(SchemaKind::from_proto_str("invalid").is_none());
+    }
+
+    #[test]
+    fn entity_id_parse_rejects_invalid_uuid() {
+        let err = EntityId::parse("not-a-uuid").expect_err("invalid entity id should fail");
+        assert!(err.contains("must be a valid UUID"));
+    }
+
+    #[test]
+    fn universe_id_parse_rejects_empty() {
+        let err = UniverseId::parse("   ").expect_err("empty universe id should fail");
+        assert_eq!(err, "universe id is required");
+    }
+
+    #[test]
+    fn type_id_parse_rejects_empty() {
+        let err = TypeId::parse("\n").expect_err("empty type id should fail");
+        assert_eq!(err, "type id is required");
+    }
 }

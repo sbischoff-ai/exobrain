@@ -2,7 +2,9 @@ use std::sync::Arc;
 
 use tonic::{transport::Server, Request, Response, Status};
 
-use crate::domain::{SchemaType, UpsertSchemaTypeCommand, UpsertSchemaTypePropertyInput};
+use crate::domain::{
+    SchemaKind, SchemaType, UpsertSchemaTypeCommand, UpsertSchemaTypePropertyInput,
+};
 use crate::service::{
     build_extraction_entity_types, ExtractionAllowedEdge as ServiceAllowedEdge,
     ExtractionEntityType as ServiceExtractionEntityType, ExtractionSchemaOptions,
@@ -252,7 +254,10 @@ impl KnowledgeInterface for KnowledgeGrpcService {
             .upsert_schema_type(UpsertSchemaTypeCommand {
                 schema_type: SchemaType {
                     id: payload.id,
-                    kind: payload.kind,
+                    kind: SchemaKind::from_proto_str(&payload.kind)
+                        .map(SchemaKind::as_db_str)
+                        .unwrap_or(payload.kind.as_str())
+                        .to_string(),
                     name: payload.name,
                     description: payload.description,
                     active: payload.active,

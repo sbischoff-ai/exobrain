@@ -8,8 +8,8 @@ use crate::{
         BlockNode, EmbeddedBlock, EntityNode, ExistingBlockContext, ExtractionUniverse,
         FindEntityCandidatesQuery, FindEntityCandidatesResult, FullSchema, GetEntityContextQuery,
         GetEntityContextResult, GraphDelta, GraphEdge, ListEntitiesByTypeQuery,
-        ListEntitiesByTypeResult, PropertyScalar, PropertyValue, SchemaType, UniverseNode,
-        UpsertSchemaTypeCommand, UserInitGraphNodeIds, Visibility,
+        ListEntitiesByTypeResult, PropertyScalar, PropertyValue, SchemaKind, SchemaType, TypeId,
+        UniverseNode, UpsertSchemaTypeCommand, UserInitGraphNodeIds, Visibility,
     },
     ports::{Embedder, GraphRepository, SchemaRepository},
 };
@@ -63,8 +63,8 @@ impl KnowledgeApplication {
     }
 
     pub async fn get_schema(&self) -> Result<FullSchema> {
-        let node_types = self.schema_repository.get_by_kind("node").await?;
-        let edge_types = self.schema_repository.get_by_kind("edge").await?;
+        let node_types = self.schema_repository.get_by_kind(SchemaKind::Node).await?;
+        let edge_types = self.schema_repository.get_by_kind(SchemaKind::Edge).await?;
         let inheritance = self.schema_repository.get_type_inheritance().await?;
         let properties = self.schema_repository.get_all_properties().await?;
         let edge_rules = self.schema_repository.get_edge_endpoint_rules().await?;
@@ -154,15 +154,15 @@ impl KnowledgeApplication {
     pub async fn upsert_schema_type(&self, command: UpsertSchemaTypeCommand) -> Result<SchemaType> {
         let schema_type = command.schema_type;
 
-        if !matches!(schema_type.kind.as_str(), "node" | "edge") {
-            return Err(anyhow!("schema kind must be one of: node, edge"));
-        }
+        let schema_kind = schema_type
+            .schema_kind()
+            .ok_or_else(|| anyhow!("schema kind must be one of: node, edge"))?;
 
-        if schema_type.kind == "edge" && command.parent_type_id.is_some() {
+        if matches!(schema_kind, SchemaKind::Edge) && command.parent_type_id.is_some() {
             return Err(anyhow!("edge inheritance is out of scope"));
         }
 
-        if schema_type.kind == "node" {
+        if matches!(schema_kind, SchemaKind::Node) {
             if schema_type.id == "node.entity" {
                 if command.parent_type_id.is_some() {
                     return Err(anyhow!("node.entity cannot declare a parent"));
@@ -178,7 +178,7 @@ impl KnowledgeApplication {
                     .await?
                     .ok_or_else(|| anyhow!("parent type does not exist"))?;
 
-                if parent_schema.kind != "node" {
+                if !matches!(parent_schema.schema_kind(), Some(SchemaKind::Node)) {
                     return Err(anyhow!("parent type must be a node"));
                 }
 
@@ -204,7 +204,8 @@ impl KnowledgeApplication {
 
         let upserted = self.schema_repository.upsert(&schema_type).await?;
 
-        if upserted.kind == "node" && upserted.id != "node.entity" {
+        if matches!(upserted.schema_kind(), Some(SchemaKind::Node)) && upserted.id != "node.entity"
+        {
             let parent = command
                 .parent_type_id
                 .as_ref()
@@ -596,21 +597,35 @@ fn validate_internal_timestamps_not_provided(
     }
 }
 
+fn schema_kind_for_type_id(value: &str) -> Option<SchemaKind> {
+    let id = TypeId::parse(value).ok()?;
+    let raw = id.as_str();
+    let prefix = raw.split('.').next().unwrap_or(raw);
+    SchemaKind::from_db_str(prefix)
+}
+
 fn is_global_property_owner(owner_type_id: &str, property_owner_type_id: &str) -> bool {
-    (property_owner_type_id == "node"
-        && (owner_type_id == "node" || owner_type_id.starts_with("node.")))
-        || (property_owner_type_id == "edge"
-            && (owner_type_id == "edge" || owner_type_id.starts_with("edge.")))
+    let Some(owner_kind) = schema_kind_for_type_id(owner_type_id) else {
+        return false;
+    };
+
+    property_owner_type_id == owner_kind.as_db_str()
 }
 
 fn validate_graph_id(id: &str, kind: &str) -> std::result::Result<(), String> {
-    if id.trim().is_empty() {
-        return Err(format!("{kind} id is required"));
+    match kind {
+        "entity" => crate::domain::EntityId::parse(id).map(|_| ()),
+        "universe" => crate::domain::UniverseId::parse(id).map(|_| ()),
+        _ => {
+            if id.trim().is_empty() {
+                return Err(format!("{kind} id is required"));
+            }
+            if uuid::Uuid::parse_str(id).is_err() {
+                return Err(format!("{kind} id '{}' must be a valid UUID", id));
+            }
+            Ok(())
+        }
     }
-    if uuid::Uuid::parse_str(id).is_err() {
-        return Err(format!("{kind} id '{}' must be a valid UUID", id));
-    }
-    Ok(())
 }
 
 fn validate_properties(
@@ -1017,9 +1032,9 @@ mod tests {
 
     #[async_trait]
     impl SchemaRepository for FakeSchemaRepo {
-        async fn get_by_kind(&self, kind: &str) -> Result<Vec<SchemaType>> {
+        async fn get_by_kind(&self, kind: SchemaKind) -> Result<Vec<SchemaType>> {
             let values = match kind {
-                "node" => vec![
+                SchemaKind::Node => vec![
                     SchemaType {
                         id: "node.entity".to_string(),
                         kind: "node".to_string(),
@@ -1105,7 +1120,7 @@ mod tests {
                         active: true,
                     },
                 ],
-                "edge" => vec![
+                SchemaKind::Edge => vec![
                     SchemaType {
                         id: "edge.related_to".to_string(),
                         kind: "edge".to_string(),
@@ -1156,7 +1171,6 @@ mod tests {
                         active: true,
                     },
                 ],
-                _ => vec![],
             };
             Ok(values)
         }

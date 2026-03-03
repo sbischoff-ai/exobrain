@@ -22,9 +22,9 @@ use crate::{
         EntityContextEntitySnapshot, EntityContextNeighborItem, EntityContextOtherEntity,
         ExistingBlockContext, ExtractionUniverse, FindEntityCandidatesQuery, GetEntityContextQuery,
         GetEntityContextResult, GraphDelta, ListEntitiesByTypeQuery, ListEntitiesByTypeResult,
-        NeighborDirection, NodeRelationshipCounts, PropertyScalar, PropertyValue, SchemaType,
-        TypeInheritance, TypeProperty, TypedEntityListItem, UpsertSchemaTypePropertyInput,
-        UserInitGraphNodeIds, Visibility,
+        NeighborDirection, NodeRelationshipCounts, PropertyScalar, PropertyValue, SchemaKind,
+        SchemaType, TypeInheritance, TypeProperty, TypedEntityListItem,
+        UpsertSchemaTypePropertyInput, UserInitGraphNodeIds, Visibility,
     },
     ports::{
         Embedder, GraphBootstrapRepository, GraphReadRepository, GraphRepository,
@@ -51,11 +51,11 @@ impl PostgresSchemaRepository {
 
 #[async_trait]
 impl SchemaRepository for PostgresSchemaRepository {
-    async fn get_by_kind(&self, kind: &str) -> Result<Vec<SchemaType>> {
+    async fn get_by_kind(&self, kind: SchemaKind) -> Result<Vec<SchemaType>> {
         let rows = sqlx::query(
             "SELECT id, kind, name, description, active FROM knowledge_graph_schema_types WHERE kind = $1 AND active = TRUE ORDER BY name",
         )
-        .bind(kind)
+        .bind(kind.as_db_str())
         .fetch_all(&self.pool)
         .await?;
 
@@ -1040,7 +1040,11 @@ impl MemgraphQdrantGraphRepository {
 
 #[async_trait]
 impl GraphWriteRepository for MemgraphQdrantGraphRepository {
-    async fn apply_delta_with_blocks(&self, delta: &GraphDelta, blocks: &[EmbeddedBlock]) -> Result<()> {
+    async fn apply_delta_with_blocks(
+        &self,
+        delta: &GraphDelta,
+        blocks: &[EmbeddedBlock],
+    ) -> Result<()> {
         GraphRepository::apply_delta_with_blocks(self, delta, blocks).await
     }
 
@@ -1068,11 +1072,17 @@ impl GraphReadRepository for MemgraphQdrantGraphRepository {
         GraphRepository::find_entity_candidates(self, query, query_vector).await
     }
 
-    async fn get_entity_context(&self, query: &GetEntityContextQuery) -> Result<GetEntityContextResult> {
+    async fn get_entity_context(
+        &self,
+        query: &GetEntityContextQuery,
+    ) -> Result<GetEntityContextResult> {
         GraphRepository::get_entity_context(self, query).await
     }
 
-    async fn list_entities_by_type(&self, query: &ListEntitiesByTypeQuery) -> Result<ListEntitiesByTypeResult> {
+    async fn list_entities_by_type(
+        &self,
+        query: &ListEntitiesByTypeQuery,
+    ) -> Result<ListEntitiesByTypeResult> {
         GraphRepository::list_entities_by_type(self, query).await
     }
 
