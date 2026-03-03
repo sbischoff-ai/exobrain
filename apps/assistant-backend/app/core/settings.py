@@ -76,6 +76,15 @@ class Settings(BaseSettings):
         alias="JOB_ORCHESTRATOR_CONNECT_TIMEOUT_SECONDS",
         gt=0,
     )
+    knowledge_interface_grpc_target: str = Field(
+        default="localhost:50051",
+        alias="KNOWLEDGE_INTERFACE_GRPC_TARGET",
+    )
+    knowledge_interface_connect_timeout_seconds: float = Field(
+        default=5.0,
+        alias="KNOWLEDGE_INTERFACE_CONNECT_TIMEOUT_SECONDS",
+        gt=0,
+    )
     tavily_api_key: str | None = Field(default=None, alias="TAVILY_API_KEY")
     web_tools_use_mock: bool = Field(default=False, alias="WEB_TOOLS_USE_MOCK")
     web_tools_mock_data_file: str | None = Field(default=None, alias="WEB_TOOLS_MOCK_DATA_FILE")
