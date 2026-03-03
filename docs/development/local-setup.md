@@ -67,6 +67,7 @@ This script starts local infrastructure, resets graph stores, applies database m
 
 Startup dependency note: start `job-orchestrator` alongside `assistant-backend` before validating `/api/knowledge/update`, because assistant-backend now enqueues work through orchestrator `EnqueueJob` gRPC instead of publishing directly to NATS.
 The `job-orchestrator` mprocs process starts both API and worker by default (`scripts/local/run-job-orchestrator.sh`).
+`knowledge-interface` in `.mprocs/backend-knowledge.yml` and `.mprocs/fullstack.yml` now waits for model-provider `http://127.0.0.1:8010/healthz` before start, which avoids first-boot crashes when model-provider is still initializing.
 
 Backend + knowledge profile:
 
