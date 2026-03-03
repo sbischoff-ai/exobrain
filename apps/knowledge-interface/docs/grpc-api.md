@@ -136,7 +136,11 @@ message GetUpsertGraphDeltaJsonSchemaReply {
 
 Response behavior:
 
-- `json_schema` contains a JSON Schema document string.
+- `json_schema` contains a deterministic Draft 2020-12 JSON Schema document string generated from a single serializer path for cache/snapshot stability.
+- schema root is an object with required arrays: `universes`, `entities`, `blocks`, `edges`.
+- node/edge records require proto-aligned fields and UUID-constrained IDs are marked with `format: "uuid"`.
+- `PropertyValue` requires `key` plus exactly one typed value (`string_value`, `float_value`, `int_value`, `bool_value`, `datetime_value`, `json_value`) via `oneOf`.
+- `visibility` values are constrained to `PRIVATE` and `SHARED` in the schema.
 - `schema_id` identifies the canonical schema document URI.
 - `draft` reports the JSON Schema draft the response uses.
 - `version` reports the schema payload version.

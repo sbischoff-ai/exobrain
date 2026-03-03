@@ -528,6 +528,7 @@ dependencies = [
  "qdrant-client",
  "reqwest",
  "serde",
+ "serde_json",
  "sqlx",
  "tokio",
  "tonic",
