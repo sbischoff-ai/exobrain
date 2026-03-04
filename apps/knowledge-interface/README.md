@@ -102,6 +102,7 @@ The Memgraph write is held in a transaction until Qdrant upserts complete. If Qd
 - AI agent entity (`node.ai_agent`, UUID id) named `Exobrain Assistant`
 - one descriptive assistant block (embedded + upserted to Qdrant)
 - `RELATED_TO` edge from assistant -> person
+- all seeded user-init nodes/edges are created with `PRIVATE` visibility
 
 
 ## ListEntitiesByType gRPC
