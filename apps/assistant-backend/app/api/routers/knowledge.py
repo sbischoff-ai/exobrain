@@ -6,6 +6,7 @@ from fastapi.responses import StreamingResponse
 from app.api.dependencies.auth import get_required_auth_context
 from app.api.schemas.auth import UnifiedPrincipal
 from app.api.schemas.knowledge import (
+    KnowledgeCategoryTreeResponse,
     KnowledgeCategoryPagesListResponse,
     KnowledgePageDetailResponse,
     KnowledgeUpdateRequest,
@@ -130,6 +131,44 @@ async def watch_knowledge_update(
             yield encode_knowledge_sse_event(event)
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+@router.get(
+    "/category",
+    response_model=KnowledgeCategoryTreeResponse,
+    summary="List the knowledge category tree",
+    description="Returns the wiki category hierarchy projected from knowledge-interface GetSchema node type inheritance.",
+    responses={
+        400: {"description": "Invalid knowledge category request"},
+        503: {"description": "knowledge-interface unavailable or timed out"},
+        502: {"description": "Unexpected upstream failure from knowledge-interface"},
+    },
+)
+async def list_knowledge_categories(
+    request: Request,
+    _auth_context: UnifiedPrincipal = Depends(get_required_auth_context),
+) -> KnowledgeCategoryTreeResponse:
+    service = get_container(request).resolve(KnowledgeServiceProtocol)
+
+    try:
+        categories = await service.list_wiki_category_tree(universe_id="wiki")
+    except KnowledgeInterfaceClientInvalidArgumentError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="invalid knowledge categories request",
+        ) from exc
+    except KnowledgeInterfaceClientUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="knowledge categories unavailable",
+        ) from exc
+    except KnowledgeInterfaceClientError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="knowledge categories upstream failure",
+        ) from exc
+
+    return KnowledgeCategoryTreeResponse(categories=categories)
 
 
 @router.get(

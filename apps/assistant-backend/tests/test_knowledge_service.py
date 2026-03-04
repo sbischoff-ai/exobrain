@@ -754,3 +754,72 @@ async def test_watch_update_job_maps_grpc_errors_to_domain_errors(
                 user_id="user-1", job_id="job-1"
             )
         ]
+
+
+@pytest.mark.asyncio
+async def test_list_category_pages_passes_none_pagination_to_client() -> None:
+    client = FakeKnowledgeInterfaceClient(
+        entities_reply=knowledge_pb2.ListEntitiesByTypeReply(entities=[])
+    )
+    service = KnowledgeService(
+        database=FakeDatabase([]),
+        job_publisher=FakeJobPublisher(),
+        knowledge_interface_client=client,
+        settings=Settings(),
+    )
+
+    response = await service.list_category_pages(user_id="user-1", category_id="type-1")
+
+    assert client.calls == [
+        {
+            "method": "list_entities_by_type",
+            "user_id": "user-1",
+            "type_id": "type-1",
+            "page_size": None,
+            "page_token": None,
+        }
+    ]
+    assert response["page_size"] == 1
+    assert response["next_page_token"] is None
+    assert response["total_count"] is None
+
+
+@pytest.mark.asyncio
+async def test_get_page_detail_maps_metadata_links_and_content() -> None:
+    reply = knowledge_pb2.GetEntityContextReply(
+        entity=knowledge_pb2.EntityContextCore(
+            id="entity-1",
+            name="Entity One",
+            created_at="2026-02-19T09:00:00Z",
+            updated_at="2026-02-19T10:00:00Z",
+        ),
+        entity_properties={"description": "Canonical summary"},
+        blocks=[knowledge_pb2.EntityContextBlock(id="b1", block_level=1, text="Root")],
+        neighbors=[
+            knowledge_pb2.EntityContextNeighbor(
+                other_entity=knowledge_pb2.EntityContextOtherEntity(
+                    id="entity-2", name="Entity Two", description="Related page"
+                )
+            )
+        ],
+    )
+    service = KnowledgeService(
+        database=FakeDatabase([]),
+        job_publisher=FakeJobPublisher(),
+        knowledge_interface_client=FakeKnowledgeInterfaceClient(entity_context_reply=reply),
+        settings=Settings(),
+    )
+
+    response = await service.get_page_detail(user_id="user-1", page_id="entity-1")
+
+    assert response["metadata"] == {
+        "id": "entity-1",
+        "name": "Entity One",
+        "description": "Canonical summary",
+        "created_at": "2026-02-19T09:00:00Z",
+        "updated_at": "2026-02-19T10:00:00Z",
+    }
+    assert response["links"] == [
+        {"page_id": "entity-2", "title": "Entity Two", "summary": "Related page"}
+    ]
+    assert response["content_markdown"] == "- Root"

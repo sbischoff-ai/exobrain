@@ -4,6 +4,8 @@ FastAPI service for auth, chat orchestration, journal APIs, and knowledge-base u
 
 Knowledge update stream contract: [`docs/knowledge-update-sse-contract.md`](docs/knowledge-update-sse-contract.md).
 
+Knowledge category/page contract: [`docs/knowledge-category-page-contract.md`](docs/knowledge-category-page-contract.md).
+
 ## What this service is
 
 The backend follows layered boundaries:
@@ -70,6 +72,94 @@ Optional overrides:
 - `INIT_REQUEST_PATH`
 - `DELTA_TEMPLATE_PATH`
 
+
+## Knowledge category/page endpoints
+
+### `GET /api/knowledge/category`
+Returns the category tree projected from knowledge-interface schema node inheritance.
+
+Example response:
+
+```json
+{
+  "categories": [
+    {
+      "category_id": "node.root",
+      "display_name": "Root",
+      "sub_categories": [
+        {
+          "category_id": "node.child",
+          "display_name": "Child",
+          "sub_categories": []
+        }
+      ]
+    }
+  ]
+}
+```
+
+### `GET /api/knowledge/category/{category_id}/pages`
+Returns paginated page summaries for a category via `ListEntitiesByType`.
+
+Example response:
+
+```json
+{
+  "pages": [
+    {
+      "entity": {
+        "id": "entity-1",
+        "name": "Entity One",
+        "description": "Entity summary",
+        "updated_at": "2026-02-19T10:00:00Z",
+        "score": 0.7
+      },
+      "page_id": "entity-1",
+      "page_title": "Entity One",
+      "page_summary": "Entity summary"
+    }
+  ],
+  "page_size": 20,
+  "next_page_token": "next-cursor",
+  "total_count": 42
+}
+```
+
+### `GET /api/knowledge/page/{page_id}`
+Returns page detail via `GetEntityContext`, including metadata, related links, and rendered markdown content.
+
+Example response:
+
+```json
+{
+  "entity": {
+    "id": "entity-1",
+    "name": "Entity One",
+    "description": "Entity summary",
+    "created_at": "2026-02-19T09:00:00Z",
+    "updated_at": "2026-02-19T10:00:00Z"
+  },
+  "page_id": "entity-1",
+  "title": "Entity One",
+  "summary": "Entity summary",
+  "metadata": {
+    "id": "entity-1",
+    "name": "Entity One",
+    "description": "Entity summary",
+    "created_at": "2026-02-19T09:00:00Z",
+    "updated_at": "2026-02-19T10:00:00Z"
+  },
+  "links": [
+    {
+      "page_id": "entity-2",
+      "title": "Entity Two",
+      "summary": "Linked summary"
+    }
+  ],
+  "content_markdown": "- Root\n  - Child"
+}
+```
+
 ## Configuration
 
 Core runtime vars:
@@ -82,6 +172,7 @@ Core runtime vars:
 - `KNOWLEDGE_INTERFACE_GRPC_TARGET` (knowledge-interface gRPC endpoint for read APIs, default `localhost:50051`)
 - `KNOWLEDGE_INTERFACE_CONNECT_TIMEOUT_SECONDS` (knowledge-interface gRPC request timeout in seconds, default `5.0`)
 - Knowledge wiki category trees are derived from `GetSchema` node types only (`kind=node` and ids prefixed `node.`), sorted by `display_name` then `id`.
+- `GET /api/knowledge/category` maps upstream `INVALID_ARGUMENT` to `400`, `UNAVAILABLE/DEADLINE_EXCEEDED` to `503`, and other upstream failures to `502`.
 - Multiple inheritance in wiki categories duplicates a child category under each active parent category.
 - `POST /api/knowledge/update` returns `409` when there are no uncommitted messages in scope, `503` when orchestrator is unavailable, and `502` for other enqueue failures.
 - `GET /api/knowledge/category/{category_id}/pages` accepts `page_size` and `page_token`, and maps upstream `INVALID_ARGUMENT` to `400`, `UNAVAILABLE/DEADLINE_EXCEEDED` to `503`, and other upstream failures to `502`.
