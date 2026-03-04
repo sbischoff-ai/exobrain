@@ -1,4 +1,12 @@
 {
+  "universes": [
+    {
+      "id": "10000000-0000-4000-8000-000000000010",
+      "name": "The Sword Isles",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    }
+  ],
   "entities": [
     {
       "id": "10000000-0000-4000-8000-000000000001",
@@ -59,6 +67,10 @@
         {
           "key": "name",
           "string_value": "Duisburg"
+        },
+        {
+          "key": "aliases",
+          "json_value": "[{\"kind\": \"geo\", \"lat\": 51.4344, \"lon\": 6.7623}, {\"kind\": \"country\", \"value\": \"Germany\"}]"
         }
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
@@ -71,6 +83,10 @@
         {
           "key": "name",
           "string_value": "Essen"
+        },
+        {
+          "key": "aliases",
+          "json_value": "[{\"kind\": \"geo\", \"lat\": 51.4556, \"lon\": 7.0116}, {\"kind\": \"country\", \"value\": \"Germany\"}]"
         }
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
@@ -110,19 +126,8 @@
         }
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
-      "visibility": "PRIVATE"
-    },
-    {
-      "id": "10000000-0000-4000-8000-000000000010",
-      "type_id": "node.concept",
-      "properties": [
-        {
-          "key": "name",
-          "string_value": "The Sword Isles"
-        }
-      ],
-      "user_id": "11111111-1111-1111-1111-111111111111",
-      "visibility": "PRIVATE"
+      "visibility": "PRIVATE",
+      "universe_id": "10000000-0000-4000-8000-000000000010"
     },
     {
       "id": "10000000-0000-4000-8000-000000000011",
@@ -134,7 +139,8 @@
         }
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
-      "visibility": "PRIVATE"
+      "visibility": "PRIVATE",
+      "universe_id": "10000000-0000-4000-8000-000000000010"
     },
     {
       "id": "10000000-0000-4000-8000-000000000012",
@@ -143,6 +149,212 @@
         {
           "key": "name",
           "string_value": "Captain Mirelle Voss"
+        },
+        {
+          "key": "aliases",
+          "json_value": "[{\"email\": \"mirelle.voss@isles-fiction.test\"}, {\"callsign\": \"The Harbor Fox\"}]"
+        }
+      ],
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "universe_id": "10000000-0000-4000-8000-000000000010"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000013",
+      "type_id": "node.concept",
+      "properties": [
+        {
+          "key": "name",
+          "string_value": "Sword Isles setting lore"
+        }
+      ],
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "universe_id": "10000000-0000-4000-8000-000000000010"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000014",
+      "type_id": "node.task",
+      "properties": [
+        {
+          "key": "name",
+          "string_value": "Develop next-wave Exobrain knowledge features"
+        },
+        {
+          "key": "due",
+          "datetime_value": "2026-06-30T16:00:00Z"
+        },
+        {
+          "key": "aliases",
+          "json_value": "[{\"project\": \"KI + assistant memory hardening\"}, {\"priority\": \"high\"}]"
+        }
+      ],
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000015",
+      "type_id": "node.task",
+      "properties": [
+        {
+          "key": "name",
+          "string_value": "Implement universe-aware graph seeding CLI"
+        },
+        {
+          "key": "due",
+          "datetime_value": "2026-05-10T12:00:00Z"
+        }
+      ],
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000016",
+      "type_id": "node.task",
+      "properties": [
+        {
+          "key": "name",
+          "string_value": "Expand entity context ranking with richer block depth tests"
+        },
+        {
+          "key": "due",
+          "datetime_value": "2026-05-20T12:00:00Z"
+        }
+      ],
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000017",
+      "type_id": "node.task",
+      "properties": [
+        {
+          "key": "name",
+          "string_value": "Add QA script for delta-schema regression checks"
+        },
+        {
+          "key": "due",
+          "datetime_value": "2026-05-27T12:00:00Z"
+        }
+      ],
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000018",
+      "type_id": "node.person",
+      "properties": [
+        {
+          "key": "name",
+          "string_value": "Lena Hoffmann"
+        },
+        {
+          "key": "aliases",
+          "json_value": "[{\"email\": \"lena.hoffmann@example.test\"}, {\"relation\": \"partner\"}, {\"phone\": \"+49-170-555-0142\"}]"
+        }
+      ],
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000019",
+      "type_id": "node.person",
+      "properties": [
+        {
+          "key": "name",
+          "string_value": "Noah Richter"
+        },
+        {
+          "key": "aliases",
+          "json_value": "[{\"email\": \"noah.richter@uni-example.test\"}, {\"relation\": \"uni friend\"}, {\"focus\": \"computational physics\"}]"
+        }
+      ],
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000020",
+      "type_id": "node.person",
+      "properties": [
+        {
+          "key": "name",
+          "string_value": "Sara Yilmaz"
+        },
+        {
+          "key": "aliases",
+          "json_value": "[{\"email\": \"sara.yilmaz@uni-example.test\"}, {\"relation\": \"uni friend\"}, {\"focus\": \"data engineering\"}]"
+        }
+      ],
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000021",
+      "type_id": "node.document",
+      "properties": [
+        {
+          "key": "name",
+          "string_value": "The Left Hand of Darkness"
+        },
+        {
+          "key": "aliases",
+          "json_value": "[{\"category\": \"favorite-book\"}, {\"genre\": \"science fiction\"}]"
+        },
+        {
+          "key": "source_uri",
+          "string_value": "https://example.test/books/the-left-hand-of-darkness"
+        },
+        {
+          "key": "published_at",
+          "datetime_value": "1969-03-01T00:00:00Z"
+        }
+      ],
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000022",
+      "type_id": "node.person",
+      "properties": [
+        {
+          "key": "name",
+          "string_value": "Ursula K. Le Guin"
+        },
+        {
+          "key": "aliases",
+          "json_value": "[{\"email\": \"ursula.leguin@authors.example.test\"}, {\"role\": \"author\"}]"
+        }
+      ],
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000023",
+      "type_id": "node.place",
+      "properties": [
+        {
+          "key": "name",
+          "string_value": "Altstadt Cafe"
+        },
+        {
+          "key": "aliases",
+          "json_value": "[{\"kind\": \"geo\", \"lat\": 51.4519, \"lon\": 6.7714}, {\"city\": \"Duisburg\"}]"
+        }
+      ],
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000024",
+      "type_id": "node.group",
+      "properties": [
+        {
+          "key": "name",
+          "string_value": "Exobrain Product Circle"
+        },
+        {
+          "key": "aliases",
+          "json_value": "[{\"cadence\": \"weekly\"}, {\"channel\": \"#product-circle\"}]"
         }
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
@@ -269,6 +481,198 @@
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
       "visibility": "PRIVATE"
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000011",
+      "type_id": "node.block",
+      "properties": [
+        {
+          "key": "text",
+          "string_value": "## Sword Isles universe brief\n\nThe Sword Isles is a maritime universe of oath politics, island city-states, and dueling captains. This universe captures fiction-only nodes and should stay distinct from real-world study/work memories."
+        }
+      ],
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000012",
+      "type_id": "node.block",
+      "properties": [
+        {
+          "key": "text",
+          "string_value": "## Exobrain feature project\n\nRoadmap objective: improve graph quality, retrieval precision, and local developer confidence for memory ingestion."
+        }
+      ],
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000013",
+      "type_id": "node.block",
+      "properties": [
+        {
+          "key": "text",
+          "string_value": "### Workstream overview\n\n- Universe-aware ingest validation\n- Richer summarization trees in fixtures\n- Automation checks around mock-data imports"
+        }
+      ],
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000014",
+      "type_id": "node.block",
+      "properties": [
+        {
+          "key": "text",
+          "string_value": "#### Delivery constraints\n\nKeep compatibility with schema validation, avoid non-schema properties, and maintain clean seeded graph semantics."
+        }
+      ],
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000015",
+      "type_id": "node.block",
+      "properties": [
+        {
+          "key": "text",
+          "string_value": "## Task: Universe-aware graph seeding CLI\n\nCreate deterministic seeding with explicit universes[] payload and IS_PART_OF edges where needed."
+        }
+      ],
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000016",
+      "type_id": "node.block",
+      "properties": [
+        {
+          "key": "text",
+          "string_value": "## Task: Context ranking depth tests\n\nIncrease fixture breadth and depth to test traversal and scoring behavior under realistic memory trees."
+        }
+      ],
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000017",
+      "type_id": "node.block",
+      "properties": [
+        {
+          "key": "text",
+          "string_value": "## Task: Delta-schema regression QA\n\nWrap import script calls in reproducible local checks and report proto/schema validation errors clearly."
+        }
+      ],
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000018",
+      "type_id": "node.block",
+      "properties": [
+        {
+          "key": "text",
+          "string_value": "## Personal network snapshot\n\nLena is the user's partner and frequent sounding board for product ideas. Noah and Sara are close friends from uni and occasional collaborators."
+        }
+      ],
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000019",
+      "type_id": "node.block",
+      "properties": [
+        {
+          "key": "text",
+          "string_value": "### Shared routines\n\n- Tuesday coffee at Altstadt Cafe\n- Monthly reading circle\n- Sprint review prep buddy sessions"
+        }
+      ],
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000020",
+      "type_id": "node.block",
+      "properties": [
+        {
+          "key": "text",
+          "string_value": "## Favorite book note\n\nThe user loves *The Left Hand of Darkness* for its worldbuilding density, political nuance, and character voice."
+        }
+      ],
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000021",
+      "type_id": "node.block",
+      "properties": [
+        {
+          "key": "text",
+          "string_value": "### Why this matters for Exobrain\n\nThe book is a touchstone for writing style references when crafting Sword Isles narrative memory blocks."
+        }
+      ],
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000022",
+      "type_id": "node.block",
+      "properties": [
+        {
+          "key": "text",
+          "string_value": "## Duisburg context\n\nDuisburg city memory includes commute routes, lecture halls, and cafe meetups near the old town."
+        }
+      ],
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000023",
+      "type_id": "node.block",
+      "properties": [
+        {
+          "key": "text",
+          "string_value": "## Essen context\n\nEssen city memory includes department offices, library sessions, and evening lab debriefs."
+        }
+      ],
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000024",
+      "type_id": "node.block",
+      "properties": [
+        {
+          "key": "text",
+          "string_value": "## Product circle charter\n\nThe Exobrain Product Circle aligns weekly priorities, design notes, and shipping responsibilities across collaborators."
+        }
+      ],
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000025",
+      "type_id": "node.block",
+      "properties": [
+        {
+          "key": "text",
+          "string_value": "### Meeting format\n\n1. Review graph quality metrics\n2. Confirm key retrieval bugs\n3. Decide next sprint subtasks"
+        }
+      ],
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000026",
+      "type_id": "node.block",
+      "properties": [
+        {
+          "key": "text",
+          "string_value": "### Fiction timeline\n\nMirelle's first chapter intersects harbor debt law, hidden cartography, and a staged duel."
+        }
+      ],
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
     }
   ],
   "edges": [
@@ -279,9 +683,18 @@
       "user_id": "11111111-1111-1111-1111-111111111111",
       "visibility": "PRIVATE",
       "properties": [
-        { "key": "confidence", "float_value": 1.0 },
-        { "key": "status", "string_value": "asserted" },
-        { "key": "provenance_hint", "string_value": "seed task block" }
+        {
+          "key": "confidence",
+          "float_value": 1.0
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed task block"
+        }
       ]
     },
     {
@@ -291,9 +704,18 @@
       "user_id": "11111111-1111-1111-1111-111111111111",
       "visibility": "PRIVATE",
       "properties": [
-        { "key": "confidence", "float_value": 1.0 },
-        { "key": "status", "string_value": "asserted" },
-        { "key": "provenance_hint", "string_value": "seed task related assistant" }
+        {
+          "key": "confidence",
+          "float_value": 1.0
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed task related assistant"
+        }
       ]
     },
     {
@@ -303,9 +725,18 @@
       "user_id": "11111111-1111-1111-1111-111111111111",
       "visibility": "PRIVATE",
       "properties": [
-        { "key": "confidence", "float_value": 1.0 },
-        { "key": "status", "string_value": "asserted" },
-        { "key": "provenance_hint", "string_value": "seed task assigned to user" }
+        {
+          "key": "confidence",
+          "float_value": 1.0
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed task assigned to user"
+        }
       ]
     },
     {
@@ -315,9 +746,18 @@
       "user_id": "11111111-1111-1111-1111-111111111111",
       "visibility": "PRIVATE",
       "properties": [
-        { "key": "confidence", "float_value": 0.9 },
-        { "key": "status", "string_value": "asserted" },
-        { "key": "provenance_hint", "string_value": "seed task beneficiary document" }
+        {
+          "key": "confidence",
+          "float_value": 0.9
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed task beneficiary document"
+        }
       ]
     },
     {
@@ -327,9 +767,18 @@
       "user_id": "11111111-1111-1111-1111-111111111111",
       "visibility": "PRIVATE",
       "properties": [
-        { "key": "confidence", "float_value": 1.0 },
-        { "key": "status", "string_value": "asserted" },
-        { "key": "provenance_hint", "string_value": "seed qft doc root block" }
+        {
+          "key": "confidence",
+          "float_value": 1.0
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed qft doc root block"
+        }
       ]
     },
     {
@@ -339,9 +788,18 @@
       "user_id": "11111111-1111-1111-1111-111111111111",
       "visibility": "PRIVATE",
       "properties": [
-        { "key": "confidence", "float_value": 1.0 },
-        { "key": "status", "string_value": "asserted" },
-        { "key": "provenance_hint", "string_value": "seed qft detail level 1" }
+        {
+          "key": "confidence",
+          "float_value": 1.0
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed qft detail level 1"
+        }
       ]
     },
     {
@@ -351,9 +809,18 @@
       "user_id": "11111111-1111-1111-1111-111111111111",
       "visibility": "PRIVATE",
       "properties": [
-        { "key": "confidence", "float_value": 1.0 },
-        { "key": "status", "string_value": "asserted" },
-        { "key": "provenance_hint", "string_value": "seed qft detail level 2" }
+        {
+          "key": "confidence",
+          "float_value": 1.0
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed qft detail level 2"
+        }
       ]
     },
     {
@@ -363,9 +830,18 @@
       "user_id": "11111111-1111-1111-1111-111111111111",
       "visibility": "PRIVATE",
       "properties": [
-        { "key": "confidence", "float_value": 1.0 },
-        { "key": "status", "string_value": "asserted" },
-        { "key": "provenance_hint", "string_value": "seed qft mention concept" }
+        {
+          "key": "confidence",
+          "float_value": 1.0
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed qft mention concept"
+        }
       ]
     },
     {
@@ -375,9 +851,18 @@
       "user_id": "11111111-1111-1111-1111-111111111111",
       "visibility": "PRIVATE",
       "properties": [
-        { "key": "confidence", "float_value": 0.95 },
-        { "key": "status", "string_value": "asserted" },
-        { "key": "provenance_hint", "string_value": "seed user authored qft doc" }
+        {
+          "key": "confidence",
+          "float_value": 0.95
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed user authored qft doc"
+        }
       ]
     },
     {
@@ -387,9 +872,18 @@
       "user_id": "11111111-1111-1111-1111-111111111111",
       "visibility": "PRIVATE",
       "properties": [
-        { "key": "confidence", "float_value": 0.9 },
-        { "key": "status", "string_value": "asserted" },
-        { "key": "provenance_hint", "string_value": "seed user university affiliation" }
+        {
+          "key": "confidence",
+          "float_value": 0.9
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed user university affiliation"
+        }
       ]
     },
     {
@@ -399,9 +893,18 @@
       "user_id": "11111111-1111-1111-1111-111111111111",
       "visibility": "PRIVATE",
       "properties": [
-        { "key": "confidence", "float_value": 0.9 },
-        { "key": "status", "string_value": "asserted" },
-        { "key": "provenance_hint", "string_value": "seed user faculty membership" }
+        {
+          "key": "confidence",
+          "float_value": 0.9
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed user faculty membership"
+        }
       ]
     },
     {
@@ -411,9 +914,18 @@
       "user_id": "11111111-1111-1111-1111-111111111111",
       "visibility": "PRIVATE",
       "properties": [
-        { "key": "confidence", "float_value": 0.85 },
-        { "key": "status", "string_value": "asserted" },
-        { "key": "provenance_hint", "string_value": "seed faculty in university" }
+        {
+          "key": "confidence",
+          "float_value": 0.85
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed faculty in university"
+        }
       ]
     },
     {
@@ -423,9 +935,18 @@
       "user_id": "11111111-1111-1111-1111-111111111111",
       "visibility": "PRIVATE",
       "properties": [
-        { "key": "confidence", "float_value": 0.85 },
-        { "key": "status", "string_value": "asserted" },
-        { "key": "provenance_hint", "string_value": "seed university duisburg campus" }
+        {
+          "key": "confidence",
+          "float_value": 0.85
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed university duisburg campus"
+        }
       ]
     },
     {
@@ -435,9 +956,18 @@
       "user_id": "11111111-1111-1111-1111-111111111111",
       "visibility": "PRIVATE",
       "properties": [
-        { "key": "confidence", "float_value": 0.85 },
-        { "key": "status", "string_value": "asserted" },
-        { "key": "provenance_hint", "string_value": "seed university essen campus" }
+        {
+          "key": "confidence",
+          "float_value": 0.85
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed university essen campus"
+        }
       ]
     },
     {
@@ -447,9 +977,18 @@
       "user_id": "11111111-1111-1111-1111-111111111111",
       "visibility": "PRIVATE",
       "properties": [
-        { "key": "confidence", "float_value": 1.0 },
-        { "key": "status", "string_value": "asserted" },
-        { "key": "provenance_hint", "string_value": "seed university context root" }
+        {
+          "key": "confidence",
+          "float_value": 1.0
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed university context root"
+        }
       ]
     },
     {
@@ -459,9 +998,18 @@
       "user_id": "11111111-1111-1111-1111-111111111111",
       "visibility": "PRIVATE",
       "properties": [
-        { "key": "confidence", "float_value": 1.0 },
-        { "key": "status", "string_value": "asserted" },
-        { "key": "provenance_hint", "string_value": "seed life note root" }
+        {
+          "key": "confidence",
+          "float_value": 1.0
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed life note root"
+        }
       ]
     },
     {
@@ -471,21 +1019,39 @@
       "user_id": "11111111-1111-1111-1111-111111111111",
       "visibility": "PRIVATE",
       "properties": [
-        { "key": "confidence", "float_value": 0.95 },
-        { "key": "status", "string_value": "asserted" },
-        { "key": "provenance_hint", "string_value": "seed user authored life note" }
+        {
+          "key": "confidence",
+          "float_value": 0.95
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed user authored life note"
+        }
       ]
     },
     {
       "from_id": "20000000-0000-4000-8000-000000000006",
-      "to_id": "10000000-0000-4000-8000-000000000010",
+      "to_id": "10000000-0000-4000-8000-000000000013",
       "edge_type": "MENTIONS",
       "user_id": "11111111-1111-1111-1111-111111111111",
       "visibility": "PRIVATE",
       "properties": [
-        { "key": "confidence", "float_value": 0.9 },
-        { "key": "status", "string_value": "asserted" },
-        { "key": "provenance_hint", "string_value": "seed life note mention universe concept" }
+        {
+          "key": "confidence",
+          "float_value": 0.9
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed life note mention sword isles lore concept"
+        }
       ]
     },
     {
@@ -495,9 +1061,18 @@
       "user_id": "11111111-1111-1111-1111-111111111111",
       "visibility": "PRIVATE",
       "properties": [
-        { "key": "confidence", "float_value": 0.9 },
-        { "key": "status", "string_value": "asserted" },
-        { "key": "provenance_hint", "string_value": "seed life note mention character" }
+        {
+          "key": "confidence",
+          "float_value": 0.9
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed life note mention character"
+        }
       ]
     },
     {
@@ -507,9 +1082,18 @@
       "user_id": "11111111-1111-1111-1111-111111111111",
       "visibility": "PRIVATE",
       "properties": [
-        { "key": "confidence", "float_value": 1.0 },
-        { "key": "status", "string_value": "asserted" },
-        { "key": "provenance_hint", "string_value": "seed fantasy note root" }
+        {
+          "key": "confidence",
+          "float_value": 1.0
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed fantasy note root"
+        }
       ]
     },
     {
@@ -519,9 +1103,18 @@
       "user_id": "11111111-1111-1111-1111-111111111111",
       "visibility": "PRIVATE",
       "properties": [
-        { "key": "confidence", "float_value": 1.0 },
-        { "key": "status", "string_value": "asserted" },
-        { "key": "provenance_hint", "string_value": "seed fantasy depth 1" }
+        {
+          "key": "confidence",
+          "float_value": 1.0
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed fantasy depth 1"
+        }
       ]
     },
     {
@@ -531,9 +1124,18 @@
       "user_id": "11111111-1111-1111-1111-111111111111",
       "visibility": "PRIVATE",
       "properties": [
-        { "key": "confidence", "float_value": 1.0 },
-        { "key": "status", "string_value": "asserted" },
-        { "key": "provenance_hint", "string_value": "seed fantasy depth 2" }
+        {
+          "key": "confidence",
+          "float_value": 1.0
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed fantasy depth 2"
+        }
       ]
     },
     {
@@ -543,9 +1145,18 @@
       "user_id": "11111111-1111-1111-1111-111111111111",
       "visibility": "PRIVATE",
       "properties": [
-        { "key": "confidence", "float_value": 1.0 },
-        { "key": "status", "string_value": "asserted" },
-        { "key": "provenance_hint", "string_value": "seed quote attributed character" }
+        {
+          "key": "confidence",
+          "float_value": 1.0
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed quote attributed character"
+        }
       ]
     },
     {
@@ -555,21 +1166,39 @@
       "user_id": "11111111-1111-1111-1111-111111111111",
       "visibility": "PRIVATE",
       "properties": [
-        { "key": "confidence", "float_value": 1.0 },
-        { "key": "status", "string_value": "asserted" },
-        { "key": "provenance_hint", "string_value": "seed fantasy depth 3" }
+        {
+          "key": "confidence",
+          "float_value": 1.0
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed fantasy depth 3"
+        }
       ]
     },
     {
       "from_id": "20000000-0000-4000-8000-000000000007",
-      "to_id": "10000000-0000-4000-8000-000000000010",
+      "to_id": "10000000-0000-4000-8000-000000000013",
       "edge_type": "MENTIONS",
       "user_id": "11111111-1111-1111-1111-111111111111",
       "visibility": "PRIVATE",
       "properties": [
-        { "key": "confidence", "float_value": 0.95 },
-        { "key": "status", "string_value": "asserted" },
-        { "key": "provenance_hint", "string_value": "seed fantasy mention universe" }
+        {
+          "key": "confidence",
+          "float_value": 0.95
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed fantasy mention sword isles lore concept"
+        }
       ]
     },
     {
@@ -579,9 +1208,18 @@
       "user_id": "11111111-1111-1111-1111-111111111111",
       "visibility": "PRIVATE",
       "properties": [
-        { "key": "confidence", "float_value": 0.95 },
-        { "key": "status", "string_value": "asserted" },
-        { "key": "provenance_hint", "string_value": "seed fantasy mention place" }
+        {
+          "key": "confidence",
+          "float_value": 0.95
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed fantasy mention place"
+        }
       ]
     },
     {
@@ -591,33 +1229,60 @@
       "user_id": "11111111-1111-1111-1111-111111111111",
       "visibility": "PRIVATE",
       "properties": [
-        { "key": "confidence", "float_value": 0.95 },
-        { "key": "status", "string_value": "asserted" },
-        { "key": "provenance_hint", "string_value": "seed fantasy mention character" }
+        {
+          "key": "confidence",
+          "float_value": 0.95
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed fantasy mention character"
+        }
       ]
     },
     {
-      "from_id": "10000000-0000-4000-8000-000000000010",
-      "to_id": "10000000-0000-4000-8000-000000000011",
-      "edge_type": "RELATED_TO",
+      "from_id": "10000000-0000-4000-8000-000000000011",
+      "to_id": "10000000-0000-4000-8000-000000000010",
+      "edge_type": "IS_PART_OF",
       "user_id": "11111111-1111-1111-1111-111111111111",
       "visibility": "PRIVATE",
       "properties": [
-        { "key": "confidence", "float_value": 0.85 },
-        { "key": "status", "string_value": "asserted" },
-        { "key": "provenance_hint", "string_value": "seed universe has place" }
+        {
+          "key": "confidence",
+          "float_value": 0.95
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed bristleharbor in sword isles universe"
+        }
       ]
     },
     {
       "from_id": "10000000-0000-4000-8000-000000000012",
       "to_id": "10000000-0000-4000-8000-000000000010",
-      "edge_type": "RELATED_TO",
+      "edge_type": "IS_PART_OF",
       "user_id": "11111111-1111-1111-1111-111111111111",
       "visibility": "PRIVATE",
       "properties": [
-        { "key": "confidence", "float_value": 0.85 },
-        { "key": "status", "string_value": "asserted" },
-        { "key": "provenance_hint", "string_value": "seed character in universe" }
+        {
+          "key": "confidence",
+          "float_value": 0.95
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed mirelle in sword isles universe"
+        }
       ]
     },
     {
@@ -627,9 +1292,732 @@
       "user_id": "11111111-1111-1111-1111-111111111111",
       "visibility": "PRIVATE",
       "properties": [
-        { "key": "confidence", "float_value": 0.95 },
-        { "key": "status", "string_value": "asserted" },
-        { "key": "provenance_hint", "string_value": "seed user authored fantasy note" }
+        {
+          "key": "confidence",
+          "float_value": 0.95
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed user authored fantasy note"
+        }
+      ]
+    },
+    {
+      "from_id": "10000000-0000-4000-8000-000000000010",
+      "to_id": "20000000-0000-4000-8000-000000000011",
+      "edge_type": "DESCRIBED_BY",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "properties": [
+        {
+          "key": "confidence",
+          "float_value": 1.0
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed sword isles universe root block"
+        }
+      ]
+    },
+    {
+      "from_id": "20000000-0000-4000-8000-000000000011",
+      "to_id": "10000000-0000-4000-8000-000000000013",
+      "edge_type": "MENTIONS",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "properties": [
+        {
+          "key": "confidence",
+          "float_value": 0.95
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed universe block mention lore concept"
+        }
+      ]
+    },
+    {
+      "from_id": "10000000-0000-4000-8000-000000000013",
+      "to_id": "10000000-0000-4000-8000-000000000010",
+      "edge_type": "IS_PART_OF",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "properties": [
+        {
+          "key": "confidence",
+          "float_value": 0.95
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed lore concept in sword isles universe"
+        }
+      ]
+    },
+    {
+      "from_id": "10000000-0000-4000-8000-000000000014",
+      "to_id": "20000000-0000-4000-8000-000000000012",
+      "edge_type": "DESCRIBED_BY",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "properties": [
+        {
+          "key": "confidence",
+          "float_value": 1.0
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed exobrain project root"
+        }
+      ]
+    },
+    {
+      "from_id": "20000000-0000-4000-8000-000000000012",
+      "to_id": "20000000-0000-4000-8000-000000000013",
+      "edge_type": "SUMMARIZES",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "properties": [
+        {
+          "key": "confidence",
+          "float_value": 1.0
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed project depth 1"
+        }
+      ]
+    },
+    {
+      "from_id": "20000000-0000-4000-8000-000000000013",
+      "to_id": "20000000-0000-4000-8000-000000000014",
+      "edge_type": "SUMMARIZES",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "properties": [
+        {
+          "key": "confidence",
+          "float_value": 1.0
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed project depth 2"
+        }
+      ]
+    },
+    {
+      "from_id": "10000000-0000-4000-8000-000000000014",
+      "to_id": "10000000-0000-4000-8000-000000000015",
+      "edge_type": "DEPENDS_ON",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "properties": [
+        {
+          "key": "confidence",
+          "float_value": 0.8
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed project depends subtask 1"
+        }
+      ]
+    },
+    {
+      "from_id": "10000000-0000-4000-8000-000000000014",
+      "to_id": "10000000-0000-4000-8000-000000000016",
+      "edge_type": "DEPENDS_ON",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "properties": [
+        {
+          "key": "confidence",
+          "float_value": 0.8
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed project depends subtask 2"
+        }
+      ]
+    },
+    {
+      "from_id": "10000000-0000-4000-8000-000000000014",
+      "to_id": "10000000-0000-4000-8000-000000000017",
+      "edge_type": "DEPENDS_ON",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "properties": [
+        {
+          "key": "confidence",
+          "float_value": 0.8
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed project depends subtask 3"
+        }
+      ]
+    },
+    {
+      "from_id": "10000000-0000-4000-8000-000000000015",
+      "to_id": "20000000-0000-4000-8000-000000000015",
+      "edge_type": "DESCRIBED_BY",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "properties": [
+        {
+          "key": "confidence",
+          "float_value": 1.0
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed subtask1 root"
+        }
+      ]
+    },
+    {
+      "from_id": "10000000-0000-4000-8000-000000000016",
+      "to_id": "20000000-0000-4000-8000-000000000016",
+      "edge_type": "DESCRIBED_BY",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "properties": [
+        {
+          "key": "confidence",
+          "float_value": 1.0
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed subtask2 root"
+        }
+      ]
+    },
+    {
+      "from_id": "10000000-0000-4000-8000-000000000017",
+      "to_id": "20000000-0000-4000-8000-000000000017",
+      "edge_type": "DESCRIBED_BY",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "properties": [
+        {
+          "key": "confidence",
+          "float_value": 1.0
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed subtask3 root"
+        }
+      ]
+    },
+    {
+      "from_id": "10000000-0000-4000-8000-000000000014",
+      "to_id": "__PERSON_ENTITY_ID__",
+      "edge_type": "ASSIGNED_TO",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "properties": [
+        {
+          "key": "confidence",
+          "float_value": 0.95
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed project assigned user"
+        }
+      ]
+    },
+    {
+      "from_id": "10000000-0000-4000-8000-000000000014",
+      "to_id": "10000000-0000-4000-8000-000000000024",
+      "edge_type": "DONE_FOR",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "properties": [
+        {
+          "key": "confidence",
+          "float_value": 0.8
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed project done for product circle"
+        }
+      ]
+    },
+    {
+      "from_id": "10000000-0000-4000-8000-000000000024",
+      "to_id": "20000000-0000-4000-8000-000000000024",
+      "edge_type": "DESCRIBED_BY",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "properties": [
+        {
+          "key": "confidence",
+          "float_value": 1.0
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed product circle root"
+        }
+      ]
+    },
+    {
+      "from_id": "20000000-0000-4000-8000-000000000024",
+      "to_id": "20000000-0000-4000-8000-000000000025",
+      "edge_type": "SUMMARIZES",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "properties": [
+        {
+          "key": "confidence",
+          "float_value": 1.0
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed product circle detail"
+        }
+      ]
+    },
+    {
+      "from_id": "__PERSON_ENTITY_ID__",
+      "to_id": "10000000-0000-4000-8000-000000000018",
+      "edge_type": "KNOWS",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "properties": [
+        {
+          "key": "confidence",
+          "float_value": 0.95
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed user knows partner"
+        }
+      ]
+    },
+    {
+      "from_id": "__PERSON_ENTITY_ID__",
+      "to_id": "10000000-0000-4000-8000-000000000019",
+      "edge_type": "KNOWS",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "properties": [
+        {
+          "key": "confidence",
+          "float_value": 0.95
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed user knows noah"
+        }
+      ]
+    },
+    {
+      "from_id": "__PERSON_ENTITY_ID__",
+      "to_id": "10000000-0000-4000-8000-000000000020",
+      "edge_type": "KNOWS",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "properties": [
+        {
+          "key": "confidence",
+          "float_value": 0.95
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed user knows sara"
+        }
+      ]
+    },
+    {
+      "from_id": "10000000-0000-4000-8000-000000000018",
+      "to_id": "10000000-0000-4000-8000-000000000023",
+      "edge_type": "RELATED_TO",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "properties": [
+        {
+          "key": "confidence",
+          "float_value": 0.7
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed lena regular cafe connection"
+        }
+      ]
+    },
+    {
+      "from_id": "10000000-0000-4000-8000-000000000019",
+      "to_id": "10000000-0000-4000-8000-000000000007",
+      "edge_type": "MEMBER_OF",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "properties": [
+        {
+          "key": "confidence",
+          "float_value": 0.8
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed noah faculty alumni group"
+        }
+      ]
+    },
+    {
+      "from_id": "10000000-0000-4000-8000-000000000020",
+      "to_id": "10000000-0000-4000-8000-000000000024",
+      "edge_type": "MEMBER_OF",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "properties": [
+        {
+          "key": "confidence",
+          "float_value": 0.8
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed sara in product circle"
+        }
+      ]
+    },
+    {
+      "from_id": "10000000-0000-4000-8000-000000000018",
+      "to_id": "20000000-0000-4000-8000-000000000018",
+      "edge_type": "DESCRIBED_BY",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "properties": [
+        {
+          "key": "confidence",
+          "float_value": 1.0
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed lena person root"
+        }
+      ]
+    },
+    {
+      "from_id": "20000000-0000-4000-8000-000000000018",
+      "to_id": "20000000-0000-4000-8000-000000000019",
+      "edge_type": "SUMMARIZES",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "properties": [
+        {
+          "key": "confidence",
+          "float_value": 1.0
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed social detail"
+        }
+      ]
+    },
+    {
+      "from_id": "10000000-0000-4000-8000-000000000021",
+      "to_id": "20000000-0000-4000-8000-000000000020",
+      "edge_type": "DESCRIBED_BY",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "properties": [
+        {
+          "key": "confidence",
+          "float_value": 1.0
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed favorite book root"
+        }
+      ]
+    },
+    {
+      "from_id": "20000000-0000-4000-8000-000000000020",
+      "to_id": "20000000-0000-4000-8000-000000000021",
+      "edge_type": "SUMMARIZES",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "properties": [
+        {
+          "key": "confidence",
+          "float_value": 1.0
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed favorite book detail"
+        }
+      ]
+    },
+    {
+      "from_id": "10000000-0000-4000-8000-000000000022",
+      "to_id": "10000000-0000-4000-8000-000000000021",
+      "edge_type": "AUTHORED",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "properties": [
+        {
+          "key": "confidence",
+          "float_value": 0.97
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed le guin authored book"
+        }
+      ]
+    },
+    {
+      "from_id": "__PERSON_ENTITY_ID__",
+      "to_id": "10000000-0000-4000-8000-000000000021",
+      "edge_type": "RELATED_TO",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "properties": [
+        {
+          "key": "confidence",
+          "float_value": 0.8
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed user likes favorite book"
+        }
+      ]
+    },
+    {
+      "from_id": "10000000-0000-4000-8000-000000000005",
+      "to_id": "20000000-0000-4000-8000-000000000022",
+      "edge_type": "DESCRIBED_BY",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "properties": [
+        {
+          "key": "confidence",
+          "float_value": 1.0
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed duisburg place root"
+        }
+      ]
+    },
+    {
+      "from_id": "10000000-0000-4000-8000-000000000006",
+      "to_id": "20000000-0000-4000-8000-000000000023",
+      "edge_type": "DESCRIBED_BY",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "properties": [
+        {
+          "key": "confidence",
+          "float_value": 1.0
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed essen place root"
+        }
+      ]
+    },
+    {
+      "from_id": "20000000-0000-4000-8000-000000000022",
+      "to_id": "10000000-0000-4000-8000-000000000023",
+      "edge_type": "MENTIONS",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "properties": [
+        {
+          "key": "confidence",
+          "float_value": 0.8
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed duisburg block mention cafe"
+        }
+      ]
+    },
+    {
+      "from_id": "10000000-0000-4000-8000-000000000023",
+      "to_id": "10000000-0000-4000-8000-000000000005",
+      "edge_type": "LIES_IN",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "properties": [
+        {
+          "key": "confidence",
+          "float_value": 0.9
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed cafe lies in duisburg"
+        }
+      ]
+    },
+    {
+      "from_id": "20000000-0000-4000-8000-000000000008",
+      "to_id": "20000000-0000-4000-8000-000000000026",
+      "edge_type": "SUMMARIZES",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "properties": [
+        {
+          "key": "confidence",
+          "float_value": 1.0
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed fantasy branch timeline"
+        }
+      ]
+    },
+    {
+      "from_id": "20000000-0000-4000-8000-000000000026",
+      "to_id": "10000000-0000-4000-8000-000000000012",
+      "edge_type": "MENTIONS",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "properties": [
+        {
+          "key": "confidence",
+          "float_value": 0.95
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed timeline mention mirelle"
+        }
       ]
     }
   ]
