@@ -81,6 +81,8 @@ Core runtime vars:
 - `JOB_ORCHESTRATOR_CONNECT_TIMEOUT_SECONDS` (gRPC request timeout in seconds, default `5.0`)
 - `KNOWLEDGE_INTERFACE_GRPC_TARGET` (knowledge-interface gRPC endpoint for read APIs, default `localhost:50051`)
 - `KNOWLEDGE_INTERFACE_CONNECT_TIMEOUT_SECONDS` (knowledge-interface gRPC request timeout in seconds, default `5.0`)
+- Knowledge wiki category trees are derived from `GetSchema` node types only (`kind=node` and ids prefixed `node.`), sorted by `display_name` then `id`.
+- Multiple inheritance in wiki categories duplicates a child category under each active parent category.
 - `POST /api/knowledge/update` returns `409` when there are no uncommitted messages in scope, `503` when orchestrator is unavailable, and `502` for other enqueue failures.
 - `EXOBRAIN_QDRANT_URL`, `EXOBRAIN_MEMGRAPH_URL` (knowledge dependencies)
 - `KNOWLEDGE_UPDATE_MAX_TOKENS` (max tokens per knowledge-update job payload, default `8000`)

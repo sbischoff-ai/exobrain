@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 import grpc
 import pytest
 
-from app.services.grpc import job_orchestrator_pb2
+from app.services.grpc import job_orchestrator_pb2, knowledge_pb2
 
 from app.core.settings import Settings
 from app.services.knowledge_service import (
@@ -33,6 +33,16 @@ class FakeDatabase:
     async def execute(self, query: str, *args: object):
         self.execute_calls.append((query, args))
         return "UPDATE 1"
+
+
+class FakeKnowledgeInterfaceClient:
+    def __init__(self, reply: knowledge_pb2.GetSchemaReply | None = None) -> None:
+        self.reply = reply or knowledge_pb2.GetSchemaReply()
+        self.calls: list[dict[str, str]] = []
+
+    async def get_schema(self, *, universe_id: str) -> knowledge_pb2.GetSchemaReply:
+        self.calls.append({"universe_id": universe_id})
+        return self.reply
 
 
 class FakeJobPublisher:
@@ -129,7 +139,7 @@ async def test_enqueue_update_job_filters_and_splits_uncommitted_sequences() -> 
     publisher = FakeJobPublisher()
     settings = Settings()
     settings.knowledge_update_max_tokens = 100
-    service = KnowledgeService(database=database, job_publisher=publisher, settings=settings)
+    service = KnowledgeService(database=database, job_publisher=publisher, knowledge_interface_client=FakeKnowledgeInterfaceClient(), settings=settings)
 
     job_id = await service.enqueue_update_job(user_id="user-1")
 
@@ -173,7 +183,7 @@ async def test_enqueue_update_job_respects_token_limit() -> None:
     publisher = FakeJobPublisher()
     settings = Settings()
     settings.knowledge_update_max_tokens = 10
-    service = KnowledgeService(database=database, job_publisher=publisher, settings=settings)
+    service = KnowledgeService(database=database, job_publisher=publisher, knowledge_interface_client=FakeKnowledgeInterfaceClient(), settings=settings)
 
     await service.enqueue_update_job(user_id="user-1", journal_reference="2026/02/19")
 
@@ -185,7 +195,7 @@ async def test_enqueue_update_job_respects_token_limit() -> None:
 async def test_enqueue_update_job_raises_when_no_uncommitted_messages() -> None:
     database = FakeDatabase([])
     publisher = FakeJobPublisher()
-    service = KnowledgeService(database=database, job_publisher=publisher, settings=Settings())
+    service = KnowledgeService(database=database, job_publisher=publisher, knowledge_interface_client=FakeKnowledgeInterfaceClient(), settings=Settings())
 
     with pytest.raises(KnowledgeNoPendingMessagesError):
         await service.enqueue_update_job(user_id="user-1", journal_reference="2026/02/19")
@@ -230,6 +240,7 @@ async def test_enqueue_update_job_maps_grpc_errors_to_domain_errors(status_code:
     service = KnowledgeService(
         database=database,
         job_publisher=EnqueueErroringJobPublisher(status_code),
+        knowledge_interface_client=FakeKnowledgeInterfaceClient(),
         settings=Settings(),
     )
 
@@ -237,6 +248,79 @@ async def test_enqueue_update_job_maps_grpc_errors_to_domain_errors(status_code:
         await service.enqueue_update_job(user_id="user-1", journal_reference="2026/02/19")
 
     assert database.execute_calls == []
+
+@pytest.mark.asyncio
+async def test_list_wiki_category_tree_filters_sorts_and_nests_types() -> None:
+    schema = knowledge_pb2.GetSchemaReply(
+        node_types=[
+            knowledge_pb2.SchemaNodeType(type=knowledge_pb2.SchemaType(id="node.gamma", kind="node", name="Gamma", active=True)),
+            knowledge_pb2.SchemaNodeType(type=knowledge_pb2.SchemaType(id="node.alpha", kind="node", name="Alpha", active=True)),
+            knowledge_pb2.SchemaNodeType(type=knowledge_pb2.SchemaType(id="node.beta", kind="node", name="Beta", active=True)),
+            knowledge_pb2.SchemaNodeType(type=knowledge_pb2.SchemaType(id="node.root", kind="node", name="Root", active=True)),
+            knowledge_pb2.SchemaNodeType(type=knowledge_pb2.SchemaType(id="node.delta", kind="node", name="Delta", active=True)),
+            knowledge_pb2.SchemaNodeType(type=knowledge_pb2.SchemaType(id="node.inactive", kind="node", name="Inactive", active=False)),
+            knowledge_pb2.SchemaNodeType(type=knowledge_pb2.SchemaType(id="edge.related_to", kind="edge", name="Related", active=True)),
+            knowledge_pb2.SchemaNodeType(type=knowledge_pb2.SchemaType(id="misc.type", kind="node", name="Misc", active=True)),
+        ]
+    )
+    schema.node_types[0].parents.extend([
+        knowledge_pb2.TypeInheritance(child_type_id="node.gamma", parent_type_id="node.beta", active=True),
+        knowledge_pb2.TypeInheritance(child_type_id="node.gamma", parent_type_id="node.alpha", active=True),
+    ])
+    schema.node_types[2].parents.extend([
+        knowledge_pb2.TypeInheritance(child_type_id="node.beta", parent_type_id="node.root", active=True),
+    ])
+    schema.node_types[1].parents.extend([
+        knowledge_pb2.TypeInheritance(child_type_id="node.alpha", parent_type_id="node.root", active=True),
+    ])
+
+    client = FakeKnowledgeInterfaceClient(reply=schema)
+    service = KnowledgeService(
+        database=FakeDatabase([]),
+        job_publisher=FakeJobPublisher(),
+        knowledge_interface_client=client,
+        settings=Settings(),
+    )
+
+    categories = await service.list_wiki_category_tree(universe_id="u-1")
+
+    assert client.calls == [{"universe_id": "u-1"}]
+    assert categories == [
+        {
+            "category_id": "node.delta",
+            "display_name": "Delta",
+            "sub_categories": [],
+        },
+        {
+            "category_id": "node.root",
+            "display_name": "Root",
+            "sub_categories": [
+                {
+                    "category_id": "node.alpha",
+                    "display_name": "Alpha",
+                    "sub_categories": [
+                        {
+                            "category_id": "node.gamma",
+                            "display_name": "Gamma",
+                            "sub_categories": [],
+                        }
+                    ],
+                },
+                {
+                    "category_id": "node.beta",
+                    "display_name": "Beta",
+                    "sub_categories": [
+                        {
+                            "category_id": "node.gamma",
+                            "display_name": "Gamma",
+                            "sub_categories": [],
+                        }
+                    ],
+                },
+            ],
+        },
+    ]
+
 
 def test_count_text_tokens_rounds_character_division() -> None:
     assert KnowledgeService._count_text_tokens("abcd") == 1
@@ -248,7 +332,7 @@ def test_count_text_tokens_rounds_character_division() -> None:
 async def test_watch_update_job_maps_orchestrator_events_to_stream_events() -> None:
     database = FakeDatabase([])
     publisher = FakeJobPublisher()
-    service = KnowledgeService(database=database, job_publisher=publisher, settings=Settings())
+    service = KnowledgeService(database=database, job_publisher=publisher, knowledge_interface_client=FakeKnowledgeInterfaceClient(), settings=Settings())
 
     events = [event async for event in service.watch_update_job(user_id="user-1", job_id="job-1")]
 
@@ -310,7 +394,7 @@ async def test_watch_update_job_stops_after_first_terminal_state() -> None:
             ),
         ]
     )
-    service = KnowledgeService(database=database, job_publisher=publisher, settings=Settings())
+    service = KnowledgeService(database=database, job_publisher=publisher, knowledge_interface_client=FakeKnowledgeInterfaceClient(), settings=Settings())
 
     events = [event async for event in service.watch_update_job(user_id="user-1", job_id="job-1")]
 
@@ -368,7 +452,7 @@ class ErroringJobPublisher(FakeJobPublisher):
 )
 async def test_watch_update_job_maps_grpc_errors_to_domain_errors(status_code: grpc.StatusCode, expected_error: type[Exception]) -> None:
     database = FakeDatabase([])
-    service = KnowledgeService(database=database, job_publisher=ErroringJobPublisher(status_code), settings=Settings())
+    service = KnowledgeService(database=database, job_publisher=ErroringJobPublisher(status_code), knowledge_interface_client=FakeKnowledgeInterfaceClient(), settings=Settings())
 
     with pytest.raises(expected_error):
         _ = [event async for event in service.watch_update_job(user_id="user-1", job_id="job-1")]

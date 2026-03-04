@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Sequence
+from collections import defaultdict
 from typing import Any
 
 import grpc
@@ -9,6 +10,7 @@ from app.core.settings import Settings
 from app.services.contracts import (
     DatabaseServiceProtocol,
     JobPublisherProtocol,
+    KnowledgeInterfaceClientProtocol,
     KnowledgeJobStatusSSEPayload,
 )
 from app.services.grpc import job_orchestrator_pb2
@@ -47,11 +49,86 @@ class KnowledgeService:
         self,
         database: DatabaseServiceProtocol,
         job_publisher: JobPublisherProtocol,
+        knowledge_interface_client: KnowledgeInterfaceClientProtocol,
         settings: Settings,
     ) -> None:
         self._database = database
         self._job_publisher = job_publisher
+        self._knowledge_interface_client = knowledge_interface_client
         self._max_tokens = settings.knowledge_update_max_tokens
+
+    async def list_wiki_category_tree(self, *, universe_id: str) -> list[dict[str, Any]]:
+        """Return wiki categories as a deterministic parent/child tree.
+
+        Multiple inheritance is represented by duplicating a child under each
+        active parent category.
+        """
+        schema = await self._knowledge_interface_client.get_schema(universe_id=universe_id)
+
+        categories_by_id: dict[str, dict[str, Any]] = {}
+        category_parent_ids: dict[str, set[str]] = defaultdict(set)
+        category_children_ids: dict[str, set[str]] = defaultdict(set)
+
+        for node_type in schema.node_types:
+            schema_type = node_type.type
+            if not self._is_wiki_category_type(type_id=schema_type.id, kind=schema_type.kind, active=schema_type.active):
+                continue
+            categories_by_id[schema_type.id] = {
+                "category_id": schema_type.id,
+                "display_name": schema_type.name or schema_type.id,
+            }
+
+        for node_type in schema.node_types:
+            child_type_id = node_type.type.id
+            if child_type_id not in categories_by_id:
+                continue
+
+            for parent in node_type.parents:
+                if not parent.active:
+                    continue
+                parent_type_id = parent.parent_type_id
+                if parent_type_id not in categories_by_id:
+                    continue
+
+                category_parent_ids[child_type_id].add(parent_type_id)
+                category_children_ids[parent_type_id].add(child_type_id)
+
+        def sort_key(category_id: str) -> tuple[str, str]:
+            category = categories_by_id[category_id]
+            return (str(category["display_name"]).lower(), category_id)
+
+        def build_sub_categories(category_id: str, *, lineage: frozenset[str]) -> list[dict[str, Any]]:
+            sub_categories: list[dict[str, Any]] = []
+            for child_id in sorted(category_children_ids.get(category_id, set()), key=sort_key):
+                if child_id in lineage:
+                    continue
+                child_category = categories_by_id[child_id]
+                sub_categories.append(
+                    {
+                        "category_id": child_category["category_id"],
+                        "display_name": child_category["display_name"],
+                        "sub_categories": build_sub_categories(child_id, lineage=lineage | {child_id}),
+                    }
+                )
+            return sub_categories
+
+        root_category_ids = sorted(
+            [category_id for category_id in categories_by_id if not category_parent_ids.get(category_id)],
+            key=sort_key,
+        )
+
+        root_categories: list[dict[str, Any]] = []
+        for root_id in root_category_ids:
+            root_category = categories_by_id[root_id]
+            root_categories.append(
+                {
+                    "category_id": root_category["category_id"],
+                    "display_name": root_category["display_name"],
+                    "sub_categories": build_sub_categories(root_id, lineage=frozenset({root_id})),
+                }
+            )
+
+        return root_categories
 
     async def enqueue_update_job(self, *, user_id: str, journal_reference: str | None = None) -> str:
         message_sequences = await self._list_uncommitted_message_sequences(user_id=user_id, journal_reference=journal_reference)
@@ -208,6 +285,14 @@ class KnowledgeService:
         if not text:
             return 0
         return round(len(text) / 4)
+
+    @staticmethod
+    def _is_wiki_category_type(*, type_id: str, kind: str, active: bool) -> bool:
+        if not active:
+            return False
+        if kind != "node":
+            return False
+        return type_id.startswith("node.")
 
     @staticmethod
     def _message_payload(row: dict[str, Any]) -> dict[str, Any]:
