@@ -259,7 +259,15 @@ describe('root page', () => {
       .mockResolvedValueOnce(jsonResponse({ name: 'Test User', email: 'test.user@exobrain.local' }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19', message_count: 0 }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
-      .mockResolvedValueOnce(jsonResponse([{ reference: '2026/02/19' }]));
+      .mockResolvedValueOnce(jsonResponse([{ reference: '2026/02/19' }]))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          categories: [{ category_id: 'cat-1', display_name: 'Category 1', page_count: 1, sub_categories: [] }]
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ knowledge_pages: [{ id: 'page-1', title: 'Page 1', summary: 'summary' }] })
+      );
 
     render(Page);
 
@@ -798,12 +806,41 @@ describe('root page', () => {
       })
     );
 
-    vi.spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(jsonResponse({ name: 'Test User', email: 'test.user@exobrain.local' }))
-      .mockResolvedValueOnce(jsonResponse({ reference: '2026/01/01', message_count: 0 }))
-      .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
-      .mockResolvedValueOnce(jsonResponse([{ reference: '2026/02/19' }, { reference: '2026/01/01' }]))
-      .mockResolvedValueOnce({ ok: true, status: 204 } as Response);
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const rawUrl = typeof input === 'string' ? input : String((input as { url?: unknown }).url ?? input);
+      
+      if (rawUrl.includes('/api/users/me')) {
+        return jsonResponse({ name: 'Test User', email: 'test.user@exobrain.local' });
+      }
+
+      if (rawUrl.includes('/api/journal/2026/01/01') || rawUrl.includes('/api/journal/2026%2F01%2F01')) {
+        return jsonResponse({ reference: '2026/01/01', message_count: 0 });
+      }
+
+      if (rawUrl.includes('/api/journal/today')) {
+        return jsonResponse({ reference: '2026/02/19' });
+      }
+
+      if (rawUrl.includes('/api/journal')) {
+        return jsonResponse([{ reference: '2026/02/19' }, { reference: '2026/01/01' }]);
+      }
+
+      if (rawUrl.includes('/api/knowledge/category/cat-1/pages')) {
+        return jsonResponse({ knowledge_pages: [{ id: 'page-1', title: 'Page 1', summary: null }] });
+      }
+
+      if (rawUrl.includes('/api/knowledge/category')) {
+        return jsonResponse({
+          categories: [{ category_id: 'cat-1', display_name: 'Category 1', page_count: 1, sub_categories: [] }]
+        });
+      }
+
+      if (rawUrl.includes('/api/auth/logout')) {
+        return { ok: true, status: 204 } as Response;
+      }
+
+      return jsonResponse({}, 404);
+    });
 
     render(Page);
 
