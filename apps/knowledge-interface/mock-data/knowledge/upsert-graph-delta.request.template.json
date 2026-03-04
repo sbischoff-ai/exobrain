@@ -126,8 +126,7 @@
         }
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
-      "visibility": "PRIVATE",
-      "universe_id": "10000000-0000-4000-8000-000000000010"
+      "visibility": "PRIVATE"
     },
     {
       "id": "10000000-0000-4000-8000-000000000011",
@@ -2017,6 +2016,27 @@
         {
           "key": "provenance_hint",
           "string_value": "seed timeline mention mirelle"
+        }
+      ]
+    },
+    {
+      "from_id": "10000000-0000-4000-8000-000000000009",
+      "to_id": "10000000-0000-4000-8000-000000000010",
+      "edge_type": "RELATED_TO",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "properties": [
+        {
+          "key": "confidence",
+          "float_value": 0.9
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed real-world story planning related to sword isles universe"
         }
       ]
     }
