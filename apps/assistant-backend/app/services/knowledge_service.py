@@ -235,8 +235,12 @@ class KnowledgeService:
             raise KnowledgePageUpstreamError("knowledge page upstream failure") from exc
         entity = reply.entity
         links: list[dict[str, str | None]] = []
+        seen_link_page_ids: set[str] = set()
         for neighbor in reply.neighbors:
             other_entity = neighbor.other_entity
+            if other_entity.id in seen_link_page_ids:
+                continue
+            seen_link_page_ids.add(other_entity.id)
             links.append(
                 {
                     "page_id": other_entity.id,

@@ -113,7 +113,7 @@ class KnowledgePageDetailResponse(BaseModel):
     )
     links: list[dict[str, str | None]] = Field(
         default_factory=list,
-        description="Mapped related pages from entity neighbors",
+        description="Mapped related pages from entity neighbors, deduplicated by page_id",
     )
     content_markdown: str = Field(
         ...,
