@@ -14,4 +14,10 @@ describe('datetime utils', () => {
     expect(formatTimestamp('')).toBe('');
     expect(formatTimestamp(null)).toBe('');
   });
+
+  it('formats backend timestamps with bracketed timezone names', () => {
+    const formatted = formatTimestamp('2026-03-04T23:17:10.326738+00:00[Etc/UTC]');
+
+    expect(formatted).toBe('2026/03/04 23:17');
+  });
 });
