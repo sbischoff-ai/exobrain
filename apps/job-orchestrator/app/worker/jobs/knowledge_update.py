@@ -8,7 +8,7 @@ import sys
 from uuid import uuid5, NAMESPACE_URL
 
 import grpc
-from google.protobuf.json_format import MessageToDict
+from google.protobuf.json_format import MessageToDict, ParseDict
 
 from app.contracts import JobEnvelope, KnowledgeUpdatePayload
 from app.services.grpc import knowledge_pb2
@@ -160,6 +160,156 @@ def _merge_upsert_graph_delta_requests(
         "blocks": [*(left.get("blocks", []) or []), *(right.get("blocks", []) or [])],
         "edges": [*(left.get("edges", []) or []), *(right.get("edges", []) or [])],
     }
+
+
+def _find_property_value(node: dict[str, object], key: str) -> str:
+    properties = node.get("properties")
+    if not isinstance(properties, list):
+        return ""
+    for prop in properties:
+        if not isinstance(prop, dict) or prop.get("key") != key:
+            continue
+        for value_key in ("string_value", "datetime_value", "json_value"):
+            value = prop.get(value_key)
+            if isinstance(value, str):
+                return value
+    return ""
+
+
+def _build_step_four_router_prompt(
+    step_one_graph_delta: dict[str, object],
+    step_three_graph_delta: dict[str, object],
+) -> str:
+    step_one_blocks = [
+        {
+            "block_id": block.get("id", ""),
+            "text": _find_property_value(block, "text"),
+        }
+        for block in (step_one_graph_delta.get("blocks", []) or [])
+        if isinstance(block, dict)
+    ]
+    step_three_entities = [
+        {
+            "entity_id": entity.get("id", ""),
+            "type_id": entity.get("type_id", ""),
+            "name": _find_property_value(entity, "name"),
+            "described_by_text": _find_property_value(entity, "described_by_text"),
+        }
+        for entity in (step_three_graph_delta.get("entities", []) or [])
+        if isinstance(entity, dict)
+    ]
+
+    return json.dumps(
+        {
+            "chat_blocks": step_one_blocks,
+            "extracted_entities": step_three_entities,
+            "chat_graph_delta": step_one_graph_delta,
+            "extracted_graph_delta": step_three_graph_delta,
+        },
+        ensure_ascii=False,
+    )
+
+
+def _build_step_four_router_json_schema() -> dict[str, object]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "mappings": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "block_id": {"type": "string"},
+                        "entity_id": {"type": "string"},
+                        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                        "reason": {"type": "string"},
+                    },
+                    "required": ["block_id", "entity_id", "confidence"],
+                },
+            }
+        },
+        "required": ["mappings"],
+    }
+
+
+async def _run_step_four_router_agent(
+    step_one_graph_delta: dict[str, object],
+    step_three_graph_delta: dict[str, object],
+    settings: Settings,
+) -> list[dict[str, object]]:
+    from langchain.agents import create_agent
+    from langchain_openai import ChatOpenAI
+
+    model = ChatOpenAI(
+        model="router",
+        base_url=settings.model_provider_base_url,
+        api_key="model-provider",
+        temperature=0,
+    )
+    response_schema = _build_step_four_router_json_schema()
+    prompt = _build_step_four_router_prompt(step_one_graph_delta, step_three_graph_delta)
+    compiled_agent = create_agent(
+        model=model,
+        tools=[],
+        system_prompt=(
+            "You map chat message blocks to extracted entities. "
+            "Return only high-confidence links for MENTIONS edges with calibrated confidence scores in [0,1]."
+        ),
+        response_format={"type": "json_schema", "json_schema": response_schema},
+    )
+    reply = await compiled_agent.ainvoke({"messages": [{"role": "user", "content": prompt}]})
+    structured = reply.get("structured_response") if isinstance(reply, dict) else None
+    if not isinstance(structured, dict):
+        raise RuntimeError("knowledge.update step four router agent returned no structured_response")
+    mappings = structured.get("mappings")
+    if not isinstance(mappings, list):
+        raise RuntimeError("knowledge.update step four router agent returned invalid mappings")
+    return [item for item in mappings if isinstance(item, dict)]
+
+
+def _append_mentions_edges(
+    merged_graph_delta: dict[str, object],
+    step_one_graph_delta: dict[str, object],
+    step_three_graph_delta: dict[str, object],
+    mappings: list[dict[str, object]],
+    user_id: str,
+) -> None:
+    block_ids = {
+        str(block.get("id"))
+        for block in (step_one_graph_delta.get("blocks", []) or [])
+        if isinstance(block, dict) and block.get("id")
+    }
+    entity_ids = {
+        str(entity.get("id"))
+        for entity in (step_three_graph_delta.get("entities", []) or [])
+        if isinstance(entity, dict) and entity.get("id")
+    }
+
+    mentions_edges: list[dict[str, object]] = []
+    for mapping in mappings:
+        block_id = mapping.get("block_id")
+        entity_id = mapping.get("entity_id")
+        confidence = mapping.get("confidence")
+        if not isinstance(block_id, str) or block_id not in block_ids:
+            continue
+        if not isinstance(entity_id, str) or entity_id not in entity_ids:
+            continue
+        if not isinstance(confidence, (float, int)):
+            continue
+        mentions_edges.append(
+            {
+                "from_id": block_id,
+                "to_id": entity_id,
+                "edge_type": "MENTIONS",
+                "user_id": user_id,
+                "visibility": "PRIVATE",
+                "properties": [{"key": "confidence", "float_value": float(confidence)}],
+            }
+        )
+
+    merged_graph_delta["edges"] = [*(merged_graph_delta.get("edges", []) or []), *mentions_edges]
 
 
 def _build_step_three_system_prompt(
@@ -380,6 +530,19 @@ async def run(job: JobEnvelope) -> None:
             raise RuntimeError("knowledge.update missing task results for step four graph delta merge")
 
         merged_graph_delta = _merge_upsert_graph_delta_requests(step_one_graph_delta, step_three_graph_delta)
+        mentions_mappings = await _run_step_four_router_agent(
+            step_one_graph_delta,
+            step_three_graph_delta,
+            settings,
+        )
+        _append_mentions_edges(
+            merged_graph_delta,
+            step_one_graph_delta,
+            step_three_graph_delta,
+            mentions_mappings,
+            payload.requested_by_user_id,
+        )
+
         logger.info(
             "knowledge.update step four merged graph delta",
             extra={
@@ -387,6 +550,23 @@ async def run(job: JobEnvelope) -> None:
                 "blocks": len(merged_graph_delta["blocks"]),
                 "edges": len(merged_graph_delta["edges"]),
                 "universes": len(merged_graph_delta["universes"]),
+                "mentions_edges_added": len(mentions_mappings),
+            },
+        )
+
+        upsert_graph_delta = channel.unary_unary(
+            "/exobrain.knowledge.v1.KnowledgeInterface/UpsertGraphDelta",
+            request_serializer=knowledge_pb2.UpsertGraphDeltaRequest.SerializeToString,
+            response_deserializer=knowledge_pb2.UpsertGraphDeltaReply.FromString,
+        )
+        upsert_request = ParseDict(merged_graph_delta, knowledge_pb2.UpsertGraphDeltaRequest())
+        upsert_reply = await upsert_graph_delta(upsert_request)
+        logger.info(
+            "knowledge.update step five upserted merged graph delta",
+            extra={
+                "entities_upserted": upsert_reply.entities_upserted,
+                "blocks_upserted": upsert_reply.blocks_upserted,
+                "edges_upserted": upsert_reply.edges_upserted,
             },
         )
 
