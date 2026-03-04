@@ -29,7 +29,7 @@
             type="button"
             class="toggle"
             aria-label={isExpanded(node) ? `Collapse ${node.name}` : `Expand ${node.name}`}
-            on:click={() => dispatch('toggle', { categoryId: node.id, expanded: !isExpanded(node) })}
+            on:click|stopPropagation={() => dispatch('toggle', { categoryId: node.id, expanded: !isExpanded(node) })}
           >
             {isExpanded(node) ? '▾' : '▸'}
           </button>
