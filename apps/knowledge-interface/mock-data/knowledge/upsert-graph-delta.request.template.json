@@ -441,6 +441,18 @@
       ]
     },
     {
+      "from_id": "10000000-0000-4000-8000-000000000004",
+      "to_id": "20000000-0000-4000-8000-000000000005",
+      "edge_type": "DESCRIBED_BY",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "properties": [
+        { "key": "confidence", "float_value": 1.0 },
+        { "key": "status", "string_value": "asserted" },
+        { "key": "provenance_hint", "string_value": "seed university context root" }
+      ]
+    },
+    {
       "from_id": "10000000-0000-4000-8000-000000000008",
       "to_id": "20000000-0000-4000-8000-000000000006",
       "edge_type": "DESCRIBED_BY",
