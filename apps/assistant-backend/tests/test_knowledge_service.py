@@ -346,7 +346,7 @@ async def test_list_wiki_category_tree_filters_sorts_and_nests_types() -> None:
         node_types=[
             knowledge_pb2.SchemaNodeType(
                 type=knowledge_pb2.SchemaType(
-                    id="node.gamma", kind="node", name="Gamma", active=True
+                    id="node.entity", kind="node", name="Entity", active=True
                 )
             ),
             knowledge_pb2.SchemaNodeType(
@@ -361,12 +361,27 @@ async def test_list_wiki_category_tree_filters_sorts_and_nests_types() -> None:
             ),
             knowledge_pb2.SchemaNodeType(
                 type=knowledge_pb2.SchemaType(
-                    id="node.root", kind="node", name="Root", active=True
+                    id="node.gamma", kind="node", name="Gamma", active=True
                 )
             ),
             knowledge_pb2.SchemaNodeType(
                 type=knowledge_pb2.SchemaType(
                     id="node.delta", kind="node", name="Delta", active=True
+                )
+            ),
+            knowledge_pb2.SchemaNodeType(
+                type=knowledge_pb2.SchemaType(
+                    id="node.block", kind="node", name="Block", active=True
+                )
+            ),
+            knowledge_pb2.SchemaNodeType(
+                type=knowledge_pb2.SchemaType(
+                    id="node.universe", kind="node", name="Universe", active=True
+                )
+            ),
+            knowledge_pb2.SchemaNodeType(
+                type=knowledge_pb2.SchemaType(
+                    id="node.orphan", kind="node", name="Orphan", active=True
                 )
             ),
             knowledge_pb2.SchemaNodeType(
@@ -379,14 +394,23 @@ async def test_list_wiki_category_tree_filters_sorts_and_nests_types() -> None:
                     id="edge.related_to", kind="edge", name="Related", active=True
                 )
             ),
-            knowledge_pb2.SchemaNodeType(
-                type=knowledge_pb2.SchemaType(
-                    id="misc.type", kind="node", name="Misc", active=True
-                )
+        ]
+    )
+    schema.node_types[1].parents.extend(
+        [
+            knowledge_pb2.TypeInheritance(
+                child_type_id="node.alpha", parent_type_id="node.entity", active=True
             ),
         ]
     )
-    schema.node_types[0].parents.extend(
+    schema.node_types[2].parents.extend(
+        [
+            knowledge_pb2.TypeInheritance(
+                child_type_id="node.beta", parent_type_id="node.entity", active=True
+            ),
+        ]
+    )
+    schema.node_types[3].parents.extend(
         [
             knowledge_pb2.TypeInheritance(
                 child_type_id="node.gamma", parent_type_id="node.beta", active=True
@@ -396,18 +420,25 @@ async def test_list_wiki_category_tree_filters_sorts_and_nests_types() -> None:
             ),
         ]
     )
-    schema.node_types[2].parents.extend(
+    schema.node_types[4].parents.extend(
         [
             knowledge_pb2.TypeInheritance(
-                child_type_id="node.beta", parent_type_id="node.root", active=True
-            ),
+                child_type_id="node.delta", parent_type_id="node.entity", active=True
+            )
         ]
     )
-    schema.node_types[1].parents.extend(
+    schema.node_types[5].parents.extend(
         [
             knowledge_pb2.TypeInheritance(
-                child_type_id="node.alpha", parent_type_id="node.root", active=True
-            ),
+                child_type_id="node.block", parent_type_id="node.entity", active=True
+            )
+        ]
+    )
+    schema.node_types[6].parents.extend(
+        [
+            knowledge_pb2.TypeInheritance(
+                child_type_id="node.universe", parent_type_id="node.entity", active=True
+            )
         ]
     )
 
@@ -424,37 +455,31 @@ async def test_list_wiki_category_tree_filters_sorts_and_nests_types() -> None:
     assert client.calls == [{"method": "get_schema", "universe_id": "u-1"}]
     assert categories == [
         {
+            "category_id": "node.alpha",
+            "display_name": "Alpha",
+            "sub_categories": [
+                {
+                    "category_id": "node.gamma",
+                    "display_name": "Gamma",
+                    "sub_categories": [],
+                }
+            ],
+        },
+        {
+            "category_id": "node.beta",
+            "display_name": "Beta",
+            "sub_categories": [
+                {
+                    "category_id": "node.gamma",
+                    "display_name": "Gamma",
+                    "sub_categories": [],
+                }
+            ],
+        },
+        {
             "category_id": "node.delta",
             "display_name": "Delta",
             "sub_categories": [],
-        },
-        {
-            "category_id": "node.root",
-            "display_name": "Root",
-            "sub_categories": [
-                {
-                    "category_id": "node.alpha",
-                    "display_name": "Alpha",
-                    "sub_categories": [
-                        {
-                            "category_id": "node.gamma",
-                            "display_name": "Gamma",
-                            "sub_categories": [],
-                        }
-                    ],
-                },
-                {
-                    "category_id": "node.beta",
-                    "display_name": "Beta",
-                    "sub_categories": [
-                        {
-                            "category_id": "node.gamma",
-                            "display_name": "Gamma",
-                            "sub_categories": [],
-                        }
-                    ],
-                },
-            ],
         },
     ]
 

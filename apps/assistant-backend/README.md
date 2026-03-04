@@ -76,7 +76,7 @@ Optional overrides:
 ## Knowledge category/page endpoints
 
 ### `GET /api/knowledge/category`
-Returns the category tree projected from knowledge-interface schema node inheritance.
+Returns active wiki categories rooted at direct `node.entity` subtypes (excluding `node.block` and `node.universe`), then nests descendant subtypes.
 
 Example response:
 
@@ -171,7 +171,7 @@ Core runtime vars:
 - `JOB_ORCHESTRATOR_CONNECT_TIMEOUT_SECONDS` (gRPC request timeout in seconds, default `5.0`)
 - `KNOWLEDGE_INTERFACE_GRPC_TARGET` (knowledge-interface gRPC endpoint for read APIs, default `localhost:50051`)
 - `KNOWLEDGE_INTERFACE_CONNECT_TIMEOUT_SECONDS` (knowledge-interface gRPC request timeout in seconds, default `5.0`)
-- Knowledge wiki category trees are derived from `GetSchema` node types only (`kind=node` and ids prefixed `node.`), sorted by `display_name` then `id`.
+- Knowledge wiki category trees are derived from active `GetSchema` node types (`kind=node`, ids prefixed `node.`), rooted at direct children of `node.entity` (excluding `node.block` and `node.universe`), and sorted by `display_name` then `id`.
 - `GET /api/knowledge/category` maps upstream `INVALID_ARGUMENT` to `400`, `UNAVAILABLE/DEADLINE_EXCEEDED` to `503`, and other upstream failures to `502`.
 - Multiple inheritance in wiki categories duplicates a child category under each active parent category.
 - `POST /api/knowledge/update` returns `409` when there are no uncommitted messages in scope, `503` when orchestrator is unavailable, and `502` for other enqueue failures.

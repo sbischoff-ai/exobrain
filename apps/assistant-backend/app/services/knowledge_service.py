@@ -87,9 +87,9 @@ class KnowledgeService:
         schema = await self._knowledge_interface_client.get_schema(
             universe_id=universe_id
         )
+        excluded_root_types = {"node.block", "node.universe"}
         categories_by_id: dict[str, dict[str, Any]] = {}
-        category_parent_ids: dict[str, set[str]] = defaultdict(set)
-        category_children_ids: dict[str, set[str]] = defaultdict(set)
+        all_children_by_parent: dict[str, set[str]] = defaultdict(set)
         for node_type in schema.node_types:
             schema_type = node_type.type
             if not self._is_wiki_category_type(
@@ -110,8 +110,33 @@ class KnowledgeService:
                 parent_type_id = parent.parent_type_id
                 if parent_type_id not in categories_by_id:
                     continue
-                category_parent_ids[child_type_id].add(parent_type_id)
-                category_children_ids[parent_type_id].add(child_type_id)
+                all_children_by_parent[parent_type_id].add(child_type_id)
+
+        root_category_ids = sorted(
+            [
+                child_id
+                for child_id in all_children_by_parent.get("node.entity", set())
+                if child_id not in excluded_root_types
+            ]
+        )
+
+        included_category_ids: set[str] = set(root_category_ids)
+        pending_ids = list(root_category_ids)
+        while pending_ids:
+            parent_id = pending_ids.pop()
+            for child_id in all_children_by_parent.get(parent_id, set()):
+                if child_id in included_category_ids:
+                    continue
+                included_category_ids.add(child_id)
+                pending_ids.append(child_id)
+
+        category_children_ids: dict[str, set[str]] = defaultdict(set)
+        for parent_id, child_ids in all_children_by_parent.items():
+            if parent_id not in included_category_ids:
+                continue
+            for child_id in child_ids:
+                if child_id in included_category_ids:
+                    category_children_ids[parent_id].add(child_id)
 
         def sort_key(category_id: str) -> tuple[str, str]:
             category = categories_by_id[category_id]
@@ -138,14 +163,7 @@ class KnowledgeService:
                 )
             return sub_categories
 
-        root_category_ids = sorted(
-            [
-                category_id
-                for category_id in categories_by_id
-                if not category_parent_ids.get(category_id)
-            ],
-            key=sort_key,
-        )
+        root_category_ids = sorted(root_category_ids, key=sort_key)
         root_categories: list[dict[str, Any]] = []
         for root_id in root_category_ids:
             root_category = categories_by_id[root_id]
