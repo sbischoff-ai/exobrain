@@ -84,7 +84,7 @@ describe('knowledgeService', () => {
   });
 
   it('gets and normalizes page detail', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(
         JSON.stringify({
           id: 'entity-1',
@@ -106,6 +106,8 @@ describe('knowledgeService', () => {
     );
 
     const response = await knowledgeService.getPage('entity-1');
+
+    expect(fetchSpy).toHaveBeenCalledWith('/api/knowledge/page/entity-1', undefined);
 
     expect(response).toEqual({
       id: 'entity-1',
@@ -150,6 +152,18 @@ describe('knowledgeService', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ journal_reference: 'jrnl-123' })
     });
+  });
+
+  it('encodes page detail ids with slashes', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ id: 'entity/with/slash', title: 'Entity', metadata: {}, links: [] }), {
+        status: 200
+      })
+    );
+
+    await knowledgeService.getPage('entity/with/slash');
+
+    expect(fetchSpy).toHaveBeenCalledWith('/api/knowledge/page/entity%2Fwith%2Fslash', undefined);
   });
 
   it('parses valid status SSE payloads', () => {

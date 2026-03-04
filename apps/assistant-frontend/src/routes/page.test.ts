@@ -293,6 +293,90 @@ describe('root page', () => {
     expect(persistedChat.mode).toBe('chat');
   });
 
+
+  it('restores last selected journal from session storage in chat mode', async () => {
+    window.sessionStorage.setItem(
+      'exobrain.assistant.session',
+      JSON.stringify({
+        user: { name: 'Test User', email: 'test.user@exobrain.local' },
+        journalReference: '2025/01/14',
+        messageCount: 1,
+        messages: [{ role: 'assistant', content: 'cached', clientMessageId: 'cached-1', sequence: 1 }]
+      })
+    );
+    window.sessionStorage.setItem(
+      'exobrain.assistant.workspaceView',
+      JSON.stringify({
+        mode: 'chat',
+        explorerRoute: { type: 'overview' },
+        expandedCategories: {}
+      })
+    );
+
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(jsonResponse({ name: 'Test User', email: 'test.user@exobrain.local' }))
+      .mockResolvedValueOnce(jsonResponse({ reference: '2025/01/14', message_count: 1 }))
+      .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
+      .mockResolvedValueOnce(jsonResponse([{ reference: '2026/02/19' }, { reference: '2025/01/14' }]));
+
+    render(Page);
+
+    await waitFor(() => {
+      expect(screen.getByText('Journal:')).toBeInTheDocument();
+      expect(screen.getAllByText('2025/01/14').length).toBeGreaterThan(0);
+      expect(screen.getByText('cached')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Switch to Knowledge Explorer' })).toBeInTheDocument();
+    });
+
+    expect(fetchSpy).toHaveBeenCalledWith('/api/journal/2025/01/14', undefined);
+  });
+
+  it('restores last explorer location from session storage in knowledge mode', async () => {
+    window.sessionStorage.setItem(
+      'exobrain.assistant.session',
+      JSON.stringify({
+        user: { name: 'Test User', email: 'test.user@exobrain.local' },
+        journalReference: '2026/02/19',
+        messageCount: 0,
+        messages: []
+      })
+    );
+    window.sessionStorage.setItem(
+      'exobrain.assistant.workspaceView',
+      JSON.stringify({
+        mode: 'knowledge',
+        explorerRoute: { type: 'category', id: 'cat-1' },
+        expandedCategories: { 'cat-1': true }
+      })
+    );
+
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(jsonResponse({ name: 'Test User', email: 'test.user@exobrain.local' }))
+      .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19', message_count: 0 }))
+      .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
+      .mockResolvedValueOnce(jsonResponse([{ reference: '2026/02/19' }]))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          categories: [{ category_id: 'cat-1', display_name: 'Category 1', page_count: 1, sub_categories: [] }]
+        })
+      )
+      .mockResolvedValueOnce(jsonResponse({ knowledge_pages: [{ id: 'page-1', title: 'Page 1', summary: null }] }))
+      .mockResolvedValueOnce(jsonResponse({ knowledge_pages: [{ id: 'page-1', title: 'Page 1', summary: null }] }));
+
+    render(Page);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Switch to Journal Chat' })).toBeInTheDocument();
+      expect(screen.getByLabelText('Knowledge explorer')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /Category 1/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Page 1' })).toBeInTheDocument();
+    });
+
+    expect(fetchSpy).toHaveBeenCalledWith('/api/knowledge/category/cat-1/pages', undefined);
+  });
+
   it('renders update button in header with default tooltip when updates are available', async () => {
     window.sessionStorage.setItem(
       'exobrain.assistant.session',
