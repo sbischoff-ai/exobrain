@@ -1,3 +1,7 @@
+function padTwoDigits(value: number): string {
+  return value.toString().padStart(2, '0');
+}
+
 export function formatTimestamp(value: string | null | undefined): string {
   if (!value) {
     return '';
@@ -8,8 +12,5 @@ export function formatTimestamp(value: string | null | undefined): string {
     return '';
   }
 
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short'
-  }).format(parsedDate);
+  return `${parsedDate.getFullYear()}/${padTwoDigits(parsedDate.getMonth() + 1)}/${padTwoDigits(parsedDate.getDate())} ${padTwoDigits(parsedDate.getHours())}:${padTwoDigits(parsedDate.getMinutes())}`;
 }

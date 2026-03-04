@@ -53,8 +53,8 @@
           nodes={node.children}
           {expandedCategories}
           {currentCategoryId}
-          on:toggle
-          on:selectCategory
+          on:toggle={(event) => dispatch('toggle', event.detail)}
+          on:selectCategory={(event) => dispatch('selectCategory', event.detail)}
         />
       {/if}
     </li>

@@ -584,7 +584,7 @@ async def test_get_page_detail_maps_entity_neighbors_and_block_markdown() -> Non
     assert response["links"] == [
         {"page_id": "entity-2", "title": "Entity Two", "summary": "Linked summary"}
     ]
-    assert response["content_markdown"] == "Summary\n\n- Root\n  - Child"
+    assert response["content_markdown"] == "Summary\n\nRoot\n\nChild"
 
 
 
@@ -607,7 +607,7 @@ async def test_get_page_detail_renders_level_zero_as_paragraph_and_nested_as_lis
     response = await service.get_page_detail(user_id="user-1", page_id="entity-1")
 
     assert response["summary"] == "# Heading"
-    assert response["content_markdown"] == "# Heading\n\n- Bullet"
+    assert response["content_markdown"] == "# Heading\n\nBullet"
 
 
 @pytest.mark.asyncio
@@ -874,4 +874,4 @@ async def test_get_page_detail_maps_metadata_links_and_content() -> None:
     assert response["links"] == [
         {"page_id": "entity-2", "title": "Entity Two", "summary": "Related page"}
     ]
-    assert response["content_markdown"] == "Summary\n\n- Root"
+    assert response["content_markdown"] == "Summary\n\nRoot"

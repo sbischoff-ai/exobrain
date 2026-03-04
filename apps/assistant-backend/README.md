@@ -143,7 +143,7 @@ Example response:
       "summary": "Linked summary"
     }
   ],
-  "content_markdown": "- Root\n  - Child"
+  "content_markdown": "Root\n\nChild"
 }
 ```
 

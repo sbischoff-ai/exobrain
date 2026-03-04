@@ -6,8 +6,7 @@ describe('datetime utils', () => {
   it('formats valid timestamps for display', () => {
     const formatted = formatTimestamp('2026-01-02T03:04:05Z');
 
-    expect(formatted).toBeTruthy();
-    expect(formatted).toContain('2026');
+    expect(formatted).toBe('2026/01/02 03:04');
   });
 
   it('returns empty string for invalid timestamps', () => {
