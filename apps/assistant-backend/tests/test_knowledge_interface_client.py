@@ -9,6 +9,7 @@ from app.services.knowledge_interface_client import (
     KnowledgeInterfaceClient,
     KnowledgeInterfaceClientAccessDeniedError,
     KnowledgeInterfaceClientError,
+    KnowledgeInterfaceClientInvalidArgumentError,
     KnowledgeInterfaceClientNotFoundError,
     KnowledgeInterfaceClientUnavailableError,
 )
@@ -112,6 +113,7 @@ async def test_client_calls_list_entities_and_entity_context(monkeypatch: pytest
 @pytest.mark.parametrize(
     ("status_code", "expected_error"),
     [
+        (grpc.StatusCode.INVALID_ARGUMENT, KnowledgeInterfaceClientInvalidArgumentError),
         (grpc.StatusCode.NOT_FOUND, KnowledgeInterfaceClientNotFoundError),
         (grpc.StatusCode.PERMISSION_DENIED, KnowledgeInterfaceClientAccessDeniedError),
         (grpc.StatusCode.UNAVAILABLE, KnowledgeInterfaceClientUnavailableError),

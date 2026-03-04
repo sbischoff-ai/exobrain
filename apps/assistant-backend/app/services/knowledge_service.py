@@ -130,6 +130,45 @@ class KnowledgeService:
 
         return root_categories
 
+    async def list_category_pages(
+        self,
+        *,
+        user_id: str,
+        category_id: str,
+        page_size: int | None = None,
+        page_token: str | None = None,
+    ) -> dict[str, Any]:
+        reply = await self._knowledge_interface_client.list_entities_by_type(
+            user_id=user_id,
+            type_id=category_id,
+            page_size=page_size,
+            page_token=page_token,
+        )
+        pages: list[dict[str, Any]] = []
+        for entity in reply.entities:
+            entity_payload = {
+                "id": entity.id,
+                "name": entity.name,
+                "description": entity.description if entity.HasField("description") else None,
+                "updated_at": entity.updated_at if entity.HasField("updated_at") else None,
+                "score": entity.score if entity.HasField("score") else None,
+            }
+            pages.append(
+                {
+                    "entity": entity_payload,
+                    "page_id": entity_payload["id"],
+                    "page_title": entity_payload["name"],
+                    "page_summary": entity_payload["description"],
+                }
+            )
+
+        return {
+            "pages": pages,
+            "page_size": page_size if page_size is not None else max(len(pages), 1),
+            "next_page_token": reply.next_page_token if reply.HasField("next_page_token") else None,
+            "total_count": reply.total_count if reply.HasField("total_count") else None,
+        }
+
     async def enqueue_update_job(self, *, user_id: str, journal_reference: str | None = None) -> str:
         message_sequences = await self._list_uncommitted_message_sequences(user_id=user_id, journal_reference=journal_reference)
         if not message_sequences:

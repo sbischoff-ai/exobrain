@@ -10,6 +10,11 @@ from app.api.dependencies.auth import get_required_auth_context
 from app.api.routers import knowledge as knowledge_router
 from app.api.schemas.auth import UnifiedPrincipal
 from app.api.schemas.knowledge import KnowledgeUpdateRequest
+from app.services.knowledge_interface_client import (
+    KnowledgeInterfaceClientError,
+    KnowledgeInterfaceClientInvalidArgumentError,
+    KnowledgeInterfaceClientUnavailableError,
+)
 from app.services.contracts import KnowledgeServiceProtocol
 from app.services.knowledge_service import (
     KnowledgeEnqueueError,
@@ -27,6 +32,46 @@ class FakeKnowledgeService:
         self.calls: list[dict[str, str | None]] = []
         self.watch_calls: list[dict[str, object]] = []
         self.enqueue_error: Exception | None = None
+        self.category_pages_calls: list[dict[str, object]] = []
+        self.category_pages_error: Exception | None = None
+
+
+    async def list_category_pages(
+        self,
+        *,
+        user_id: str,
+        category_id: str,
+        page_size: int | None = None,
+        page_token: str | None = None,
+    ) -> dict[str, object]:
+        self.category_pages_calls.append(
+            {
+                "user_id": user_id,
+                "category_id": category_id,
+                "page_size": page_size,
+                "page_token": page_token,
+            }
+        )
+        if self.category_pages_error is not None:
+            raise self.category_pages_error
+        return {
+            "pages": [
+                {
+                    "entity": {
+                        "id": "entity-1",
+                        "name": "Entity One",
+                        "description": "Entity summary",
+                        "updated_at": "2026-02-19T10:00:00Z",
+                    },
+                    "page_id": "entity-1",
+                    "page_title": "Entity One",
+                    "page_summary": "Entity summary",
+                }
+            ],
+            "page_size": page_size or 1,
+            "next_page_token": "next-token",
+            "total_count": 10,
+        }
 
     async def enqueue_update_job(self, *, user_id: str, journal_reference: str | None = None) -> str:
         self.calls.append({"user_id": user_id, "journal_reference": journal_reference})
@@ -206,6 +251,62 @@ def test_api_knowledge_watch_maps_domain_errors_to_http(error: Exception, expect
 
     assert response.status_code == expected_status
     assert service.watch_calls == [{"user_id": "user-1", "job_id": "job-knowledge-1", "include_current": True}]
+
+
+def test_api_knowledge_category_pages_returns_mapped_payload() -> None:
+    principal = UnifiedPrincipal(user_id="user-1", email="u@example.com", display_name="User")
+    service = FakeKnowledgeService()
+    container = build_test_container({KnowledgeServiceProtocol: service})
+
+    app = FastAPI()
+
+    @app.middleware("http")
+    async def attach_container(request, call_next):
+        request.app.state.container = container
+        return await call_next(request)
+
+    app.dependency_overrides[get_required_auth_context] = lambda: principal
+    app.include_router(knowledge_router.router, prefix="/api")
+
+    with TestClient(app) as client:
+        response = client.get("/api/knowledge/category/type-1/pages?page_size=5&page_token=cursor-1")
+
+    assert response.status_code == 200
+    assert response.json()["pages"][0]["page_id"] == "entity-1"
+    assert response.json()["pages"][0]["entity"]["id"] == "entity-1"
+    assert service.category_pages_calls == [
+        {"user_id": "user-1", "category_id": "type-1", "page_size": 5, "page_token": "cursor-1"}
+    ]
+
+
+@pytest.mark.parametrize(
+    ("error", "expected_status"),
+    [
+        (KnowledgeInterfaceClientInvalidArgumentError("bad arg"), 400),
+        (KnowledgeInterfaceClientUnavailableError("unavailable"), 503),
+        (KnowledgeInterfaceClientError("failed"), 502),
+    ],
+)
+def test_api_knowledge_category_pages_maps_upstream_errors(error: Exception, expected_status: int) -> None:
+    principal = UnifiedPrincipal(user_id="user-1", email="u@example.com", display_name="User")
+    service = FakeKnowledgeService()
+    service.category_pages_error = error
+    container = build_test_container({KnowledgeServiceProtocol: service})
+
+    app = FastAPI()
+
+    @app.middleware("http")
+    async def attach_container(request, call_next):
+        request.app.state.container = container
+        return await call_next(request)
+
+    app.dependency_overrides[get_required_auth_context] = lambda: principal
+    app.include_router(knowledge_router.router, prefix="/api")
+
+    with TestClient(app) as client:
+        response = client.get("/api/knowledge/category/type-1/pages")
+
+    assert response.status_code == expected_status
 
 
 def test_api_knowledge_watch_requires_auth() -> None:

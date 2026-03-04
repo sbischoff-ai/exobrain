@@ -36,13 +36,37 @@ class FakeDatabase:
 
 
 class FakeKnowledgeInterfaceClient:
-    def __init__(self, reply: knowledge_pb2.GetSchemaReply | None = None) -> None:
+    def __init__(
+        self,
+        reply: knowledge_pb2.GetSchemaReply | None = None,
+        entities_reply: knowledge_pb2.ListEntitiesByTypeReply | None = None,
+    ) -> None:
         self.reply = reply or knowledge_pb2.GetSchemaReply()
-        self.calls: list[dict[str, str]] = []
+        self.entities_reply = entities_reply or knowledge_pb2.ListEntitiesByTypeReply()
+        self.calls: list[dict[str, object]] = []
 
     async def get_schema(self, *, universe_id: str) -> knowledge_pb2.GetSchemaReply:
-        self.calls.append({"universe_id": universe_id})
+        self.calls.append({"method": "get_schema", "universe_id": universe_id})
         return self.reply
+
+    async def list_entities_by_type(
+        self,
+        *,
+        user_id: str,
+        type_id: str,
+        page_size: int | None = None,
+        page_token: str | None = None,
+    ) -> knowledge_pb2.ListEntitiesByTypeReply:
+        self.calls.append(
+            {
+                "method": "list_entities_by_type",
+                "user_id": user_id,
+                "type_id": type_id,
+                "page_size": page_size,
+                "page_token": page_token,
+            }
+        )
+        return self.entities_reply
 
 
 class FakeJobPublisher:
@@ -284,7 +308,7 @@ async def test_list_wiki_category_tree_filters_sorts_and_nests_types() -> None:
 
     categories = await service.list_wiki_category_tree(universe_id="u-1")
 
-    assert client.calls == [{"universe_id": "u-1"}]
+    assert client.calls == [{"method": "get_schema", "universe_id": "u-1"}]
     assert categories == [
         {
             "category_id": "node.delta",
@@ -321,6 +345,54 @@ async def test_list_wiki_category_tree_filters_sorts_and_nests_types() -> None:
         },
     ]
 
+
+
+@pytest.mark.asyncio
+async def test_list_category_pages_maps_entity_fields_and_pagination() -> None:
+    entities_reply = knowledge_pb2.ListEntitiesByTypeReply(
+        entities=[
+            knowledge_pb2.ListEntitiesByTypeItem(
+                id="entity-1",
+                name="Entity One",
+                description="Entity summary",
+                updated_at="2026-02-19T10:00:00Z",
+                score=0.7,
+            )
+        ],
+        next_page_token="next-cursor",
+        total_count=42,
+    )
+    client = FakeKnowledgeInterfaceClient(entities_reply=entities_reply)
+    service = KnowledgeService(
+        database=FakeDatabase([]),
+        job_publisher=FakeJobPublisher(),
+        knowledge_interface_client=client,
+        settings=Settings(),
+    )
+
+    response = await service.list_category_pages(
+        user_id="user-1",
+        category_id="type-1",
+        page_size=20,
+        page_token="cursor-1",
+    )
+
+    assert client.calls == [
+        {
+            "method": "list_entities_by_type",
+            "user_id": "user-1",
+            "type_id": "type-1",
+            "page_size": 20,
+            "page_token": "cursor-1",
+        }
+    ]
+    assert response["page_size"] == 20
+    assert response["next_page_token"] == "next-cursor"
+    assert response["total_count"] == 42
+    assert response["pages"][0]["entity"]["id"] == "entity-1"
+    assert response["pages"][0]["page_id"] == "entity-1"
+    assert response["pages"][0]["page_title"] == "Entity One"
+    assert response["pages"][0]["page_summary"] == "Entity summary"
 
 def test_count_text_tokens_rounds_character_division() -> None:
     assert KnowledgeService._count_text_tokens("abcd") == 1

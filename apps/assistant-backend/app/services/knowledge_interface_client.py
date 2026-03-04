@@ -22,6 +22,10 @@ class KnowledgeInterfaceClientUnavailableError(KnowledgeInterfaceClientError):
     """Raised when knowledge-interface is unavailable or times out."""
 
 
+class KnowledgeInterfaceClientInvalidArgumentError(KnowledgeInterfaceClientError):
+    """Raised when knowledge-interface rejects request arguments."""
+
+
 class KnowledgeInterfaceClient(KnowledgeInterfaceClientProtocol):
     """gRPC client for read APIs exposed by knowledge-interface."""
 
@@ -84,6 +88,10 @@ class KnowledgeInterfaceClient(KnowledgeInterfaceClientProtocol):
             return await rpc(request, timeout=self._connect_timeout_seconds)
         except grpc.aio.AioRpcError as exc:
             status_code = exc.code()
+            if status_code == grpc.StatusCode.INVALID_ARGUMENT:
+                raise KnowledgeInterfaceClientInvalidArgumentError(
+                    f"knowledge-interface rejected arguments for {error_context}",
+                ) from exc
             if status_code == grpc.StatusCode.NOT_FOUND:
                 raise KnowledgeInterfaceClientNotFoundError(f"knowledge-interface {error_context} not found") from exc
             if status_code in (grpc.StatusCode.PERMISSION_DENIED, grpc.StatusCode.UNAUTHENTICATED):
