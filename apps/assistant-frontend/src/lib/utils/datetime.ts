@@ -2,12 +2,16 @@ function padTwoDigits(value: number): string {
   return value.toString().padStart(2, '0');
 }
 
+function normalizeTimestamp(value: string): string {
+  return value.trim().replace(/\[[^\]]+\]$/, '');
+}
+
 export function formatTimestamp(value: string | null | undefined): string {
   if (!value) {
     return '';
   }
 
-  const parsedDate = new Date(value);
+  const parsedDate = new Date(normalizeTimestamp(value));
   if (Number.isNaN(parsedDate.getTime())) {
     return '';
   }
