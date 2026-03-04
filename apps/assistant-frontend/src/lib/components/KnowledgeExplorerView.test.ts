@@ -47,11 +47,11 @@ describe('KnowledgeExplorerView', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Category A' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'A1' })).toBeInTheDocument();
+      expect(screen.getByText('A1')).toBeInTheDocument();
     });
 
     await fireEvent.click(screen.getByRole('button', { name: 'Category A' }));
-    await fireEvent.click(screen.getByRole('button', { name: 'A1' }));
+    await fireEvent.click(screen.getByText('A1'));
 
     expect(getCategoryPages).toHaveBeenCalledWith('cat-a');
     expect(getCategoryPages).toHaveBeenCalledWith('cat-b');
@@ -93,12 +93,12 @@ describe('KnowledgeExplorerView', () => {
       expect(screen.getByRole('navigation', { name: 'Knowledge breadcrumbs' })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Overview' })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Root' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Child Page' })).toBeInTheDocument();
+      expect(screen.getByText('Child Page')).toBeInTheDocument();
     });
 
     await fireEvent.click(screen.getByRole('button', { name: 'Overview' }));
-    await fireEvent.click(screen.getByRole('button', { name: 'Child Page' }));
-    await fireEvent.click(screen.getByRole('button', { name: 'Collapse Root' }));
+    await fireEvent.click(screen.getByText('Child Page'));
+    await fireEvent.click(screen.getByRole('button', { name: 'Collapse Child' }));
   });
 
 
@@ -168,9 +168,9 @@ describe('KnowledgeExplorerView', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Page Title' })).toBeInTheDocument();
-      expect(screen.getByText(/Created/)).toBeInTheDocument();
+      expect(screen.getByText('Created 2026/01/02 03:04 · Updated 2026/01/03 04:05')).toBeInTheDocument();
       expect(screen.getByRole('heading', { name: 'Related pages' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Linked Page' })).toBeInTheDocument();
+      expect(screen.getByText('Linked Page')).toBeInTheDocument();
     });
 
     expect(getPage).toHaveBeenCalledWith('page-1');

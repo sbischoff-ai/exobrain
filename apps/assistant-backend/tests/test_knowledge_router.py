@@ -112,7 +112,7 @@ class FakeKnowledgeService:
             "links": [
                 {"page_id": "entity-2", "title": "Entity Two", "summary": "Linked"}
             ],
-            "content_markdown": "Root\n\n- Child",
+            "content_markdown": "Root\n\nChild",
         }
 
     async def enqueue_update_job(
@@ -535,7 +535,7 @@ def test_api_knowledge_page_returns_mapped_payload() -> None:
     assert payload["links"][0]["page_id"] == "entity-2"
     assert payload["summary"] == "Root"
     assert "entity" not in payload
-    assert payload["content_markdown"] == "Root\n\n- Child"
+    assert payload["content_markdown"] == "Root\n\nChild"
     assert service.page_detail_calls == [{"user_id": "user-1", "page_id": "entity-1"}]
 
 

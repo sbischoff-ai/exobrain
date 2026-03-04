@@ -97,7 +97,7 @@ describe('knowledgeService', () => {
             updated_at: '2026-02-19T10:00:00Z'
           },
           links: [{ page_id: 'entity-2', title: 'Entity Two', summary: 'Linked' }],
-          content_markdown: 'Root\\n\\n- Child',
+          content_markdown: 'Root\\n\\nChild',
           category_breadcrumb: [
             { category_id: 'node.root', display_name: 'Root' },
             { category_id: 'node.child', display_name: 'Child' }
@@ -115,7 +115,7 @@ describe('knowledgeService', () => {
       id: 'entity-1',
       title: 'Entity One',
       summary: 'Root',
-      content_markdown: 'Root\\n\\n- Child',
+      content_markdown: 'Root\\n\\nChild',
       created_at: '2026-02-19T09:00:00Z',
       updated_at: '2026-02-19T10:00:00Z',
       links: [{ page_id: 'entity-2', title: 'Entity Two', summary: 'Linked' }],

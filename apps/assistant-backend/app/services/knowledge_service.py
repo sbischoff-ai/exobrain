@@ -363,26 +363,18 @@ class KnowledgeService:
             grouped[parent_block_id].append(block)
         for siblings in grouped.values():
             siblings.sort(key=lambda block: (block.block_level, block.id))
-        lines: list[str] = []
+
+        markdown_blocks: list[str] = []
 
         def render(parent_id: str | None) -> None:
             for block in grouped.get(parent_id, []):
                 text = block.text if block.HasField("text") else ""
                 if text.strip():
-                    if block.block_level >= 1:
-                        indent = "  " * (block.block_level - 1)
-                        lines.append(f"{indent}- {text.strip()}")
-                    else:
-                        if lines and lines[-1] != "":
-                            lines.append("")
-                        lines.append(text.strip())
-                        lines.append("")
+                    markdown_blocks.append(text.strip())
                 render(block.id)
 
         render(None)
-        while lines and lines[-1] == "":
-            lines.pop()
-        return "\n".join(lines)
+        return "\n\n".join(markdown_blocks)
 
     @staticmethod
     def _extract_summary_from_described_by_block(blocks: Any) -> str | None:
