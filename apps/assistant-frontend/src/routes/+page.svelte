@@ -17,6 +17,13 @@
     saveSessionState,
     type SessionState
   } from '$lib/stores/journalSessionStore';
+  import {
+    clearWorkspaceViewState,
+    loadWorkspaceViewState,
+    saveWorkspaceViewState,
+    type ExplorerRouteState,
+    type WorkspaceMode
+  } from '$lib/stores/workspaceViewStore';
   import { makeClientMessageId, toStoredMessages } from '$lib/utils/message';
 
   interface ChatStartResponse {
@@ -68,6 +75,9 @@
   let todayReference = '';
   let currentReference = '';
   let messages: StoredMessage[] = [];
+  let workspaceMode: WorkspaceMode = 'chat';
+  let explorerRoute: ExplorerRouteState = { type: 'overview' };
+  let expandedCategories: Record<string, boolean> = {};
   let requestError = '';
   let currentMessageCount = 0;
 
@@ -103,6 +113,11 @@
   async function bootstrap(): Promise<void> {
     initializing = true;
     authError = '';
+
+    const workspaceViewState = loadWorkspaceViewState();
+    workspaceMode = workspaceViewState.mode;
+    explorerRoute = workspaceViewState.explorerRoute;
+    expandedCategories = workspaceViewState.expandedCategories;
 
     try {
       const me = await authService.getCurrentUser();
@@ -141,6 +156,7 @@
     clearPendingStreamId();
 
     clearSessionState();
+    clearWorkspaceViewState();
     authenticated = false;
     user = null;
     sidebarCollapsed = true;
@@ -155,6 +171,33 @@
     awaitingAssistant = false;
     knowledgeUpdateInProgress = false;
     stopKnowledgeUpdateWatch();
+
+    workspaceMode = 'chat';
+    explorerRoute = { type: 'overview' };
+    expandedCategories = {};
+  }
+
+  function persistWorkspaceViewState(): void {
+    saveWorkspaceViewState({
+      mode: workspaceMode,
+      explorerRoute,
+      expandedCategories
+    });
+  }
+
+  function handleModeChange(event: CustomEvent<{ mode: WorkspaceMode }>): void {
+    workspaceMode = event.detail.mode;
+    persistWorkspaceViewState();
+  }
+
+  function handleExplorerNavigate(event: CustomEvent<{ route: ExplorerRouteState }>): void {
+    explorerRoute = event.detail.route;
+    persistWorkspaceViewState();
+  }
+
+  function handleExpandedCategoriesChange(event: CustomEvent<{ expanded: Record<string, boolean> }>): void {
+    expandedCategories = event.detail.expanded;
+    persistWorkspaceViewState();
   }
 
   async function refreshAllState(): Promise<void> {
@@ -679,8 +722,14 @@
     {knowledgeUpdateDisabled}
     {knowledgeUpdateTooltip}
     knowledgeUpdateInProgress={knowledgeUpdateInProgress}
+    {workspaceMode}
+    {explorerRoute}
+    {expandedCategories}
     on:logout={logout}
     on:knowledgeUpdate={handleKnowledgeUpdate}
+    on:modeChange={handleModeChange}
+    on:explorerNavigate={handleExplorerNavigate}
+    on:expandedCategoriesChange={handleExpandedCategoriesChange}
     on:toggleSidebar={() => (sidebarCollapsed = !sidebarCollapsed)}
     on:closeSidebar={() => (sidebarCollapsed = true)}
     on:selectJournal={selectJournal}

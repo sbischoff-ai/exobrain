@@ -5,6 +5,7 @@
   import UserMenu from '$lib/components/UserMenu.svelte';
   import type { CurrentUser } from '$lib/models/auth';
   import type { JournalEntry, StoredMessage } from '$lib/models/journal';
+  import type { ExplorerRouteState, WorkspaceMode } from '$lib/stores/workspaceViewStore';
 
   export let user: CurrentUser;
   export let journalEntries: JournalEntry[] = [];
@@ -24,6 +25,9 @@
   export let knowledgeUpdateDisabled = false;
   export let knowledgeUpdateTooltip = '';
   export let knowledgeUpdateInProgress = false;
+  export let workspaceMode: WorkspaceMode = 'chat';
+  export let explorerRoute: ExplorerRouteState = { type: 'overview' };
+  export let expandedCategories: Record<string, boolean> = {};
 
   const dispatch = createEventDispatcher<{
     logout: void;
@@ -33,7 +37,14 @@
     send: { text: string };
     loadOlder: void;
     knowledgeUpdate: void;
+    modeChange: { mode: WorkspaceMode };
+    explorerNavigate: { route: ExplorerRouteState };
+    expandedCategoriesChange: { expanded: Record<string, boolean> };
   }>();
+
+  $: workspaceMode;
+  $: explorerRoute;
+  $: expandedCategories;
 </script>
 
 <div class="app-shell">
