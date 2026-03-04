@@ -182,10 +182,8 @@ mod tests {
 
     #[test]
     fn schema_string_is_deterministic() {
-        let first =
-            try_upsert_graph_delta_json_schema_string().expect("schema should serialize");
-        let second =
-            try_upsert_graph_delta_json_schema_string().expect("schema should serialize");
+        let first = try_upsert_graph_delta_json_schema_string().expect("schema should serialize");
+        let second = try_upsert_graph_delta_json_schema_string().expect("schema should serialize");
 
         assert_eq!(first, second);
         assert!(first.contains(UPSERT_GRAPH_DELTA_SCHEMA_ID));
