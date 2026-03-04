@@ -6,6 +6,7 @@ SvelteKit application for intro/login gating, journal navigation, and streaming 
 
 - Cookie-authenticated intro/login flow.
 - Journal-focused chat UX with `sessionStorage` snapshots (`exobrain.assistant.session`).
+- Workspace view snapshots in `sessionStorage` (`exobrain.assistant.workspaceView`) for mode/explorer continuity.
 - SSE-driven streaming message rendering with tool call/response cards.
 - Header action to trigger knowledge-base update jobs with live in-progress watch state.
 - Mermaid diagram blocks and KaTeX math expressions render in assistant messages.
@@ -50,6 +51,7 @@ cd apps/assistant-frontend && npm test
 - Auto-scroll responds to all message updates, including streaming chunk updates.
 - Chat bubbles show per-message `hh:mm` timestamps sourced from message `created_at` values.
 - Logout clears `sessionStorage` snapshot state and returns users to intro gate.
+- Workspace mode (`chat`/`knowledge`) and knowledge explorer route/expansion state are restored on bootstrap and persisted on view navigation.
 - Knowledge update action appears in the top-right header actions cluster, immediately next to the user menu.
 - Knowledge update action is exposed as an accessible circular header control (`aria-label` + tooltip).
 - Knowledge update is disabled when viewing a past journal, while app state is loading/syncing, while an update is already in progress, and whenever there are no new messages since the last successful update (`title="nothing to update"`).

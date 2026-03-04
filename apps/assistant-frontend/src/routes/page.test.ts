@@ -748,6 +748,14 @@ describe('root page', () => {
         messages: []
       })
     );
+    window.sessionStorage.setItem(
+      'exobrain.assistant.workspaceView',
+      JSON.stringify({
+        mode: 'knowledge',
+        explorerRoute: { type: 'category', id: 'cat-1' },
+        expandedCategories: { 'cat-1': true }
+      })
+    );
 
     vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(jsonResponse({ name: 'Test User', email: 'test.user@exobrain.local' }))
@@ -768,6 +776,7 @@ describe('root page', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Login' })).toBeInTheDocument();
       expect(window.sessionStorage.getItem('exobrain.assistant.session')).toBeNull();
+      expect(window.sessionStorage.getItem('exobrain.assistant.workspaceView')).toBeNull();
     });
   });
 });
