@@ -99,13 +99,7 @@ class KnowledgeCategoryPagesListResponse(BaseModel):
     )
 
 
-class KnowledgePageEntityDetail(BaseModel):
-    id: str = Field(..., description="Upstream entity identifier from GetEntityContext")
-    name: str = Field(..., description="Upstream entity name from GetEntityContext")
-    description: str | None = Field(
-        default=None,
-        description="Upstream entity description when provided by GetEntityContext",
-    )
+class KnowledgePageMetadata(BaseModel):
     created_at: str = Field(..., description="Upstream entity creation timestamp")
     updated_at: str = Field(..., description="Upstream entity last-update timestamp")
 
@@ -113,29 +107,24 @@ class KnowledgePageEntityDetail(BaseModel):
 class KnowledgePageDetailResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    entity: KnowledgePageEntityDetail = Field(
-        ...,
-        description="Original entity payload returned by GetEntityContext",
-    )
     page_id: str = Field(
         ...,
-        validation_alias=AliasChoices("page_id", AliasPath("entity", "id")),
-        description="Mapped page identifier (alias of entity.id)",
+        description="Mapped page identifier",
     )
     title: str = Field(
         ...,
-        validation_alias=AliasChoices("title", AliasPath("entity", "name")),
+        validation_alias=AliasChoices("title"),
         description="Page title for rendering in the knowledge UI",
     )
     summary: str | None = Field(
         default=None,
-        validation_alias=AliasChoices("summary", AliasPath("entity", "description")),
+        validation_alias=AliasChoices("summary"),
         description="Optional page summary for previews and metadata",
     )
-    metadata: KnowledgePageEntityDetail = Field(
+    metadata: KnowledgePageMetadata = Field(
         ...,
-        validation_alias=AliasChoices("metadata", "entity"),
-        description="Page metadata including canonical timestamps",
+        validation_alias=AliasChoices("metadata"),
+        description="Page metadata including canonical timestamps only",
     )
     links: list[dict[str, str | None]] = Field(
         default_factory=list,

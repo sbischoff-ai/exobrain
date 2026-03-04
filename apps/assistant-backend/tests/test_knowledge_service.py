@@ -543,6 +543,7 @@ async def test_get_page_detail_maps_entity_neighbors_and_block_markdown() -> Non
         ),
         entity_properties={"description": "Entity summary"},
         blocks=[
+            knowledge_pb2.EntityContextBlock(id="block-0", block_level=0, text="Summary"),
             knowledge_pb2.EntityContextBlock(id="block-1", block_level=1, text="Root"),
             knowledge_pb2.EntityContextBlock(
                 id="block-1-1", parent_block_id="block-1", block_level=2, text="Child"
@@ -577,11 +578,35 @@ async def test_get_page_detail_maps_entity_neighbors_and_block_markdown() -> Non
         }
     ]
     assert response["title"] == "Entity One"
+    assert response["summary"] == "Summary"
     assert response["metadata"]["created_at"] == "2026-02-19T09:00:00Z"
     assert response["links"] == [
         {"page_id": "entity-2", "title": "Entity Two", "summary": "Linked summary"}
     ]
-    assert response["content_markdown"] == "- Root\n  - Child"
+    assert response["content_markdown"] == "Summary\n\n- Root\n  - Child"
+
+
+
+@pytest.mark.asyncio
+async def test_get_page_detail_renders_level_zero_as_paragraph_and_nested_as_list() -> None:
+    reply = knowledge_pb2.GetEntityContextReply(
+        entity=knowledge_pb2.EntityContextCore(id="entity-1", name="Entity One"),
+        blocks=[
+            knowledge_pb2.EntityContextBlock(id="b1", block_level=0, text="# Heading"),
+            knowledge_pb2.EntityContextBlock(id="b2", block_level=1, text="Bullet"),
+        ],
+    )
+    service = KnowledgeService(
+        database=FakeDatabase([]),
+        job_publisher=FakeJobPublisher(),
+        knowledge_interface_client=FakeKnowledgeInterfaceClient(entity_context_reply=reply),
+        settings=Settings(),
+    )
+
+    response = await service.get_page_detail(user_id="user-1", page_id="entity-1")
+
+    assert response["summary"] == "# Heading"
+    assert response["content_markdown"] == "# Heading\n\n- Bullet"
 
 
 @pytest.mark.asyncio
@@ -819,7 +844,10 @@ async def test_get_page_detail_maps_metadata_links_and_content() -> None:
             updated_at="2026-02-19T10:00:00Z",
         ),
         entity_properties={"description": "Canonical summary"},
-        blocks=[knowledge_pb2.EntityContextBlock(id="b1", block_level=1, text="Root")],
+        blocks=[
+            knowledge_pb2.EntityContextBlock(id="b0", block_level=0, text="Summary"),
+            knowledge_pb2.EntityContextBlock(id="b1", block_level=1, text="Root"),
+        ],
         neighbors=[
             knowledge_pb2.EntityContextNeighbor(
                 other_entity=knowledge_pb2.EntityContextOtherEntity(
@@ -837,14 +865,12 @@ async def test_get_page_detail_maps_metadata_links_and_content() -> None:
 
     response = await service.get_page_detail(user_id="user-1", page_id="entity-1")
 
+    assert response["summary"] == "Summary"
     assert response["metadata"] == {
-        "id": "entity-1",
-        "name": "Entity One",
-        "description": "Canonical summary",
         "created_at": "2026-02-19T09:00:00Z",
         "updated_at": "2026-02-19T10:00:00Z",
     }
     assert response["links"] == [
         {"page_id": "entity-2", "title": "Entity Two", "summary": "Related page"}
     ]
-    assert response["content_markdown"] == "- Root"
+    assert response["content_markdown"] == "Summary\n\n- Root"
