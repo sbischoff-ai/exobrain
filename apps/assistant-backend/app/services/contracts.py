@@ -290,6 +290,9 @@ class KnowledgeInterfaceClientProtocol(Protocol):
 class KnowledgeServiceProtocol(Protocol):
     """Service contract for knowledge-graph related asynchronous workflows."""
 
+    async def list_wiki_category_tree(self, *, universe_id: str) -> list[dict[str, Any]]:
+        """Return wiki category tree items derived from schema node type inheritance."""
+
     async def enqueue_update_job(self, *, user_id: str, journal_reference: str | None = None) -> str:
         """Queue one or more knowledge update jobs from uncommitted journal messages."""
 
