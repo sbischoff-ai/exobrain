@@ -1,6 +1,6 @@
 # Exobrain Assistant Backend
 
-FastAPI service for auth, chat orchestration, journal APIs, and knowledge-base update workflows. Includes `/api/knowledge/update` to enqueue updates and `/api/knowledge/update/{job_id}/watch` to stream lifecycle events via SSE from job-orchestrator.
+FastAPI service for auth, chat orchestration, journal APIs, and knowledge-base update workflows. Includes `/api/knowledge/update` to enqueue updates, `/api/knowledge/update/{job_id}/watch` to stream lifecycle events via SSE from job-orchestrator, and `/api/knowledge/category/{category_id}/pages` for category page listings backed by `ListEntitiesByType`.
 
 Knowledge update stream contract: [`docs/knowledge-update-sse-contract.md`](docs/knowledge-update-sse-contract.md).
 
@@ -84,6 +84,7 @@ Core runtime vars:
 - Knowledge wiki category trees are derived from `GetSchema` node types only (`kind=node` and ids prefixed `node.`), sorted by `display_name` then `id`.
 - Multiple inheritance in wiki categories duplicates a child category under each active parent category.
 - `POST /api/knowledge/update` returns `409` when there are no uncommitted messages in scope, `503` when orchestrator is unavailable, and `502` for other enqueue failures.
+- `GET /api/knowledge/category/{category_id}/pages` accepts `page_size` and `page_token`, and maps upstream `INVALID_ARGUMENT` to `400`, `UNAVAILABLE/DEADLINE_EXCEEDED` to `503`, and other upstream failures to `502`.
 - `EXOBRAIN_QDRANT_URL`, `EXOBRAIN_MEMGRAPH_URL` (knowledge dependencies)
 - `KNOWLEDGE_UPDATE_MAX_TOKENS` (max tokens per knowledge-update job payload, default `8000`)
 - `RESHAPE_SCHEMA_QUERY` (migration introspection)

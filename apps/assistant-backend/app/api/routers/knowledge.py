@@ -1,11 +1,18 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 
 from app.api.dependencies.auth import get_required_auth_context
 from app.api.schemas.auth import UnifiedPrincipal
-from app.api.schemas.knowledge import KnowledgeUpdateRequest, KnowledgeUpdateResponse
+from app.api.schemas.knowledge import KnowledgeCategoryPagesListResponse, KnowledgeUpdateRequest, KnowledgeUpdateResponse
 from app.dependency_injection import get_container
 from app.services.contracts import KnowledgeServiceProtocol
+from app.services.knowledge_interface_client import (
+    KnowledgeInterfaceClientError,
+    KnowledgeInterfaceClientInvalidArgumentError,
+    KnowledgeInterfaceClientUnavailableError,
+)
 from app.services.knowledge_service import (
     KnowledgeEnqueueError,
     KnowledgeJobAccessDeniedError,
@@ -96,3 +103,40 @@ async def watch_knowledge_update(
             yield encode_knowledge_sse_event(event)
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+@router.get(
+    "/category/{category_id}/pages",
+    response_model=KnowledgeCategoryPagesListResponse,
+    summary="List pages for a knowledge category",
+    description="Returns page summaries for a category using knowledge-interface ListEntitiesByType pagination.",
+    responses={
+        400: {"description": "Invalid pagination or category arguments"},
+        503: {"description": "knowledge-interface unavailable or timed out"},
+        502: {"description": "Unexpected upstream failure from knowledge-interface"},
+    },
+)
+async def list_knowledge_category_pages(
+    category_id: str,
+    request: Request,
+    auth_context: UnifiedPrincipal = Depends(get_required_auth_context),
+    page_size: Annotated[int | None, Query(ge=1, description="Maximum pages to return")]=None,
+    page_token: Annotated[str | None, Query(min_length=1, description="Opaque continuation token")]=None,
+) -> KnowledgeCategoryPagesListResponse:
+    service = get_container(request).resolve(KnowledgeServiceProtocol)
+
+    try:
+        payload = await service.list_category_pages(
+            user_id=auth_context.user_id,
+            category_id=category_id,
+            page_size=page_size,
+            page_token=page_token,
+        )
+    except KnowledgeInterfaceClientInvalidArgumentError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid knowledge category pages request") from exc
+    except KnowledgeInterfaceClientUnavailableError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="knowledge category pages unavailable") from exc
+    except KnowledgeInterfaceClientError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="knowledge category pages upstream failure") from exc
+
+    return KnowledgeCategoryPagesListResponse.model_validate(payload)

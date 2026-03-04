@@ -293,6 +293,16 @@ class KnowledgeServiceProtocol(Protocol):
     async def list_wiki_category_tree(self, *, universe_id: str) -> list[dict[str, Any]]:
         """Return wiki category tree items derived from schema node type inheritance."""
 
+    async def list_category_pages(
+        self,
+        *,
+        user_id: str,
+        category_id: str,
+        page_size: int | None = None,
+        page_token: str | None = None,
+    ) -> dict[str, Any]:
+        """Return page-like summaries for one knowledge category id."""
+
     async def enqueue_update_job(self, *, user_id: str, journal_reference: str | None = None) -> str:
         """Queue one or more knowledge update jobs from uncommitted journal messages."""
 
