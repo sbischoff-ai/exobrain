@@ -366,7 +366,7 @@ impl KnowledgeApplication {
                     type_id: "node.person".to_string(),
                     universe_id: Some(COMMON_UNIVERSE_ID.to_string()),
                     user_id: user_id.to_string(),
-                    visibility: Visibility::Shared,
+                    visibility: Visibility::Private,
                     properties: vec![
                         PropertyValue {
                             key: "name".to_string(),
@@ -384,7 +384,7 @@ impl KnowledgeApplication {
                     type_id: "node.ai_agent".to_string(),
                     universe_id: Some(COMMON_UNIVERSE_ID.to_string()),
                     user_id: user_id.to_string(),
-                    visibility: Visibility::Shared,
+                    visibility: Visibility::Private,
                     properties: vec![PropertyValue {
                         key: "name".to_string(),
                         value: PropertyScalar::String("Exobrain Assistant".to_string()),
@@ -396,7 +396,7 @@ impl KnowledgeApplication {
                 id: assistant_block_id.clone(),
                 type_id: "node.block".to_string(),
                 user_id: user_id.to_string(),
-                visibility: Visibility::Shared,
+                visibility: Visibility::Private,
                 properties: vec![PropertyValue {
                     key: "text".to_string(),
                     value: PropertyScalar::String("Exobrain Assistant is your personal assistant in Exobrain. It chats with you and helps organize your knowledge graph.".to_string()),
@@ -409,7 +409,7 @@ impl KnowledgeApplication {
                     to_id: COMMON_UNIVERSE_ID.to_string(),
                     edge_type: "IS_PART_OF".to_string(),
                     user_id: user_id.to_string(),
-                    visibility: Visibility::Shared,
+                    visibility: Visibility::Private,
                     properties: default_edge_properties("user universe assignment"),
                 },
                 GraphEdge {
@@ -417,7 +417,7 @@ impl KnowledgeApplication {
                     to_id: COMMON_UNIVERSE_ID.to_string(),
                     edge_type: "IS_PART_OF".to_string(),
                     user_id: user_id.to_string(),
-                    visibility: Visibility::Shared,
+                    visibility: Visibility::Private,
                     properties: default_edge_properties("assistant universe assignment"),
                 },
                 GraphEdge {
@@ -425,7 +425,7 @@ impl KnowledgeApplication {
                     to_id: person_entity_id,
                     edge_type: "RELATED_TO".to_string(),
                     user_id: user_id.to_string(),
-                    visibility: Visibility::Shared,
+                    visibility: Visibility::Private,
                     properties: default_edge_properties("assistant relationship"),
                 },
                 GraphEdge {
@@ -433,7 +433,7 @@ impl KnowledgeApplication {
                     to_id: assistant_block_id,
                     edge_type: "DESCRIBED_BY".to_string(),
                     user_id: user_id.to_string(),
-                    visibility: Visibility::Shared,
+                    visibility: Visibility::Private,
                     properties: default_edge_properties("assistant description link"),
                 },
             ],
@@ -2119,10 +2119,29 @@ mod tests {
         let guard = captured.lock().expect("lock should be available");
         assert_eq!(guard.len(), 1);
         assert_eq!(guard[0].block_level, 0);
+        assert_eq!(guard[0].visibility, Visibility::Private);
 
         let marked = marked_user_ids.lock().expect("lock should be available");
         assert_eq!(marked.len(), 1);
         assert!(marked[0].starts_with("user-1:"));
+    }
+
+    #[test]
+    fn user_init_delta_sets_private_visibility_for_all_nodes() {
+        let delta = KnowledgeApplication::user_init_delta("user-1", "Alex");
+
+        assert!(delta
+            .entities
+            .iter()
+            .all(|entity| entity.visibility == Visibility::Private));
+        assert!(delta
+            .blocks
+            .iter()
+            .all(|block| block.visibility == Visibility::Private));
+        assert!(delta
+            .edges
+            .iter()
+            .all(|edge| edge.visibility == Visibility::Private));
     }
 
     #[tokio::test]
