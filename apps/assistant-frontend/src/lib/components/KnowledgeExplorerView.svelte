@@ -1,10 +1,22 @@
 <script lang="ts">
   import { createEventDispatcher, onMount } from 'svelte';
-  import CategoryOverview, { type CategoryOverviewPreview } from '$lib/components/knowledge/CategoryOverview.svelte';
+  import CategoryOverview from '$lib/components/knowledge/CategoryOverview.svelte';
   import CategoryPage from '$lib/components/knowledge/CategoryPage.svelte';
-  import type { KnowledgeCategoryNode, KnowledgeCategoryPageListItem, KnowledgePageCategoryBreadcrumbItem } from '$lib/models/knowledge';
+  import KnowledgePage from '$lib/components/knowledge/KnowledgePage.svelte';
+  import type {
+    KnowledgeCategoryNode,
+    KnowledgeCategoryPageListItem,
+    KnowledgePageCategoryBreadcrumbItem,
+    KnowledgePageDetail
+  } from '$lib/models/knowledge';
   import { knowledgeService } from '$lib/services/knowledgeService';
   import type { ExplorerRouteState } from '$lib/stores/workspaceViewStore';
+
+
+  interface CategoryOverviewPreview {
+    category: KnowledgeCategoryNode;
+    pages: KnowledgeCategoryPageListItem[];
+  }
 
   const OVERVIEW_PREVIEW_LIMIT = 3;
   const LARGE_BRANCH_DESCENDANT_LIMIT = 8;
@@ -17,7 +29,9 @@
   let rootCategories: KnowledgeCategoryNode[] = [];
   let overviewPreviews: CategoryOverviewPreview[] = [];
   let categoryPages: KnowledgeCategoryPageListItem[] = [];
+  let pageDetail: KnowledgePageDetail | null = null;
   let lastLoadedCategoryId = '';
+  let lastLoadedPageId = '';
 
   const dispatch = createEventDispatcher<{
     navigate: { route: ExplorerRouteState };
@@ -32,7 +46,11 @@
     await loadRouteData();
   });
 
-  $: if (rootCategories.length > 0 && explorerRoute.type === 'category' && explorerRoute.id !== lastLoadedCategoryId) {
+  $: if (
+    rootCategories.length > 0 &&
+    ((explorerRoute.type === 'category' && explorerRoute.id !== lastLoadedCategoryId) ||
+      (explorerRoute.type === 'page' && explorerRoute.id !== lastLoadedPageId))
+  ) {
     void loadRouteData();
   }
 
@@ -64,21 +82,43 @@
   async function loadRouteData(): Promise<void> {
     if (explorerRoute.type !== 'category') {
       categoryPages = [];
+    }
+
+    if (explorerRoute.type !== 'page') {
+      pageDetail = null;
+    }
+
+    if (explorerRoute.type === 'category') {
+      if (!currentCategory) {
+        return;
+      }
+
+      loading = true;
+      requestError = '';
+      try {
+        const { pages } = await knowledgeService.getCategoryPages(explorerRoute.id);
+        categoryPages = pages;
+        lastLoadedCategoryId = explorerRoute.id;
+      } catch {
+        requestError = 'Could not load category pages.';
+      } finally {
+        loading = false;
+      }
+
       return;
     }
 
-    if (!currentCategory) {
+    if (explorerRoute.type !== 'page' || explorerRoute.id === lastLoadedPageId) {
       return;
     }
 
     loading = true;
     requestError = '';
     try {
-      const { pages } = await knowledgeService.getCategoryPages(explorerRoute.id);
-      categoryPages = pages;
-      lastLoadedCategoryId = explorerRoute.id;
+      pageDetail = await knowledgeService.getPage(explorerRoute.id);
+      lastLoadedPageId = explorerRoute.id;
     } catch {
-      requestError = 'Could not load category pages.';
+      requestError = 'Could not load knowledge page.';
     } finally {
       loading = false;
     }
@@ -163,12 +203,14 @@
   </div>
 
   <div class="knowledge-content">
-    {#if requestError}
-      <p class="error">{requestError}</p>
-    {/if}
+    {#if explorerRoute.type !== 'page'}
+      {#if requestError}
+        <p class="error">{requestError}</p>
+      {/if}
 
-    {#if loading}
-      <p class="loading">Loading…</p>
+      {#if loading}
+        <p class="loading">Loading…</p>
+      {/if}
     {/if}
 
     {#if explorerRoute.type === 'overview'}
@@ -190,7 +232,14 @@
         on:toggleCategory={(event) => updateExpanded(event.detail.categoryId, event.detail.expanded)}
       />
     {:else}
-      <p class="loading">Page view is not available yet.</p>
+      <KnowledgePage
+        page={pageDetail}
+        loading={loading}
+        error={requestError}
+        on:navigateOverview={() => navigate({ type: 'overview' })}
+        on:navigateCategory={(event) => navigate({ type: 'category', id: event.detail.categoryId })}
+        on:openPage={(event) => navigate({ type: 'page', id: event.detail.pageId })}
+      />
     {/if}
   </div>
 </section>
