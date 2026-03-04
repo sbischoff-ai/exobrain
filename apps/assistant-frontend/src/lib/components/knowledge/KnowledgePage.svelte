@@ -125,13 +125,13 @@
 
   h1 {
     margin: 0;
-    color: #fb4934;
+    color: var(--explorer-title-red);
     font-size: 1.4rem;
   }
 
   .meta {
     margin: 0.5rem 0 0;
-    color: var(--muted);
+    color: var(--explorer-meta-muted);
     font-size: 0.85rem;
   }
 
@@ -159,11 +159,11 @@
   .loading,
   .empty {
     margin: 0;
-    color: var(--muted);
+    color: var(--explorer-meta-muted);
   }
 
   .error {
     margin: 0;
-    color: #d08a8a;
+    color: var(--explorer-error-text);
   }
 </style>

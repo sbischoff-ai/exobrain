@@ -28,21 +28,21 @@
     flex-wrap: wrap;
     gap: 0.4rem;
     align-items: center;
-    color: var(--muted);
+    color: var(--explorer-meta-muted);
     font-size: 0.9rem;
   }
 
   .crumb {
     border: none;
     background: none;
-    color: var(--accent-soft);
+    color: var(--explorer-breadcrumb-link);
     font: inherit;
     cursor: pointer;
     padding: 0;
   }
 
   .crumb:hover {
-    color: var(--accent);
+    color: var(--explorer-breadcrumb-link-hover);
     text-decoration: underline;
   }
 

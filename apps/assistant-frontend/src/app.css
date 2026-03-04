@@ -9,6 +9,15 @@
   --accent-soft: #fabd2f;
   --border: #7c6f64;
   --code-bg: #282828;
+  --explorer-title-red: #fb4934;
+  --explorer-card-bg: #504945;
+  --explorer-card-border: #7c6f64;
+  --explorer-card-hover-bg: #5a4f48;
+  --explorer-breadcrumb-link: #fabd2f;
+  --explorer-breadcrumb-link-hover: #feee9d;
+  --explorer-breadcrumb-decoration: #d79921;
+  --explorer-meta-muted: #d5c4a1;
+  --explorer-error-text: #d08a8a;
   --header-height: 5.4rem;
   --mobile-ui-scale: 1;
 }
@@ -521,12 +530,12 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
 
 
 .exo-md-link {
-  color: #fabd2f !important;
-  text-decoration-color: #d79921 !important;
+  color: var(--explorer-breadcrumb-link) !important;
+  text-decoration-color: var(--explorer-breadcrumb-decoration) !important;
 }
 
 .exo-md-link:hover {
-  color: #feee9d !important;
+  color: var(--explorer-breadcrumb-link-hover) !important;
 }
 
 .exo-md-blockquote {

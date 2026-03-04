@@ -52,13 +52,18 @@
   }
 
   .category-card {
-    border: 1px solid var(--border);
+    border: 1px solid var(--explorer-card-border);
     border-radius: 0.85rem;
-    background: var(--surface);
+    background: var(--explorer-card-bg);
     padding: 1rem;
     display: flex;
     flex-direction: column;
     gap: 0.65rem;
+    transition: background-color 150ms ease;
+  }
+
+  .category-card:hover {
+    background: var(--explorer-card-hover-bg);
   }
 
   h3 {
@@ -69,7 +74,7 @@
   .category-link {
     border: none;
     background: none;
-    color: var(--accent-soft);
+    color: var(--explorer-breadcrumb-link);
     font: inherit;
     font-weight: 600;
     text-align: left;
@@ -78,19 +83,19 @@
   }
 
   .category-link:hover {
-    color: var(--accent);
+    color: var(--explorer-breadcrumb-link-hover);
     text-decoration: underline;
   }
 
   .count {
-    color: var(--muted);
+    color: var(--explorer-meta-muted);
     font-size: 0.9em;
     margin-left: 0.3rem;
   }
 
   .empty {
     margin: 0;
-    color: var(--muted);
+    color: var(--explorer-meta-muted);
   }
 
   .preview-pages {
