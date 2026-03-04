@@ -185,8 +185,8 @@
     });
   }
 
-  function handleModeChange(event: CustomEvent<{ mode: WorkspaceMode }>): void {
-    workspaceMode = event.detail.mode;
+  function handleToggleViewMode(): void {
+    workspaceMode = workspaceMode === 'chat' ? 'knowledge' : 'chat';
     persistWorkspaceViewState();
   }
 
@@ -722,12 +722,12 @@
     {knowledgeUpdateDisabled}
     {knowledgeUpdateTooltip}
     knowledgeUpdateInProgress={knowledgeUpdateInProgress}
-    {workspaceMode}
+    viewMode={workspaceMode}
     {explorerRoute}
     {expandedCategories}
     on:logout={logout}
     on:knowledgeUpdate={handleKnowledgeUpdate}
-    on:modeChange={handleModeChange}
+    on:toggleViewMode={handleToggleViewMode}
     on:explorerNavigate={handleExplorerNavigate}
     on:expandedCategoriesChange={handleExpandedCategoriesChange}
     on:toggleSidebar={() => (sidebarCollapsed = !sidebarCollapsed)}

@@ -25,7 +25,7 @@
   export let knowledgeUpdateDisabled = false;
   export let knowledgeUpdateTooltip = '';
   export let knowledgeUpdateInProgress = false;
-  export let workspaceMode: WorkspaceMode = 'chat';
+  export let viewMode: WorkspaceMode = 'chat';
   export let explorerRoute: ExplorerRouteState = { type: 'overview' };
   export let expandedCategories: Record<string, boolean> = {};
 
@@ -37,14 +37,17 @@
     send: { text: string };
     loadOlder: void;
     knowledgeUpdate: void;
-    modeChange: { mode: WorkspaceMode };
+    toggleViewMode: void;
     explorerNavigate: { route: ExplorerRouteState };
     expandedCategoriesChange: { expanded: Record<string, boolean> };
   }>();
 
-  $: workspaceMode;
+  $: viewMode;
   $: explorerRoute;
   $: expandedCategories;
+
+  $: viewModeButtonTitle = viewMode === 'chat' ? 'Switch to Knowledge Explorer' : 'Switch to Journal Chat';
+  $: viewModeButtonLabel = viewMode === 'chat' ? 'Switch to Knowledge Explorer' : 'Switch to Journal Chat';
 </script>
 
 <div class="app-shell">
@@ -56,7 +59,28 @@
       </div>
       <div class="header-actions">
         <button
-          class="knowledge-update-trigger"
+          class="header-action-button"
+          type="button"
+          on:click={() => dispatch('toggleViewMode')}
+          aria-label={viewModeButtonLabel}
+          title={viewModeButtonTitle}
+        >
+          {#if viewMode === 'chat'}
+            <svg viewBox="0 0 24 24" role="img" aria-hidden="true" focusable="false">
+              <path
+                d="M6 3a3 3 0 0 0-3 3v12.5A2.5 2.5 0 0 0 5.5 21H19a1 1 0 1 0 0-2H5.5a.5.5 0 0 1-.5-.5V6a1 1 0 0 1 1-1h5v10.75c0 .71.78 1.15 1.39.79L15 15.2l2.61 1.34a.9.9 0 0 0 1.39-.79V5h1a1 1 0 0 1 1 1v4a1 1 0 1 0 2 0V6a3 3 0 0 0-3-3H6zm7 2h4v9.12l-1.55-.79a1 1 0 0 0-.9 0L13 14.12V5z"
+              />
+            </svg>
+          {:else}
+            <svg viewBox="0 0 24 24" role="img" aria-hidden="true" focusable="false">
+              <path
+                d="M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-5.26l-3.92 3.36a1 1 0 0 1-1.65-.76V17H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm0 2v9h6.17a1 1 0 0 1 1 1v1.51l2.42-2.07a1 1 0 0 1 .65-.24H20V6H4z"
+              />
+            </svg>
+          {/if}
+        </button>
+        <button
+          class="header-action-button knowledge-update-trigger"
           type="button"
           on:click={() => dispatch('knowledgeUpdate')}
           aria-label="Update knowledge base"
@@ -116,7 +140,7 @@
     gap: 0.55rem;
   }
 
-  .knowledge-update-trigger {
+  .header-action-button {
     width: calc(2.75rem * var(--mobile-ui-scale, 1));
     height: calc(2.75rem * var(--mobile-ui-scale, 1));
     border-radius: 999px;
@@ -129,18 +153,18 @@
     transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease, opacity 120ms ease;
   }
 
-  .knowledge-update-trigger:hover:not(:disabled) {
+  .header-action-button:hover:not(:disabled) {
     border-color: var(--accent);
     background: #5a4f48;
   }
 
-  .knowledge-update-trigger:disabled {
+  .header-action-button:disabled {
     color: var(--muted);
     opacity: 0.55;
     cursor: not-allowed;
   }
 
-  .knowledge-update-trigger svg {
+  .header-action-button svg {
     width: calc(1.3rem * var(--mobile-ui-scale, 1));
     height: calc(1.3rem * var(--mobile-ui-scale, 1));
     fill: currentColor;
