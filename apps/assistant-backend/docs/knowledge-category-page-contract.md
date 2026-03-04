@@ -94,20 +94,10 @@ Returns page detail from `GetEntityContext` (`max_block_level=2`).
 
 ```json
 {
-  "entity": {
-    "id": "entity-1",
-    "name": "Entity One",
-    "description": "Entity summary",
-    "created_at": "2026-02-19T09:00:00Z",
-    "updated_at": "2026-02-19T10:00:00Z"
-  },
   "page_id": "entity-1",
   "title": "Entity One",
-  "summary": "Entity summary",
+  "summary": "Root",
   "metadata": {
-    "id": "entity-1",
-    "name": "Entity One",
-    "description": "Entity summary",
     "created_at": "2026-02-19T09:00:00Z",
     "updated_at": "2026-02-19T10:00:00Z"
   },
@@ -118,15 +108,16 @@ Returns page detail from `GetEntityContext` (`max_block_level=2`).
       "summary": "Linked summary"
     }
   ],
-  "content_markdown": "- Root\n  - Child"
+  "content_markdown": "Root\n\n- Child"
 }
 ```
 
 ### Notes
 
-- `metadata` mirrors canonical entity fields and is alias-compatible with `entity`.
+- `summary` is sourced from the text of the direct `DESCRIBED_BY` block (root block at level 0).
+- `metadata` contains only canonical timestamps (`created_at`, `updated_at`).
 - `links` are mapped from neighbor entities.
-- `content_markdown` is rendered from contextual blocks.
+- `content_markdown` renders level-0 blocks as paragraphs and level>=1 blocks as list items.
 
 ### Error mapping
 

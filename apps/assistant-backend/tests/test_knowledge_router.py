@@ -104,27 +104,17 @@ class FakeKnowledgeService:
         if self.page_detail_error is not None:
             raise self.page_detail_error
         return {
-            "entity": {
-                "id": page_id,
-                "name": "Entity One",
-                "description": "Entity summary",
-                "created_at": "2026-02-19T09:00:00Z",
-                "updated_at": "2026-02-19T10:00:00Z",
-            },
             "page_id": page_id,
             "title": "Entity One",
-            "summary": "Entity summary",
+            "summary": "Root",
             "metadata": {
-                "id": page_id,
-                "name": "Entity One",
-                "description": "Entity summary",
                 "created_at": "2026-02-19T09:00:00Z",
                 "updated_at": "2026-02-19T10:00:00Z",
             },
             "links": [
                 {"page_id": "entity-2", "title": "Entity Two", "summary": "Linked"}
             ],
-            "content_markdown": "- Root\n  - Child",
+            "content_markdown": "Root\n\n- Child",
         }
 
     async def enqueue_update_job(
@@ -544,7 +534,9 @@ def test_api_knowledge_page_returns_mapped_payload() -> None:
     assert payload["title"] == "Entity One"
     assert payload["metadata"]["created_at"] == "2026-02-19T09:00:00Z"
     assert payload["links"][0]["page_id"] == "entity-2"
-    assert payload["content_markdown"] == "- Root\n  - Child"
+    assert payload["summary"] == "Root"
+    assert "entity" not in payload
+    assert payload["content_markdown"] == "Root\n\n- Child"
     assert service.page_detail_calls == [{"user_id": "user-1", "page_id": "entity-1"}]
 
 

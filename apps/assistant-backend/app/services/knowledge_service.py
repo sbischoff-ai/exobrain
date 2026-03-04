@@ -251,24 +251,10 @@ class KnowledgeService:
                 }
             )
         return {
-            "entity": {
-                "id": entity.id,
-                "name": entity.name,
-                "description": reply.entity_properties.get("description"),
-                "created_at": entity.created_at
-                if entity.HasField("created_at")
-                else "",
-                "updated_at": entity.updated_at
-                if entity.HasField("updated_at")
-                else "",
-            },
             "page_id": entity.id,
             "title": entity.name,
-            "summary": reply.entity_properties.get("description"),
+            "summary": self._extract_summary_from_described_by_block(reply.blocks),
             "metadata": {
-                "id": entity.id,
-                "name": entity.name,
-                "description": reply.entity_properties.get("description"),
                 "created_at": entity.created_at
                 if entity.HasField("created_at")
                 else "",
@@ -385,14 +371,31 @@ class KnowledgeService:
 
         def render(parent_id: str | None) -> None:
             for block in grouped.get(parent_id, []):
-                indent = "  " * max(block.block_level - 1, 0)
                 text = block.text if block.HasField("text") else ""
                 if text.strip():
-                    lines.append(f"{indent}- {text.strip()}")
+                    if block.block_level >= 1:
+                        indent = "  " * (block.block_level - 1)
+                        lines.append(f"{indent}- {text.strip()}")
+                    else:
+                        if lines and lines[-1] != "":
+                            lines.append("")
+                        lines.append(text.strip())
+                        lines.append("")
                 render(block.id)
 
         render(None)
+        while lines and lines[-1] == "":
+            lines.pop()
         return "\n".join(lines)
+
+    @staticmethod
+    def _extract_summary_from_described_by_block(blocks: Any) -> str | None:
+        for block in blocks:
+            is_root = not block.HasField("parent_block_id")
+            text = block.text if block.HasField("text") else ""
+            if is_root and block.block_level == 0 and text.strip():
+                return text.strip()
+        return None
 
     async def _list_uncommitted_message_sequences(
         self,

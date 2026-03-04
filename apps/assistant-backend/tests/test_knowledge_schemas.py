@@ -49,17 +49,10 @@ def test_category_pages_list_response_preserves_pagination() -> None:
 def test_page_detail_response_maps_aliases_and_context_markdown() -> None:
     response = KnowledgePageDetailResponse.model_validate(
         {
-            "entity": {
-                "id": "page-42",
-                "name": "Meaning",
-                "description": "All about meaning",
-                "created_at": "2026-01-01T00:00:00Z",
-                "updated_at": "2026-02-01T00:00:00Z",
-            },
+            "page_id": "page-42",
+            "title": "Meaning",
+            "summary": "All about meaning",
             "metadata": {
-                "id": "page-42",
-                "name": "Meaning",
-                "description": "All about meaning",
                 "created_at": "2026-01-01T00:00:00Z",
                 "updated_at": "2026-02-01T00:00:00Z",
             },
@@ -75,3 +68,4 @@ def test_page_detail_response_maps_aliases_and_context_markdown() -> None:
     assert response.metadata.updated_at == "2026-02-01T00:00:00Z"
     assert response.links[0]["page_id"] == "page-8"
     assert response.content_markdown == "# Meaning"
+    assert "entity" not in response.model_dump()
