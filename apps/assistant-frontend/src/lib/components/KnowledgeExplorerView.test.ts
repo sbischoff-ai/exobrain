@@ -102,6 +102,38 @@ describe('KnowledgeExplorerView', () => {
   });
 
 
+
+  it('collapses the visible branch when category toggle is clicked', async () => {
+    getCategoryTree.mockResolvedValue({
+      categories: [
+        {
+          id: 'root',
+          name: 'Root',
+          page_count: 2,
+          children: [{ id: 'child', name: 'Child', page_count: 1, children: [] }]
+        }
+      ]
+    });
+    getCategoryPages.mockImplementation(async () => ({ pages: [] }));
+
+    const { rerender } = render(KnowledgeExplorerView, {
+      props: {
+        explorerRoute: { type: 'category', id: 'root' },
+        expandedCategories: { root: true }
+      }
+    });
+
+    const collapseButton = await screen.findByRole('button', { name: 'Collapse Root' });
+    await fireEvent.click(collapseButton);
+
+    await rerender({
+      explorerRoute: { type: 'category', id: 'root' },
+      expandedCategories: { root: false }
+    });
+
+    expect(screen.queryByRole('button', { name: 'Child' })).not.toBeInTheDocument();
+  });
+
   it('renders breadcrumb navigation views across route transitions', async () => {
     getCategoryTree.mockResolvedValue({
       categories: [
