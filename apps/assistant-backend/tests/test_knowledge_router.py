@@ -81,17 +81,15 @@ class FakeKnowledgeService:
         if self.category_pages_error is not None:
             raise self.category_pages_error
         return {
-            "pages": [
+            "knowledge_pages": [
                 {
-                    "entity": {
-                        "id": "entity-1",
-                        "name": "Entity One",
-                        "description": "Entity summary",
+                    "id": "entity-1",
+                    "title": "Entity One",
+                    "summary": "Entity summary",
+                    "metadata": {
+                        "created_at": "",
                         "updated_at": "2026-02-19T10:00:00Z",
                     },
-                    "page_id": "entity-1",
-                    "page_title": "Entity One",
-                    "page_summary": "Entity summary",
                 }
             ],
             "page_size": page_size or 1,
@@ -104,7 +102,7 @@ class FakeKnowledgeService:
         if self.page_detail_error is not None:
             raise self.page_detail_error
         return {
-            "page_id": page_id,
+            "id": page_id,
             "title": "Entity One",
             "summary": "Root",
             "metadata": {
@@ -463,8 +461,8 @@ def test_api_knowledge_category_pages_returns_mapped_payload() -> None:
         )
 
     assert response.status_code == 200
-    assert response.json()["pages"][0]["page_id"] == "entity-1"
-    assert response.json()["pages"][0]["entity"]["id"] == "entity-1"
+    assert response.json()["knowledge_pages"][0]["id"] == "entity-1"
+    assert response.json()["knowledge_pages"][0]["metadata"]["updated_at"] == "2026-02-19T10:00:00Z"
     assert service.category_pages_calls == [
         {
             "user_id": "user-1",
@@ -531,6 +529,7 @@ def test_api_knowledge_page_returns_mapped_payload() -> None:
 
     assert response.status_code == 200
     payload = response.json()
+    assert payload["id"] == "entity-1"
     assert payload["title"] == "Entity One"
     assert payload["metadata"]["created_at"] == "2026-02-19T09:00:00Z"
     assert payload["links"][0]["page_id"] == "entity-2"

@@ -192,28 +192,24 @@ class KnowledgeService:
             page_size=page_size,
             page_token=page_token,
         )
-        pages: list[dict[str, Any]] = []
+        knowledge_pages: list[dict[str, Any]] = []
         for entity in reply.entities:
-            entity_payload = {
-                "id": entity.id,
-                "name": entity.name,
-                "description": entity.description if entity.HasField("description") else None,
-                "updated_at": entity.updated_at
-                if entity.HasField("updated_at")
-                else None,
-                "score": entity.score if entity.HasField("score") else None,
-            }
-            pages.append(
+            knowledge_pages.append(
                 {
-                    "entity": entity_payload,
-                    "page_id": entity_payload["id"],
-                    "page_title": entity_payload["name"],
-                    "page_summary": entity_payload["description"],
+                    "id": entity.id,
+                    "title": entity.name,
+                    "summary": entity.description if entity.HasField("description") else None,
+                    "metadata": {
+                        "created_at": "",
+                        "updated_at": entity.updated_at
+                        if entity.HasField("updated_at")
+                        else "",
+                    },
                 }
             )
         return {
-            "pages": pages,
-            "page_size": page_size if page_size is not None else max(len(pages), 1),
+            "knowledge_pages": knowledge_pages,
+            "page_size": page_size if page_size is not None else max(len(knowledge_pages), 1),
             "next_page_token": reply.next_page_token
             if reply.HasField("next_page_token")
             else None,
@@ -251,7 +247,7 @@ class KnowledgeService:
                 }
             )
         return {
-            "page_id": entity.id,
+            "id": entity.id,
             "title": entity.name,
             "summary": self._extract_summary_from_described_by_block(reply.blocks),
             "metadata": {

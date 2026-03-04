@@ -105,18 +105,15 @@ Example response:
 
 ```json
 {
-  "pages": [
+  "knowledge_pages": [
     {
-      "entity": {
-        "id": "entity-1",
-        "name": "Entity One",
-        "description": "Entity summary",
-        "updated_at": "2026-02-19T10:00:00Z",
-        "score": 0.7
-      },
-      "page_id": "entity-1",
-      "page_title": "Entity One",
-      "page_summary": "Entity summary"
+      "id": "entity-1",
+      "title": "Entity One",
+      "summary": "Entity summary",
+      "metadata": {
+        "created_at": "",
+        "updated_at": "2026-02-19T10:00:00Z"
+      }
     }
   ],
   "page_size": 20,
@@ -132,20 +129,10 @@ Example response:
 
 ```json
 {
-  "entity": {
-    "id": "entity-1",
-    "name": "Entity One",
-    "description": "Entity summary",
-    "created_at": "2026-02-19T09:00:00Z",
-    "updated_at": "2026-02-19T10:00:00Z"
-  },
-  "page_id": "entity-1",
+  "id": "entity-1",
   "title": "Entity One",
   "summary": "Entity summary",
   "metadata": {
-    "id": "entity-1",
-    "name": "Entity One",
-    "description": "Entity summary",
     "created_at": "2026-02-19T09:00:00Z",
     "updated_at": "2026-02-19T10:00:00Z"
   },

@@ -5,33 +5,34 @@ from app.api.schemas.knowledge import (
 )
 
 
-def test_category_pages_list_item_maps_aliases_from_entity() -> None:
+def test_category_pages_list_item_uses_compact_fields() -> None:
     item = KnowledgeCategoryPageListItem.model_validate(
         {
-            "entity": {
-                "id": "page-1",
-                "name": "Page One",
-                "description": "Summary One",
+            "id": "page-1",
+            "title": "Page One",
+            "summary": "Summary One",
+            "metadata": {
+                "created_at": "2026-02-18T10:00:00Z",
                 "updated_at": "2026-02-19T10:00:00Z",
-            }
+            },
         }
     )
 
-    assert item.page_id == "page-1"
-    assert item.page_title == "Page One"
-    assert item.page_summary == "Summary One"
+    assert item.id == "page-1"
+    assert item.title == "Page One"
+    assert item.summary == "Summary One"
+    assert item.metadata.created_at == "2026-02-18T10:00:00Z"
 
 
 def test_category_pages_list_response_preserves_pagination() -> None:
     response = KnowledgeCategoryPagesListResponse.model_validate(
         {
-            "pages": [
+            "knowledge_pages": [
                 {
-                    "entity": {
-                        "id": "page-1",
-                        "name": "Page One",
-                        "description": "Summary One",
-                    }
+                    "id": "page-1",
+                    "title": "Page One",
+                    "summary": "Summary One",
+                    "metadata": {"created_at": "", "updated_at": ""},
                 }
             ],
             "page_size": 20,
@@ -43,13 +44,13 @@ def test_category_pages_list_response_preserves_pagination() -> None:
     assert response.page_size == 20
     assert response.next_page_token == "cursor-2"
     assert response.total_count == 101
-    assert response.pages[0].entity.id == "page-1"
+    assert response.knowledge_pages[0].id == "page-1"
 
 
 def test_page_detail_response_maps_aliases_and_context_markdown() -> None:
     response = KnowledgePageDetailResponse.model_validate(
         {
-            "page_id": "page-42",
+            "id": "page-42",
             "title": "Meaning",
             "summary": "All about meaning",
             "metadata": {
@@ -61,7 +62,7 @@ def test_page_detail_response_maps_aliases_and_context_markdown() -> None:
         }
     )
 
-    assert response.page_id == "page-42"
+    assert response.id == "page-42"
     assert response.title == "Meaning"
     assert response.summary == "All about meaning"
     assert response.metadata.created_at == "2026-01-01T00:00:00Z"
