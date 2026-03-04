@@ -21,6 +21,10 @@ from app.services.knowledge_service import (
     KnowledgeJobAccessDeniedError,
     KnowledgeJobNotFoundError,
     KnowledgeNoPendingMessagesError,
+    KnowledgePageAccessDeniedError,
+    KnowledgePageNotFoundError,
+    KnowledgePageUnavailableError,
+    KnowledgePageUpstreamError,
     KnowledgeUpstreamUnavailableError,
     KnowledgeWatchError,
 )
@@ -34,7 +38,8 @@ class FakeKnowledgeService:
         self.enqueue_error: Exception | None = None
         self.category_pages_calls: list[dict[str, object]] = []
         self.category_pages_error: Exception | None = None
-
+        self.page_detail_calls: list[dict[str, object]] = []
+        self.page_detail_error: Exception | None = None
 
     async def list_category_pages(
         self,
@@ -73,7 +78,37 @@ class FakeKnowledgeService:
             "total_count": 10,
         }
 
-    async def enqueue_update_job(self, *, user_id: str, journal_reference: str | None = None) -> str:
+    async def get_page_detail(self, *, user_id: str, page_id: str) -> dict[str, object]:
+        self.page_detail_calls.append({"user_id": user_id, "page_id": page_id})
+        if self.page_detail_error is not None:
+            raise self.page_detail_error
+        return {
+            "entity": {
+                "id": page_id,
+                "name": "Entity One",
+                "description": "Entity summary",
+                "created_at": "2026-02-19T09:00:00Z",
+                "updated_at": "2026-02-19T10:00:00Z",
+            },
+            "page_id": page_id,
+            "title": "Entity One",
+            "summary": "Entity summary",
+            "metadata": {
+                "id": page_id,
+                "name": "Entity One",
+                "description": "Entity summary",
+                "created_at": "2026-02-19T09:00:00Z",
+                "updated_at": "2026-02-19T10:00:00Z",
+            },
+            "links": [
+                {"page_id": "entity-2", "title": "Entity Two", "summary": "Linked"}
+            ],
+            "content_markdown": "- Root\n  - Child",
+        }
+
+    async def enqueue_update_job(
+        self, *, user_id: str, journal_reference: str | None = None
+    ) -> str:
         self.calls.append({"user_id": user_id, "journal_reference": journal_reference})
         if self.enqueue_error is not None:
             raise self.enqueue_error
@@ -86,14 +121,31 @@ class FakeKnowledgeService:
         job_id: str,
         include_current: bool = True,
     ) -> AsyncIterator[dict[str, object]]:
-        self.watch_calls.append({"user_id": user_id, "job_id": job_id, "include_current": include_current})
-        yield {"type": "status", "data": {"job_id": job_id, "state": "STARTED", "attempt": 1, "detail": "working", "terminal": False, "emitted_at": "2026-02-19T10:00:00Z"}}
-        yield {"type": "done", "data": {"job_id": job_id, "state": "SUCCEEDED", "terminal": True}}
+        self.watch_calls.append(
+            {"user_id": user_id, "job_id": job_id, "include_current": include_current}
+        )
+        yield {
+            "type": "status",
+            "data": {
+                "job_id": job_id,
+                "state": "STARTED",
+                "attempt": 1,
+                "detail": "working",
+                "terminal": False,
+                "emitted_at": "2026-02-19T10:00:00Z",
+            },
+        }
+        yield {
+            "type": "done",
+            "data": {"job_id": job_id, "state": "SUCCEEDED", "terminal": True},
+        }
 
 
 @pytest.mark.asyncio
 async def test_enqueue_knowledge_update_uses_knowledge_service_with_reference() -> None:
-    principal = UnifiedPrincipal(user_id="user-1", email="u@example.com", display_name="User")
+    principal = UnifiedPrincipal(
+        user_id="user-1", email="u@example.com", display_name="User"
+    )
     service = FakeKnowledgeService()
     container = build_test_container({KnowledgeServiceProtocol: service})
     request = build_test_request(container)
@@ -110,8 +162,12 @@ async def test_enqueue_knowledge_update_uses_knowledge_service_with_reference() 
 
 
 @pytest.mark.asyncio
-async def test_enqueue_knowledge_update_uses_knowledge_service_without_reference() -> None:
-    principal = UnifiedPrincipal(user_id="user-1", email="u@example.com", display_name="User")
+async def test_enqueue_knowledge_update_uses_knowledge_service_without_reference() -> (
+    None
+):
+    principal = UnifiedPrincipal(
+        user_id="user-1", email="u@example.com", display_name="User"
+    )
     service = FakeKnowledgeService()
     container = build_test_container({KnowledgeServiceProtocol: service})
     request = build_test_request(container)
@@ -128,7 +184,9 @@ async def test_enqueue_knowledge_update_uses_knowledge_service_without_reference
 
 
 def test_api_knowledge_update_surfaces_job_id() -> None:
-    principal = UnifiedPrincipal(user_id="user-1", email="u@example.com", display_name="User")
+    principal = UnifiedPrincipal(
+        user_id="user-1", email="u@example.com", display_name="User"
+    )
     service = FakeKnowledgeService()
     container = build_test_container({KnowledgeServiceProtocol: service})
 
@@ -143,25 +201,37 @@ def test_api_knowledge_update_surfaces_job_id() -> None:
     app.include_router(knowledge_router.router, prefix="/api")
 
     with TestClient(app) as client:
-        response = client.post("/api/knowledge/update", json={"journal_reference": "2026/02/19"})
+        response = client.post(
+            "/api/knowledge/update", json={"journal_reference": "2026/02/19"}
+        )
 
     assert response.status_code == 200
     assert response.json()["job_id"] == "job-knowledge-1"
     assert service.calls == [{"user_id": "user-1", "journal_reference": "2026/02/19"}]
 
 
-
-
 @pytest.mark.parametrize(
     ("error", "expected_status", "expected_detail"),
     [
-        (KnowledgeNoPendingMessagesError("empty"), 409, "no uncommitted messages available for knowledge update"),
-        (KnowledgeUpstreamUnavailableError("unavailable"), 503, "knowledge update enqueue unavailable"),
+        (
+            KnowledgeNoPendingMessagesError("empty"),
+            409,
+            "no uncommitted messages available for knowledge update",
+        ),
+        (
+            KnowledgeUpstreamUnavailableError("unavailable"),
+            503,
+            "knowledge update enqueue unavailable",
+        ),
         (KnowledgeEnqueueError("failed"), 502, "knowledge update enqueue failed"),
     ],
 )
-def test_api_knowledge_update_maps_enqueue_domain_errors(error: Exception, expected_status: int, expected_detail: str) -> None:
-    principal = UnifiedPrincipal(user_id="user-1", email="u@example.com", display_name="User")
+def test_api_knowledge_update_maps_enqueue_domain_errors(
+    error: Exception, expected_status: int, expected_detail: str
+) -> None:
+    principal = UnifiedPrincipal(
+        user_id="user-1", email="u@example.com", display_name="User"
+    )
     service = FakeKnowledgeService()
     service.enqueue_error = error
     container = build_test_container({KnowledgeServiceProtocol: service})
@@ -177,13 +247,18 @@ def test_api_knowledge_update_maps_enqueue_domain_errors(error: Exception, expec
     app.include_router(knowledge_router.router, prefix="/api")
 
     with TestClient(app) as client:
-        response = client.post("/api/knowledge/update", json={"journal_reference": "2026/02/19"})
+        response = client.post(
+            "/api/knowledge/update", json={"journal_reference": "2026/02/19"}
+        )
 
     assert response.status_code == expected_status
     assert response.json() == {"detail": expected_detail}
 
+
 def test_api_knowledge_watch_streams_sse_events() -> None:
-    principal = UnifiedPrincipal(user_id="user-1", email="u@example.com", display_name="User")
+    principal = UnifiedPrincipal(
+        user_id="user-1", email="u@example.com", display_name="User"
+    )
     service = FakeKnowledgeService()
     container = build_test_container({KnowledgeServiceProtocol: service})
 
@@ -205,7 +280,9 @@ def test_api_knowledge_watch_streams_sse_events() -> None:
     assert "event: status" in response.text
     assert '"state": "STARTED"' in response.text
     assert "event: done" in response.text
-    assert service.watch_calls == [{"user_id": "user-1", "job_id": "job-knowledge-1", "include_current": True}]
+    assert service.watch_calls == [
+        {"user_id": "user-1", "job_id": "job-knowledge-1", "include_current": True}
+    ]
 
 
 @pytest.mark.parametrize(
@@ -217,8 +294,12 @@ def test_api_knowledge_watch_streams_sse_events() -> None:
         (KnowledgeWatchError("failed"), 502),
     ],
 )
-def test_api_knowledge_watch_maps_domain_errors_to_http(error: Exception, expected_status: int) -> None:
-    principal = UnifiedPrincipal(user_id="user-1", email="u@example.com", display_name="User")
+def test_api_knowledge_watch_maps_domain_errors_to_http(
+    error: Exception, expected_status: int
+) -> None:
+    principal = UnifiedPrincipal(
+        user_id="user-1", email="u@example.com", display_name="User"
+    )
 
     class ErroringKnowledgeService(FakeKnowledgeService):
         async def watch_update_job(
@@ -228,7 +309,13 @@ def test_api_knowledge_watch_maps_domain_errors_to_http(error: Exception, expect
             job_id: str,
             include_current: bool = True,
         ) -> AsyncIterator[dict[str, object]]:
-            self.watch_calls.append({"user_id": user_id, "job_id": job_id, "include_current": include_current})
+            self.watch_calls.append(
+                {
+                    "user_id": user_id,
+                    "job_id": job_id,
+                    "include_current": include_current,
+                }
+            )
             raise error
             if False:
                 yield {"type": "status", "data": {}}
@@ -250,11 +337,15 @@ def test_api_knowledge_watch_maps_domain_errors_to_http(error: Exception, expect
         response = client.get("/api/knowledge/update/job-knowledge-1/watch")
 
     assert response.status_code == expected_status
-    assert service.watch_calls == [{"user_id": "user-1", "job_id": "job-knowledge-1", "include_current": True}]
+    assert service.watch_calls == [
+        {"user_id": "user-1", "job_id": "job-knowledge-1", "include_current": True}
+    ]
 
 
 def test_api_knowledge_category_pages_returns_mapped_payload() -> None:
-    principal = UnifiedPrincipal(user_id="user-1", email="u@example.com", display_name="User")
+    principal = UnifiedPrincipal(
+        user_id="user-1", email="u@example.com", display_name="User"
+    )
     service = FakeKnowledgeService()
     container = build_test_container({KnowledgeServiceProtocol: service})
 
@@ -269,13 +360,20 @@ def test_api_knowledge_category_pages_returns_mapped_payload() -> None:
     app.include_router(knowledge_router.router, prefix="/api")
 
     with TestClient(app) as client:
-        response = client.get("/api/knowledge/category/type-1/pages?page_size=5&page_token=cursor-1")
+        response = client.get(
+            "/api/knowledge/category/type-1/pages?page_size=5&page_token=cursor-1"
+        )
 
     assert response.status_code == 200
     assert response.json()["pages"][0]["page_id"] == "entity-1"
     assert response.json()["pages"][0]["entity"]["id"] == "entity-1"
     assert service.category_pages_calls == [
-        {"user_id": "user-1", "category_id": "type-1", "page_size": 5, "page_token": "cursor-1"}
+        {
+            "user_id": "user-1",
+            "category_id": "type-1",
+            "page_size": 5,
+            "page_token": "cursor-1",
+        }
     ]
 
 
@@ -287,8 +385,12 @@ def test_api_knowledge_category_pages_returns_mapped_payload() -> None:
         (KnowledgeInterfaceClientError("failed"), 502),
     ],
 )
-def test_api_knowledge_category_pages_maps_upstream_errors(error: Exception, expected_status: int) -> None:
-    principal = UnifiedPrincipal(user_id="user-1", email="u@example.com", display_name="User")
+def test_api_knowledge_category_pages_maps_upstream_errors(
+    error: Exception, expected_status: int
+) -> None:
+    principal = UnifiedPrincipal(
+        user_id="user-1", email="u@example.com", display_name="User"
+    )
     service = FakeKnowledgeService()
     service.category_pages_error = error
     container = build_test_container({KnowledgeServiceProtocol: service})
@@ -307,6 +409,71 @@ def test_api_knowledge_category_pages_maps_upstream_errors(error: Exception, exp
         response = client.get("/api/knowledge/category/type-1/pages")
 
     assert response.status_code == expected_status
+
+
+def test_api_knowledge_page_returns_mapped_payload() -> None:
+    principal = UnifiedPrincipal(
+        user_id="user-1", email="u@example.com", display_name="User"
+    )
+    service = FakeKnowledgeService()
+    container = build_test_container({KnowledgeServiceProtocol: service})
+
+    app = FastAPI()
+
+    @app.middleware("http")
+    async def attach_container(request, call_next):
+        request.app.state.container = container
+        return await call_next(request)
+
+    app.dependency_overrides[get_required_auth_context] = lambda: principal
+    app.include_router(knowledge_router.router, prefix="/api")
+
+    with TestClient(app) as client:
+        response = client.get("/api/knowledge/page/entity-1")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["title"] == "Entity One"
+    assert payload["metadata"]["created_at"] == "2026-02-19T09:00:00Z"
+    assert payload["links"][0]["page_id"] == "entity-2"
+    assert payload["content_markdown"] == "- Root\n  - Child"
+    assert service.page_detail_calls == [{"user_id": "user-1", "page_id": "entity-1"}]
+
+
+@pytest.mark.parametrize(
+    ("error", "expected_status", "expected_detail"),
+    [
+        (KnowledgePageNotFoundError("missing"), 404, "knowledge page not found"),
+        (KnowledgePageAccessDeniedError("denied"), 403, "knowledge page access denied"),
+        (KnowledgePageUnavailableError("down"), 503, "knowledge page unavailable"),
+        (KnowledgePageUpstreamError("failed"), 502, "knowledge page upstream failure"),
+    ],
+)
+def test_api_knowledge_page_maps_errors(
+    error: Exception, expected_status: int, expected_detail: str
+) -> None:
+    principal = UnifiedPrincipal(
+        user_id="user-1", email="u@example.com", display_name="User"
+    )
+    service = FakeKnowledgeService()
+    service.page_detail_error = error
+    container = build_test_container({KnowledgeServiceProtocol: service})
+
+    app = FastAPI()
+
+    @app.middleware("http")
+    async def attach_container(request, call_next):
+        request.app.state.container = container
+        return await call_next(request)
+
+    app.dependency_overrides[get_required_auth_context] = lambda: principal
+    app.include_router(knowledge_router.router, prefix="/api")
+
+    with TestClient(app) as client:
+        response = client.get("/api/knowledge/page/entity-1")
+
+    assert response.status_code == expected_status
+    assert response.json() == {"detail": expected_detail}
 
 
 def test_api_knowledge_watch_requires_auth() -> None:
