@@ -9,12 +9,12 @@
 
 <article class="page-card">
   <h4>
-    <button type="button" class="page-link" on:click={() => dispatch('open', { pageId: page.id })}>
+    <button type="button" class="page-link truncate" on:click={() => dispatch('open', { pageId: page.id })}>
       {page.title}
     </button>
   </h4>
   {#if page.summary}
-    <p>{page.summary}</p>
+    <p class="summary-clamp">{page.summary}</p>
   {/if}
 </article>
 
@@ -50,8 +50,23 @@
     text-decoration: underline;
   }
 
+  .truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .summary-clamp {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    line-clamp: 2;
+  }
+
   p {
     margin: 0;
     color: var(--explorer-meta-muted);
   }
 </style>
+
