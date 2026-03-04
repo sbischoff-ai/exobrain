@@ -9,6 +9,7 @@ from app.services.grpc import knowledge_pb2
 from app.worker.jobs.knowledge_update import (
     _append_mentions_edges,
     _build_batch_document,
+    _format_exception_for_stderr,
     _build_step_four_router_json_schema,
     _build_step_four_router_prompt,
     _build_step_three_system_prompt,
@@ -83,6 +84,17 @@ async def test_step_one_requires_created_at() -> None:
 
     assert "missing created_at" in str(exc_info.value)
 
+
+
+
+def test_format_exception_for_stderr_includes_traceback_and_message() -> None:
+    try:
+        raise ValueError("boom")
+    except ValueError as exc:
+        formatted = _format_exception_for_stderr(exc)
+
+    assert "Traceback (most recent call last):" in formatted
+    assert "ValueError: boom" in formatted
 
 def test_build_batch_document_formats_header_and_turns() -> None:
     payload = KnowledgeUpdatePayload(
