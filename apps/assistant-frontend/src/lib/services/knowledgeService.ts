@@ -39,6 +39,8 @@ interface BackendKnowledgePageDetailResponse {
   links?: unknown;
   content_markdown?: unknown;
   category_breadcrumb?: unknown;
+  created_at?: unknown;
+  updated_at?: unknown;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -58,6 +60,15 @@ function isKnowledgeUpdateStatusEvent(value: unknown): value is KnowledgeUpdateS
     typeof value.terminal === 'boolean' &&
     typeof value.emitted_at === 'string'
   );
+}
+
+
+function maybeNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function maybeTimestamp(value: unknown): string {
+  return typeof value === 'string' ? value : '';
 }
 
 function isKnowledgeUpdateDoneEvent(value: unknown): value is KnowledgeUpdateDoneEvent {
@@ -99,6 +110,7 @@ function normalizeCategoryTreeResponse(value: BackendKnowledgeCategoryTreeRespon
 
 function normalizeCategoryPagesResponse(value: BackendKnowledgeCategoryPagesResponse): KnowledgeCategoryPagesResponse {
   const pages = Array.isArray(value.knowledge_pages) ? value.knowledge_pages : [];
+  const totalCount = maybeNumber((value as Record<string, unknown>).total_count);
 
   return {
     pages: pages
@@ -119,7 +131,8 @@ function normalizeCategoryPagesResponse(value: BackendKnowledgeCategoryPagesResp
           summary: typeof page.summary === 'string' ? page.summary : null
         };
       })
-      .filter((page): page is KnowledgeCategoryPagesResponse['pages'][number] => page !== null)
+      .filter((page): page is KnowledgeCategoryPagesResponse['pages'][number] => page !== null),
+    total_count: totalCount
   };
 }
 
@@ -142,19 +155,22 @@ function normalizePageLink(value: unknown): KnowledgePageLink | null {
 }
 
 function normalizeCategoryBreadcrumb(value: unknown): KnowledgePageCategoryBreadcrumb {
-  if (!Array.isArray(value)) {
-    return { path: [] };
-  }
+  const rawPath = Array.isArray(value)
+    ? value
+    : isRecord(value) && Array.isArray(value.path)
+      ? value.path
+      : [];
 
   return {
-    path: value
+    path: rawPath
       .map((item) => {
         if (!isRecord(item)) {
           return null;
         }
 
-        const id = typeof item.category_id === 'string' ? item.category_id : null;
-        const name = typeof item.display_name === 'string' ? item.display_name : null;
+        const id = typeof item.category_id === 'string' ? item.category_id : typeof item.id === 'string' ? item.id : null;
+        const name =
+          typeof item.display_name === 'string' ? item.display_name : typeof item.name === 'string' ? item.name : null;
         if (!id || !name) {
           return null;
         }
@@ -174,8 +190,8 @@ function normalizePageDetail(value: BackendKnowledgePageDetailResponse): Knowled
     title: typeof value.title === 'string' ? value.title : '',
     summary: typeof value.summary === 'string' ? value.summary : null,
     content_markdown: typeof value.content_markdown === 'string' ? value.content_markdown : '',
-    created_at: typeof metadata.created_at === 'string' ? metadata.created_at : '',
-    updated_at: typeof metadata.updated_at === 'string' ? metadata.updated_at : '',
+    created_at: maybeTimestamp(metadata.created_at) || maybeTimestamp(value.created_at),
+    updated_at: maybeTimestamp(metadata.updated_at) || maybeTimestamp(value.updated_at),
     links: links.map(normalizePageLink).filter((link): link is KnowledgePageLink => link !== null),
     category_breadcrumb: normalizeCategoryBreadcrumb(value.category_breadcrumb)
   };

@@ -11,14 +11,35 @@
   export let previews: CategoryOverviewPreview[] = [];
 
   const dispatch = createEventDispatcher<{ openCategory: { categoryId: string }; openPage: { pageId: string } }>();
+
+  function openCategory(categoryId: string): void {
+    dispatch('openCategory', { categoryId });
+  }
+
+  function onCardKeydown(event: KeyboardEvent, categoryId: string): void {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      openCategory(categoryId);
+    }
+  }
 </script>
 
 <section class="overview">
   <div class="overview-grid">
     {#each previews as preview (preview.category.id)}
-      <article class="category-card">
+      <div
+        class="category-card"
+        role="button"
+        tabindex="0"
+        on:click={() => openCategory(preview.category.id)}
+        on:keydown={(event) => onCardKeydown(event, preview.category.id)}
+      >
         <h3>
-          <button type="button" class="category-link" on:click={() => dispatch('openCategory', { categoryId: preview.category.id })}>
+          <button
+            type="button"
+            class="category-link"
+            on:click|stopPropagation={() => openCategory(preview.category.id)}
+          >
             {preview.category.name}
           </button>
           <span class="count">({preview.category.page_count})</span>
@@ -33,7 +54,7 @@
             {/each}
           </div>
         {/if}
-      </article>
+      </div>
     {/each}
   </div>
 </section>
@@ -54,29 +75,36 @@
   .category-card {
     border: 1px solid var(--explorer-card-border);
     border-radius: 0.85rem;
-    background: var(--explorer-card-bg);
+    background: var(--explorer-category-card-bg, #46403b);
     padding: 1rem;
     display: flex;
     flex-direction: column;
     gap: 0.65rem;
     transition: background-color 150ms ease;
+    cursor: pointer;
   }
 
-  .category-card:hover {
-    background: var(--explorer-card-hover-bg);
+  .category-card:hover,
+  .category-card:focus-visible {
+    background: var(--explorer-category-card-hover-bg, #544b45);
+  }
+
+  .category-card:focus-visible {
+    outline: 2px solid var(--explorer-breadcrumb-link-hover);
+    outline-offset: 1px;
   }
 
   h3 {
     margin: 0;
-    font-size: 1rem;
+    font-size: 1.2rem;
   }
 
   .category-link {
     border: none;
     background: none;
-    color: var(--explorer-breadcrumb-link);
+    color: var(--explorer-title-red);
     font: inherit;
-    font-weight: 600;
+    font-weight: 700;
     text-align: left;
     cursor: pointer;
     padding: 0;

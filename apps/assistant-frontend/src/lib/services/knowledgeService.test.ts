@@ -66,7 +66,8 @@ describe('knowledgeService', () => {
             { id: 'entity-2', title: 'Entity Two' }
           ],
           page_size: 20,
-          next_page_token: 'cursor-1'
+          next_page_token: 'cursor-1',
+          total_count: 7
         }),
         { status: 200 }
       )
@@ -79,7 +80,8 @@ describe('knowledgeService', () => {
       pages: [
         { id: 'entity-1', title: 'Entity One', summary: 'Summary' },
         { id: 'entity-2', title: 'Entity Two', summary: null }
-      ]
+      ],
+      total_count: 7
     });
   });
 
@@ -124,6 +126,61 @@ describe('knowledgeService', () => {
         ]
       }
     });
+  });
+
+
+
+  it('normalizes object-shaped category breadcrumb paths', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: 'entity-7',
+          title: 'Entity Seven',
+          metadata: {
+            created_at: '2026-03-01T08:00:00Z',
+            updated_at: '2026-03-01T09:00:00Z'
+          },
+          links: [],
+          content_markdown: 'Content',
+          category_breadcrumb: {
+            path: [
+              { id: 'node.event', name: 'Event' },
+              { id: 'node.task', name: 'Task' }
+            ]
+          }
+        }),
+        { status: 200 }
+      )
+    );
+
+    const response = await knowledgeService.getPage('entity-7');
+
+    expect(response.category_breadcrumb.path).toEqual([
+      { id: 'node.event', name: 'Event' },
+      { id: 'node.task', name: 'Task' }
+    ]);
+  });
+
+  it('normalizes top-level page timestamps when metadata is missing', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: 'entity-9',
+          title: 'Entity Nine',
+          created_at: '2026-03-01T08:00:00Z',
+          updated_at: '2026-03-01T09:00:00Z',
+          links: [],
+          content_markdown: 'Content',
+          category_breadcrumb: []
+        }),
+        { status: 200 }
+      )
+    );
+
+    const response = await knowledgeService.getPage('entity-9');
+
+    expect(response.created_at).toBe('2026-03-01T08:00:00Z');
+    expect(response.updated_at).toBe('2026-03-01T09:00:00Z');
   });
 
   it('posts enqueue request without journal_reference when omitted', async () => {
