@@ -1,30 +1,159 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
-
+  import { createEventDispatcher, onMount } from 'svelte';
+  import CategoryOverview, { type CategoryOverviewPreview } from '$lib/components/knowledge/CategoryOverview.svelte';
+  import CategoryPage from '$lib/components/knowledge/CategoryPage.svelte';
+  import type { KnowledgeCategoryNode, KnowledgeCategoryPageListItem, KnowledgePageCategoryBreadcrumbItem } from '$lib/models/knowledge';
+  import { knowledgeService } from '$lib/services/knowledgeService';
   import type { ExplorerRouteState } from '$lib/stores/workspaceViewStore';
+
+  const OVERVIEW_PREVIEW_LIMIT = 3;
+  const LARGE_BRANCH_DESCENDANT_LIMIT = 8;
 
   export let explorerRoute: ExplorerRouteState = { type: 'overview' };
   export let expandedCategories: Record<string, boolean> = {};
 
-  const SAMPLE_CATEGORY_ID = 'knowledge-overview';
-  const SAMPLE_PAGE_ID = 'knowledge-overview:getting-started';
+  let loading = false;
+  let requestError = '';
+  let rootCategories: KnowledgeCategoryNode[] = [];
+  let overviewPreviews: CategoryOverviewPreview[] = [];
+  let categoryPages: KnowledgeCategoryPageListItem[] = [];
+  let lastLoadedCategoryId = '';
 
   const dispatch = createEventDispatcher<{
     navigate: { route: ExplorerRouteState };
     expandedCategoriesChange: { expanded: Record<string, boolean> };
   }>();
 
+  $: currentCategory = explorerRoute.type === 'category' ? findCategoryById(rootCategories, explorerRoute.id) : null;
+  $: categoryBreadcrumbs = currentCategory ? findCategoryBreadcrumbs(rootCategories, currentCategory.id) : [];
+
+  onMount(async () => {
+    await ensureTreeLoaded();
+    await loadRouteData();
+  });
+
+  $: if (rootCategories.length > 0 && explorerRoute.type === 'category' && explorerRoute.id !== lastLoadedCategoryId) {
+    void loadRouteData();
+  }
+
+  async function ensureTreeLoaded(): Promise<void> {
+    loading = true;
+    requestError = '';
+    try {
+      const { categories } = await knowledgeService.getCategoryTree();
+      rootCategories = categories;
+      maybeApplyBranchDefaults(categories);
+
+      const previews = await Promise.all(
+        categories.map(async (category) => {
+          const { pages } = await knowledgeService.getCategoryPages(category.id);
+          return {
+            category,
+            pages: pages.slice(0, OVERVIEW_PREVIEW_LIMIT)
+          };
+        })
+      );
+      overviewPreviews = previews;
+    } catch {
+      requestError = 'Could not load knowledge categories.';
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function loadRouteData(): Promise<void> {
+    if (explorerRoute.type !== 'category') {
+      categoryPages = [];
+      return;
+    }
+
+    if (!currentCategory) {
+      return;
+    }
+
+    loading = true;
+    requestError = '';
+    try {
+      const { pages } = await knowledgeService.getCategoryPages(explorerRoute.id);
+      categoryPages = pages;
+      lastLoadedCategoryId = explorerRoute.id;
+    } catch {
+      requestError = 'Could not load category pages.';
+    } finally {
+      loading = false;
+    }
+  }
+
   function navigate(route: ExplorerRouteState): void {
     dispatch('navigate', { route });
   }
 
-  function toggleSampleCategory(): void {
+  function updateExpanded(categoryId: string, expanded: boolean): void {
     dispatch('expandedCategoriesChange', {
       expanded: {
         ...expandedCategories,
-        [SAMPLE_CATEGORY_ID]: !expandedCategories[SAMPLE_CATEGORY_ID]
+        [categoryId]: expanded
       }
     });
+  }
+
+  function maybeApplyBranchDefaults(categories: KnowledgeCategoryNode[]): void {
+    const nextExpanded = { ...expandedCategories };
+    let changed = false;
+
+    const stack: KnowledgeCategoryNode[] = [...categories];
+    while (stack.length > 0) {
+      const node = stack.pop();
+      if (!node) {
+        continue;
+      }
+
+      if (node.children.length > 0 && nextExpanded[node.id] === undefined) {
+        const descendants = countDescendants(node);
+        nextExpanded[node.id] = descendants <= LARGE_BRANCH_DESCENDANT_LIMIT;
+        changed = true;
+      }
+
+      stack.push(...node.children);
+    }
+
+    if (changed) {
+      dispatch('expandedCategoriesChange', { expanded: nextExpanded });
+    }
+  }
+
+  function countDescendants(node: KnowledgeCategoryNode): number {
+    return node.children.reduce((total, child) => total + 1 + countDescendants(child), 0);
+  }
+
+  function findCategoryById(nodes: KnowledgeCategoryNode[], id: string): KnowledgeCategoryNode | null {
+    for (const node of nodes) {
+      if (node.id === id) {
+        return node;
+      }
+
+      const nested = findCategoryById(node.children, id);
+      if (nested) {
+        return nested;
+      }
+    }
+
+    return null;
+  }
+
+  function findCategoryBreadcrumbs(nodes: KnowledgeCategoryNode[], id: string): KnowledgePageCategoryBreadcrumbItem[] {
+    for (const node of nodes) {
+      if (node.id === id) {
+        return [];
+      }
+
+      const nested = findCategoryBreadcrumbs(node.children, id);
+      if (nested.length > 0 || node.children.some((child) => child.id === id)) {
+        return [{ id: node.id, name: node.name }, ...nested];
+      }
+    }
+
+    return [];
   }
 </script>
 
@@ -34,19 +163,35 @@
   </div>
 
   <div class="knowledge-content">
-    <p class="knowledge-route">Current route: <strong>{explorerRoute.type}</strong></p>
-    <div class="knowledge-actions">
-      <button type="button" on:click={() => navigate({ type: 'overview' })}>Overview</button>
-      <button type="button" on:click={() => navigate({ type: 'category', id: SAMPLE_CATEGORY_ID })}>
-        Open sample category
-      </button>
-      <button type="button" on:click={() => navigate({ type: 'page', id: SAMPLE_PAGE_ID })}>
-        Open sample page
-      </button>
-      <button type="button" on:click={toggleSampleCategory}>
-        {expandedCategories[SAMPLE_CATEGORY_ID] ? 'Collapse sample category' : 'Expand sample category'}
-      </button>
-    </div>
+    {#if requestError}
+      <p class="error">{requestError}</p>
+    {/if}
+
+    {#if loading}
+      <p class="loading">Loading…</p>
+    {/if}
+
+    {#if explorerRoute.type === 'overview'}
+      <CategoryOverview
+        previews={overviewPreviews}
+        on:openCategory={(event) => navigate({ type: 'category', id: event.detail.categoryId })}
+        on:openPage={(event) => navigate({ type: 'page', id: event.detail.pageId })}
+      />
+    {:else if explorerRoute.type === 'category'}
+      <CategoryPage
+        {rootCategories}
+        currentCategory={currentCategory}
+        breadcrumbs={categoryBreadcrumbs}
+        pages={categoryPages}
+        {expandedCategories}
+        on:navigateOverview={() => navigate({ type: 'overview' })}
+        on:navigateCategory={(event) => navigate({ type: 'category', id: event.detail.categoryId })}
+        on:openPage={(event) => navigate({ type: 'page', id: event.detail.pageId })}
+        on:toggleCategory={(event) => updateExpanded(event.detail.categoryId, event.detail.expanded)}
+      />
+    {:else}
+      <p class="loading">Page view is not available yet.</p>
+    {/if}
   </div>
 </section>
 
@@ -59,23 +204,13 @@
     color: var(--text);
   }
 
-  .knowledge-route {
+  .loading {
+    margin: 0;
     color: var(--muted);
   }
 
-  .knowledge-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-  }
-
-  .knowledge-actions button {
-    border: 1px solid var(--border);
-    border-radius: 0.6rem;
-    background: var(--surface);
-    color: var(--text);
-    font: inherit;
-    padding: 0.5rem 0.75rem;
-    cursor: pointer;
+  .error {
+    margin: 0;
+    color: #d08a8a;
   }
 </style>

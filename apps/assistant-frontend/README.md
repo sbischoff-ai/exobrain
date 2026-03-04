@@ -52,11 +52,11 @@ cd apps/assistant-frontend && npm test
 - Chat bubbles show per-message `hh:mm` timestamps sourced from message `created_at` values.
 - Logout clears `sessionStorage` snapshot state and returns users to intro gate.
 - Workspace mode (`chat`/`knowledge`) and knowledge explorer route/expansion state are restored on bootstrap and persisted on view navigation.
-- Knowledge mode swaps the chat body for the top-level `KnowledgeExplorerView` and hides the journal sidebar controls to keep the main layout stable under the shared header.
+- Knowledge mode swaps the chat body for a data-backed explorer with `CategoryOverview` and `CategoryPage` flows, including breadcrumbs, recursive collapsible category tree navigation, and page preview cards.
 - Knowledge update action appears in the top-right header actions cluster, immediately next to the user menu.
 - Knowledge update action is exposed as an accessible circular header control (`aria-label` + tooltip).
 - Knowledge update is disabled when viewing a past journal, while app state is loading/syncing, while an update is already in progress, and whenever there are no new messages since the last successful update (`title="nothing to update"`).
-- Knowledge browsing service normalizes backend category/page payload fields (`category_id`, `display_name`, `sub_categories`, `knowledge_pages`, `metadata`) into frontend-facing contracts for tree, list, and page detail views.
+- Knowledge browsing service normalizes backend category/page payload fields (`category_id`, `display_name`, `sub_categories`, `knowledge_pages`, `metadata`) into frontend-facing contracts for tree, category previews, lists, and page detail views.
 
 ### Knowledge update flow (high-level)
 
