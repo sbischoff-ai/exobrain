@@ -3,6 +3,53 @@ export interface KnowledgeUpdateResponse {
   status?: string;
 }
 
+export interface KnowledgeCategoryNode {
+  id: string;
+  name: string;
+  page_count: number;
+  children: KnowledgeCategoryNode[];
+}
+
+export interface KnowledgeCategoryTreeResponse {
+  categories: KnowledgeCategoryNode[];
+}
+
+export interface KnowledgeCategoryPageListItem {
+  id: string;
+  title: string;
+  summary: string | null;
+}
+
+export interface KnowledgeCategoryPagesResponse {
+  pages: KnowledgeCategoryPageListItem[];
+}
+
+export interface KnowledgePageLink {
+  page_id: string;
+  title: string;
+  summary: string | null;
+}
+
+export interface KnowledgePageCategoryBreadcrumbItem {
+  id: string;
+  name: string;
+}
+
+export interface KnowledgePageCategoryBreadcrumb {
+  path: KnowledgePageCategoryBreadcrumbItem[];
+}
+
+export interface KnowledgePageDetail {
+  id: string;
+  title: string;
+  summary: string | null;
+  content_markdown: string;
+  created_at: string;
+  updated_at: string;
+  links: KnowledgePageLink[];
+  category_breadcrumb: KnowledgePageCategoryBreadcrumb;
+}
+
 export interface KnowledgeUpdateStatusEvent {
   job_id: string;
   state: string;
