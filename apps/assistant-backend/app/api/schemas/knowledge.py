@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import AliasChoices, AliasPath, BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 
 class KnowledgeUpdateRequest(BaseModel):
@@ -37,53 +37,38 @@ class KnowledgeCategoryTreeResponse(BaseModel):
     )
 
 
-class KnowledgePageEntitySummary(BaseModel):
-    id: str = Field(
-        ..., description="Upstream entity identifier from ListEntitiesByType"
+class KnowledgeCategoryPageMetadata(BaseModel):
+    created_at: str = Field(
+        default="",
+        description="Upstream entity creation timestamp from ListEntitiesByType when available",
     )
-    name: str = Field(..., description="Upstream entity name from ListEntitiesByType")
-    description: str | None = Field(
-        default=None,
-        description="Upstream entity description from ListEntitiesByType when available",
-    )
-    updated_at: str | None = Field(
-        default=None,
+    updated_at: str = Field(
+        default="",
         description="Upstream entity update timestamp from ListEntitiesByType when available",
-    )
-    score: float | None = Field(
-        default=None,
-        description="Upstream relevance score from ListEntitiesByType when available",
     )
 
 
 class KnowledgeCategoryPageListItem(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    entity: KnowledgePageEntitySummary = Field(
+    id: str = Field(
         ...,
-        description="Original entity payload returned by ListEntitiesByType",
+        description="Page identifier",
     )
-    page_id: str = Field(
+    title: str = Field(
         ...,
-        validation_alias=AliasChoices("page_id", AliasPath("entity", "id")),
-        description="Mapped page identifier (alias of entity.id)",
+        description="Page title",
     )
-    page_title: str = Field(
-        ...,
-        validation_alias=AliasChoices("page_title", AliasPath("entity", "name")),
-        description="Mapped page title (alias of entity.name)",
-    )
-    page_summary: str | None = Field(
+    summary: str | None = Field(
         default=None,
-        validation_alias=AliasChoices(
-            "page_summary", AliasPath("entity", "description")
-        ),
-        description="Mapped page summary (alias of entity.description)",
+        description="Page summary",
+    )
+    metadata: KnowledgeCategoryPageMetadata = Field(
+        default_factory=KnowledgeCategoryPageMetadata,
+        description="Page metadata including created and updated timestamps",
     )
 
 
 class KnowledgeCategoryPagesListResponse(BaseModel):
-    pages: list[KnowledgeCategoryPageListItem] = Field(
+    knowledge_pages: list[KnowledgeCategoryPageListItem] = Field(
         default_factory=list,
         description="Page summaries within the selected category",
     )
@@ -107,7 +92,7 @@ class KnowledgePageMetadata(BaseModel):
 class KnowledgePageDetailResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    page_id: str = Field(
+    id: str = Field(
         ...,
         description="Mapped page identifier",
     )

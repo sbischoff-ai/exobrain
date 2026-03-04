@@ -55,18 +55,15 @@ Returns page summaries for a category from `ListEntitiesByType`.
 
 ```json
 {
-  "pages": [
+  "knowledge_pages": [
     {
-      "entity": {
-        "id": "entity-1",
-        "name": "Entity One",
-        "description": "Entity summary",
-        "updated_at": "2026-02-19T10:00:00Z",
-        "score": 0.7
-      },
-      "page_id": "entity-1",
-      "page_title": "Entity One",
-      "page_summary": "Entity summary"
+      "id": "entity-1",
+      "title": "Entity One",
+      "summary": "Entity summary",
+      "metadata": {
+        "created_at": "",
+        "updated_at": "2026-02-19T10:00:00Z"
+      }
     }
   ],
   "page_size": 20,
@@ -77,7 +74,8 @@ Returns page summaries for a category from `ListEntitiesByType`.
 
 ### Notes
 
-- `page_id`, `page_title`, and `page_summary` are aliases mapped from `entity.id`, `entity.name`, and `entity.description`.
+- `knowledge_pages` contains compact page items with `id`, `title`, `summary`, and `metadata` only.
+- `metadata.created_at` is currently empty when upstream list payloads omit creation timestamps.
 - Pagination values are passthrough from request and upstream response.
 
 ### Error mapping
@@ -94,7 +92,7 @@ Returns page detail from `GetEntityContext` (`max_block_level=2`).
 
 ```json
 {
-  "page_id": "entity-1",
+  "id": "entity-1",
   "title": "Entity One",
   "summary": "Root",
   "metadata": {

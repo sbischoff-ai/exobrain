@@ -485,7 +485,7 @@ async def test_list_wiki_category_tree_filters_sorts_and_nests_types() -> None:
 
 
 @pytest.mark.asyncio
-async def test_list_category_pages_maps_entity_fields_and_pagination() -> None:
+async def test_list_category_pages_maps_compact_fields_and_pagination() -> None:
     entities_reply = knowledge_pb2.ListEntitiesByTypeReply(
         entities=[
             knowledge_pb2.ListEntitiesByTypeItem(
@@ -526,10 +526,10 @@ async def test_list_category_pages_maps_entity_fields_and_pagination() -> None:
     assert response["page_size"] == 20
     assert response["next_page_token"] == "next-cursor"
     assert response["total_count"] == 42
-    assert response["pages"][0]["entity"]["id"] == "entity-1"
-    assert response["pages"][0]["page_id"] == "entity-1"
-    assert response["pages"][0]["page_title"] == "Entity One"
-    assert response["pages"][0]["page_summary"] == "Entity summary"
+    assert response["knowledge_pages"][0]["id"] == "entity-1"
+    assert response["knowledge_pages"][0]["title"] == "Entity One"
+    assert response["knowledge_pages"][0]["summary"] == "Entity summary"
+    assert response["knowledge_pages"][0]["metadata"]["created_at"] == ""
 
 
 @pytest.mark.asyncio
@@ -577,6 +577,7 @@ async def test_get_page_detail_maps_entity_neighbors_and_block_markdown() -> Non
             "max_block_level": 2,
         }
     ]
+    assert response["id"] == "entity-1"
     assert response["title"] == "Entity One"
     assert response["summary"] == "Summary"
     assert response["metadata"]["created_at"] == "2026-02-19T09:00:00Z"
