@@ -14,7 +14,7 @@ All endpoints require authenticated user context.
 
 ## Endpoint: `GET /api/knowledge/category`
 
-Returns the category tree projected from `GetSchema` (`universe_id=wiki`), filtering to active node types (`kind=node`, id prefix `node.`), with deterministic ordering by `display_name` then `category_id`.
+Returns the category tree projected from `GetSchema` (`universe_id=wiki`), filtering to active node types (`kind=node`, id prefix `node.`), rooted at direct `node.entity` subtypes (excluding `node.block` and `node.universe`), with deterministic ordering by `display_name` then `category_id`.
 
 ### 200 response
 

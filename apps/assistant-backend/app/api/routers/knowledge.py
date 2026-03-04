@@ -137,7 +137,7 @@ async def watch_knowledge_update(
     "/category",
     response_model=KnowledgeCategoryTreeResponse,
     summary="List the knowledge category tree",
-    description="Returns the wiki category hierarchy projected from knowledge-interface GetSchema node type inheritance.",
+    description="Returns active wiki categories rooted at direct node.entity subtypes (excluding node.block/node.universe), then nested by subtype inheritance.",
     responses={
         400: {"description": "Invalid knowledge category request"},
         503: {"description": "knowledge-interface unavailable or timed out"},
