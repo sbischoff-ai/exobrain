@@ -5,6 +5,7 @@ import asyncio
 import json
 import logging
 import sys
+import traceback
 from uuid import uuid5, NAMESPACE_URL
 
 import grpc
@@ -15,6 +16,10 @@ from app.services.grpc import knowledge_pb2
 from app.settings import Settings, get_settings
 
 logger = logging.getLogger(__name__)
+
+
+def _format_exception_for_stderr(exc: BaseException) -> str:
+    return "".join(traceback.format_exception(exc)).rstrip()
 
 
 def _message_entity_name(journal_reference: str, sequence_number: int) -> str:
@@ -581,7 +586,7 @@ def main() -> None:
     try:
         asyncio.run(run(job))
     except Exception as exc:  # noqa: BLE001
-        print(str(exc), file=sys.stderr)
+        print(_format_exception_for_stderr(exc), file=sys.stderr)
         raise SystemExit(1) from None
 
 
