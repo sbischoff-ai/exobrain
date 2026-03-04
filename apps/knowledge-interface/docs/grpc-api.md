@@ -372,7 +372,7 @@ message GetEntityTypePropertyContextReply {
 
 ## ListEntitiesByType
 
-`ListEntitiesByType` returns paginated entities for a specific type and requester visibility scope.
+`ListEntitiesByType` returns paginated entities for a specific type label (including subtype entities) and requester visibility scope.
 
 ### Request schema
 
@@ -386,7 +386,7 @@ message ListEntitiesByTypeRequest {
 ```
 
 - `user_id` (required): requester identity.
-- `type_id` (required): entity type id filter (for example `node.person`).
+- `type_id` (required): entity type id filter by resolved Memgraph label (for example `node.person` returns both `node.person` and subtypes such as `node.ai_agent`).
 - `page_size` (optional): requested page size; service clamps into `[1, 200]` and defaults to `50`.
 - `page_token` (optional): opaque forward cursor currently encoded as a decimal offset string.
 
