@@ -319,13 +319,15 @@ impl Neo4jGraphStore {
 
         for entity in &delta.entities {
             let labels = sanitize_labels(&entity.resolved_labels)?;
+            let entity_properties = property_values_to_bolt_map(&entity.properties);
             let cypher = format!(
-                "MERGE (e:{} {{id: $id}}) SET e.type_id = $type_id, e.name = $name, e.aliases = $aliases, e.user_id = $user_id, e.visibility = $visibility WITH e MATCH (u:Universe {{id: $universe_id}}) MERGE (e)-[:IS_PART_OF]->(u)",
+                "MERGE (e:{} {{id: $id}}) SET e += $properties, e.type_id = $type_id, e.name = $name, e.aliases = $aliases, e.user_id = $user_id, e.visibility = $visibility WITH e MATCH (u:Universe {{id: $universe_id}}) MERGE (e)-[:IS_PART_OF]->(u)",
                 labels.join(":"),
             );
             txn.run(
                 query(&cypher)
                     .param("id", entity.id.clone())
+                    .param("properties", entity_properties)
                     .param("type_id", entity.type_id.clone())
                     .param(
                         "name",
@@ -348,13 +350,15 @@ impl Neo4jGraphStore {
 
         for block in &delta.blocks {
             let labels = sanitize_labels(&block.resolved_labels)?;
+            let block_properties = property_values_to_bolt_map(&block.properties);
             let cypher = format!(
-                "MERGE (b:{} {{id: $id}}) SET b.type_id = $type_id, b.text = $text, b.user_id = $user_id, b.visibility = $visibility",
+                "MERGE (b:{} {{id: $id}}) SET b += $properties, b.type_id = $type_id, b.text = $text, b.user_id = $user_id, b.visibility = $visibility",
                 labels.join(":"),
             );
             txn.run(
                 query(&cypher)
                     .param("id", block.id.clone())
+                    .param("properties", block_properties)
                     .param("type_id", block.type_id.clone())
                     .param(
                         "text",
@@ -369,8 +373,9 @@ impl Neo4jGraphStore {
 
         for edge in &delta.edges {
             validate_edge_type(&edge.edge_type)?;
+            let edge_properties = property_values_to_bolt_map(&edge.properties);
             let allowed_node_visibilities = allowed_node_visibilities(edge.visibility);
-            let cypher = format!("MATCH (a {{id: $from_id}}), (b {{id: $to_id}}) WHERE a.visibility IN $allowed_node_visibilities AND b.visibility IN $allowed_node_visibilities MERGE (a)-[r:{}]->(b) SET r.confidence = $confidence, r.status = $status, r.provenance_hint = $provenance_hint, r.user_id = $user_id, r.visibility = $visibility RETURN COUNT(r) AS upserted_count", edge.edge_type);
+            let cypher = format!("MATCH (a {{id: $from_id}}), (b {{id: $to_id}}) WHERE a.visibility IN $allowed_node_visibilities AND b.visibility IN $allowed_node_visibilities MERGE (a)-[r:{}]->(b) SET r += $properties, r.confidence = $confidence, r.status = $status, r.provenance_hint = $provenance_hint, r.user_id = $user_id, r.visibility = $visibility RETURN COUNT(r) AS upserted_count", edge.edge_type);
             let mut result = txn
                 .execute(
                     query(&cypher)
@@ -378,6 +383,7 @@ impl Neo4jGraphStore {
                         .param("to_id", edge.to_id.clone())
                         .param("user_id", edge.user_id.clone())
                         .param("visibility", visibility_as_str(edge.visibility))
+                        .param("properties", edge_properties)
                         .param("allowed_node_visibilities", allowed_node_visibilities)
                         .param(
                             "confidence",
@@ -1712,6 +1718,24 @@ fn prop_as_float(props: &[PropertyValue], key: &str) -> Option<f64> {
     })
 }
 
+fn property_values_to_bolt_map(props: &[PropertyValue]) -> HashMap<String, BoltType> {
+    props
+        .iter()
+        .map(|prop| (prop.key.clone(), property_scalar_to_bolt_type(&prop.value)))
+        .collect()
+}
+
+fn property_scalar_to_bolt_type(value: &PropertyScalar) -> BoltType {
+    match value {
+        PropertyScalar::String(v) | PropertyScalar::Datetime(v) | PropertyScalar::Json(v) => {
+            BoltType::from(v.clone())
+        }
+        PropertyScalar::Float(v) => BoltType::from(*v),
+        PropertyScalar::Int(v) => BoltType::from(*v),
+        PropertyScalar::Bool(v) => BoltType::from(*v),
+    }
+}
+
 #[derive(Debug, Serialize)]
 struct EmbeddingRequest<'a> {
     input: &'a [String],
@@ -1874,6 +1898,7 @@ mod tests {
         build_list_entities_by_type_query, compute_name_score, internal_timestamp_trigger_specs,
         memgraph_user_or_shared_access_clause, normalize_qdrant_grpc_url, parse_block_level,
         parse_neighbor_direction, payload_i64, payload_string, prop_as_aliases,
+        property_scalar_to_bolt_type, property_values_to_bolt_map,
         qdrant_user_or_shared_access_filter, semantic_score_with_block_level,
         to_typed_entity_list_item, trigger_name_column_candidates, type_id_to_memgraph_label,
         upsert_semantic_candidate, validate_edge_type, MockEmbedder,
@@ -2046,6 +2071,58 @@ mod tests {
         assert!(matches!(
             local_scalar,
             crate::domain::PropertyScalar::Datetime(v) if v == "15:56:25.155889"
+        ));
+    }
+
+    #[test]
+    fn converts_property_values_to_bolt_map_for_memgraph_upserts() {
+        use crate::domain::{PropertyScalar, PropertyValue};
+
+        let map = property_values_to_bolt_map(&[
+            PropertyValue {
+                key: "email".to_string(),
+                value: PropertyScalar::String("ada@example.com".to_string()),
+            },
+            PropertyValue {
+                key: "lat".to_string(),
+                value: PropertyScalar::Float(42.1),
+            },
+            PropertyValue {
+                key: "is_active".to_string(),
+                value: PropertyScalar::Bool(true),
+            },
+        ]);
+
+        assert!(matches!(
+            map.get("email"),
+            Some(BoltType::String(v)) if v.value == "ada@example.com"
+        ));
+        assert!(matches!(
+            map.get("lat"),
+            Some(BoltType::Float(v)) if (v.value - 42.1).abs() < f64::EPSILON
+        ));
+        assert!(matches!(
+            map.get("is_active"),
+            Some(BoltType::Boolean(v)) if v.value
+        ));
+    }
+
+    #[test]
+    fn maps_property_scalar_datetime_and_json_to_bolt_string() {
+        let datetime = property_scalar_to_bolt_type(&crate::domain::PropertyScalar::Datetime(
+            "2026-03-03T15:56:25.155889+00:00".to_string(),
+        ));
+        let json = property_scalar_to_bolt_type(&crate::domain::PropertyScalar::Json(
+            "{\"key\":\"value\"}".to_string(),
+        ));
+
+        assert!(matches!(
+            datetime,
+            BoltType::String(v) if v.value == "2026-03-03T15:56:25.155889+00:00"
+        ));
+        assert!(matches!(
+            json,
+            BoltType::String(v) if v.value == "{\"key\":\"value\"}"
         ));
     }
 

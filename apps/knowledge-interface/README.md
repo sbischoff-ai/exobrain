@@ -92,6 +92,8 @@ All graph writes now flow through a single application path (`KnowledgeApplicati
 3. Generates embeddings for `node.block` nodes.
 4. Writes to Memgraph and Qdrant as one coordinated operation.
 
+During `UpsertGraphDelta`, all schema-defined properties provided on entities, blocks, and edges are written through to Memgraph properties (for example `email`, `phone`, `lat`, `lon`), in addition to core system fields.
+
 The Memgraph write is held in a transaction until Qdrant upserts complete. If Qdrant fails, Memgraph is rolled back. If Memgraph commit fails after Qdrant upsert, the new Qdrant points are deleted as compensation.
 
 ## GetUserInitGraph gRPC
