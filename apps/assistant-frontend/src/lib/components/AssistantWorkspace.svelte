@@ -2,6 +2,7 @@
   import { createEventDispatcher } from 'svelte';
   import ChatView from '$lib/components/ChatView.svelte';
   import JournalSidebar from '$lib/components/JournalSidebar.svelte';
+  import KnowledgeExplorerView from '$lib/components/KnowledgeExplorerView.svelte';
   import UserMenu from '$lib/components/UserMenu.svelte';
   import type { CurrentUser } from '$lib/models/auth';
   import type { JournalEntry, StoredMessage } from '$lib/models/journal';
@@ -105,31 +106,40 @@
   </header>
 
   <main class="main-content workspace">
-    <JournalSidebar
-      entries={journalEntries}
-      {currentReference}
-      {todayReference}
-      collapsed={sidebarCollapsed}
-      on:toggle={() => dispatch('toggleSidebar')}
-      on:close={() => dispatch('closeSidebar')}
-      on:select={(event) => dispatch('selectJournal', event.detail)}
-    />
+    {#if viewMode === 'chat'}
+      <JournalSidebar
+        entries={journalEntries}
+        {currentReference}
+        {todayReference}
+        collapsed={sidebarCollapsed}
+        on:toggle={() => dispatch('toggleSidebar')}
+        on:close={() => dispatch('closeSidebar')}
+        on:select={(event) => dispatch('selectJournal', event.detail)}
+      />
 
-    <ChatView
-      {messages}
-      {loading}
-      {loadingOlder}
-      {canLoadOlder}
-      reference={currentReference}
-      {inputDisabled}
-      {disabledReason}
-      {requestError}
-      {requestStatus}
-      {streamingInProgress}
-      {autoScrollEnabled}
-      onSend={(text) => dispatch('send', { text })}
-      onLoadOlder={() => dispatch('loadOlder')}
-    />
+      <ChatView
+        {messages}
+        {loading}
+        {loadingOlder}
+        {canLoadOlder}
+        reference={currentReference}
+        {inputDisabled}
+        {disabledReason}
+        {requestError}
+        {requestStatus}
+        {streamingInProgress}
+        {autoScrollEnabled}
+        onSend={(text) => dispatch('send', { text })}
+        onLoadOlder={() => dispatch('loadOlder')}
+      />
+    {:else}
+      <KnowledgeExplorerView
+        {explorerRoute}
+        {expandedCategories}
+        on:navigate={(event) => dispatch('explorerNavigate', event.detail)}
+        on:expandedCategoriesChange={(event) => dispatch('expandedCategoriesChange', event.detail)}
+      />
+    {/if}
   </main>
 </div>
 

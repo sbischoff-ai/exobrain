@@ -187,6 +187,9 @@
 
   function handleToggleViewMode(): void {
     workspaceMode = workspaceMode === 'chat' ? 'knowledge' : 'chat';
+    if (workspaceMode === 'knowledge') {
+      sidebarCollapsed = true;
+    }
     persistWorkspaceViewState();
   }
 
