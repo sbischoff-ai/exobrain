@@ -32,11 +32,6 @@ pub fn upsert_graph_delta_json_schema_value() -> Value {
     })
 }
 
-pub fn upsert_graph_delta_json_schema_string() -> String {
-    try_upsert_graph_delta_json_schema_string()
-        .expect("upsert graph delta json schema should always serialize")
-}
-
 pub fn try_upsert_graph_delta_json_schema_string() -> Result<String, serde_json::Error> {
     serde_json::to_string_pretty(&upsert_graph_delta_json_schema_value())
 }
@@ -153,7 +148,7 @@ fn uuid_string_schema() -> Value {
 #[cfg(test)]
 mod tests {
     use super::{
-        upsert_graph_delta_json_schema_string, upsert_graph_delta_json_schema_value,
+        try_upsert_graph_delta_json_schema_string, upsert_graph_delta_json_schema_value,
         UPSERT_GRAPH_DELTA_SCHEMA_ID,
     };
 
@@ -187,8 +182,10 @@ mod tests {
 
     #[test]
     fn schema_string_is_deterministic() {
-        let first = upsert_graph_delta_json_schema_string();
-        let second = upsert_graph_delta_json_schema_string();
+        let first =
+            try_upsert_graph_delta_json_schema_string().expect("schema should serialize");
+        let second =
+            try_upsert_graph_delta_json_schema_string().expect("schema should serialize");
 
         assert_eq!(first, second);
         assert!(first.contains(UPSERT_GRAPH_DELTA_SCHEMA_ID));
