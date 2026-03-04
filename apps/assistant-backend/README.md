@@ -63,8 +63,8 @@ Use the canned knowledge-interface gRPC payloads to initialize graph state for t
 
 The script reads:
 
-- `apps/assistant-backend/mock-data/knowledge/initialize-user-graph.request.json`
-- `apps/assistant-backend/mock-data/knowledge/upsert-graph-delta.request.template.json`
+- `apps/knowledge-interface/mock-data/knowledge/initialize-user-graph.request.json`
+- `apps/knowledge-interface/mock-data/knowledge/upsert-graph-delta.request.template.json`
 
 Optional overrides:
 
