@@ -62,15 +62,19 @@
     },
     {
       "id": "10000000-0000-4000-8000-000000000005",
-      "type_id": "node.place",
+      "type_id": "node.city",
       "properties": [
         {
           "key": "name",
           "string_value": "Duisburg"
         },
         {
-          "key": "aliases",
-          "json_value": "[{\"kind\": \"geo\", \"lat\": 51.4344, \"lon\": 6.7623}, {\"kind\": \"country\", \"value\": \"Germany\"}]"
+          "key": "lat",
+          "float_value": 51.4344
+        },
+        {
+          "key": "lon",
+          "float_value": 6.7623
         }
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
@@ -78,15 +82,19 @@
     },
     {
       "id": "10000000-0000-4000-8000-000000000006",
-      "type_id": "node.place",
+      "type_id": "node.city",
       "properties": [
         {
           "key": "name",
           "string_value": "Essen"
         },
         {
-          "key": "aliases",
-          "json_value": "[{\"kind\": \"geo\", \"lat\": 51.4556, \"lon\": 7.0116}, {\"kind\": \"country\", \"value\": \"Germany\"}]"
+          "key": "lat",
+          "float_value": 51.4556
+        },
+        {
+          "key": "lon",
+          "float_value": 7.0116
         }
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
@@ -151,7 +159,7 @@
         },
         {
           "key": "aliases",
-          "json_value": "[{\"email\": \"mirelle.voss@isles-fiction.test\"}, {\"callsign\": \"The Harbor Fox\"}]"
+          "json_value": "[\"The Harbor Fox\"]"
         }
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
@@ -182,10 +190,6 @@
         {
           "key": "due",
           "datetime_value": "2026-06-30T16:00:00Z"
-        },
-        {
-          "key": "aliases",
-          "json_value": "[{\"project\": \"KI + assistant memory hardening\"}, {\"priority\": \"high\"}]"
         }
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
@@ -248,8 +252,12 @@
           "string_value": "Lena Hoffmann"
         },
         {
-          "key": "aliases",
-          "json_value": "[{\"email\": \"lena.hoffmann@example.test\"}, {\"relation\": \"partner\"}, {\"phone\": \"+49-170-555-0142\"}]"
+          "key": "email",
+          "string_value": "lena.hoffmann@example.test"
+        },
+        {
+          "key": "phone",
+          "string_value": "+49-170-555-0142"
         }
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
@@ -264,8 +272,8 @@
           "string_value": "Noah Richter"
         },
         {
-          "key": "aliases",
-          "json_value": "[{\"email\": \"noah.richter@uni-example.test\"}, {\"relation\": \"uni friend\"}, {\"focus\": \"computational physics\"}]"
+          "key": "email",
+          "string_value": "noah.richter@uni-example.test"
         }
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
@@ -280,8 +288,12 @@
           "string_value": "Sara Yilmaz"
         },
         {
-          "key": "aliases",
-          "json_value": "[{\"email\": \"sara.yilmaz@uni-example.test\"}, {\"relation\": \"uni friend\"}, {\"focus\": \"data engineering\"}]"
+          "key": "email",
+          "string_value": "sara.yilmaz@uni-example.test"
+        },
+        {
+          "key": "role",
+          "string_value": "Data Engineer"
         }
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
@@ -296,16 +308,16 @@
           "string_value": "The Left Hand of Darkness"
         },
         {
-          "key": "aliases",
-          "json_value": "[{\"category\": \"favorite-book\"}, {\"genre\": \"science fiction\"}]"
-        },
-        {
           "key": "source_uri",
           "string_value": "https://example.test/books/the-left-hand-of-darkness"
         },
         {
           "key": "published_at",
           "datetime_value": "1969-03-01T00:00:00Z"
+        },
+        {
+          "key": "genre",
+          "string_value": "science fiction"
         }
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
@@ -320,8 +332,12 @@
           "string_value": "Ursula K. Le Guin"
         },
         {
-          "key": "aliases",
-          "json_value": "[{\"email\": \"ursula.leguin@authors.example.test\"}, {\"role\": \"author\"}]"
+          "key": "email",
+          "string_value": "ursula.leguin@authors.example.test"
+        },
+        {
+          "key": "role",
+          "string_value": "author"
         }
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
@@ -336,8 +352,12 @@
           "string_value": "Altstadt Cafe"
         },
         {
-          "key": "aliases",
-          "json_value": "[{\"kind\": \"geo\", \"lat\": 51.4519, \"lon\": 6.7714}, {\"city\": \"Duisburg\"}]"
+          "key": "lat",
+          "float_value": 51.4519
+        },
+        {
+          "key": "lon",
+          "float_value": 6.7714
         }
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
@@ -350,10 +370,18 @@
         {
           "key": "name",
           "string_value": "Exobrain Product Circle"
-        },
+        }
+      ],
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000025",
+      "type_id": "node.country",
+      "properties": [
         {
-          "key": "aliases",
-          "json_value": "[{\"cadence\": \"weekly\"}, {\"channel\": \"#product-circle\"}]"
+          "key": "name",
+          "string_value": "Germany"
         }
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
@@ -668,6 +696,18 @@
         {
           "key": "text",
           "string_value": "### Fiction timeline\n\nMirelle's first chapter intersects harbor debt law, hidden cartography, and a staged duel."
+        }
+      ],
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE"
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000027",
+      "type_id": "node.block",
+      "properties": [
+        {
+          "key": "text",
+          "string_value": "#### Noah profile\n\nRelationship context: uni friend. Current focus: computational physics."
         }
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
@@ -2037,6 +2077,111 @@
         {
           "key": "provenance_hint",
           "string_value": "seed real-world story planning related to sword isles universe"
+        }
+      ]
+    },
+    {
+      "from_id": "10000000-0000-4000-8000-000000000005",
+      "to_id": "10000000-0000-4000-8000-000000000025",
+      "edge_type": "LIES_IN",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "properties": [
+        {
+          "key": "confidence",
+          "float_value": 0.95
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed duisburg lies in germany"
+        }
+      ]
+    },
+    {
+      "from_id": "10000000-0000-4000-8000-000000000006",
+      "to_id": "10000000-0000-4000-8000-000000000025",
+      "edge_type": "LIES_IN",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "properties": [
+        {
+          "key": "confidence",
+          "float_value": 0.95
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed essen lies in germany"
+        }
+      ]
+    },
+    {
+      "from_id": "__PERSON_ENTITY_ID__",
+      "to_id": "10000000-0000-4000-8000-000000000018",
+      "edge_type": "PARTNER_OF",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "properties": [
+        {
+          "key": "confidence",
+          "float_value": 0.95
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed user partner relation"
+        }
+      ]
+    },
+    {
+      "from_id": "20000000-0000-4000-8000-000000000018",
+      "to_id": "20000000-0000-4000-8000-000000000027",
+      "edge_type": "SUMMARIZES",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "properties": [
+        {
+          "key": "confidence",
+          "float_value": 1.0
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed noah detail block"
+        }
+      ]
+    },
+    {
+      "from_id": "20000000-0000-4000-8000-000000000027",
+      "to_id": "10000000-0000-4000-8000-000000000019",
+      "edge_type": "MENTIONS",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "visibility": "PRIVATE",
+      "properties": [
+        {
+          "key": "confidence",
+          "float_value": 0.95
+        },
+        {
+          "key": "status",
+          "string_value": "asserted"
+        },
+        {
+          "key": "provenance_hint",
+          "string_value": "seed noah detail mention"
         }
       ]
     }
