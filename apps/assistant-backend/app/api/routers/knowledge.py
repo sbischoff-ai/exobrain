@@ -5,7 +5,12 @@ from fastapi.responses import StreamingResponse
 
 from app.api.dependencies.auth import get_required_auth_context
 from app.api.schemas.auth import UnifiedPrincipal
-from app.api.schemas.knowledge import KnowledgeCategoryPagesListResponse, KnowledgeUpdateRequest, KnowledgeUpdateResponse
+from app.api.schemas.knowledge import (
+    KnowledgeCategoryPagesListResponse,
+    KnowledgePageDetailResponse,
+    KnowledgeUpdateRequest,
+    KnowledgeUpdateResponse,
+)
 from app.dependency_injection import get_container
 from app.services.contracts import KnowledgeServiceProtocol
 from app.services.knowledge_interface_client import (
@@ -18,6 +23,10 @@ from app.services.knowledge_service import (
     KnowledgeJobAccessDeniedError,
     KnowledgeJobNotFoundError,
     KnowledgeNoPendingMessagesError,
+    KnowledgePageAccessDeniedError,
+    KnowledgePageNotFoundError,
+    KnowledgePageUnavailableError,
+    KnowledgePageUpstreamError,
     KnowledgeUpstreamUnavailableError,
     KnowledgeWatchError,
 )
@@ -32,8 +41,12 @@ router = APIRouter(prefix="/knowledge", tags=["knowledge"])
     summary="Update the knowledge base using uncommitted messages",
     description="Starts one or more knowledge-base update jobs from uncommitted journal messages, optionally scoped to a journal reference.",
     responses={
-        409: {"description": "No uncommitted messages were found for the requested scope"},
-        503: {"description": "Job orchestrator unavailable while attempting to enqueue"},
+        409: {
+            "description": "No uncommitted messages were found for the requested scope"
+        },
+        503: {
+            "description": "Job orchestrator unavailable while attempting to enqueue"
+        },
         502: {"description": "Unexpected enqueue error from job orchestrator"},
     },
 )
@@ -59,7 +72,10 @@ async def enqueue_knowledge_update(
             detail="knowledge update enqueue unavailable",
         ) from exc
     except KnowledgeEnqueueError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="knowledge update enqueue failed") from exc
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="knowledge update enqueue failed",
+        ) from exc
 
     return KnowledgeUpdateResponse(job_id=job_id)
 
@@ -87,13 +103,24 @@ async def watch_knowledge_update(
     except StopAsyncIteration:
         first_event = None
     except KnowledgeJobNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="knowledge update job not found") from exc
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="knowledge update job not found",
+        ) from exc
     except KnowledgeJobAccessDeniedError as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="knowledge update job access denied") from exc
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="knowledge update job access denied",
+        ) from exc
     except KnowledgeUpstreamUnavailableError as exc:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="knowledge stream unavailable") from exc
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="knowledge stream unavailable",
+        ) from exc
     except KnowledgeWatchError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="knowledge stream error") from exc
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail="knowledge stream error"
+        ) from exc
 
     async def event_stream() -> str:
         if first_event is not None:
@@ -120,8 +147,12 @@ async def list_knowledge_category_pages(
     category_id: str,
     request: Request,
     auth_context: UnifiedPrincipal = Depends(get_required_auth_context),
-    page_size: Annotated[int | None, Query(ge=1, description="Maximum pages to return")]=None,
-    page_token: Annotated[str | None, Query(min_length=1, description="Opaque continuation token")]=None,
+    page_size: Annotated[
+        int | None, Query(ge=1, description="Maximum pages to return")
+    ] = None,
+    page_token: Annotated[
+        str | None, Query(min_length=1, description="Opaque continuation token")
+    ] = None,
 ) -> KnowledgeCategoryPagesListResponse:
     service = get_container(request).resolve(KnowledgeServiceProtocol)
 
@@ -133,10 +164,64 @@ async def list_knowledge_category_pages(
             page_token=page_token,
         )
     except KnowledgeInterfaceClientInvalidArgumentError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid knowledge category pages request") from exc
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="invalid knowledge category pages request",
+        ) from exc
     except KnowledgeInterfaceClientUnavailableError as exc:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="knowledge category pages unavailable") from exc
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="knowledge category pages unavailable",
+        ) from exc
     except KnowledgeInterfaceClientError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="knowledge category pages upstream failure") from exc
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="knowledge category pages upstream failure",
+        ) from exc
 
     return KnowledgeCategoryPagesListResponse.model_validate(payload)
+
+
+@router.get(
+    "/page/{page_id}",
+    response_model=KnowledgePageDetailResponse,
+    summary="Get knowledge page details",
+    description="Returns full page detail by page id using knowledge-interface GetEntityContext.",
+    responses={
+        403: {"description": "Requested page is inaccessible for the caller"},
+        404: {"description": "Requested page does not exist"},
+        503: {"description": "knowledge-interface unavailable or timed out"},
+        502: {"description": "Unexpected upstream failure from knowledge-interface"},
+    },
+)
+async def get_knowledge_page(
+    page_id: str,
+    request: Request,
+    auth_context: UnifiedPrincipal = Depends(get_required_auth_context),
+) -> KnowledgePageDetailResponse:
+    service = get_container(request).resolve(KnowledgeServiceProtocol)
+
+    try:
+        payload = await service.get_page_detail(
+            user_id=auth_context.user_id, page_id=page_id
+        )
+    except KnowledgePageNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="knowledge page not found"
+        ) from exc
+    except KnowledgePageAccessDeniedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="knowledge page access denied"
+        ) from exc
+    except KnowledgePageUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="knowledge page unavailable",
+        ) from exc
+    except KnowledgePageUpstreamError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="knowledge page upstream failure",
+        ) from exc
+
+    return KnowledgePageDetailResponse.model_validate(payload)

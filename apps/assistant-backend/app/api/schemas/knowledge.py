@@ -12,12 +12,17 @@ class KnowledgeUpdateRequest(BaseModel):
 
 
 class KnowledgeUpdateResponse(BaseModel):
-    job_id: str = Field(..., description="Identifier of the first accepted knowledge-base update request")
+    job_id: str = Field(
+        ...,
+        description="Identifier of the first accepted knowledge-base update request",
+    )
     status: str = Field(default="queued", description="Initial accepted status")
 
 
 class KnowledgeCategoryTreeItem(BaseModel):
-    category_id: str = Field(..., description="Stable identifier for the knowledge category")
+    category_id: str = Field(
+        ..., description="Stable identifier for the knowledge category"
+    )
     display_name: str = Field(..., description="Human-friendly category name")
     sub_categories: list[KnowledgeCategoryTreeItem] = Field(
         default_factory=list,
@@ -33,7 +38,9 @@ class KnowledgeCategoryTreeResponse(BaseModel):
 
 
 class KnowledgePageEntitySummary(BaseModel):
-    id: str = Field(..., description="Upstream entity identifier from ListEntitiesByType")
+    id: str = Field(
+        ..., description="Upstream entity identifier from ListEntitiesByType"
+    )
     name: str = Field(..., description="Upstream entity name from ListEntitiesByType")
     description: str | None = Field(
         default=None,
@@ -68,7 +75,9 @@ class KnowledgeCategoryPageListItem(BaseModel):
     )
     page_summary: str | None = Field(
         default=None,
-        validation_alias=AliasChoices("page_summary", AliasPath("entity", "description")),
+        validation_alias=AliasChoices(
+            "page_summary", AliasPath("entity", "description")
+        ),
         description="Mapped page summary (alias of entity.description)",
     )
 
@@ -123,17 +132,15 @@ class KnowledgePageDetailResponse(BaseModel):
         validation_alias=AliasChoices("summary", AliasPath("entity", "description")),
         description="Optional page summary for previews and metadata",
     )
-    created_at: str = Field(
+    metadata: KnowledgePageEntityDetail = Field(
         ...,
-        validation_alias=AliasChoices("created_at", AliasPath("entity", "created_at")),
-        description="Page creation timestamp",
+        validation_alias=AliasChoices("metadata", "entity"),
+        description="Page metadata including canonical timestamps",
     )
-    updated_at: str = Field(
-        ...,
-        validation_alias=AliasChoices("updated_at", AliasPath("entity", "updated_at")),
-        description="Page last-update timestamp",
+    links: list[dict[str, str | None]] = Field(
+        default_factory=list,
+        description="Mapped related pages from entity neighbors",
     )
-    links: list[str] = Field(default_factory=list, description="Related links extracted for this knowledge page")
     content_markdown: str = Field(
         ...,
         validation_alias=AliasChoices("content_markdown", "prompt_context_markdown"),

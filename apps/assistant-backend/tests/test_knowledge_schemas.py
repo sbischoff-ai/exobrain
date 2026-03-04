@@ -56,14 +56,22 @@ def test_page_detail_response_maps_aliases_and_context_markdown() -> None:
                 "created_at": "2026-01-01T00:00:00Z",
                 "updated_at": "2026-02-01T00:00:00Z",
             },
-            "links": ["https://example.com/doc"],
-            "prompt_context_markdown": "# Meaning",
+            "metadata": {
+                "id": "page-42",
+                "name": "Meaning",
+                "description": "All about meaning",
+                "created_at": "2026-01-01T00:00:00Z",
+                "updated_at": "2026-02-01T00:00:00Z",
+            },
+            "links": [{"page_id": "page-8", "title": "Linked", "summary": "Neighbor"}],
+            "content_markdown": "# Meaning",
         }
     )
 
     assert response.page_id == "page-42"
     assert response.title == "Meaning"
     assert response.summary == "All about meaning"
-    assert response.created_at == "2026-01-01T00:00:00Z"
-    assert response.updated_at == "2026-02-01T00:00:00Z"
+    assert response.metadata.created_at == "2026-01-01T00:00:00Z"
+    assert response.metadata.updated_at == "2026-02-01T00:00:00Z"
+    assert response.links[0]["page_id"] == "page-8"
     assert response.content_markdown == "# Meaning"

@@ -303,6 +303,9 @@ class KnowledgeServiceProtocol(Protocol):
     ) -> dict[str, Any]:
         """Return page-like summaries for one knowledge category id."""
 
+    async def get_page_detail(self, *, user_id: str, page_id: str) -> dict[str, Any]:
+        """Return detailed page content and link metadata for one page id."""
+
     async def enqueue_update_job(self, *, user_id: str, journal_reference: str | None = None) -> str:
         """Queue one or more knowledge update jobs from uncommitted journal messages."""
 
