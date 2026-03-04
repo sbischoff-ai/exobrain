@@ -58,6 +58,25 @@ cd apps/assistant-frontend && npm test
 - Knowledge update is disabled when viewing a past journal, while app state is loading/syncing, while an update is already in progress, and whenever there are no new messages since the last successful update (`title="nothing to update"`).
 - Knowledge browsing service normalizes backend category/page payload fields (`category_id`, `display_name`, `sub_categories`, `knowledge_pages`, `metadata`) into frontend-facing contracts for tree, category previews, lists, and page detail views.
 
+### Knowledge Explorer View
+
+- Header mode toggle switches the main workspace between journal chat and knowledge explorer.
+- Mode toggle tooltip/accessible label reflects the next target mode:
+  - From chat mode: `Switch to Knowledge Explorer`.
+  - From knowledge mode: `Switch to Journal Chat`.
+- Explorer navigation flow is hierarchical and reversible:
+  1. **Overview**: category cards + category tree entrypoint (`explorerRoute.type = "overview"`).
+  2. **Category**: selected category detail/listing (`explorerRoute.type = "category"`, `categoryId`).
+  3. **Page**: markdown-rendered knowledge page with metadata/related links (`explorerRoute.type = "page"`, `pageId`).
+- Route transitions (overview → category → page and back via breadcrumbs/tree clicks) are persisted so refresh/reload restores prior explorer context.
+- Category tree expansion state is persisted alongside route state so recursive branch open/closed state survives navigation and reloads.
+
+### Session storage notes (explorer + logout)
+
+- `exobrain.assistant.workspaceView` stores workspace mode (`chat`/`knowledge`), explorer route, and expanded category map for continuity.
+- `exobrain.assistant.session` stores active journal reference/message snapshot for chat continuity when switching journals or reloading.
+- Logout clears both keys (and pending stream state), then resets UI state to intro-gated chat defaults (chat mode + overview explorer route + no expanded categories).
+
 ### Knowledge update flow (high-level)
 
 1. User clicks the header update button for today's journal with new messages available.
