@@ -8,6 +8,7 @@ Python service responsible for asynchronous job orchestration.
 - Subscribes to NATS job request subjects.
 - Persists job lifecycle state in `job_orchestrator_db`.
 - Executes worker job scripts idempotently, retries failures, and publishes completion/failure events.
+- Worker subprocess stdout/stderr is forwarded into job-orchestrator logs so `mprocs` shows per-job console output during local debugging.
 - The `knowledge.update` skeleton uses `grpcio`; ensure `libstdc++` is available in runtime/dev environments.
 - Uses an orchestration/runner abstraction so local process execution can later switch to pod orchestration.
 
