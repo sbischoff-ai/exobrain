@@ -32,12 +32,13 @@ flowchart TD
 
 - Every `Entity` has exactly one `IS_PART_OF` edge to `Universe`.
 - `DESCRIBED_BY` is used when a block directly describes an entity (or universe context); higher-level summary blocks can omit it.
+- Domain kind/type should be represented through schema node types (inheritance/labels), not discriminator properties.
 - `SUMMARIZES` forms a DAG (no cycles).
 - World semantics should prefer explicit edge types over excess properties.
 
 ## Entity subtype constraints
 
-The direct children of `node.entity` are intentionally fixed:
+The direct children of `node.entity` are:
 
 - `node.person`
 - `node.group`
@@ -46,19 +47,21 @@ The direct children of `node.entity` are intentionally fixed:
 - `node.object`
 - `node.concept`
 - `node.event`
+- `node.document`
 
-`node.task` and `node.message` remain subtypes of `node.event` (not direct children of `node.entity`), `node.chat_message` is a subtype of `node.message`, `node.ai_agent` is a subtype of `node.person`, and `node.species` is a subtype of `node.concept`.
+`node.task`, `node.message`, and `node.recurring_event` remain subtypes of `node.event` (not direct children of `node.entity`), `node.chat_message` is a subtype of `node.message`, `node.ai_agent` is a subtype of `node.person`, `node.company` is a subtype of `node.institution`, `node.rule` and `node.species` are subtypes of `node.concept`, and `node.note`/`node.report` are subtypes of `node.document`.
 
 ## Starter node labels
 
 - `Universe`
-- `Entity` (+ starter sublabels like `Person`, `AI Agent`, `Group`, `Institution`, `Place`, `Object`, `Concept`, `Species`, `Event`, `Task`, `Message`, `Chat Message`)
+- `Entity` (+ starter sublabels like `Person`, `AI Agent`, `Group`, `Institution`, `Company`, `Place`, `Object`, `Concept`, `Rule`, `Species`, `Event`, `Recurring Event`, `Task`, `Message`, `Chat Message`, `Document`, `Note`, `Report`)
 - `Block` (+ optional `Quote`)
 
 ## Starter edge set
 
 - Scoping/content: `IS_PART_OF`, `DESCRIBED_BY`, `SUMMARIZES`, `MENTIONS`
 - General fallback: `RELATED_TO`
+- Ownership/authorship/applicability: `OWNS`, `AUTHORED`, `APPLIES_TO`
 - Spatial/containment: `LOCATED_AT`, `LIES_IN`, `CONTAINS`
 - Social: `KNOWS`, `MEMBER_OF`, `AFFILIATED_WITH`
 - Event/task: `PARTICIPATED_IN`, `INVOLVES`, `CAUSES`, `ASSIGNED_TO`, `DONE_FOR`, `DEPENDS_ON`, `SENT_TO`, `SENT_BY`
@@ -71,6 +74,10 @@ Edges must include:
 - `confidence: float`
 - `status: asserted | disputed | falsified`
 - `context: string`
+
+Edges may include temporal validity metadata:
+- `valid_from: datetime`
+- `valid_to: datetime`
 
 Blocks may include editorial trust hints:
 - `confidence`
