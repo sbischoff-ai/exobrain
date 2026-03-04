@@ -12,6 +12,118 @@ describe('knowledgeService', () => {
     vi.restoreAllMocks();
   });
 
+  it('gets and normalizes category tree', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          categories: [
+            {
+              category_id: 'node.root',
+              display_name: 'Root',
+              page_count: 3,
+              sub_categories: [
+                {
+                  category_id: 'node.child',
+                  display_name: 'Child',
+                  sub_categories: []
+                }
+              ]
+            }
+          ]
+        }),
+        { status: 200 }
+      )
+    );
+
+    const response = await knowledgeService.getCategoryTree();
+
+    expect(fetchSpy).toHaveBeenCalledWith('/api/knowledge/category', undefined);
+    expect(response).toEqual({
+      categories: [
+        {
+          id: 'node.root',
+          name: 'Root',
+          page_count: 3,
+          children: [
+            {
+              id: 'node.child',
+              name: 'Child',
+              page_count: 0,
+              children: []
+            }
+          ]
+        }
+      ]
+    });
+  });
+
+  it('gets and normalizes category pages', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          knowledge_pages: [
+            { id: 'entity-1', title: 'Entity One', summary: 'Summary' },
+            { id: 'entity-2', title: 'Entity Two' }
+          ],
+          page_size: 20,
+          next_page_token: 'cursor-1'
+        }),
+        { status: 200 }
+      )
+    );
+
+    const response = await knowledgeService.getCategoryPages('type/with/slash');
+
+    expect(fetchSpy).toHaveBeenCalledWith('/api/knowledge/category/type%2Fwith%2Fslash/pages', undefined);
+    expect(response).toEqual({
+      pages: [
+        { id: 'entity-1', title: 'Entity One', summary: 'Summary' },
+        { id: 'entity-2', title: 'Entity Two', summary: null }
+      ]
+    });
+  });
+
+  it('gets and normalizes page detail', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: 'entity-1',
+          title: 'Entity One',
+          summary: 'Root',
+          metadata: {
+            created_at: '2026-02-19T09:00:00Z',
+            updated_at: '2026-02-19T10:00:00Z'
+          },
+          links: [{ page_id: 'entity-2', title: 'Entity Two', summary: 'Linked' }],
+          content_markdown: 'Root\\n\\n- Child',
+          category_breadcrumb: [
+            { category_id: 'node.root', display_name: 'Root' },
+            { category_id: 'node.child', display_name: 'Child' }
+          ]
+        }),
+        { status: 200 }
+      )
+    );
+
+    const response = await knowledgeService.getPage('entity-1');
+
+    expect(response).toEqual({
+      id: 'entity-1',
+      title: 'Entity One',
+      summary: 'Root',
+      content_markdown: 'Root\\n\\n- Child',
+      created_at: '2026-02-19T09:00:00Z',
+      updated_at: '2026-02-19T10:00:00Z',
+      links: [{ page_id: 'entity-2', title: 'Entity Two', summary: 'Linked' }],
+      category_breadcrumb: {
+        path: [
+          { id: 'node.root', name: 'Root' },
+          { id: 'node.child', name: 'Child' }
+        ]
+      }
+    });
+  });
+
   it('posts enqueue request without journal_reference when omitted', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ job_id: 'job-1' }), { status: 200 })

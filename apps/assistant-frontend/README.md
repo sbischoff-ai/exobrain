@@ -53,6 +53,7 @@ cd apps/assistant-frontend && npm test
 - Knowledge update action appears in the top-right header actions cluster, immediately next to the user menu.
 - Knowledge update action is exposed as an accessible circular header control (`aria-label` + tooltip).
 - Knowledge update is disabled when viewing a past journal, while app state is loading/syncing, while an update is already in progress, and whenever there are no new messages since the last successful update (`title="nothing to update"`).
+- Knowledge browsing service normalizes backend category/page payload fields (`category_id`, `display_name`, `sub_categories`, `knowledge_pages`, `metadata`) into frontend-facing contracts for tree, list, and page detail views.
 
 ### Knowledge update flow (high-level)
 
