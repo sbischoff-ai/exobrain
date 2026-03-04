@@ -836,6 +836,42 @@ async def test_list_category_pages_passes_none_pagination_to_client() -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_page_detail_deduplicates_links_by_page_id() -> None:
+    reply = knowledge_pb2.GetEntityContextReply(
+        entity=knowledge_pb2.EntityContextCore(id="entity-1", name="Entity One"),
+        neighbors=[
+            knowledge_pb2.EntityContextNeighbor(
+                other_entity=knowledge_pb2.EntityContextOtherEntity(
+                    id="entity-2", name="Entity Two", description="First summary"
+                )
+            ),
+            knowledge_pb2.EntityContextNeighbor(
+                other_entity=knowledge_pb2.EntityContextOtherEntity(
+                    id="entity-2", name="Entity Two", description="Duplicate summary"
+                )
+            ),
+            knowledge_pb2.EntityContextNeighbor(
+                other_entity=knowledge_pb2.EntityContextOtherEntity(
+                    id="entity-3", name="Entity Three", description="Another page"
+                )
+            ),
+        ],
+    )
+    service = KnowledgeService(
+        database=FakeDatabase([]),
+        job_publisher=FakeJobPublisher(),
+        knowledge_interface_client=FakeKnowledgeInterfaceClient(entity_context_reply=reply),
+        settings=Settings(),
+    )
+
+    response = await service.get_page_detail(user_id="user-1", page_id="entity-1")
+
+    assert response["links"] == [
+        {"page_id": "entity-2", "title": "Entity Two", "summary": "First summary"},
+        {"page_id": "entity-3", "title": "Entity Three", "summary": "Another page"},
+    ]
+
+
 async def test_get_page_detail_maps_metadata_links_and_content() -> None:
     reply = knowledge_pb2.GetEntityContextReply(
         entity=knowledge_pb2.EntityContextCore(
