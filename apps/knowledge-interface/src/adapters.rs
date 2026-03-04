@@ -865,7 +865,7 @@ fn build_get_entity_context_neighbors_query() -> String {
 fn build_list_entities_by_type_query() -> String {
     format!(
         "MATCH (e:Entity)
-         WHERE {entity_access} AND e.type_id = $type_id
+         WHERE {entity_access} AND $type_label IN labels(e)
          OPTIONAL MATCH (e)-[:DESCRIBED_BY]->(root:Block)
          WHERE {root_access}
          WITH e, root
@@ -1302,6 +1302,7 @@ impl GraphRepository for MemgraphQdrantGraphRepository {
     ) -> Result<ListEntitiesByTypeResult> {
         let page_size = query_input.page_size.unwrap_or(20);
         let offset = query_input.offset.unwrap_or_default();
+        let type_label = type_id_to_memgraph_label(&query_input.type_id);
 
         let cypher = build_list_entities_by_type_query();
         let limit = i64::from(page_size) + 1;
@@ -1313,7 +1314,7 @@ impl GraphRepository for MemgraphQdrantGraphRepository {
             .execute(
                 query(&cypher)
                     .param("user_id", query_input.user_id.clone())
-                    .param("type_id", query_input.type_id.clone())
+                    .param("type_label", type_label)
                     .param("limit", limit)
                     .param("offset", offset_i64),
             )
@@ -1650,6 +1651,19 @@ fn sanitize_labels(labels: &[String]) -> Result<Vec<String>> {
     Ok(cleaned)
 }
 
+fn type_id_to_memgraph_label(type_id: &str) -> String {
+    let label = type_id.trim().trim_start_matches("node.");
+    let mut chars = label.chars();
+    match chars.next() {
+        Some(first) => format!(
+            "{}{}",
+            first.to_ascii_uppercase(),
+            chars.collect::<String>()
+        ),
+        None => String::new(),
+    }
+}
+
 fn prop_as_string(props: &[PropertyValue], key: &str) -> Option<String> {
     props.iter().find_map(|p| {
         if p.key != key {
@@ -1861,8 +1875,8 @@ mod tests {
         memgraph_user_or_shared_access_clause, normalize_qdrant_grpc_url, parse_block_level,
         parse_neighbor_direction, payload_i64, payload_string, prop_as_aliases,
         qdrant_user_or_shared_access_filter, semantic_score_with_block_level,
-        to_typed_entity_list_item, trigger_name_column_candidates, upsert_semantic_candidate,
-        validate_edge_type, MockEmbedder,
+        to_typed_entity_list_item, trigger_name_column_candidates, type_id_to_memgraph_label,
+        upsert_semantic_candidate, validate_edge_type, MockEmbedder,
     };
     use crate::domain::Visibility;
     use crate::ports::Embedder;
@@ -2105,7 +2119,7 @@ mod tests {
         let list_query = build_list_entities_by_type_query();
 
         assert!(list_query.contains("(e.user_id = $user_id OR e.visibility = 'SHARED')"));
-        assert!(list_query.contains("e.type_id = $type_id"));
+        assert!(list_query.contains("$type_label IN labels(e)"));
         assert!(list_query.contains("(root.user_id = $user_id OR root.visibility = 'SHARED')"));
         assert!(list_query.contains(
             "(described_root.user_id = $user_id OR described_root.visibility = 'SHARED')"
@@ -2122,6 +2136,12 @@ mod tests {
         assert!(!list_query.contains("duration.between"));
         assert!(list_query.contains("LIMIT $limit"));
         assert!(list_query.contains("SKIP $offset"));
+    }
+
+    #[test]
+    fn maps_type_id_to_memgraph_label() {
+        assert_eq!(type_id_to_memgraph_label("node.person"), "Person");
+        assert_eq!(type_id_to_memgraph_label("node.ai_agent"), "Ai_agent");
     }
 
     #[test]
