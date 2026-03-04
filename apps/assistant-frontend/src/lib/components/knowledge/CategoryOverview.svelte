@@ -3,7 +3,7 @@
   import type { KnowledgeCategoryNode, KnowledgeCategoryPageListItem } from '$lib/models/knowledge';
   import PageCard from './PageCard.svelte';
 
-  export interface CategoryOverviewPreview {
+  interface CategoryOverviewPreview {
     category: KnowledgeCategoryNode;
     pages: KnowledgeCategoryPageListItem[];
   }

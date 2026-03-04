@@ -5,17 +5,19 @@ import KnowledgeExplorerView from './KnowledgeExplorerView.svelte';
 
 const serviceMocks = vi.hoisted(() => ({
   getCategoryTree: vi.fn(),
-  getCategoryPages: vi.fn()
+  getCategoryPages: vi.fn(),
+  getPage: vi.fn()
 }));
 
 vi.mock('$lib/services/knowledgeService', () => ({
   knowledgeService: {
     getCategoryTree: serviceMocks.getCategoryTree,
-    getCategoryPages: serviceMocks.getCategoryPages
+    getCategoryPages: serviceMocks.getCategoryPages,
+    getPage: serviceMocks.getPage
   }
 }));
 
-const { getCategoryTree, getCategoryPages } = serviceMocks;
+const { getCategoryTree, getCategoryPages, getPage } = serviceMocks;
 
 describe('KnowledgeExplorerView', () => {
   it('loads overview cards and emits category/page navigation', async () => {
@@ -93,5 +95,38 @@ describe('KnowledgeExplorerView', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Overview' }));
     await fireEvent.click(screen.getByRole('button', { name: 'Child Page' }));
     await fireEvent.click(screen.getByRole('button', { name: 'Collapse Root' }));
+  });
+
+  it('renders knowledge page details with related links', async () => {
+    getCategoryTree.mockResolvedValue({
+      categories: [{ id: 'cat-a', name: 'Category A', page_count: 1, children: [] }]
+    });
+    getCategoryPages.mockResolvedValue({ pages: [] });
+    getPage.mockResolvedValue({
+      id: 'page-1',
+      title: 'Page Title',
+      summary: null,
+      content_markdown: '## Body',
+      created_at: '2026-01-02T03:04:05Z',
+      updated_at: '2026-01-03T04:05:06Z',
+      links: [{ page_id: 'linked-1', title: 'Linked Page', summary: 'see also' }],
+      category_breadcrumb: { path: [{ id: 'cat-a', name: 'Category A' }] }
+    });
+
+    render(KnowledgeExplorerView, {
+      props: {
+        explorerRoute: { type: 'page', id: 'page-1' },
+        expandedCategories: {}
+      }
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Page Title' })).toBeInTheDocument();
+      expect(screen.getByText(/Created/)).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Related pages' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Linked Page' })).toBeInTheDocument();
+    });
+
+    expect(getPage).toHaveBeenCalledWith('page-1');
   });
 });
