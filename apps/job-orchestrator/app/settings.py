@@ -31,6 +31,14 @@ class Settings(BaseSettings):
         alias="KNOWLEDGE_INTERFACE_CONNECT_TIMEOUT_SECONDS",
         gt=0,
     )
+    model_provider_base_url: str = Field(
+        default="http://model-provider:8080/v1",
+        alias="MODEL_PROVIDER_BASE_URL",
+    )
+    knowledge_update_extraction_model: str = Field(
+        default="architect",
+        alias="KNOWLEDGE_UPDATE_EXTRACTION_MODEL",
+    )
     job_orchestrator_api_bind_address: str | None = Field(
         default=None,
         alias="JOB_ORCHESTRATOR_API_BIND_ADDRESS",

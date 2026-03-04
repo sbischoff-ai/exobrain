@@ -101,8 +101,14 @@ assistant-backend
 
 This API ownership keeps producers decoupled from JetStream subject/version details and lets the orchestrator enforce payload validation centrally.
 For `knowledge.update`, clients must provide `user_id` plus the typed `knowledge_update` payload (`journal_reference`, `messages`, and `requested_by_user_id`), and the server uses `user_id` as the envelope correlation id.
-Current `knowledge.update` worker flow uses two explicit steps: step one constructs the `UpsertGraphDelta` request body from message payloads (after one `GetUserInitGraph` lookup), and step two preprocesses the chat sequence into a deterministic batch document with turn boundaries, speaker tags, timestamps, and an optional metadata header.
-This preprocessing exists to produce stable input for downstream LLM-based entity/relation extraction and evidence attribution.
+Current `knowledge.update` worker flow uses four explicit steps arranged as a task group:
+
+1. Step one builds a baseline `UpsertGraphDelta` request body from message payloads (after one `GetUserInitGraph` lookup).
+2. Step two preprocesses the chat sequence into a deterministic markdown batch document with turn boundaries, speaker tags, timestamps, and an optional metadata header.
+3. Step three runs a LangChain extraction agent (`architect` model via model-provider) against the step-two markdown, using schema context from `GetExtractionSchemaContext`, structured output schema from `GetUpsertGraphDeltaJsonSchema`, and graph lookup tools backed by `FindEntityCandidates`, `GetEntityContext`, and `GetEntityTypePropertyContext`.
+4. Step four merges graph deltas from step one and step three for final upsert handling.
+
+Execution uses two parallel tasks: task one runs step one, and task two runs steps two+three; step four depends on both task results.
 
 ## Common commands
 
@@ -131,6 +137,8 @@ Keep request subject patterns narrow enough that they do not also match events/D
 - `JOB_ORCHESTRATOR_WORKER_ENABLED` (default: `true`, run worker process)
 - `KNOWLEDGE_INTERFACE_GRPC_TARGET` (default: `localhost:50051`)
 - `KNOWLEDGE_INTERFACE_CONNECT_TIMEOUT_SECONDS` (default: `5.0`)
+- `MODEL_PROVIDER_BASE_URL` (default: `http://model-provider:8080/v1`, OpenAI-compatible model-provider endpoint used by the step-three extraction agent)
+- `KNOWLEDGE_UPDATE_EXTRACTION_MODEL` (default: `architect`, model alias used for step-three extraction)
 - `APP_ENV` (default: `local`, influences default logging level)
 - `LOG_LEVEL` (optional override; defaults to `DEBUG` in local, `INFO` otherwise)
 - `RESHAPE_SCHEMA_QUERY` (optional)
