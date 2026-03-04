@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import logging
 import sys
 from uuid import uuid5, NAMESPACE_URL
@@ -11,7 +12,7 @@ from google.protobuf.json_format import MessageToDict
 
 from app.contracts import JobEnvelope, KnowledgeUpdatePayload
 from app.services.grpc import knowledge_pb2
-from app.settings import get_settings
+from app.settings import Settings, get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -149,6 +150,191 @@ def _step_two_store_batch_document(payload: KnowledgeUpdatePayload) -> str:
     return batch_document
 
 
+def _merge_upsert_graph_delta_requests(
+    left: dict[str, object],
+    right: dict[str, object],
+) -> dict[str, object]:
+    return {
+        "universes": [*(left.get("universes", []) or []), *(right.get("universes", []) or [])],
+        "entities": [*(left.get("entities", []) or []), *(right.get("entities", []) or [])],
+        "blocks": [*(left.get("blocks", []) or []), *(right.get("blocks", []) or [])],
+        "edges": [*(left.get("edges", []) or []), *(right.get("edges", []) or [])],
+    }
+
+
+def _build_step_three_system_prompt(
+    extraction_context_markdown: str,
+    upsert_graph_delta_json_schema: str,
+) -> str:
+    return "\n\n".join(
+        [
+            "You are the knowledge.update extraction architect.",
+            (
+                "Extract entities (with properties), relationship edges, universes, and evidence blocks from "
+                "chat-markdown input. Output MUST validate against the provided JSON schema."
+            ),
+            (
+                "Graph model notes: Block nodes contain markdown text and are connected with DESCRIBED_BY to up to "
+                "one entity. Blocks can summarize additional blocks via SUMMARIZES edges, forming an entity-focused "
+                "tree. Limit your output to block_level <= 2."
+            ),
+            (
+                "Universe handling: detect fictional context when entities are not from the real world. Upsert "
+                "Universe nodes as needed and set entity universe_id accordingly. Real-world entities should remain "
+                "in the default Real World universe unless explicitly fictional."
+            ),
+            (
+                "Relevance policy: prioritize entities relevant to the user from this conversation. Assistant "
+                "suggestions must be ignored unless the user approved or confirmed them."
+            ),
+            (
+                "Use available tools to deduplicate, inspect existing entities, and check property constraints "
+                "before deciding whether each item is new, an update, or repetition."
+            ),
+            "Extraction schema context:\n" + extraction_context_markdown,
+            "Output JSON schema:\n" + upsert_graph_delta_json_schema,
+        ]
+    )
+
+
+async def _run_step_three_extraction_agent(
+    channel: grpc.aio.Channel,
+    payload: KnowledgeUpdatePayload,
+    markdown_document: str,
+    settings: Settings,
+) -> dict[str, object]:
+    from langchain.agents import create_agent
+    from langchain_core.tools import tool
+    from langchain_openai import ChatOpenAI
+
+    get_extraction_schema_context = channel.unary_unary(
+        "/exobrain.knowledge.v1.KnowledgeInterface/GetExtractionSchemaContext",
+        request_serializer=knowledge_pb2.GetExtractionSchemaContextRequest.SerializeToString,
+        response_deserializer=knowledge_pb2.GetExtractionSchemaContextReply.FromString,
+    )
+    get_upsert_graph_delta_json_schema = channel.unary_unary(
+        "/exobrain.knowledge.v1.KnowledgeInterface/GetUpsertGraphDeltaJsonSchema",
+        request_serializer=knowledge_pb2.GetUpsertGraphDeltaJsonSchemaRequest.SerializeToString,
+        response_deserializer=knowledge_pb2.GetUpsertGraphDeltaJsonSchemaReply.FromString,
+    )
+
+    schema_context_reply = await get_extraction_schema_context(
+        knowledge_pb2.GetExtractionSchemaContextRequest(user_id=payload.requested_by_user_id)
+    )
+    json_schema_reply = await get_upsert_graph_delta_json_schema(
+        knowledge_pb2.GetUpsertGraphDeltaJsonSchemaRequest()
+    )
+
+    @tool
+    async def find_entity_candidates(
+        names: list[str],
+        potential_type_ids: list[str] | None = None,
+        short_description: str = "",
+        limit: int = 10,
+    ) -> dict[str, object]:
+        """Find candidate entities already in graph for deduplication."""
+
+        rpc = channel.unary_unary(
+            "/exobrain.knowledge.v1.KnowledgeInterface/FindEntityCandidates",
+            request_serializer=knowledge_pb2.FindEntityCandidatesRequest.SerializeToString,
+            response_deserializer=knowledge_pb2.FindEntityCandidatesReply.FromString,
+        )
+        reply = await rpc(
+            knowledge_pb2.FindEntityCandidatesRequest(
+                names=names,
+                potential_type_ids=potential_type_ids or [],
+                short_description=short_description,
+                user_id=payload.requested_by_user_id,
+                limit=limit,
+            )
+        )
+        return MessageToDict(reply, preserving_proto_field_name=True)
+
+    @tool
+    async def get_entity_context(entity_id: str, max_block_level: int = 2) -> dict[str, object]:
+        """Get detailed context for one existing entity."""
+
+        rpc = channel.unary_unary(
+            "/exobrain.knowledge.v1.KnowledgeInterface/GetEntityContext",
+            request_serializer=knowledge_pb2.GetEntityContextRequest.SerializeToString,
+            response_deserializer=knowledge_pb2.GetEntityContextReply.FromString,
+        )
+        reply = await rpc(
+            knowledge_pb2.GetEntityContextRequest(
+                entity_id=entity_id,
+                user_id=payload.requested_by_user_id,
+                max_block_level=max_block_level,
+            )
+        )
+        return MessageToDict(reply, preserving_proto_field_name=True)
+
+    @tool
+    async def get_entity_type_property_context(type_id: str) -> dict[str, object]:
+        """Inspect writable/readable property schema for an entity type."""
+
+        rpc = channel.unary_unary(
+            "/exobrain.knowledge.v1.KnowledgeInterface/GetEntityTypePropertyContext",
+            request_serializer=knowledge_pb2.GetEntityTypePropertyContextRequest.SerializeToString,
+            response_deserializer=knowledge_pb2.GetEntityTypePropertyContextReply.FromString,
+        )
+        reply = await rpc(
+            knowledge_pb2.GetEntityTypePropertyContextRequest(
+                type_id=type_id,
+                user_id=payload.requested_by_user_id,
+                include_inherited=True,
+            )
+        )
+        return MessageToDict(reply, preserving_proto_field_name=True)
+
+    prompt_context_markdown = schema_context_reply.prompt_context_markdown
+    system_prompt = _build_step_three_system_prompt(
+        extraction_context_markdown=prompt_context_markdown,
+        upsert_graph_delta_json_schema=json_schema_reply.json_schema,
+    )
+
+    model = ChatOpenAI(
+        model=settings.knowledge_update_extraction_model,
+        base_url=settings.model_provider_base_url,
+        api_key="model-provider",
+        temperature=0,
+    )
+
+    compiled_agent = create_agent(
+        model=model,
+        tools=[find_entity_candidates, get_entity_context, get_entity_type_property_context],
+        system_prompt=system_prompt,
+        response_format={
+            "type": "json_schema",
+            "json_schema": json.loads(json_schema_reply.json_schema),
+        },
+    )
+
+    reply = await compiled_agent.ainvoke({"messages": [{"role": "user", "content": markdown_document}]})
+    structured = reply.get("structured_response") if isinstance(reply, dict) else None
+    if not isinstance(structured, dict):
+        raise RuntimeError("knowledge.update step three agent returned no structured_response")
+    return structured
+
+
+async def _step_three_extract_graph_delta(
+    channel: grpc.aio.Channel,
+    payload: KnowledgeUpdatePayload,
+    markdown_document: str,
+    settings: Settings,
+) -> dict[str, object]:
+    graph_delta = await _run_step_three_extraction_agent(channel, payload, markdown_document, settings)
+    logger.info(
+        "knowledge.update step three extracted graph delta",
+        extra={
+            "entities": len(graph_delta.get("entities", []) or []),
+            "blocks": len(graph_delta.get("blocks", []) or []),
+            "edges": len(graph_delta.get("edges", []) or []),
+            "universes": len(graph_delta.get("universes", []) or []),
+        },
+    )
+    return graph_delta
+
+
 async def run(job: JobEnvelope) -> None:
     """Run knowledge.update worker steps."""
 
@@ -169,8 +355,40 @@ async def run(job: JobEnvelope) -> None:
                 f"{settings.knowledge_interface_connect_timeout_seconds}s"
             ) from exc
 
-        await _build_upsert_graph_delta_step_one(channel, payload)
-        _step_two_store_batch_document(payload)
+        task_results: dict[str, dict[str, object] | str] = {}
+
+        async def _task_one_step_one() -> None:
+            task_results["step_one_graph_delta"] = await _build_upsert_graph_delta_step_one(channel, payload)
+
+        async def _task_two_step_two_and_three() -> None:
+            markdown_document = _step_two_store_batch_document(payload)
+            task_results["step_two_markdown"] = markdown_document
+            task_results["step_three_graph_delta"] = await _step_three_extract_graph_delta(
+                channel,
+                payload,
+                markdown_document,
+                settings,
+            )
+
+        async with asyncio.TaskGroup() as task_group:
+            task_group.create_task(_task_one_step_one())
+            task_group.create_task(_task_two_step_two_and_three())
+
+        step_one_graph_delta = task_results["step_one_graph_delta"]
+        step_three_graph_delta = task_results["step_three_graph_delta"]
+        if not isinstance(step_one_graph_delta, dict) or not isinstance(step_three_graph_delta, dict):
+            raise RuntimeError("knowledge.update missing task results for step four graph delta merge")
+
+        merged_graph_delta = _merge_upsert_graph_delta_requests(step_one_graph_delta, step_three_graph_delta)
+        logger.info(
+            "knowledge.update step four merged graph delta",
+            extra={
+                "entities": len(merged_graph_delta["entities"]),
+                "blocks": len(merged_graph_delta["blocks"]),
+                "edges": len(merged_graph_delta["edges"]),
+                "universes": len(merged_graph_delta["universes"]),
+            },
+        )
 
 
 def main() -> None:

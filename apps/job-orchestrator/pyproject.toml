@@ -12,7 +12,9 @@ dependencies = [
   "nats-py>=2.9.0",
   "grpcio>=1.66.0",
   "protobuf>=5.27.0",
-  "pydantic-settings>=2.3.0"
+  "pydantic-settings>=2.3.0",
+  "langchain>=0.2.0",
+  "langchain-openai>=0.1.0"
 ]
 
 [project.optional-dependencies]

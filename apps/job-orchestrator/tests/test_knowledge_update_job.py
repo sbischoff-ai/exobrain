@@ -8,7 +8,9 @@ from app.contracts import KnowledgeUpdatePayload
 from app.services.grpc import knowledge_pb2
 from app.worker.jobs.knowledge_update import (
     _build_batch_document,
+    _build_step_three_system_prompt,
     _build_upsert_graph_delta_step_one,
+    _merge_upsert_graph_delta_requests,
     _step_two_store_batch_document,
 )
 
@@ -113,8 +115,7 @@ hi
 --- TURN 2 ---
 speaker: USER_ROLE
 timestamp: 2026-03-02T12:05:00Z
-content:
-"""
+content:"""
 
 
 def test_build_batch_document_without_header_and_missing_timestamps() -> None:
@@ -159,3 +160,31 @@ def test_step_two_logs_batch_document(caplog: pytest.LogCaptureFixture) -> None:
 
     assert "knowledge.update step two batch document" in caplog.text
     assert "conversation_id: journal-1" in document
+
+
+def test_merge_upsert_graph_delta_requests_combines_all_sections() -> None:
+    left = {"entities": [{"id": "e1"}], "blocks": [], "edges": [{"id": "edge-1"}]}
+    right = {"universes": [{"id": "u1"}], "entities": [{"id": "e2"}], "blocks": [{"id": "b1"}]}
+
+    merged = _merge_upsert_graph_delta_requests(left, right)
+
+    assert merged == {
+        "universes": [{"id": "u1"}],
+        "entities": [{"id": "e1"}, {"id": "e2"}],
+        "blocks": [{"id": "b1"}],
+        "edges": [{"id": "edge-1"}],
+    }
+
+
+def test_build_step_three_system_prompt_includes_required_guidance() -> None:
+    prompt = _build_step_three_system_prompt(
+        extraction_context_markdown="## Entities\n- Person",
+        upsert_graph_delta_json_schema='{"type":"object"}',
+    )
+
+    assert "knowledge.update extraction architect" in prompt
+    assert "block_level <= 2" in prompt
+    assert "fictional context" in prompt
+    assert "assistant suggestions must be ignored unless the user approved" in prompt.lower()
+    assert "## Entities" in prompt
+    assert '{"type":"object"}' in prompt
