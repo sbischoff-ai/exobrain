@@ -244,6 +244,45 @@ describe('root page', () => {
     });
   });
 
+  it('toggles header view mode button and persists workspace mode', async () => {
+    window.sessionStorage.setItem(
+      'exobrain.assistant.session',
+      JSON.stringify({
+        user: { name: 'Test User', email: 'test.user@exobrain.local' },
+        journalReference: '2026/02/19',
+        messageCount: 0,
+        messages: []
+      })
+    );
+
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(jsonResponse({ name: 'Test User', email: 'test.user@exobrain.local' }))
+      .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19', message_count: 0 }))
+      .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
+      .mockResolvedValueOnce(jsonResponse([{ reference: '2026/02/19' }]));
+
+    render(Page);
+
+    const toggleToKnowledgeButton = await screen.findByRole('button', {
+      name: 'Switch to Knowledge Explorer'
+    });
+    expect(toggleToKnowledgeButton).toHaveAttribute('title', 'Switch to Knowledge Explorer');
+
+    await fireEvent.click(toggleToKnowledgeButton);
+
+    const persistedKnowledge = JSON.parse(window.sessionStorage.getItem('exobrain.assistant.workspaceView') || '{}');
+    expect(persistedKnowledge.mode).toBe('knowledge');
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Switch to Journal Chat' })).toBeInTheDocument();
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Switch to Journal Chat' }));
+
+    const persistedChat = JSON.parse(window.sessionStorage.getItem('exobrain.assistant.workspaceView') || '{}');
+    expect(persistedChat.mode).toBe('chat');
+  });
+
   it('renders update button in header with default tooltip when updates are available', async () => {
     window.sessionStorage.setItem(
       'exobrain.assistant.session',
