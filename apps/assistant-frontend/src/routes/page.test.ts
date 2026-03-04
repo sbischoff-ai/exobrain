@@ -275,6 +275,8 @@ describe('root page', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Switch to Journal Chat' })).toBeInTheDocument();
+      expect(screen.getByLabelText('Knowledge explorer')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Open journals' })).not.toBeInTheDocument();
     });
 
     await fireEvent.click(screen.getByRole('button', { name: 'Switch to Journal Chat' }));
