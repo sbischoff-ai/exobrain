@@ -102,14 +102,15 @@ assistant-backend
 
 This API ownership keeps producers decoupled from JetStream subject/version details and lets the orchestrator enforce payload validation centrally.
 For `knowledge.update`, clients must provide `user_id` plus the typed `knowledge_update` payload (`journal_reference`, `messages`, and `requested_by_user_id`), and the server uses `user_id` as the envelope correlation id.
-Current `knowledge.update` worker flow uses four explicit steps arranged as a task group:
+Current `knowledge.update` worker flow uses five explicit steps arranged as a task group:
 
 1. Step one builds a baseline `UpsertGraphDelta` request body from message payloads (after one `GetUserInitGraph` lookup).
 2. Step two preprocesses the chat sequence into a deterministic markdown batch document with turn boundaries, speaker tags, timestamps, and an optional metadata header.
 3. Step three runs a LangChain extraction agent (`architect` model via model-provider) against the step-two markdown, using schema context from `GetExtractionSchemaContext`, structured output schema from `GetUpsertGraphDeltaJsonSchema`, and graph lookup tools backed by `FindEntityCandidates`, `GetEntityContext`, and `GetEntityTypePropertyContext`.
-4. Step four merges graph deltas from step one and step three for final upsert handling.
+4. Step four runs a router agent (`router` model) that maps step-one chat blocks to step-three entities with confidence scores, then appends corresponding `MENTIONS` edges to the merged graph delta.
+5. Step five upserts the merged `UpsertGraphDelta` payload via `UpsertGraphDelta`.
 
-Execution uses two parallel tasks: task one runs step one, and task two runs steps two+three; step four depends on both task results.
+Execution uses two parallel tasks: task one runs step one, and task two runs steps two+three; steps four and five run after both task results are available.
 
 ## Common commands
 

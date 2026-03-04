@@ -7,7 +7,10 @@ import pytest
 from app.contracts import KnowledgeUpdatePayload
 from app.services.grpc import knowledge_pb2
 from app.worker.jobs.knowledge_update import (
+    _append_mentions_edges,
     _build_batch_document,
+    _build_step_four_router_json_schema,
+    _build_step_four_router_prompt,
     _build_step_three_system_prompt,
     _build_upsert_graph_delta_step_one,
     _merge_upsert_graph_delta_requests,
@@ -188,3 +191,66 @@ def test_build_step_three_system_prompt_includes_required_guidance() -> None:
     assert "assistant suggestions must be ignored unless the user approved" in prompt.lower()
     assert "## Entities" in prompt
     assert '{"type":"object"}' in prompt
+
+
+def test_build_step_four_router_json_schema_requires_mapping_fields() -> None:
+    schema = _build_step_four_router_json_schema()
+
+    mapping_required = schema["properties"]["mappings"]["items"]["required"]
+    assert mapping_required == ["block_id", "entity_id", "confidence"]
+
+
+def test_build_step_four_router_prompt_includes_block_and_entity_summaries() -> None:
+    step_one = {
+        "blocks": [
+            {
+                "id": "block-1",
+                "properties": [{"key": "text", "string_value": "Alice met Bob"}],
+            }
+        ]
+    }
+    step_three = {
+        "entities": [
+            {
+                "id": "entity-1",
+                "type_id": "node.person",
+                "properties": [
+                    {"key": "name", "string_value": "Alice"},
+                    {"key": "described_by_text", "string_value": "A colleague"},
+                ],
+            }
+        ]
+    }
+
+    prompt = _build_step_four_router_prompt(step_one, step_three)
+
+    assert '"block_id": "block-1"' in prompt
+    assert '"entity_id": "entity-1"' in prompt
+    assert '"Alice met Bob"' in prompt
+
+
+def test_append_mentions_edges_adds_valid_mappings_only() -> None:
+    merged = {"edges": [{"from_id": "x", "to_id": "y", "edge_type": "EXISTING"}]}
+    step_one = {"blocks": [{"id": "block-1"}]}
+    step_three = {"entities": [{"id": "entity-1"}]}
+
+    _append_mentions_edges(
+        merged,
+        step_one,
+        step_three,
+        mappings=[
+            {"block_id": "block-1", "entity_id": "entity-1", "confidence": 0.9},
+            {"block_id": "missing", "entity_id": "entity-1", "confidence": 0.8},
+            {"block_id": "block-1", "entity_id": "missing", "confidence": 0.8},
+            {"block_id": "block-1", "entity_id": "entity-1", "confidence": "high"},
+        ],
+        user_id="user-1",
+    )
+
+    assert len(merged["edges"]) == 2
+    mentions_edge = merged["edges"][1]
+    assert mentions_edge["edge_type"] == "MENTIONS"
+    assert mentions_edge["from_id"] == "block-1"
+    assert mentions_edge["to_id"] == "entity-1"
+    assert mentions_edge["visibility"] == "PRIVATE"
+    assert mentions_edge["properties"] == [{"key": "confidence", "float_value": 0.9}]
