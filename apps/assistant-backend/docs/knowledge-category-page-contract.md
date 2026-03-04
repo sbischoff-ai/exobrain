@@ -1,0 +1,142 @@
+# Knowledge category/page API contract (`/api/knowledge/category*`, `/api/knowledge/page/*`)
+
+## Why this exists
+
+This document defines the backend HTTP contract for browsing knowledge categories and pages. It keeps assistant-backend and assistant-frontend aligned on payload shape, pagination, and error behavior for the category/page experience.
+
+## Scope
+
+- `GET /api/knowledge/category`
+- `GET /api/knowledge/category/{category_id}/pages`
+- `GET /api/knowledge/page/{page_id}`
+
+All endpoints require authenticated user context.
+
+## Endpoint: `GET /api/knowledge/category`
+
+Returns the category tree projected from `GetSchema` (`universe_id=wiki`), filtering to active node types (`kind=node`, id prefix `node.`), with deterministic ordering by `display_name` then `category_id`.
+
+### 200 response
+
+```json
+{
+  "categories": [
+    {
+      "category_id": "node.root",
+      "display_name": "Root",
+      "sub_categories": [
+        {
+          "category_id": "node.child",
+          "display_name": "Child",
+          "sub_categories": []
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Error mapping
+
+- `400`: invalid request to upstream (`INVALID_ARGUMENT`)
+- `503`: upstream unavailable/timed out (`UNAVAILABLE`, `DEADLINE_EXCEEDED`)
+- `502`: all other upstream failures
+
+## Endpoint: `GET /api/knowledge/category/{category_id}/pages`
+
+Returns page summaries for a category from `ListEntitiesByType`.
+
+### Query params
+
+- `page_size` (optional, int >= 1)
+- `page_token` (optional, non-empty string)
+
+### 200 response
+
+```json
+{
+  "pages": [
+    {
+      "entity": {
+        "id": "entity-1",
+        "name": "Entity One",
+        "description": "Entity summary",
+        "updated_at": "2026-02-19T10:00:00Z",
+        "score": 0.7
+      },
+      "page_id": "entity-1",
+      "page_title": "Entity One",
+      "page_summary": "Entity summary"
+    }
+  ],
+  "page_size": 20,
+  "next_page_token": "next-cursor",
+  "total_count": 42
+}
+```
+
+### Notes
+
+- `page_id`, `page_title`, and `page_summary` are aliases mapped from `entity.id`, `entity.name`, and `entity.description`.
+- Pagination values are passthrough from request and upstream response.
+
+### Error mapping
+
+- `400`: invalid request (`INVALID_ARGUMENT`)
+- `503`: upstream unavailable/timed out (`UNAVAILABLE`, `DEADLINE_EXCEEDED`)
+- `502`: all other upstream failures
+
+## Endpoint: `GET /api/knowledge/page/{page_id}`
+
+Returns page detail from `GetEntityContext` (`max_block_level=2`).
+
+### 200 response
+
+```json
+{
+  "entity": {
+    "id": "entity-1",
+    "name": "Entity One",
+    "description": "Entity summary",
+    "created_at": "2026-02-19T09:00:00Z",
+    "updated_at": "2026-02-19T10:00:00Z"
+  },
+  "page_id": "entity-1",
+  "title": "Entity One",
+  "summary": "Entity summary",
+  "metadata": {
+    "id": "entity-1",
+    "name": "Entity One",
+    "description": "Entity summary",
+    "created_at": "2026-02-19T09:00:00Z",
+    "updated_at": "2026-02-19T10:00:00Z"
+  },
+  "links": [
+    {
+      "page_id": "entity-2",
+      "title": "Entity Two",
+      "summary": "Linked summary"
+    }
+  ],
+  "content_markdown": "- Root\n  - Child"
+}
+```
+
+### Notes
+
+- `metadata` mirrors canonical entity fields and is alias-compatible with `entity`.
+- `links` are mapped from neighbor entities.
+- `content_markdown` is rendered from contextual blocks.
+
+### Error mapping
+
+- `404`: page not found
+- `403`: access denied
+- `503`: upstream unavailable/timed out
+- `502`: other upstream failures
+
+## References
+
+- Router: `apps/assistant-backend/app/api/routers/knowledge.py`
+- Service mapping: `apps/assistant-backend/app/services/knowledge_service.py`
+- Schemas: `apps/assistant-backend/app/api/schemas/knowledge.py`

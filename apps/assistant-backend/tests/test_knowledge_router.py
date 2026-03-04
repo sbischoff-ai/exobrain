@@ -36,10 +36,31 @@ class FakeKnowledgeService:
         self.calls: list[dict[str, str | None]] = []
         self.watch_calls: list[dict[str, object]] = []
         self.enqueue_error: Exception | None = None
+        self.category_calls: list[dict[str, object]] = []
+        self.category_error: Exception | None = None
         self.category_pages_calls: list[dict[str, object]] = []
         self.category_pages_error: Exception | None = None
         self.page_detail_calls: list[dict[str, object]] = []
         self.page_detail_error: Exception | None = None
+
+
+    async def list_wiki_category_tree(self, *, universe_id: str) -> list[dict[str, object]]:
+        self.category_calls.append({"universe_id": universe_id})
+        if self.category_error is not None:
+            raise self.category_error
+        return [
+            {
+                "category_id": "node.root",
+                "display_name": "Root",
+                "sub_categories": [
+                    {
+                        "category_id": "node.child",
+                        "display_name": "Child",
+                        "sub_categories": [],
+                    }
+                ],
+            }
+        ]
 
     async def list_category_pages(
         self,
@@ -342,6 +363,93 @@ def test_api_knowledge_watch_maps_domain_errors_to_http(
     ]
 
 
+def test_api_knowledge_category_returns_tree_payload() -> None:
+    principal = UnifiedPrincipal(
+        user_id="user-1", email="u@example.com", display_name="User"
+    )
+    service = FakeKnowledgeService()
+    container = build_test_container({KnowledgeServiceProtocol: service})
+
+    app = FastAPI()
+
+    @app.middleware("http")
+    async def attach_container(request, call_next):
+        request.app.state.container = container
+        return await call_next(request)
+
+    app.dependency_overrides[get_required_auth_context] = lambda: principal
+    app.include_router(knowledge_router.router, prefix="/api")
+
+    with TestClient(app) as client:
+        response = client.get("/api/knowledge/category")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "categories": [
+            {
+                "category_id": "node.root",
+                "display_name": "Root",
+                "sub_categories": [
+                    {
+                        "category_id": "node.child",
+                        "display_name": "Child",
+                        "sub_categories": [],
+                    }
+                ],
+            }
+        ]
+    }
+    assert service.category_calls == [{"universe_id": "wiki"}]
+
+
+@pytest.mark.parametrize(
+    ("error", "expected_status", "expected_detail"),
+    [
+        (
+            KnowledgeInterfaceClientInvalidArgumentError("bad arg"),
+            400,
+            "invalid knowledge categories request",
+        ),
+        (
+            KnowledgeInterfaceClientUnavailableError("unavailable"),
+            503,
+            "knowledge categories unavailable",
+        ),
+        (
+            KnowledgeInterfaceClientError("failed"),
+            502,
+            "knowledge categories upstream failure",
+        ),
+    ],
+)
+def test_api_knowledge_category_maps_upstream_errors(
+    error: Exception, expected_status: int, expected_detail: str
+) -> None:
+    principal = UnifiedPrincipal(
+        user_id="user-1", email="u@example.com", display_name="User"
+    )
+    service = FakeKnowledgeService()
+    service.category_error = error
+    container = build_test_container({KnowledgeServiceProtocol: service})
+
+    app = FastAPI()
+
+    @app.middleware("http")
+    async def attach_container(request, call_next):
+        request.app.state.container = container
+        return await call_next(request)
+
+    app.dependency_overrides[get_required_auth_context] = lambda: principal
+    app.include_router(knowledge_router.router, prefix="/api")
+
+    with TestClient(app) as client:
+        response = client.get("/api/knowledge/category")
+
+    assert response.status_code == expected_status
+    assert response.json() == {"detail": expected_detail}
+
+
+
 def test_api_knowledge_category_pages_returns_mapped_payload() -> None:
     principal = UnifiedPrincipal(
         user_id="user-1", email="u@example.com", display_name="User"
@@ -499,3 +607,78 @@ def test_api_knowledge_watch_requires_auth() -> None:
     assert response.status_code == 401
     assert response.json() == {"detail": "authentication required"}
     assert service.watch_calls == []
+
+
+def test_api_knowledge_category_requires_auth() -> None:
+    service = FakeKnowledgeService()
+    container = build_test_container({KnowledgeServiceProtocol: service})
+
+    app = FastAPI()
+
+    @app.middleware("http")
+    async def attach_container(request, call_next):
+        request.app.state.container = container
+        return await call_next(request)
+
+    async def deny_auth() -> UnifiedPrincipal:
+        raise HTTPException(status_code=401, detail="authentication required")
+
+    app.dependency_overrides[get_required_auth_context] = deny_auth
+    app.include_router(knowledge_router.router, prefix="/api")
+
+    with TestClient(app) as client:
+        response = client.get("/api/knowledge/category")
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "authentication required"}
+    assert service.category_calls == []
+
+
+def test_api_knowledge_category_pages_requires_auth() -> None:
+    service = FakeKnowledgeService()
+    container = build_test_container({KnowledgeServiceProtocol: service})
+
+    app = FastAPI()
+
+    @app.middleware("http")
+    async def attach_container(request, call_next):
+        request.app.state.container = container
+        return await call_next(request)
+
+    async def deny_auth() -> UnifiedPrincipal:
+        raise HTTPException(status_code=401, detail="authentication required")
+
+    app.dependency_overrides[get_required_auth_context] = deny_auth
+    app.include_router(knowledge_router.router, prefix="/api")
+
+    with TestClient(app) as client:
+        response = client.get("/api/knowledge/category/type-1/pages")
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "authentication required"}
+    assert service.category_pages_calls == []
+
+
+def test_api_knowledge_page_requires_auth() -> None:
+    service = FakeKnowledgeService()
+    container = build_test_container({KnowledgeServiceProtocol: service})
+
+    app = FastAPI()
+
+    @app.middleware("http")
+    async def attach_container(request, call_next):
+        request.app.state.container = container
+        return await call_next(request)
+
+    async def deny_auth() -> UnifiedPrincipal:
+        raise HTTPException(status_code=401, detail="authentication required")
+
+    app.dependency_overrides[get_required_auth_context] = deny_auth
+    app.include_router(knowledge_router.router, prefix="/api")
+
+    with TestClient(app) as client:
+        response = client.get("/api/knowledge/page/entity-1")
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "authentication required"}
+    assert service.page_detail_calls == []
