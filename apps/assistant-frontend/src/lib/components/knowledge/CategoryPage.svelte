@@ -69,9 +69,9 @@
   }
 
   .tree-wrap {
-    border: 1px solid var(--border);
+    border: 1px solid var(--explorer-card-border);
     border-radius: 0.75rem;
-    background: var(--surface);
+    background: var(--explorer-card-bg);
     padding: 0.75rem;
   }
 
@@ -81,7 +81,7 @@
   }
 
   .count {
-    color: var(--muted);
+    color: var(--explorer-meta-muted);
     margin-left: 0.3rem;
     font-size: 0.9em;
   }
@@ -93,6 +93,6 @@
 
   .empty {
     margin: 0;
-    color: var(--muted);
+    color: var(--explorer-meta-muted);
   }
 </style>

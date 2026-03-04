@@ -260,6 +260,6 @@
 
   .error {
     margin: 0;
-    color: #d08a8a;
+    color: var(--explorer-error-text);
   }
 </style>

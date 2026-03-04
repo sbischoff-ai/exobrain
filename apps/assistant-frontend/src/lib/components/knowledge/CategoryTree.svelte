@@ -86,7 +86,7 @@
   .toggle {
     border: none;
     background: none;
-    color: var(--muted);
+    color: var(--explorer-meta-muted);
     cursor: pointer;
     padding: 0;
   }
@@ -102,17 +102,17 @@
   }
 
   .category-link.active {
-    color: var(--accent-soft);
+    color: var(--explorer-breadcrumb-link);
     font-weight: 600;
   }
 
   .category-link:hover {
-    color: var(--accent);
+    color: var(--explorer-breadcrumb-link-hover);
     text-decoration: underline;
   }
 
   .count {
-    color: var(--muted);
+    color: var(--explorer-meta-muted);
     font-size: 0.9em;
     margin-left: 0.25rem;
   }
