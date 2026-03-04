@@ -22,6 +22,7 @@ export interface KnowledgeCategoryPageListItem {
 
 export interface KnowledgeCategoryPagesResponse {
   pages: KnowledgeCategoryPageListItem[];
+  total_count: number | null;
 }
 
 export interface KnowledgePageLink {

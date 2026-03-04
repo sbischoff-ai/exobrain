@@ -12,7 +12,6 @@
   import { knowledgeService } from '$lib/services/knowledgeService';
   import type { ExplorerRouteState } from '$lib/stores/workspaceViewStore';
 
-
   interface CategoryOverviewPreview {
     category: KnowledgeCategoryNode;
     pages: KnowledgeCategoryPageListItem[];
@@ -29,6 +28,7 @@
   let rootCategories: KnowledgeCategoryNode[] = [];
   let overviewPreviews: CategoryOverviewPreview[] = [];
   let categoryPages: KnowledgeCategoryPageListItem[] = [];
+  let categoryPageTotalCount: number | null = null;
   let pageDetail: KnowledgePageDetail | null = null;
   let lastLoadedCategoryId = '';
   let lastLoadedPageId = '';
@@ -40,6 +40,7 @@
 
   $: currentCategory = explorerRoute.type === 'category' ? findCategoryById(rootCategories, explorerRoute.id) : null;
   $: categoryBreadcrumbs = currentCategory ? findCategoryBreadcrumbs(rootCategories, currentCategory.id) : [];
+  $: categoryTreeNodes = currentCategory ? [currentCategory] : rootCategories;
 
   onMount(async () => {
     await ensureTreeLoaded();
@@ -64,14 +65,17 @@
 
       const previews = await Promise.all(
         categories.map(async (category) => {
-          const { pages } = await knowledgeService.getCategoryPages(category.id);
+          const { pages, total_count } = await knowledgeService.getCategoryPages(category.id);
           return {
-            category,
+            category: { ...category, page_count: total_count ?? pages.length },
             pages: pages.slice(0, OVERVIEW_PREVIEW_LIMIT)
           };
         })
       );
       overviewPreviews = previews;
+      for (const preview of previews) {
+        rootCategories = updateCategoryPageCount(rootCategories, preview.category.id, preview.category.page_count);
+      }
     } catch {
       requestError = 'Could not load knowledge categories.';
     } finally {
@@ -82,6 +86,7 @@
   async function loadRouteData(): Promise<void> {
     if (explorerRoute.type !== 'category') {
       categoryPages = [];
+      categoryPageTotalCount = null;
     }
 
     if (explorerRoute.type !== 'page') {
@@ -96,8 +101,12 @@
       loading = true;
       requestError = '';
       try {
-        const { pages } = await knowledgeService.getCategoryPages(explorerRoute.id);
+        const { pages, total_count } = await knowledgeService.getCategoryPages(explorerRoute.id);
         categoryPages = pages;
+        categoryPageTotalCount = total_count;
+        if (total_count !== null) {
+          rootCategories = updateCategoryPageCount(rootCategories, explorerRoute.id, total_count);
+        }
         lastLoadedCategoryId = explorerRoute.id;
       } catch {
         requestError = 'Could not load category pages.';
@@ -166,6 +175,24 @@
     return node.children.reduce((total, child) => total + 1 + countDescendants(child), 0);
   }
 
+
+  function updateCategoryPageCount(nodes: KnowledgeCategoryNode[], id: string, pageCount: number): KnowledgeCategoryNode[] {
+    return nodes.map((node) => {
+      if (node.id === id) {
+        return { ...node, page_count: pageCount };
+      }
+
+      if (node.children.length === 0) {
+        return node;
+      }
+
+      return {
+        ...node,
+        children: updateCategoryPageCount(node.children, id, pageCount)
+      };
+    });
+  }
+
   function findCategoryById(nodes: KnowledgeCategoryNode[], id: string): KnowledgeCategoryNode | null {
     for (const node of nodes) {
       if (node.id === id) {
@@ -221,8 +248,15 @@
       />
     {:else if explorerRoute.type === 'category'}
       <CategoryPage
-        {rootCategories}
-        currentCategory={currentCategory}
+        rootCategories={categoryTreeNodes}
+        currentCategory={
+          currentCategory
+            ? {
+                ...currentCategory,
+                page_count: categoryPageTotalCount ?? currentCategory.page_count
+              }
+            : null
+        }
         breadcrumbs={categoryBreadcrumbs}
         pages={categoryPages}
         {expandedCategories}

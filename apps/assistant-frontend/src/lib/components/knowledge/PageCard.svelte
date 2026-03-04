@@ -5,18 +5,25 @@
   export let page: KnowledgeCategoryPageListItem;
 
   const dispatch = createEventDispatcher<{ open: { pageId: string } }>();
+
+  function openPage(): void {
+    dispatch('open', { pageId: page.id });
+  }
+
+  function onCardKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      openPage();
+    }
+  }
 </script>
 
-<article class="page-card">
-  <h4>
-    <button type="button" class="page-link truncate" on:click={() => dispatch('open', { pageId: page.id })}>
-      {page.title}
-    </button>
-  </h4>
+<div class="page-card" role="button" tabindex="0" on:click={openPage} on:keydown={onCardKeydown}>
+  <h4 class="page-link truncate">{page.title}</h4>
   {#if page.summary}
     <p class="summary-clamp">{page.summary}</p>
   {/if}
-</article>
+</div>
 
 <style>
   .page-card {
@@ -28,24 +35,30 @@
     flex-direction: column;
     gap: 0.4rem;
     transition: background-color 150ms ease;
+    cursor: pointer;
   }
 
-  .page-card:hover {
+  .page-card:hover,
+  .page-card:focus-visible {
     background: var(--explorer-card-hover-bg);
   }
 
+  .page-card:focus-visible {
+    outline: 2px solid var(--explorer-breadcrumb-link-hover);
+    outline-offset: 1px;
+  }
+
   .page-link {
-    border: none;
-    background: none;
     color: var(--explorer-breadcrumb-link);
     font: inherit;
     font-weight: 600;
     text-align: left;
     padding: 0;
-    cursor: pointer;
+    margin: 0;
   }
 
-  .page-link:hover {
+  .page-card:hover .page-link,
+  .page-card:focus-visible .page-link {
     color: var(--explorer-breadcrumb-link-hover);
     text-decoration: underline;
   }
@@ -69,4 +82,3 @@
     color: var(--explorer-meta-muted);
   }
 </style>
-

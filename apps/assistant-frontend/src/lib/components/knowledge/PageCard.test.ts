@@ -16,8 +16,9 @@ describe('PageCard', () => {
       }
     });
 
-    expect(screen.getByRole('button', { name: /A very long page title/ })).toHaveClass('page-link');
+    expect(screen.getByRole('button', { name: /A very long page title/ })).toHaveClass('page-card');
     expect(container.querySelector('.page-link')).toHaveClass('truncate');
     expect(container.querySelector('p')).toHaveClass('summary-clamp');
   });
+
 });

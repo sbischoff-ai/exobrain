@@ -57,6 +57,9 @@ cd apps/assistant-frontend && npm test
 - Knowledge update action is exposed as an accessible circular header control (`aria-label` + tooltip).
 - Knowledge update is disabled when viewing a past journal, while app state is loading/syncing, while an update is already in progress, and whenever there are no new messages since the last successful update (`title="nothing to update"`).
 - Knowledge browsing service normalizes backend category/page payload fields (`category_id`, `display_name`, `sub_categories`, `knowledge_pages`, `metadata`) into frontend-facing contracts for tree, category previews, lists, and page detail views.
+- Knowledge explorer cards are fully clickable (card body + title) for category and page navigation.
+- Category breadcrumbs always include the full category branch from `Overview` to the active category/page context.
+- Category pages render only the selected category subtree in the collapsible tree panel.
 
 ### Knowledge Explorer View
 
