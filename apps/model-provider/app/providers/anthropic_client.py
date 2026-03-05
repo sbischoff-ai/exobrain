@@ -28,6 +28,35 @@ class AnthropicProviderClient(ProviderClient):
     def _to_messages_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
         mapped = dict(payload)
         mapped["max_tokens"] = mapped.get("max_tokens", 1024)
+
+        tools = mapped.get("tools")
+        if isinstance(tools, list):
+            anthropic_tools: list[dict[str, Any]] = []
+            for tool in tools:
+                if (
+                    isinstance(tool, dict)
+                    and tool.get("type") == "function"
+                    and isinstance(tool.get("function"), dict)
+                ):
+                    function = tool["function"]
+                    input_schema = function.get("parameters")
+                    if not isinstance(input_schema, dict):
+                        input_schema = {"type": "object", "properties": {}}
+                    elif "type" not in input_schema:
+                        input_schema = {"type": "object", **input_schema}
+
+                    anthropic_tools.append(
+                        {
+                            "type": "custom",
+                            "name": function.get("name"),
+                            "description": function.get("description") or "",
+                            "input_schema": input_schema,
+                        }
+                    )
+                elif isinstance(tool, dict):
+                    anthropic_tools.append(tool)
+            mapped["tools"] = anthropic_tools
+
         tool_choice = mapped.get("tool_choice")
         if isinstance(tool_choice, str):
             if tool_choice == "auto":
@@ -36,6 +65,11 @@ class AnthropicProviderClient(ProviderClient):
                 mapped["tool_choice"] = {"type": "none"}
             elif tool_choice == "required":
                 mapped["tool_choice"] = {"type": "any"}
+        elif isinstance(tool_choice, dict) and tool_choice.get("type") == "function":
+            function = tool_choice.get("function")
+            if isinstance(function, dict) and function.get("name"):
+                mapped["tool_choice"] = {"type": "tool", "name": function["name"]}
+
         response_format = mapped.pop("response_format", None)
         if response_format is not None:
             json_schema = response_format.get("json_schema") if isinstance(response_format, dict) else None
