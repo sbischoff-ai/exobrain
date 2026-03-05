@@ -476,9 +476,11 @@ async def _run_step_five_detailed_comparison(
             continue
 
         status = match_item.get("status")
+        resolution_status = "new_entity"
         resolved_entity_id: str
         if status == "matched" and isinstance(match_item.get("matched_entity_id"), str):
             resolved_entity_id = match_item["matched_entity_id"]
+            resolution_status = "matched"
         elif status == "needs_detailed_comparison":
             entity_index = int(match_item.get("entity_index", -1))
             focused_markdown = entity_context_documents[entity_index] if 0 <= entity_index < len(entity_context_documents) else ""
@@ -510,6 +512,7 @@ async def _run_step_five_detailed_comparison(
             matched_entity_id = _extract_matched_entity_id(decision) if isinstance(decision, str) else None
             if matched_entity_id and matched_entity_id in candidate_ids:
                 resolved_entity_id = matched_entity_id
+                resolution_status = "matched"
             else:
                 resolved_entity_id = str(uuid4())
         else:
@@ -520,6 +523,7 @@ async def _run_step_five_detailed_comparison(
                 "entity_index": match_item.get("entity_index"),
                 "extracted_entity": extracted_entity,
                 "resolved_entity_id": resolved_entity_id,
+                "resolution_status": resolution_status,
             }
         )
 
@@ -751,10 +755,140 @@ async def _run_step_seven_match_relationship_type_and_score(
     return matched_relationships
 
 
-def _step_eight_placeholder(matched_relationships: list[dict[str, object]]) -> None:
+def _build_step_eight_final_entity_context_graph_schema() -> dict[str, object]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "entity": {"type": "object", "additionalProperties": True},
+            "blocks": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "block_id": {"type": "string", "minLength": 1},
+                        "parent_block_id": {"type": "string"},
+                        "text": {"type": "string", "minLength": 1},
+                    },
+                    "required": ["block_id", "text"],
+                },
+            },
+        },
+        "required": ["entity", "blocks"],
+    }
+
+
+async def _run_step_eight_build_final_entity_context_graphs(
+    channel: grpc.aio.Channel,
+    payload: KnowledgeUpdatePayload,
+    resolved_entities: list[dict[str, object]],
+    entity_context_documents: list[str],
+    settings: Settings,
+) -> list[dict[str, object]]:
+    from langchain.agents import create_agent
+    from app.services.model_provider_chat_model import ModelProviderChatModel
+
+    get_entity_type_property_context_rpc = channel.unary_unary(
+        "/exobrain.knowledge.v1.KnowledgeInterface/GetEntityTypePropertyContext",
+        request_serializer=knowledge_pb2.GetEntityTypePropertyContextRequest.SerializeToString,
+        response_deserializer=knowledge_pb2.GetEntityTypePropertyContextReply.FromString,
+    )
+    get_entity_context_rpc = channel.unary_unary(
+        "/exobrain.knowledge.v1.KnowledgeInterface/GetEntityContext",
+        request_serializer=knowledge_pb2.GetEntityContextRequest.SerializeToString,
+        response_deserializer=knowledge_pb2.GetEntityContextReply.FromString,
+    )
+
+    schema = _build_step_eight_final_entity_context_graph_schema()
+    final_graphs: list[dict[str, object]] = []
+
+    for resolved in resolved_entities:
+        if not isinstance(resolved, dict):
+            continue
+        extracted = resolved.get("extracted_entity")
+        if not isinstance(extracted, dict):
+            continue
+        entity_id = resolved.get("resolved_entity_id")
+        if not isinstance(entity_id, str):
+            continue
+        node_type = extracted.get("node_type") if isinstance(extracted.get("node_type"), str) else ""
+        if not node_type:
+            continue
+
+        type_context_reply = await get_entity_type_property_context_rpc(
+            knowledge_pb2.GetEntityTypePropertyContextRequest(
+                type_id=node_type,
+                user_id=payload.requested_by_user_id,
+                include_inherited=True,
+            )
+        )
+        type_context = _message_to_dict(type_context_reply, rpc_name="GetEntityTypePropertyContext")
+
+        resolution_status = resolved.get("resolution_status")
+        entity_index = resolved.get("entity_index") if isinstance(resolved.get("entity_index"), int) else -1
+        focused_markdown = entity_context_documents[entity_index] if 0 <= entity_index < len(entity_context_documents) else ""
+
+        existing_entity_context: dict[str, object] | None = None
+        model_name = "worker"
+        system_prompt = (
+            "You are the knowledge.update final entity context graph worker. "
+            "Given focused markdown and writable property context, build an entity payload and block tree. "
+            "Return strict JSON only with entity and blocks."
+        )
+
+        if resolution_status == "matched":
+            model_name = "reasoner"
+            context_reply = await get_entity_context_rpc(
+                knowledge_pb2.GetEntityContextRequest(
+                    entity_id=entity_id,
+                    user_id=payload.requested_by_user_id,
+                    max_block_level=2,
+                )
+            )
+            existing_entity_context = _message_to_dict(context_reply, rpc_name="GetEntityContext")
+            system_prompt = (
+                "You are the knowledge.update final entity context graph reasoner. "
+                "Given existing entity context and focused markdown, propose minimal updates/additions to entity "
+                "properties and block tree. Amending existing blocks should be rare. "
+                "Return strict JSON only with entity and blocks."
+            )
+
+        compiled_agent = create_agent(
+            model=ModelProviderChatModel(
+                model=model_name,
+                base_url=settings.model_provider_base_url,
+                temperature=0,
+                timeout=settings.knowledge_update_model_provider_timeout_seconds,
+            ),
+            tools=[],
+            system_prompt=system_prompt,
+            response_format={"type": "json_schema", "json_schema": schema},
+        )
+        prompt = json.dumps(
+            {
+                "entity_id": entity_id,
+                "resolution_status": resolution_status,
+                "extracted_entity": extracted,
+                "focused_markdown": focused_markdown,
+                "entity_type_property_context": type_context,
+                "existing_entity_context": existing_entity_context,
+            },
+            ensure_ascii=False,
+        )
+        reply = await compiled_agent.ainvoke({"messages": [{"role": "user", "content": prompt}]})
+        structured = reply.get("structured_response") if isinstance(reply, dict) else None
+        if not isinstance(structured, dict):
+            raise RuntimeError("knowledge.update step eight final context graph returned invalid payload")
+        final_graphs.append(structured)
+
+    return final_graphs
+
+
+def _step_nine_placeholder(final_entity_context_graphs: list[dict[str, object]]) -> None:
     logger.info(
-        "knowledge.update step eight placeholder reached",
-        extra={"matched_relationships": len(matched_relationships)},
+        "knowledge.update step nine placeholder reached",
+        extra={"final_entity_context_graphs": len(final_entity_context_graphs)},
     )
 
 
@@ -816,7 +950,14 @@ async def run(job: JobEnvelope) -> None:
             step_six_entity_pairs,
             settings,
         )
-        _step_eight_placeholder(step_seven_relationships)
+        step_eight_final_entity_context_graphs = await _run_step_eight_build_final_entity_context_graphs(
+            channel,
+            payload,
+            step_five_resolved_entities,
+            step_four_entity_contexts,
+            settings,
+        )
+        _step_nine_placeholder(step_eight_final_entity_context_graphs)
 
         upsert_graph_delta = channel.unary_unary(
             "/exobrain.knowledge.v1.KnowledgeInterface/UpsertGraphDelta",
@@ -826,7 +967,7 @@ async def run(job: JobEnvelope) -> None:
         upsert_request = ParseDict(step_zero_graph_delta, knowledge_pb2.UpsertGraphDeltaRequest())
         upsert_reply = await upsert_graph_delta(upsert_request)
         logger.info(
-            "knowledge.update step nine upserted chat message graph delta",
+            "knowledge.update step ten upserted chat message graph delta",
             extra={
                 "entities_upserted": upsert_reply.entities_upserted,
                 "blocks_upserted": upsert_reply.blocks_upserted,
