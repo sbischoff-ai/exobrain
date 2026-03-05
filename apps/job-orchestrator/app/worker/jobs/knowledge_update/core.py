@@ -38,18 +38,58 @@ _ResultT = TypeVar("_ResultT")
 
 
 class KnowledgeUpdateStepError(RuntimeError):
-    def __init__(self, *, step_name: str, operation: str, original_exception: BaseException) -> None:
+    def __init__(
+        self,
+        *,
+        step_name: str,
+        operation: str,
+        original_exception: BaseException,
+        detail: str | None = None,
+    ) -> None:
         self.step_name = step_name
         self.operation = operation
         self.original_exception_class = type(original_exception).__name__
+        rendered_detail = detail if isinstance(detail, str) and detail else str(original_exception)
         message = (
             "knowledge.update step failed"
             f" step_name={step_name}"
             f" operation={operation}"
             f" original_exception_class={self.original_exception_class}"
-            f" detail={original_exception}"
+            f" detail={rendered_detail}"
         )
         super().__init__(message)
+
+
+def _exception_detail(exc: BaseException) -> str:
+    response = getattr(exc, "response", None)
+    status_code = getattr(exc, "status_code", None)
+    if status_code is None and response is not None:
+        status_code = getattr(response, "status_code", None)
+
+    detail = str(exc)
+    if response is None:
+        return detail
+
+    response_text = getattr(response, "text", None)
+    if callable(response_text):
+        try:
+            response_text = response_text()
+        except Exception:  # noqa: BLE001
+            response_text = None
+
+    if not isinstance(response_text, str):
+        return detail
+
+    response_text = response_text.strip()
+    if not response_text:
+        return detail
+
+    max_length = 800
+    if len(response_text) > max_length:
+        response_text = f"{response_text[:max_length]}…"
+
+    status_prefix = f" status_code={status_code}" if isinstance(status_code, int) else ""
+    return f"{detail}{status_prefix} response_body={response_text}"
 
 
 def _is_transient_error(exc: BaseException) -> bool:
@@ -108,6 +148,7 @@ async def _call_with_retry(
                     step_name=step_name,
                     operation=operation,
                     original_exception=exc,
+                    detail=_exception_detail(exc),
                 ) from exc
 
             backoff = min(max_delay_seconds, base_delay_seconds * (2 ** (attempt - 1)))
@@ -673,7 +714,7 @@ async def _run_step_five_detailed_comparison(
 
             prompt = json.dumps(
                 {
-                    "extracted_entity": extracted_entity,
+                    "extracted_entity": extracted_entity.model_dump(),
                     "extracted_entity_markdown": focused_markdown,
                     "candidate_contexts": candidate_contexts,
                 },

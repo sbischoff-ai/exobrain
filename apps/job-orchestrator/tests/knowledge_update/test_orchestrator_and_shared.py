@@ -54,6 +54,37 @@ class _FakeGrpcChannelContext:
 
 
 @pytest.mark.asyncio
+async def test_call_with_retry_includes_http_response_body_in_error_detail() -> None:
+    class _FakeResponse:
+        status_code = 400
+
+        @property
+        def text(self) -> str:
+            return '{"error":"invalid schema"}'
+
+    class _FakeHTTPStatusError(Exception):
+        def __init__(self) -> None:
+            super().__init__(
+                "Client error '400 Bad Request' for url "
+                "'http://localhost:8010/v1/internal/chat/messages'"
+            )
+            self.response = _FakeResponse()
+
+    async def http_error_call() -> None:
+        raise _FakeHTTPStatusError()
+
+    with pytest.raises(KnowledgeUpdateStepError) as exc_info:
+        await _call_with_retry(
+            step_name="step six",
+            operation="relationship_extraction_agent.ainvoke",
+            call=http_error_call,
+        )
+
+    message = str(exc_info.value)
+    assert "status_code=400" in message
+    assert 'response_body={"error":"invalid schema"}' in message
+
+@pytest.mark.asyncio
 async def test_run_fails_fast_with_step_specific_parse_dict_validation(monkeypatch: pytest.MonkeyPatch) -> None:
     import app.worker.jobs.knowledge_update as knowledge_update
 
