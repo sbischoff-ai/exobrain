@@ -354,5 +354,4 @@ message GetEntityContextReply {
   map<string, string> entity_properties = 2;
   repeated EntityContextBlock blocks = 3;
   repeated EntityContextNeighbor neighbors = 4;
-  optional string prompt_context_markdown = 5;
 }

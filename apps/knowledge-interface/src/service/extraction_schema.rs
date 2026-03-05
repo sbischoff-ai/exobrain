@@ -3,7 +3,15 @@ use std::collections::{BTreeMap, HashMap};
 
 use anyhow::{anyhow, Result};
 
-use crate::domain::{FullSchema, SchemaKind};
+use crate::domain::{EdgeEndpointRule, FullSchema, SchemaKind, SchemaType, TypeInheritance};
+
+#[derive(Debug, Clone)]
+pub(crate) struct ExtractionSchemaBuildInput {
+    pub node_types: Vec<SchemaType>,
+    pub edge_types: Vec<SchemaType>,
+    pub inheritance: Vec<TypeInheritance>,
+    pub edge_rules: Vec<EdgeEndpointRule>,
+}
 
 #[derive(Debug, Clone)]
 pub(crate) struct ExtractionSchemaOptions {
@@ -67,22 +75,54 @@ pub(crate) fn build_extraction_entity_types(
     schema: FullSchema,
     options: ExtractionSchemaOptions,
 ) -> Vec<ExtractionEntityType> {
-    let node_types = schema.node_types;
-    let edge_types = schema.edge_types;
+    let FullSchema {
+        node_types: hydrated_node_types,
+        edge_types: hydrated_edge_types,
+    } = schema;
 
-    let type_name_by_id: HashMap<String, String> = node_types
+    let node_types = hydrated_node_types
         .iter()
-        .map(|node| (node.schema_type.id.clone(), node.schema_type.name.clone()))
+        .map(|node| node.schema_type.clone())
+        .collect();
+    let edge_types = hydrated_edge_types
+        .iter()
+        .map(|edge| edge.schema_type.clone())
+        .collect();
+    let inheritance = hydrated_node_types
+        .into_iter()
+        .flat_map(|node| node.parents)
+        .collect();
+    let edge_rules = hydrated_edge_types
+        .into_iter()
+        .flat_map(|edge| edge.rules)
         .collect();
 
-    let parent_by_child: BTreeMap<String, String> = node_types
+    build_extraction_entity_types_from_input(
+        ExtractionSchemaBuildInput {
+            node_types,
+            edge_types,
+            inheritance,
+            edge_rules,
+        },
+        options,
+    )
+}
+
+pub(crate) fn build_extraction_entity_types_from_input(
+    input: ExtractionSchemaBuildInput,
+    options: ExtractionSchemaOptions,
+) -> Vec<ExtractionEntityType> {
+    let type_name_by_id: HashMap<String, String> = input
+        .node_types
         .iter()
-        .flat_map(|node| {
-            node.parents
-                .iter()
-                .filter(move |parent| options.include_inactive || parent.active)
-                .map(|parent| (node.schema_type.id.clone(), parent.parent_type_id.clone()))
-        })
+        .map(|node| (node.id.clone(), node.name.clone()))
+        .collect();
+
+    let parent_by_child: BTreeMap<String, String> = input
+        .inheritance
+        .iter()
+        .filter(|parent| options.include_inactive || parent.active)
+        .map(|parent| (parent.child_type_id.clone(), parent.parent_type_id.clone()))
         .fold(BTreeMap::new(), |mut acc, (child, parent)| {
             acc.entry(child)
                 .and_modify(|existing| {
@@ -94,41 +134,40 @@ pub(crate) fn build_extraction_entity_types(
             acc
         });
 
-    let edge_meta_by_id: HashMap<String, (String, String)> = edge_types
+    let edge_meta_by_id: HashMap<String, (String, String)> = input
+        .edge_types
         .iter()
-        .filter(|edge| options.include_inactive || edge.schema_type.active)
+        .filter(|edge| options.include_inactive || edge.active)
         .map(|edge| {
             (
-                edge.schema_type.id.clone(),
-                (
-                    edge.schema_type.name.clone(),
-                    edge.schema_type.description.clone(),
-                ),
+                edge.id.clone(),
+                (edge.name.clone(), edge.description.clone()),
             )
         })
         .collect();
 
-    let mut entity_types = node_types
+    let mut entity_types = input
+        .node_types
         .into_iter()
-        .filter(|node| matches!(node.schema_type.schema_kind(), Some(SchemaKind::Node)))
-        .filter(|node| node.schema_type.id != "node")
-        .filter(|node| options.include_inactive || node.schema_type.active)
+        .filter(|node| matches!(node.schema_kind(), Some(SchemaKind::Node)))
+        .filter(|node| node.id != "node")
+        .filter(|node| options.include_inactive || node.active)
         .map(|node| {
-            let mut inheritance_chain = vec![node.schema_type.id.clone()];
-            let mut current = node.schema_type.id.clone();
+            let mut inheritance_chain = vec![node.id.clone()];
+            let mut current = node.id.clone();
             while let Some(parent_id) = parent_by_child.get(&current) {
                 inheritance_chain.push(parent_id.clone());
                 current = parent_id.clone();
             }
             inheritance_chain.reverse();
 
-            let mut outgoing_edges: Vec<ExtractionAllowedEdge> = edge_types
+            let mut outgoing_edges: Vec<ExtractionAllowedEdge> = input
+                .edge_rules
                 .iter()
-                .flat_map(|edge| edge.rules.iter())
                 .filter(|rule| options.include_inactive || rule.active)
                 .filter(|rule| {
                     extraction_type_is_assignable(
-                        &node.schema_type.id,
+                        &node.id,
                         &rule.from_node_type_id,
                         &parent_by_child,
                     )
@@ -151,16 +190,12 @@ pub(crate) fn build_extraction_entity_types(
                 .collect();
             outgoing_edges.sort_by(extraction_allowed_edge_sort_key);
 
-            let mut incoming_edges: Vec<ExtractionAllowedEdge> = edge_types
+            let mut incoming_edges: Vec<ExtractionAllowedEdge> = input
+                .edge_rules
                 .iter()
-                .flat_map(|edge| edge.rules.iter())
                 .filter(|rule| options.include_inactive || rule.active)
                 .filter(|rule| {
-                    extraction_type_is_assignable(
-                        &node.schema_type.id,
-                        &rule.to_node_type_id,
-                        &parent_by_child,
-                    )
+                    extraction_type_is_assignable(&node.id, &rule.to_node_type_id, &parent_by_child)
                 })
                 .filter_map(|rule| {
                     let (edge_name, edge_description) = edge_meta_by_id.get(&rule.edge_type_id)?;
@@ -181,9 +216,9 @@ pub(crate) fn build_extraction_entity_types(
             incoming_edges.sort_by(extraction_allowed_edge_sort_key);
 
             ExtractionEntityType {
-                type_id: node.schema_type.id,
-                name: node.schema_type.name,
-                description: node.schema_type.description,
+                type_id: node.id,
+                name: node.name,
+                description: node.description,
                 inheritance_chain,
                 outgoing_edges,
                 incoming_edges,

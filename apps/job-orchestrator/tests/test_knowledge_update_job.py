@@ -192,13 +192,13 @@ def test_merge_upsert_graph_delta_requests_combines_all_sections() -> None:
 
 
 def test_build_step_three_system_prompt_includes_required_guidance() -> None:
-    prompt = _build_step_three_system_prompt('{"type":"object"}')
+    prompt = _build_step_three_system_prompt({'entity_types': []}, '{"type":"object"}')
 
     assert "knowledge.update extraction architect" in prompt
     assert "block_level <= 2" in prompt
     assert "fictional context" in prompt
     assert "assistant suggestions must be ignored unless the user approved" in prompt.lower()
-    assert "get_entity_extraction_schema_context" in prompt
+    assert "Entity extraction schema context (JSON)" in prompt
     assert "get_edge_extraction_schema_context" in prompt
     assert '{"type":"object"}' in prompt
 
@@ -329,7 +329,6 @@ async def test_run_step_three_extraction_agent_uses_model_provider_tools(monkeyp
     assert result == {"entities": [{"id": "entity-1"}]}
     assert captured["model_class"] == "ModelProviderChatModel"
     assert captured["tools"] == [
-        "get_entity_extraction_schema_context",
         "get_edge_extraction_schema_context",
         "find_entity_candidates",
         "get_entity_context",

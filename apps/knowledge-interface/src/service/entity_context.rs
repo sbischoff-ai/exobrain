@@ -3,7 +3,6 @@ use std::collections::{HashMap, HashSet};
 use anyhow::{anyhow, Result};
 
 use crate::domain::{GetEntityContextQuery, GetEntityContextResult};
-use crate::presentation::entity_context_prompt::render_entity_context_markdown;
 
 use super::{
     KnowledgeApplication, BLOCK_CONTEXT_PROMOTED_FIELD_DENYLIST, CONTEXT_CORE_FIELD_DENYLIST,
@@ -62,8 +61,6 @@ pub(super) async fn get_entity_context(
                 && !BLOCK_CONTEXT_PROMOTED_FIELD_DENYLIST.contains(&property.key.as_str())
         });
     }
-
-    result.prompt_context_markdown = render_entity_context_markdown(&result);
 
     Ok(result)
 }

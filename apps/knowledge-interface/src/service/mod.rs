@@ -24,9 +24,11 @@ mod extraction_schema;
 mod ingestion;
 
 pub(crate) use extraction_schema::{
-    build_entity_type_property_context, build_extraction_entity_types, EntityTypePropertyContext,
+    build_entity_type_property_context, build_extraction_entity_types,
+    build_extraction_entity_types_from_input, EntityTypePropertyContext,
     EntityTypePropertyContextOptions, ExtractionAllowedEdge, ExtractionEntityType,
-    ExtractionPropertyContext, ExtractionSchemaOptions, ExtractionUniverseContext,
+    ExtractionPropertyContext, ExtractionSchemaBuildInput, ExtractionSchemaOptions,
+    ExtractionUniverseContext,
 };
 
 const EXOBRAIN_USER_ID: &str = "exobrain";
@@ -129,6 +131,44 @@ impl KnowledgeApplication {
             node_types: hydrated_nodes,
             edge_types: hydrated_edges,
         })
+    }
+
+    pub async fn get_entity_extraction_schema_types(
+        &self,
+        options: ExtractionSchemaOptions,
+    ) -> Result<Vec<ExtractionEntityType>> {
+        let node_types = self.schema_repository.get_by_kind(SchemaKind::Node).await?;
+        let inheritance = self.schema_repository.get_type_inheritance().await?;
+
+        Ok(build_extraction_entity_types_from_input(
+            ExtractionSchemaBuildInput {
+                node_types,
+                edge_types: Vec::new(),
+                inheritance,
+                edge_rules: Vec::new(),
+            },
+            options,
+        ))
+    }
+
+    pub async fn get_edge_extraction_schema_types(
+        &self,
+        options: ExtractionSchemaOptions,
+    ) -> Result<Vec<ExtractionEntityType>> {
+        let node_types = self.schema_repository.get_by_kind(SchemaKind::Node).await?;
+        let edge_types = self.schema_repository.get_by_kind(SchemaKind::Edge).await?;
+        let inheritance = self.schema_repository.get_type_inheritance().await?;
+        let edge_rules = self.schema_repository.get_edge_endpoint_rules().await?;
+
+        Ok(build_extraction_entity_types_from_input(
+            ExtractionSchemaBuildInput {
+                node_types,
+                edge_types,
+                inheritance,
+                edge_rules,
+            },
+            options,
+        ))
     }
 
     pub async fn get_extraction_universes(
@@ -3178,17 +3218,13 @@ mod tests {
         );
         assert_eq!(result.blocks.len(), expected.blocks.len());
         assert_eq!(result.neighbors.len(), expected.neighbors.len());
-        assert!(result
-            .prompt_context_markdown
-            .starts_with("# Entity context"));
-
         let seen = seen_queries.lock().expect("lock should be available");
         assert_eq!(seen.len(), 1);
         assert_eq!(seen[0].max_block_level, 7);
     }
 
     #[tokio::test]
-    async fn get_entity_context_sets_prompt_context_markdown_from_renderer() {
+    async fn get_entity_context_filters_readable_properties() {
         let app = KnowledgeApplication::new(
             Arc::new(FakeSchemaRepo::new()),
             Arc::new(ContextGraphRepository {
@@ -3207,14 +3243,8 @@ mod tests {
             .await
             .expect("query should succeed");
 
-        assert!(result
-            .prompt_context_markdown
-            .starts_with("# Entity context"));
-        assert!(result
-            .prompt_context_markdown
-            .contains("## Entity core summary"));
-        assert!(result.prompt_context_markdown.contains("## Blocks"));
-        assert_ne!(result.prompt_context_markdown, "# Sample context");
+        assert_eq!(result.entity.id, "entity-1");
+        assert_eq!(result.blocks.len(), 1);
     }
 
     #[tokio::test]
@@ -4096,7 +4126,6 @@ mod tests {
                 }],
             }],
             neighbors: vec![],
-            prompt_context_markdown: "# Sample context".to_string(),
         }
     }
 }

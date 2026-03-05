@@ -203,7 +203,6 @@ pub(crate) fn to_proto_get_entity_context_reply(
         entity,
         blocks,
         neighbors,
-        prompt_context_markdown,
     } = result;
 
     proto::GetEntityContextReply {
@@ -240,7 +239,6 @@ pub(crate) fn to_proto_get_entity_context_reply(
             .into_iter()
             .map(to_proto_entity_context_neighbor)
             .collect(),
-        prompt_context_markdown: Some(prompt_context_markdown),
     }
 }
 
@@ -516,7 +514,6 @@ mod tests {
                     },
                 },
             ],
-            prompt_context_markdown: "# Entity Context".to_string(),
         });
 
         let entity = reply.entity.expect("entity should be present");
@@ -555,11 +552,6 @@ mod tests {
         assert_eq!(
             reply.neighbors[1].direction,
             proto::NeighborDirection::Incoming as i32
-        );
-        assert!(reply.prompt_context_markdown.is_some());
-        assert_eq!(
-            reply.prompt_context_markdown.as_deref(),
-            Some("# Entity Context")
         );
     }
 

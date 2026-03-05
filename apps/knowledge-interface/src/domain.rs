@@ -363,7 +363,6 @@ pub struct GetEntityContextResult {
     pub entity: EntityContextEntitySnapshot,
     pub blocks: Vec<EntityContextBlockItem>,
     pub neighbors: Vec<EntityContextNeighborItem>,
-    pub prompt_context_markdown: String,
 }
 
 #[derive(Debug, Clone)]
