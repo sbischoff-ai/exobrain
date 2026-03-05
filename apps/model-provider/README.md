@@ -77,4 +77,13 @@ Set env vars from `.env.example`.
 
 Provider adapters use the official provider SDKs (`openai`, `anthropic`) for request/response schema compatibility.
 
+- Provider SDK clients are process-wide singletons (per provider/api key/timeout/retry config) so concurrent requests share one OpenAI and one Anthropic client instance.
+- Conservative throttling defaults are enabled per provider (`max_retries=8`, `max_concurrent_requests=2`) to reduce upstream `420/429` rate-limit failures under bursty parallel traffic.
 OpenAI chat aliases should use `max_completion_tokens` defaults (not `max_tokens`) for GPT-5 compatibility.
+
+Config knobs (environment variables):
+
+- `MODEL_PROVIDER_OPENAI_MAX_RETRIES` (default `8`)
+- `MODEL_PROVIDER_OPENAI_MAX_CONCURRENT_REQUESTS` (default `2`)
+- `MODEL_PROVIDER_ANTHROPIC_MAX_RETRIES` (default `8`)
+- `MODEL_PROVIDER_ANTHROPIC_MAX_CONCURRENT_REQUESTS` (default `2`)

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import json
+import random
 import time
 import uuid
 from copy import deepcopy
-from typing import Any, AsyncIterator
+from typing import Any, AsyncIterator, Awaitable, Callable, ClassVar
 
 import jsonref
 from anthropic import APIError, APIStatusError, APITimeoutError, AsyncAnthropic, RateLimitError
@@ -30,13 +32,44 @@ from app.providers.base import ProviderClient, ProviderClientError
 
 
 class AnthropicProviderClient(ProviderClient):
+    _shared_clients: ClassVar[dict[tuple[str, float, int], AsyncAnthropic]] = {}
+
     def __init__(
         self,
         api_key: str,
         timeout_seconds: float = 60.0,
+        max_retries: int = 8,
+        max_concurrent_requests: int = 2,
         client: AsyncAnthropic | None = None,
     ) -> None:
-        self._client = client or AsyncAnthropic(api_key=api_key, timeout=timeout_seconds)
+        self._client = client or self._get_shared_client(api_key, timeout_seconds, max_retries)
+        self._semaphore = asyncio.Semaphore(max(1, max_concurrent_requests))
+
+
+    @classmethod
+    def _get_shared_client(cls, api_key: str, timeout_seconds: float, max_retries: int) -> AsyncAnthropic:
+        key = (api_key, timeout_seconds, max_retries)
+        shared = cls._shared_clients.get(key)
+        if shared is not None:
+            return shared
+        client = AsyncAnthropic(api_key=api_key, timeout=timeout_seconds, max_retries=max_retries)
+        cls._shared_clients[key] = client
+        return client
+
+    async def _with_rate_limit_retry(self, operation: Callable[[], Awaitable[Any]]) -> Any:
+        async with self._semaphore:
+            delay = 1.0
+            for attempt in range(5):
+                try:
+                    return await operation()
+                except (RateLimitError, APIStatusError) as exc:
+                    status = getattr(exc, "status_code", None)
+                    if not (isinstance(exc, RateLimitError) or status in {420, 429}):
+                        raise
+                    if attempt == 4:
+                        raise
+                    await asyncio.sleep(delay + random.uniform(0, 0.25))
+                    delay = min(delay * 2.0, 8.0)
 
     def _native_to_messages_payload(self, request: NativeChatRequest) -> dict[str, Any]:
         system_content, messages = self._native_messages(request)
@@ -327,7 +360,7 @@ class AnthropicProviderClient(ProviderClient):
 
     async def native_chat(self, request: NativeChatRequest) -> NativeChatResponse:
         try:
-            response = await self._client.messages.create(**self._native_to_messages_payload(request))
+            response = await self._with_rate_limit_retry(lambda: self._client.messages.create(**self._native_to_messages_payload(request)))
             return self._anthropic_to_native_response(request, response)
         except (APITimeoutError,) as exc:
             raise ProviderClientError(status_code=504, message=str(exc)) from exc
@@ -343,36 +376,37 @@ class AnthropicProviderClient(ProviderClient):
     async def native_chat_stream(self, request: NativeChatRequest) -> AsyncIterator[StreamFrame]:
         payload = self._native_to_messages_payload(request)
         try:
-            async with self._client.messages.stream(**payload) as stream:
-                async for event in stream:
-                    event_type = getattr(event, "type", "")
-                    if event_type == "content_block_delta" and getattr(event, "delta", None):
-                        delta_text = getattr(event.delta, "text", None)
-                        if delta_text:
-                            yield TextDeltaFrame(text=delta_text)
-                    elif event_type == "content_block_stop" and getattr(event, "content_block", None):
-                        block = event.content_block
-                        if getattr(block, "type", "") == "tool_use":
-                            yield ToolCallFrame(
-                                id=getattr(block, "id", f"call_{uuid.uuid4().hex}"),
-                                name=getattr(block, "name", "tool"),
-                                arguments=getattr(block, "input", {}) or {},
+            async with self._semaphore:
+                async with self._client.messages.stream(**payload) as stream:
+                    async for event in stream:
+                        event_type = getattr(event, "type", "")
+                        if event_type == "content_block_delta" and getattr(event, "delta", None):
+                            delta_text = getattr(event.delta, "text", None)
+                            if delta_text:
+                                yield TextDeltaFrame(text=delta_text)
+                        elif event_type == "content_block_stop" and getattr(event, "content_block", None):
+                            block = event.content_block
+                            if getattr(block, "type", "") == "tool_use":
+                                yield ToolCallFrame(
+                                    id=getattr(block, "id", f"call_{uuid.uuid4().hex}"),
+                                    name=getattr(block, "name", "tool"),
+                                    arguments=getattr(block, "input", {}) or {},
+                                )
+                        elif event_type == "message_delta":
+                            stop_reason = getattr(getattr(event, "delta", None), "stop_reason", None)
+                            if stop_reason:
+                                yield CompletionFrame(finish_reason=stop_reason)
+                        elif event_type == "message_stop":
+                            usage = getattr(getattr(event, "message", None), "usage", None)
+                            input_tokens = getattr(usage, "input_tokens", 0) if usage else 0
+                            output_tokens = getattr(usage, "output_tokens", 0) if usage else 0
+                            yield UsageFrame(
+                                usage=Usage(
+                                    input_tokens=input_tokens,
+                                    output_tokens=output_tokens,
+                                    total_tokens=input_tokens + output_tokens,
+                                )
                             )
-                    elif event_type == "message_delta":
-                        stop_reason = getattr(getattr(event, "delta", None), "stop_reason", None)
-                        if stop_reason:
-                            yield CompletionFrame(finish_reason=stop_reason)
-                    elif event_type == "message_stop":
-                        usage = getattr(getattr(event, "message", None), "usage", None)
-                        input_tokens = getattr(usage, "input_tokens", 0) if usage else 0
-                        output_tokens = getattr(usage, "output_tokens", 0) if usage else 0
-                        yield UsageFrame(
-                            usage=Usage(
-                                input_tokens=input_tokens,
-                                output_tokens=output_tokens,
-                                total_tokens=input_tokens + output_tokens,
-                            )
-                        )
         except (APITimeoutError,) as exc:
             raise ProviderClientError(status_code=504, message=str(exc)) from exc
         except (RateLimitError,) as exc:
@@ -386,7 +420,7 @@ class AnthropicProviderClient(ProviderClient):
 
     async def chat_completions(self, payload: dict[str, Any]) -> dict[str, Any]:
         try:
-            response = await self._client.messages.create(**self._to_messages_payload(payload))
+            response = await self._with_rate_limit_retry(lambda: self._client.messages.create(**self._to_messages_payload(payload)))
             return self._to_openai_response(payload, response)
         except (APITimeoutError,) as exc:
             raise ProviderClientError(status_code=504, message=str(exc)) from exc
@@ -402,19 +436,20 @@ class AnthropicProviderClient(ProviderClient):
     async def chat_completions_stream(self, payload: dict[str, Any]) -> AsyncIterator[str]:
         message_id = f"chatcmpl-{uuid.uuid4().hex}"
         try:
-            async with self._client.messages.stream(**self._to_messages_payload(payload)) as stream:
-                async for text in stream.text_stream:
-                    if not text:
-                        continue
-                    chunk = {
-                        "id": message_id,
-                        "object": "chat.completion.chunk",
-                        "created": int(time.time()),
-                        "model": payload["model"],
-                        "choices": [{"index": 0, "delta": {"content": text}, "finish_reason": None}],
-                    }
-                    yield f"data: {json.dumps(chunk)}\n\n"
-                yield "data: [DONE]\n\n"
+            async with self._semaphore:
+                async with self._client.messages.stream(**self._to_messages_payload(payload)) as stream:
+                    async for text in stream.text_stream:
+                        if not text:
+                            continue
+                        chunk = {
+                            "id": message_id,
+                            "object": "chat.completion.chunk",
+                            "created": int(time.time()),
+                            "model": payload["model"],
+                            "choices": [{"index": 0, "delta": {"content": text}, "finish_reason": None}],
+                        }
+                        yield f"data: {json.dumps(chunk)}\n\n"
+                    yield "data: [DONE]\n\n"
         except (APITimeoutError,) as exc:
             raise ProviderClientError(status_code=504, message=str(exc)) from exc
         except (RateLimitError,) as exc:
