@@ -448,6 +448,19 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
   opacity: 0.78;
 }
 
+.process-description.pending {
+  background-image: linear-gradient(90deg, #a89984 0%, #fbf1c7 45%, #a89984 90%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: process-shimmer 1.4s ease-in-out infinite;
+}
+
+.loading-dots {
+  margin-left: 0.25rem;
+}
+
 .process-response {
   margin: 0.28rem 0 0;
   color: #a89984;
@@ -469,6 +482,11 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
 @keyframes loading-dot {
   0%, 20% { opacity: 0.2; }
   40%, 100% { opacity: 1; }
+}
+
+@keyframes process-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: -100% 50%; }
 }
 .assistant-markdown p,
 .assistant-markdown ul,

@@ -120,7 +120,7 @@
                   style={`--stack-index:${Math.min(stackIndex, 2)}`}
                 >
                   <p class="process-title">{info.title}</p>
-                  <p class="process-description" class:muted={info.state !== 'pending'}>
+                  <p class="process-description" class:muted={info.state !== 'pending'} class:pending={info.state === 'pending'}>
                     {info.description}
                     {#if info.state === 'pending'}
                       <span class="loading-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span>

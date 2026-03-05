@@ -112,6 +112,7 @@ class ToolCallFrame(BaseModel):
     type: Literal["tool_call"] = "tool_call"
     id: str
     name: str
+    index: int = 0
     arguments: dict[str, Any] = Field(default_factory=dict)
 
 
