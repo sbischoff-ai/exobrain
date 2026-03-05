@@ -325,7 +325,6 @@ mod tests {
             },
             blocks: vec![],
             neighbors: vec![],
-            prompt_context_markdown: String::new(),
         };
 
         let markdown = render_entity_context_markdown(&result);
@@ -389,7 +388,6 @@ mod tests {
                     name: Some("Taylor".to_string()),
                 },
             }],
-            prompt_context_markdown: String::new(),
         };
 
         let markdown = render_entity_context_markdown(&result);
@@ -512,7 +510,6 @@ mod tests {
                     },
                 },
             ],
-            prompt_context_markdown: String::new(),
         };
 
         let markdown = render_entity_context_markdown(&result);

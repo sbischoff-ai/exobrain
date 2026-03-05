@@ -106,7 +106,7 @@ Current `knowledge.update` worker flow uses five explicit steps arranged as a ta
 
 1. Step one builds a baseline `UpsertGraphDelta` request body from message payloads (after one `GetUserInitGraph` lookup).
 2. Step two preprocesses the chat sequence into a deterministic markdown batch document with turn boundaries, speaker tags, timestamps, and an optional metadata header.
-3. Step three runs a LangChain extraction agent (`architect` model via model-provider) against the step-two markdown, using schema context tools `GetEntityExtractionSchemaContext` + `GetEdgeExtractionSchemaContext`, structured output schema from `GetUpsertGraphDeltaJsonSchema`, and graph lookup tools backed by `FindEntityCandidates`, `GetEntityContext`, and `GetEntityTypePropertyContext`.
+3. Step three runs a LangChain extraction agent (`architect` model via model-provider) against the step-two markdown, calling `GetEntityExtractionSchemaContext` once up front for system-context priming, then using `GetEdgeExtractionSchemaContext` as a tool for pairwise edge decisions, structured output schema from `GetUpsertGraphDeltaJsonSchema`, and graph lookup tools backed by `FindEntityCandidates`, `GetEntityContext`, and `GetEntityTypePropertyContext`.
 4. Step four runs a router agent (`router` model) that maps step-one chat blocks to step-three entities with confidence scores, then appends corresponding `MENTIONS` edges to the merged graph delta.
 5. Step five upserts the merged `UpsertGraphDelta` payload via `UpsertGraphDelta`.
 

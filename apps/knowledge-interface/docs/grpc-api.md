@@ -513,7 +513,6 @@ message GetEntityContextReply {
   map<string, string> entity_properties = 2;
   repeated EntityContextBlock blocks = 3;
   repeated EntityContextNeighbor neighbors = 4;
-  optional string prompt_context_markdown = 5;
 }
 ```
 
@@ -521,7 +520,6 @@ message GetEntityContextReply {
 - `entity_properties`: additional flat scalar properties as string values (`{ "key": "value" }`) excluding `name`, `aliases`, `created_at`, and `updated_at`.
 - `blocks[]`: typed block entries (`id`, `type_id`, `block_level`) plus root-level `text`, `created_at`, `updated_at`, optional `parent_block_id`, additional `properties` (`map<string, string>`), and block-level `neighbors`.
 - `neighbors[]`: outgoing and incoming entity neighbors with edge metadata (`direction`, `edge_type`, `properties`) where `properties` is a flat `map<string, string>`, plus `other_entity` (`id`, optional `description`, optional `name`).
-- `prompt_context_markdown`: deterministic markdown rendering of the same payload, including entity metadata/properties, neighbors, and nested block tree sections with preserved block markdown text.
 
 ### Block level semantics
 

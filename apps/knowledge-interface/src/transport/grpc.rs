@@ -9,8 +9,7 @@ use crate::presentation::upsert_delta_json_schema::{
     try_upsert_graph_delta_json_schema_string, UPSERT_GRAPH_DELTA_SCHEMA_ID,
 };
 use crate::service::{
-    build_extraction_entity_types, EntityTypePropertyContextOptions,
-    ExtractionAllowedEdge as ServiceAllowedEdge,
+    EntityTypePropertyContextOptions, ExtractionAllowedEdge as ServiceAllowedEdge,
     ExtractionEntityType as ServiceExtractionEntityType, ExtractionPropertyContext,
     ExtractionSchemaOptions, ExtractionUniverseContext as ServiceExtractionUniverseContext,
     KnowledgeApplication,
@@ -209,14 +208,11 @@ impl KnowledgeInterface for KnowledgeGrpcService {
         request: Request<GetEntityExtractionSchemaContextRequest>,
     ) -> Result<Response<GetEntityExtractionSchemaContextReply>, Status> {
         let payload = request.into_inner();
-        let schema = self
+        let entity_types = self
             .app
-            .get_schema()
+            .get_entity_extraction_schema_types(extraction_options_from_entity_request(&payload))
             .await
             .map_err(|e| Status::internal(e.to_string()))?;
-
-        let entity_types =
-            build_extraction_entity_types(schema, extraction_options_from_entity_request(&payload));
         let universes = self
             .app
             .get_extraction_universes(&payload.user_id)
@@ -249,20 +245,16 @@ impl KnowledgeInterface for KnowledgeGrpcService {
             ));
         }
 
-        let schema = self
+        let entity_types = self
             .app
-            .get_schema()
+            .get_edge_extraction_schema_types(extraction_options_from_edge_request(&payload))
             .await
-            .map_err(|e| Status::internal(e.to_string()))?;
-
-        let entity_types =
-            build_extraction_entity_types(schema, extraction_options_from_edge_request(&payload))
-                .into_iter()
-                .filter(|entity| {
-                    entity.type_id == source_entity_type_id
-                        || entity.type_id == target_entity_type_id
-                })
-                .collect::<Vec<_>>();
+            .map_err(|e| Status::internal(e.to_string()))?
+            .into_iter()
+            .filter(|entity| {
+                entity.type_id == source_entity_type_id || entity.type_id == target_entity_type_id
+            })
+            .collect::<Vec<_>>();
 
         Ok(Response::new(GetEdgeExtractionSchemaContextReply {
             source_entity_type_id,

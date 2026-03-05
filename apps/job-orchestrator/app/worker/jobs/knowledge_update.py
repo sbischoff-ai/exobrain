@@ -316,7 +316,10 @@ def _append_mentions_edges(
     merged_graph_delta["edges"] = [*(merged_graph_delta.get("edges", []) or []), *mentions_edges]
 
 
-def _build_step_three_system_prompt(upsert_graph_delta_json_schema: str) -> str:
+def _build_step_three_system_prompt(
+    entity_extraction_schema_context: dict[str, object],
+    upsert_graph_delta_json_schema: str,
+) -> str:
     return "\n\n".join(
         [
             "You are the knowledge.update extraction architect.",
@@ -325,10 +328,11 @@ def _build_step_three_system_prompt(upsert_graph_delta_json_schema: str) -> str:
                 "Output MUST validate against the provided JSON schema."
             ),
             (
-                "Workflow: (1) call get_entity_extraction_schema_context once to choose candidate entity types and "
-                "universe usage; (2) deduplicate entities with find_entity_candidates and inspect matches with "
-                "get_entity_context; (3) validate entity properties with get_entity_type_property_context; "
-                "(4) for each candidate related entity pair, call get_edge_extraction_schema_context with "
+                "Workflow: (1) use the provided entity extraction schema context to choose candidate entity "
+                "types and universe usage; (2) deduplicate entities with find_entity_candidates and inspect "
+                "matches with get_entity_context; (3) validate entity properties with "
+                "get_entity_type_property_context; (4) for each candidate related entity pair, call "
+                "get_edge_extraction_schema_context with "
                 "source_entity_type_id and target_entity_type_id before creating edges; "
                 "(5) emit only edges allowed by the returned edge context and direction."
             ),
@@ -346,6 +350,7 @@ def _build_step_three_system_prompt(upsert_graph_delta_json_schema: str) -> str:
                 "Relevance policy: prioritize entities relevant to the user from this conversation. Assistant "
                 "suggestions must be ignored unless the user approved or confirmed them."
             ),
+            "Entity extraction schema context (JSON):\n" + json.dumps(entity_extraction_schema_context, sort_keys=True),
             "Output JSON schema:\n" + upsert_graph_delta_json_schema,
         ]
     )
@@ -361,33 +366,26 @@ async def _run_step_three_extraction_agent(
     from langchain_core.tools import tool
     from app.services.model_provider_chat_model import ModelProviderChatModel
 
+    get_entity_extraction_schema_context_rpc = channel.unary_unary(
+        "/exobrain.knowledge.v1.KnowledgeInterface/GetEntityExtractionSchemaContext",
+        request_serializer=knowledge_pb2.GetEntityExtractionSchemaContextRequest.SerializeToString,
+        response_deserializer=knowledge_pb2.GetEntityExtractionSchemaContextReply.FromString,
+    )
     get_upsert_graph_delta_json_schema = channel.unary_unary(
         "/exobrain.knowledge.v1.KnowledgeInterface/GetUpsertGraphDeltaJsonSchema",
         request_serializer=knowledge_pb2.GetUpsertGraphDeltaJsonSchemaRequest.SerializeToString,
         response_deserializer=knowledge_pb2.GetUpsertGraphDeltaJsonSchemaReply.FromString,
     )
 
+    entity_schema_context_reply = await get_entity_extraction_schema_context_rpc(
+        knowledge_pb2.GetEntityExtractionSchemaContextRequest(user_id=payload.requested_by_user_id)
+    )
+    entity_schema_context = MessageToDict(
+        entity_schema_context_reply, preserving_proto_field_name=True
+    )
     json_schema_reply = await get_upsert_graph_delta_json_schema(
         knowledge_pb2.GetUpsertGraphDeltaJsonSchemaRequest()
     )
-
-
-    @tool
-    async def get_entity_extraction_schema_context(include_inactive: bool = False) -> dict[str, object]:
-        """Get node-type extraction context (universes and entity types, no edge rules)."""
-
-        rpc = channel.unary_unary(
-            "/exobrain.knowledge.v1.KnowledgeInterface/GetEntityExtractionSchemaContext",
-            request_serializer=knowledge_pb2.GetEntityExtractionSchemaContextRequest.SerializeToString,
-            response_deserializer=knowledge_pb2.GetEntityExtractionSchemaContextReply.FromString,
-        )
-        reply = await rpc(
-            knowledge_pb2.GetEntityExtractionSchemaContextRequest(
-                include_inactive=include_inactive,
-                user_id=payload.requested_by_user_id,
-            )
-        )
-        return MessageToDict(reply, preserving_proto_field_name=True)
 
     @tool
     async def get_edge_extraction_schema_context(
@@ -474,6 +472,7 @@ async def _run_step_three_extraction_agent(
         return MessageToDict(reply, preserving_proto_field_name=True)
 
     system_prompt = _build_step_three_system_prompt(
+        entity_extraction_schema_context=entity_schema_context,
         upsert_graph_delta_json_schema=json_schema_reply.json_schema,
     )
 
@@ -486,7 +485,6 @@ async def _run_step_three_extraction_agent(
     compiled_agent = create_agent(
         model=model,
         tools=[
-            get_entity_extraction_schema_context,
             get_edge_extraction_schema_context,
             find_entity_candidates,
             get_entity_context,
