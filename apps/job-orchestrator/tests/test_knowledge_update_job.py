@@ -12,15 +12,16 @@ from app.worker.jobs.knowledge_update import (
     _build_step_two_entity_extraction_system_prompt,
     _build_upsert_graph_delta_step_one,
     _build_step_eight_final_entity_context_graph_schema,
+    _build_step_nine_merge_graph_delta,
     _build_step_seven_relationship_match_schema,
     _build_step_six_relationship_extraction_schema,
+    _build_step_ten_mentions_schema,
     _classify_candidate_matches,
     _deduplicate_entity_pairs,
     _extract_matched_entity_id,
     _format_exception_for_stderr,
     _run_step_two_entity_extraction,
-    _step_nine_placeholder,
-    _step_two_store_batch_document,
+        _step_two_store_batch_document,
 )
 
 
@@ -276,9 +277,49 @@ def test_extract_matched_entity_id_parses_expected_decisions() -> None:
     assert _extract_matched_entity_id("NEW_ENTITY") is None
     assert _extract_matched_entity_id("unknown") is None
 
+def test_step_ten_mentions_schema_requires_mentions() -> None:
+    schema = _build_step_ten_mentions_schema()
 
-def test_step_nine_placeholder_logs_counts(caplog: pytest.LogCaptureFixture) -> None:
-    with caplog.at_level(logging.INFO):
-        _step_nine_placeholder([{"entity": {"entity_id": "1"}, "blocks": []}])
+    assert schema["required"] == ["mentions"]
+    assert schema["properties"]["mentions"]["items"]["required"] == ["block_id", "entity_id", "confidence"]
 
-    assert "knowledge.update step nine placeholder reached" in caplog.text
+
+def test_step_nine_merge_graph_delta_maps_blocks_edges_and_universes() -> None:
+    payload = KnowledgeUpdatePayload(
+        journal_reference="journal-1",
+        requested_by_user_id="user-1",
+        messages=[{"role": "user", "content": "hello", "created_at": "2026-03-02T12:00:00Z"}],
+    )
+
+    merged = _build_step_nine_merge_graph_delta(
+        payload=payload,
+        step_zero_graph_delta={"entities": [], "blocks": [], "edges": [], "universes": []},
+        step_two_extraction={"extracted_universes": [{"name": "Wonderland", "description": "fictional"}]},
+        step_seven_relationships=[
+            {"from_entity_id": "e1", "to_entity_id": "e2", "edge_type": "edge.related_to", "confidence": 0.8}
+        ],
+        step_eight_final_entity_context_graphs=[
+            {
+                "entity": {
+                    "entity_id": "e1",
+                    "node_type": "node.person",
+                    "name": "Alice",
+                    "aliases": ["A"],
+                    "universe_name": "Wonderland",
+                },
+                "blocks": [
+                    {"block_id": "NEW_BLOCK_1", "parent_block_id": "", "text": "root"},
+                    {"block_id": "NEW_BLOCK_2", "parent_block_id": "NEW_BLOCK_1", "text": "child"},
+                ],
+            }
+        ],
+    )
+
+    assert len(merged["universes"]) == 1
+    assert len(merged["entities"]) == 1
+    assert len(merged["blocks"]) == 2
+    edge_types = {edge["edge_type"] for edge in merged["edges"]}
+    assert "DESCRIBED_BY" in edge_types
+    assert "SUMMARIZES" in edge_types
+    assert "edge.related_to" in edge_types
+

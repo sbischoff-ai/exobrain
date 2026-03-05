@@ -885,11 +885,294 @@ async def _run_step_eight_build_final_entity_context_graphs(
     return final_graphs
 
 
-def _step_nine_placeholder(final_entity_context_graphs: list[dict[str, object]]) -> None:
+def _to_property_value_dict(key: str, value: object) -> dict[str, object] | None:
+    if isinstance(value, bool):
+        return {"key": key, "bool_value": value}
+    if isinstance(value, int) and not isinstance(value, bool):
+        return {"key": key, "int_value": value}
+    if isinstance(value, float):
+        return {"key": key, "float_value": value}
+    if isinstance(value, str):
+        return {"key": key, "string_value": value}
+    if isinstance(value, (list, dict)):
+        return {"key": key, "json_value": json.dumps(value, ensure_ascii=False)}
+    return None
+
+
+def _build_step_nine_merge_graph_delta(
+    payload: KnowledgeUpdatePayload,
+    step_zero_graph_delta: dict[str, object],
+    step_two_extraction: dict[str, object],
+    step_seven_relationships: list[dict[str, object]],
+    step_eight_final_entity_context_graphs: list[dict[str, object]],
+) -> dict[str, object]:
+    merged = {
+        "universes": list(step_zero_graph_delta.get("universes", []) or []),
+        "entities": list(step_zero_graph_delta.get("entities", []) or []),
+        "blocks": list(step_zero_graph_delta.get("blocks", []) or []),
+        "edges": list(step_zero_graph_delta.get("edges", []) or []),
+    }
+
+    universe_id_by_name: dict[str, str] = {}
+    for universe in step_two_extraction.get("extracted_universes", []) or []:
+        if not isinstance(universe, dict):
+            continue
+        universe_name = universe.get("name")
+        if not isinstance(universe_name, str) or not universe_name:
+            continue
+        universe_id = str(uuid4())
+        universe_id_by_name[universe_name] = universe_id
+        merged["universes"].append(
+            {
+                "id": universe_id,
+                "name": universe_name,
+                "user_id": payload.requested_by_user_id,
+                "visibility": "PRIVATE",
+            }
+        )
+
+    for item in step_eight_final_entity_context_graphs:
+        if not isinstance(item, dict):
+            continue
+        entity_payload = item.get("entity")
+        if not isinstance(entity_payload, dict):
+            continue
+        entity_id = entity_payload.get("entity_id")
+        node_type = entity_payload.get("node_type")
+        if not isinstance(entity_id, str) or not isinstance(node_type, str):
+            continue
+
+        universe_id = entity_payload.get("universe_id")
+        if not isinstance(universe_id, str):
+            universe_name = entity_payload.get("universe_name")
+            if isinstance(universe_name, str):
+                universe_id = universe_id_by_name.get(universe_name)
+
+        properties: list[dict[str, object]] = []
+        for key, value in entity_payload.items():
+            if key in {"entity_id", "node_type", "universe_id", "universe_name"}:
+                continue
+            property_value = _to_property_value_dict(key, value)
+            if property_value is not None:
+                properties.append(property_value)
+
+        entity_node: dict[str, object] = {
+            "id": entity_id,
+            "type_id": node_type,
+            "user_id": payload.requested_by_user_id,
+            "visibility": "PRIVATE",
+            "properties": properties,
+        }
+        if isinstance(universe_id, str) and universe_id:
+            entity_node["universe_id"] = universe_id
+        merged["entities"].append(entity_node)
+
+        blocks = item.get("blocks")
+        if not isinstance(blocks, list):
+            continue
+
+        id_map: dict[str, str] = {}
+        for block in blocks:
+            if not isinstance(block, dict):
+                continue
+            raw_id = block.get("block_id")
+            if not isinstance(raw_id, str) or not raw_id:
+                continue
+            if raw_id.startswith("NEW_BLOCK_"):
+                id_map[raw_id] = str(uuid4())
+            else:
+                id_map[raw_id] = raw_id
+
+        has_root = False
+        for block in blocks:
+            if not isinstance(block, dict):
+                continue
+            raw_id = block.get("block_id")
+            if not isinstance(raw_id, str) or raw_id not in id_map:
+                continue
+            block_id = id_map[raw_id]
+            text = block.get("text") if isinstance(block.get("text"), str) else ""
+            merged["blocks"].append(
+                {
+                    "id": block_id,
+                    "type_id": "node.block",
+                    "user_id": payload.requested_by_user_id,
+                    "visibility": "PRIVATE",
+                    "properties": [{"key": "text", "string_value": text}],
+                }
+            )
+            parent_raw = block.get("parent_block_id")
+            parent_id = id_map.get(parent_raw) if isinstance(parent_raw, str) else None
+            if parent_id:
+                merged["edges"].append(
+                    {
+                        "from_id": parent_id,
+                        "to_id": block_id,
+                        "edge_type": "SUMMARIZES",
+                        "user_id": payload.requested_by_user_id,
+                        "visibility": "PRIVATE",
+                    }
+                )
+            else:
+                has_root = True
+                merged["edges"].append(
+                    {
+                        "from_id": entity_id,
+                        "to_id": block_id,
+                        "edge_type": "DESCRIBED_BY",
+                        "user_id": payload.requested_by_user_id,
+                        "visibility": "PRIVATE",
+                    }
+                )
+        if not has_root:
+            logger.warning("knowledge.update step nine entity has no root block", extra={"entity_id": entity_id})
+
+    for relationship in step_seven_relationships:
+        if not isinstance(relationship, dict):
+            continue
+        from_id = relationship.get("from_entity_id")
+        to_id = relationship.get("to_entity_id")
+        edge_type = relationship.get("edge_type")
+        confidence = relationship.get("confidence")
+        if not isinstance(from_id, str) or not isinstance(to_id, str) or not isinstance(edge_type, str):
+            continue
+        if not isinstance(confidence, (int, float)):
+            continue
+        merged["edges"].append(
+            {
+                "from_id": from_id,
+                "to_id": to_id,
+                "edge_type": edge_type,
+                "user_id": payload.requested_by_user_id,
+                "visibility": "PRIVATE",
+                "properties": [
+                    {"key": "confidence", "float_value": float(confidence)},
+                    {"key": "status", "string_value": "asserted"},
+                ],
+            }
+        )
+
     logger.info(
-        "knowledge.update step nine placeholder reached",
-        extra={"final_entity_context_graphs": len(final_entity_context_graphs)},
+        "knowledge.update step nine merged graph delta",
+        extra={
+            "universes": len(merged["universes"]),
+            "entities": len(merged["entities"]),
+            "blocks": len(merged["blocks"]),
+            "edges": len(merged["edges"]),
+        },
     )
+    return merged
+
+
+def _build_step_ten_mentions_schema() -> dict[str, object]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "mentions": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "block_id": {"type": "string", "minLength": 1},
+                        "entity_id": {"type": "string", "minLength": 1},
+                        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                    },
+                    "required": ["block_id", "entity_id", "confidence"],
+                },
+            }
+        },
+        "required": ["mentions"],
+    }
+
+
+async def _run_step_ten_finalize_graph_delta(
+    merged_graph_delta: dict[str, object],
+    settings: Settings,
+    requesting_user_id: str,
+) -> dict[str, object]:
+    from langchain.agents import create_agent
+    from app.services.model_provider_chat_model import ModelProviderChatModel
+
+    blocks = [
+        {
+            "block_id": block.get("id"),
+            "text": next((p.get("string_value") for p in (block.get("properties") or []) if isinstance(p, dict) and p.get("key") == "text"), ""),
+        }
+        for block in (merged_graph_delta.get("blocks") or [])
+        if isinstance(block, dict)
+    ]
+    entities = [
+        {
+            "entity_id": entity.get("id"),
+            "name": next((p.get("string_value") for p in (entity.get("properties") or []) if isinstance(p, dict) and p.get("key") == "name"), ""),
+        }
+        for entity in (merged_graph_delta.get("entities") or [])
+        if isinstance(entity, dict)
+    ]
+    valid_block_ids = {item["block_id"] for item in blocks if isinstance(item.get("block_id"), str)}
+    valid_entity_ids = {item["entity_id"] for item in entities if isinstance(item.get("entity_id"), str)}
+
+    agent = create_agent(
+        model=ModelProviderChatModel(
+            model="worker",
+            base_url=settings.model_provider_base_url,
+            temperature=0,
+            timeout=settings.knowledge_update_model_provider_timeout_seconds,
+        ),
+        tools=[],
+        system_prompt=(
+            "You are the knowledge.update graph finalizer worker. "
+            "Identify which blocks mention which entities. Return strict JSON only."
+        ),
+        response_format={"type": "json_schema", "json_schema": _build_step_ten_mentions_schema()},
+    )
+    prompt = json.dumps({"blocks": blocks, "entities": entities}, ensure_ascii=False)
+    reply = await agent.ainvoke({"messages": [{"role": "user", "content": prompt}]})
+    structured = reply.get("structured_response") if isinstance(reply, dict) else None
+    mentions = structured.get("mentions") if isinstance(structured, dict) else None
+    if not isinstance(mentions, list):
+        raise RuntimeError("knowledge.update step ten returned invalid mentions output")
+
+    mentions_edges: list[dict[str, object]] = []
+    seen: set[tuple[str, str]] = set()
+    for mention in mentions:
+        if not isinstance(mention, dict):
+            continue
+        block_id = mention.get("block_id")
+        entity_id = mention.get("entity_id")
+        confidence = mention.get("confidence")
+        if not isinstance(block_id, str) or block_id not in valid_block_ids:
+            continue
+        if not isinstance(entity_id, str) or entity_id not in valid_entity_ids:
+            continue
+        if not isinstance(confidence, (int, float)):
+            continue
+        key = (block_id, entity_id)
+        if key in seen:
+            continue
+        seen.add(key)
+        mentions_edges.append(
+            {
+                "from_id": block_id,
+                "to_id": entity_id,
+                "edge_type": "MENTIONS",
+                "user_id": requesting_user_id,
+                "visibility": "PRIVATE",
+                "properties": [
+                    {"key": "confidence", "float_value": float(confidence)},
+                    {"key": "status", "string_value": "asserted"},
+                ],
+            }
+        )
+
+    merged_graph_delta["edges"] = [*(merged_graph_delta.get("edges", []) or []), *mentions_edges]
+    logger.info(
+        "knowledge.update step ten finalized graph delta",
+        extra={"mentions_edges_added": len(mentions_edges), "total_edges": len(merged_graph_delta.get("edges", []) or [])},
+    )
+    return merged_graph_delta
 
 
 async def run(job: JobEnvelope) -> None:
@@ -957,17 +1240,28 @@ async def run(job: JobEnvelope) -> None:
             step_four_entity_contexts,
             settings,
         )
-        _step_nine_placeholder(step_eight_final_entity_context_graphs)
+        step_nine_merged_graph_delta = _build_step_nine_merge_graph_delta(
+            payload,
+            step_zero_graph_delta,
+            step_two_extraction,
+            step_seven_relationships,
+            step_eight_final_entity_context_graphs,
+        )
+        step_ten_final_graph_delta = await _run_step_ten_finalize_graph_delta(
+            step_nine_merged_graph_delta,
+            settings,
+            payload.requested_by_user_id,
+        )
 
         upsert_graph_delta = channel.unary_unary(
             "/exobrain.knowledge.v1.KnowledgeInterface/UpsertGraphDelta",
             request_serializer=knowledge_pb2.UpsertGraphDeltaRequest.SerializeToString,
             response_deserializer=knowledge_pb2.UpsertGraphDeltaReply.FromString,
         )
-        upsert_request = ParseDict(step_zero_graph_delta, knowledge_pb2.UpsertGraphDeltaRequest())
+        upsert_request = ParseDict(step_ten_final_graph_delta, knowledge_pb2.UpsertGraphDeltaRequest())
         upsert_reply = await upsert_graph_delta(upsert_request)
         logger.info(
-            "knowledge.update step ten upserted chat message graph delta",
+            "knowledge.update step eleven upserted final graph delta",
             extra={
                 "entities_upserted": upsert_reply.entities_upserted,
                 "blocks_upserted": upsert_reply.blocks_upserted,
