@@ -245,12 +245,11 @@ async def _run_step_four_router_agent(
     settings: Settings,
 ) -> list[dict[str, object]]:
     from langchain.agents import create_agent
-    from langchain_openai import ChatOpenAI
+    from app.services.model_provider_chat_model import ModelProviderChatModel
 
-    model = ChatOpenAI(
+    model = ModelProviderChatModel(
         model="router",
         base_url=settings.model_provider_base_url,
-        api_key="model-provider",
         temperature=0,
     )
     response_schema = _build_step_four_router_json_schema()
@@ -360,7 +359,7 @@ async def _run_step_three_extraction_agent(
 ) -> dict[str, object]:
     from langchain.agents import create_agent
     from langchain_core.tools import tool
-    from langchain_openai import ChatOpenAI
+    from app.services.model_provider_chat_model import ModelProviderChatModel
 
     get_extraction_schema_context = channel.unary_unary(
         "/exobrain.knowledge.v1.KnowledgeInterface/GetExtractionSchemaContext",
@@ -447,10 +446,9 @@ async def _run_step_three_extraction_agent(
         upsert_graph_delta_json_schema=json_schema_reply.json_schema,
     )
 
-    model = ChatOpenAI(
+    model = ModelProviderChatModel(
         model=settings.knowledge_update_extraction_model,
         base_url=settings.model_provider_base_url,
-        api_key="model-provider",
         temperature=0,
     )
 
