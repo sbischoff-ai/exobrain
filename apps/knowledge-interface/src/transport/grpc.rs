@@ -5,7 +5,6 @@ use tonic::{transport::Server, Request, Response, Status};
 use crate::domain::{
     SchemaKind, SchemaType, UpsertSchemaTypeCommand, UpsertSchemaTypePropertyInput,
 };
-use crate::presentation::extraction_prompt::ExtractionContextView;
 use crate::presentation::upsert_delta_json_schema::{
     try_upsert_graph_delta_json_schema_string, UPSERT_GRAPH_DELTA_SCHEMA_ID,
 };
@@ -28,10 +27,11 @@ use super::mappers::{
 };
 use super::proto::knowledge_interface_server::{KnowledgeInterface, KnowledgeInterfaceServer};
 use super::proto::{
-    AllowedEdge, ExtractionEntityType, ExtractionUniverse, FindEntityCandidatesReply,
-    FindEntityCandidatesRequest, GetEntityContextReply, GetEntityContextRequest,
-    GetEntityTypePropertyContextReply, GetEntityTypePropertyContextRequest,
-    GetExtractionSchemaContextReply, GetExtractionSchemaContextRequest, GetSchemaReply,
+    AllowedEdge, ExtractionEntityType, ExtractionEntityTypeWithEdges, ExtractionUniverse,
+    FindEntityCandidatesReply, FindEntityCandidatesRequest, GetEdgeExtractionSchemaContextReply,
+    GetEdgeExtractionSchemaContextRequest, GetEntityContextReply, GetEntityContextRequest,
+    GetEntityExtractionSchemaContextReply, GetEntityExtractionSchemaContextRequest,
+    GetEntityTypePropertyContextReply, GetEntityTypePropertyContextRequest, GetSchemaReply,
     GetSchemaRequest, GetUpsertGraphDeltaJsonSchemaReply, GetUpsertGraphDeltaJsonSchemaRequest,
     GetUserInitGraphReply, GetUserInitGraphRequest, HealthReply, HealthRequest,
     ListEntitiesByTypeReply, ListEntitiesByTypeRequest, UpsertGraphDeltaReply,
@@ -43,11 +43,18 @@ pub struct KnowledgeGrpcService {
     pub app: Arc<KnowledgeApplication>,
 }
 
-fn extraction_options_from_request(
-    request: &GetExtractionSchemaContextRequest,
+fn extraction_options_from_entity_request(
+    request: &GetEntityExtractionSchemaContextRequest,
 ) -> ExtractionSchemaOptions {
     ExtractionSchemaOptions {
-        include_edge_properties: request.include_edge_properties.unwrap_or(false),
+        include_inactive: request.include_inactive.unwrap_or(false),
+    }
+}
+
+fn extraction_options_from_edge_request(
+    request: &GetEdgeExtractionSchemaContextRequest,
+) -> ExtractionSchemaOptions {
+    ExtractionSchemaOptions {
         include_inactive: request.include_inactive.unwrap_or(false),
     }
 }
@@ -87,6 +94,17 @@ fn to_proto_allowed_edge(edge: ServiceAllowedEdge) -> AllowedEdge {
 
 fn to_proto_extraction_entity_type(entity: ServiceExtractionEntityType) -> ExtractionEntityType {
     ExtractionEntityType {
+        type_id: entity.type_id,
+        name: entity.name,
+        description: entity.description,
+        inheritance_chain: entity.inheritance_chain,
+    }
+}
+
+fn to_proto_extraction_entity_type_with_edges(
+    entity: ServiceExtractionEntityType,
+) -> ExtractionEntityTypeWithEdges {
+    ExtractionEntityTypeWithEdges {
         type_id: entity.type_id,
         name: entity.name,
         description: entity.description,
@@ -186,10 +204,10 @@ impl KnowledgeInterface for KnowledgeGrpcService {
         }))
     }
 
-    async fn get_extraction_schema_context(
+    async fn get_entity_extraction_schema_context(
         &self,
-        request: Request<GetExtractionSchemaContextRequest>,
-    ) -> Result<Response<GetExtractionSchemaContextReply>, Status> {
+        request: Request<GetEntityExtractionSchemaContextRequest>,
+    ) -> Result<Response<GetEntityExtractionSchemaContextReply>, Status> {
         let payload = request.into_inner();
         let schema = self
             .app
@@ -198,35 +216,60 @@ impl KnowledgeInterface for KnowledgeGrpcService {
             .map_err(|e| Status::internal(e.to_string()))?;
 
         let entity_types =
-            build_extraction_entity_types(schema, extraction_options_from_request(&payload));
+            build_extraction_entity_types(schema, extraction_options_from_entity_request(&payload));
         let universes = self
             .app
             .get_extraction_universes(&payload.user_id)
             .await
             .map_err(|e| Status::invalid_argument(e.to_string()))?;
-        let structured_context_view = ExtractionContextView::structured(entity_types, universes);
-        let prompt_context_markdown = match structured_context_view.to_rendered_markdown() {
-            ExtractionContextView::RenderedMarkdown(markdown) => markdown,
-            ExtractionContextView::Structured(_) => String::new(),
-        };
-        let structured_context = match structured_context_view {
-            ExtractionContextView::Structured(structured) => structured,
-            ExtractionContextView::RenderedMarkdown(_) => {
-                unreachable!("context view should remain structured")
-            }
-        };
 
-        Ok(Response::new(GetExtractionSchemaContextReply {
-            entity_types: structured_context
-                .entity_types
+        Ok(Response::new(GetEntityExtractionSchemaContextReply {
+            entity_types: entity_types
                 .into_iter()
                 .map(to_proto_extraction_entity_type)
                 .collect(),
-            prompt_context_markdown: Some(prompt_context_markdown),
-            universes: structured_context
-                .universes
+            universes: universes
                 .into_iter()
                 .map(to_proto_extraction_universe)
+                .collect(),
+        }))
+    }
+
+    async fn get_edge_extraction_schema_context(
+        &self,
+        request: Request<GetEdgeExtractionSchemaContextRequest>,
+    ) -> Result<Response<GetEdgeExtractionSchemaContextReply>, Status> {
+        let payload = request.into_inner();
+        let source_entity_type_id = payload.source_entity_type_id.trim().to_string();
+        let target_entity_type_id = payload.target_entity_type_id.trim().to_string();
+
+        if source_entity_type_id.is_empty() || target_entity_type_id.is_empty() {
+            return Err(Status::invalid_argument(
+                "source_entity_type_id and target_entity_type_id are required",
+            ));
+        }
+
+        let schema = self
+            .app
+            .get_schema()
+            .await
+            .map_err(|e| Status::internal(e.to_string()))?;
+
+        let entity_types =
+            build_extraction_entity_types(schema, extraction_options_from_edge_request(&payload))
+                .into_iter()
+                .filter(|entity| {
+                    entity.type_id == source_entity_type_id
+                        || entity.type_id == target_entity_type_id
+                })
+                .collect::<Vec<_>>();
+
+        Ok(Response::new(GetEdgeExtractionSchemaContextReply {
+            source_entity_type_id,
+            target_entity_type_id,
+            entity_types: entity_types
+                .into_iter()
+                .map(to_proto_extraction_entity_type_with_edges)
                 .collect(),
         }))
     }
@@ -444,15 +487,14 @@ pub async fn run_server(
 #[cfg(test)]
 mod tests {
     use super::{
-        entity_type_property_context_options_from_request, extraction_options_from_request,
-        to_proto_extraction_entity_type, to_proto_extraction_universe, to_proto_property_context,
-        KnowledgeGrpcService,
+        entity_type_property_context_options_from_request, extraction_options_from_entity_request,
+        to_proto_extraction_entity_type, to_proto_extraction_entity_type_with_edges,
+        to_proto_extraction_universe, to_proto_property_context, KnowledgeGrpcService,
     };
     use crate::domain::{
         EdgeEndpointRule, FullSchema, SchemaEdgeTypeHydrated, SchemaNodeTypeHydrated, SchemaType,
     };
     use crate::ports::{Embedder, GraphRepository, SchemaRepository};
-    use crate::presentation::extraction_prompt::render_prompt_context_markdown;
     use crate::presentation::upsert_delta_json_schema::UPSERT_GRAPH_DELTA_SCHEMA_ID;
     use crate::service::KnowledgeApplication;
     use crate::service::{
@@ -461,7 +503,7 @@ mod tests {
     };
     use crate::transport::proto::knowledge_interface_server::KnowledgeInterface;
     use crate::transport::proto::{
-        GetEntityTypePropertyContextRequest, GetExtractionSchemaContextRequest,
+        GetEntityExtractionSchemaContextRequest, GetEntityTypePropertyContextRequest,
         GetUpsertGraphDeltaJsonSchemaRequest,
     };
     use anyhow::{anyhow, Result};
@@ -686,7 +728,6 @@ mod tests {
         let entity_types = build_extraction_entity_types(
             schema,
             ExtractionSchemaOptions {
-                include_edge_properties: false,
                 include_inactive: false,
             },
         );
@@ -780,7 +821,6 @@ mod tests {
         let entity_types = build_extraction_entity_types(
             schema,
             ExtractionSchemaOptions {
-                include_edge_properties: false,
                 include_inactive: false,
             },
         );
@@ -810,77 +850,26 @@ mod tests {
     }
 
     #[test]
-    fn prompt_context_markdown_is_derived_from_sorted_structured_payload() {
-        let entity_types = vec![
-            ExtractionEntityType {
-                type_id: "node.alpha".to_string(),
-                name: "Alpha".to_string(),
-                description: "A".to_string(),
-                inheritance_chain: vec!["node.entity".to_string(), "node.alpha".to_string()],
-                outgoing_edges: vec![ExtractionAllowedEdge {
-                    edge_type_id: "edge.rel".to_string(),
-                    edge_name: "REL".to_string(),
-                    edge_description: "Relationship".to_string(),
-                    other_entity_type_id: "node.entity".to_string(),
-                    other_entity_type_name: "Entity".to_string(),
-                    min_cardinality: None,
-                    max_cardinality: None,
-                }],
-                incoming_edges: vec![],
-            },
-            ExtractionEntityType {
-                type_id: "node.entity".to_string(),
-                name: "Entity".to_string(),
-                description: "Root".to_string(),
-                inheritance_chain: vec!["node.entity".to_string()],
-                outgoing_edges: vec![],
-                incoming_edges: vec![ExtractionAllowedEdge {
-                    edge_type_id: "edge.rel".to_string(),
-                    edge_name: "REL".to_string(),
-                    edge_description: "Relationship".to_string(),
-                    other_entity_type_id: "node.alpha".to_string(),
-                    other_entity_type_name: "Alpha".to_string(),
-                    min_cardinality: None,
-                    max_cardinality: None,
-                }],
-            },
-        ];
-
-        let markdown = render_prompt_context_markdown(&entity_types);
-        assert!(markdown.contains("| node.alpha | Alpha | A | node.entity → node.alpha |"));
-        assert!(markdown.contains(
-            "| node.alpha | outgoing | edge.rel | REL | node.entity | Entity | Relationship |"
-        ));
-        assert!(markdown.contains(
-            "| node.entity | incoming | edge.rel | REL | node.alpha | Alpha | Relationship |"
-        ));
-    }
-
-    #[test]
     fn extraction_request_optional_flags_default_to_false() {
-        let request = GetExtractionSchemaContextRequest {
-            include_edge_properties: None,
+        let request = GetEntityExtractionSchemaContextRequest {
             include_inactive: None,
             user_id: "user-1".to_string(),
         };
 
-        let options = extraction_options_from_request(&request);
+        let options = extraction_options_from_entity_request(&request);
 
-        assert!(!options.include_edge_properties);
         assert!(!options.include_inactive);
     }
 
     #[test]
     fn extraction_request_optional_flags_respect_explicit_true() {
-        let request = GetExtractionSchemaContextRequest {
-            include_edge_properties: Some(true),
+        let request = GetEntityExtractionSchemaContextRequest {
             include_inactive: Some(true),
             user_id: "user-1".to_string(),
         };
 
-        let options = extraction_options_from_request(&request);
+        let options = extraction_options_from_entity_request(&request);
 
-        assert!(options.include_edge_properties);
         assert!(options.include_inactive);
     }
 
@@ -943,6 +932,21 @@ mod tests {
             name: "Person".to_string(),
             description: "A person".to_string(),
             inheritance_chain: vec!["node.entity".to_string(), "node.person".to_string()],
+            outgoing_edges: vec![],
+            incoming_edges: vec![],
+        });
+
+        assert_eq!(proto.type_id, "node.person");
+        assert_eq!(proto.inheritance_chain, vec!["node.entity", "node.person"]);
+    }
+
+    #[test]
+    fn proto_mapping_preserves_extraction_entity_with_edges_shape() {
+        let proto = to_proto_extraction_entity_type_with_edges(ExtractionEntityType {
+            type_id: "node.person".to_string(),
+            name: "Person".to_string(),
+            description: "A person".to_string(),
+            inheritance_chain: vec!["node.entity".to_string(), "node.person".to_string()],
             outgoing_edges: vec![ExtractionAllowedEdge {
                 edge_type_id: "edge.related_to".to_string(),
                 edge_name: "RELATED_TO".to_string(),
@@ -956,11 +960,8 @@ mod tests {
         });
 
         assert_eq!(proto.type_id, "node.person");
-        assert_eq!(proto.inheritance_chain, vec!["node.entity", "node.person"]);
         assert_eq!(proto.outgoing_edges.len(), 1);
         assert_eq!(proto.outgoing_edges[0].edge_type_id, "edge.related_to");
-        assert_eq!(proto.outgoing_edges[0].min_cardinality, Some(1));
-        assert_eq!(proto.outgoing_edges[0].max_cardinality, Some(2));
     }
 
     #[test]

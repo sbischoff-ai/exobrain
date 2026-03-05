@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-from . import knowledge_pb2 as knowledge__pb2
+import knowledge_pb2 as knowledge__pb2
 
 GRPC_GENERATED_VERSION = '1.78.0'
 GRPC_VERSION = grpc.__version__
@@ -49,10 +49,15 @@ class KnowledgeInterfaceStub(object):
                 request_serializer=knowledge__pb2.GetUpsertGraphDeltaJsonSchemaRequest.SerializeToString,
                 response_deserializer=knowledge__pb2.GetUpsertGraphDeltaJsonSchemaReply.FromString,
                 _registered_method=True)
-        self.GetExtractionSchemaContext = channel.unary_unary(
-                '/exobrain.knowledge.v1.KnowledgeInterface/GetExtractionSchemaContext',
-                request_serializer=knowledge__pb2.GetExtractionSchemaContextRequest.SerializeToString,
-                response_deserializer=knowledge__pb2.GetExtractionSchemaContextReply.FromString,
+        self.GetEntityExtractionSchemaContext = channel.unary_unary(
+                '/exobrain.knowledge.v1.KnowledgeInterface/GetEntityExtractionSchemaContext',
+                request_serializer=knowledge__pb2.GetEntityExtractionSchemaContextRequest.SerializeToString,
+                response_deserializer=knowledge__pb2.GetEntityExtractionSchemaContextReply.FromString,
+                _registered_method=True)
+        self.GetEdgeExtractionSchemaContext = channel.unary_unary(
+                '/exobrain.knowledge.v1.KnowledgeInterface/GetEdgeExtractionSchemaContext',
+                request_serializer=knowledge__pb2.GetEdgeExtractionSchemaContextRequest.SerializeToString,
+                response_deserializer=knowledge__pb2.GetEdgeExtractionSchemaContextReply.FromString,
                 _registered_method=True)
         self.GetEntityTypePropertyContext = channel.unary_unary(
                 '/exobrain.knowledge.v1.KnowledgeInterface/GetEntityTypePropertyContext',
@@ -112,7 +117,13 @@ class KnowledgeInterfaceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def GetExtractionSchemaContext(self, request, context):
+    def GetEntityExtractionSchemaContext(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetEdgeExtractionSchemaContext(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -178,10 +189,15 @@ def add_KnowledgeInterfaceServicer_to_server(servicer, server):
                     request_deserializer=knowledge__pb2.GetUpsertGraphDeltaJsonSchemaRequest.FromString,
                     response_serializer=knowledge__pb2.GetUpsertGraphDeltaJsonSchemaReply.SerializeToString,
             ),
-            'GetExtractionSchemaContext': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetExtractionSchemaContext,
-                    request_deserializer=knowledge__pb2.GetExtractionSchemaContextRequest.FromString,
-                    response_serializer=knowledge__pb2.GetExtractionSchemaContextReply.SerializeToString,
+            'GetEntityExtractionSchemaContext': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetEntityExtractionSchemaContext,
+                    request_deserializer=knowledge__pb2.GetEntityExtractionSchemaContextRequest.FromString,
+                    response_serializer=knowledge__pb2.GetEntityExtractionSchemaContextReply.SerializeToString,
+            ),
+            'GetEdgeExtractionSchemaContext': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetEdgeExtractionSchemaContext,
+                    request_deserializer=knowledge__pb2.GetEdgeExtractionSchemaContextRequest.FromString,
+                    response_serializer=knowledge__pb2.GetEdgeExtractionSchemaContextReply.SerializeToString,
             ),
             'GetEntityTypePropertyContext': grpc.unary_unary_rpc_method_handler(
                     servicer.GetEntityTypePropertyContext,
@@ -311,7 +327,7 @@ class KnowledgeInterface(object):
             _registered_method=True)
 
     @staticmethod
-    def GetExtractionSchemaContext(request,
+    def GetEntityExtractionSchemaContext(request,
             target,
             options=(),
             channel_credentials=None,
@@ -324,9 +340,36 @@ class KnowledgeInterface(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/exobrain.knowledge.v1.KnowledgeInterface/GetExtractionSchemaContext',
-            knowledge__pb2.GetExtractionSchemaContextRequest.SerializeToString,
-            knowledge__pb2.GetExtractionSchemaContextReply.FromString,
+            '/exobrain.knowledge.v1.KnowledgeInterface/GetEntityExtractionSchemaContext',
+            knowledge__pb2.GetEntityExtractionSchemaContextRequest.SerializeToString,
+            knowledge__pb2.GetEntityExtractionSchemaContextReply.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetEdgeExtractionSchemaContext(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/exobrain.knowledge.v1.KnowledgeInterface/GetEdgeExtractionSchemaContext',
+            knowledge__pb2.GetEdgeExtractionSchemaContextRequest.SerializeToString,
+            knowledge__pb2.GetEdgeExtractionSchemaContextReply.FromString,
             options,
             channel_credentials,
             insecure,
