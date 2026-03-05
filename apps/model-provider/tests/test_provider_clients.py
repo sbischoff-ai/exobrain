@@ -215,3 +215,25 @@ async def test_anthropic_provider_rejects_invalid_response_format_schema() -> No
         await client.chat_completions(payload)
 
     assert exc_info.value.status_code == 400
+
+
+def test_provider_clients_reuse_singleton_sdk_clients() -> None:
+    OpenAIProviderClient._shared_clients.clear()
+    AnthropicProviderClient._shared_clients.clear()
+
+    openai_a = OpenAIProviderClient(api_key="key", timeout_seconds=30.0, max_retries=7)
+    openai_b = OpenAIProviderClient(api_key="key", timeout_seconds=30.0, max_retries=7)
+    anthropic_a = AnthropicProviderClient(api_key="key", timeout_seconds=30.0, max_retries=7)
+    anthropic_b = AnthropicProviderClient(api_key="key", timeout_seconds=30.0, max_retries=7)
+
+    assert openai_a._client is openai_b._client
+    assert anthropic_a._client is anthropic_b._client
+
+
+def test_provider_clients_do_not_share_singleton_across_different_configs() -> None:
+    OpenAIProviderClient._shared_clients.clear()
+
+    openai_a = OpenAIProviderClient(api_key="key", timeout_seconds=30.0, max_retries=7)
+    openai_b = OpenAIProviderClient(api_key="key", timeout_seconds=30.0, max_retries=8)
+
+    assert openai_a._client is not openai_b._client

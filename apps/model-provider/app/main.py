@@ -48,11 +48,21 @@ class ProviderRegistry:
         if "openai" in providers:
             if not settings.openai_api_key:
                 raise ValueError("OPENAI_API_KEY required for configured OpenAI aliases")
-            self._clients["openai"] = OpenAIProviderClient(settings.openai_api_key, settings.provider_timeout_seconds)
+            self._clients["openai"] = OpenAIProviderClient(
+                settings.openai_api_key,
+                settings.provider_timeout_seconds,
+                max_retries=settings.openai_max_retries,
+                max_concurrent_requests=settings.openai_max_concurrent_requests,
+            )
         if "anthropic" in providers:
             if not settings.anthropic_api_key:
                 raise ValueError("ANTHROPIC_API_KEY required for configured Anthropic aliases")
-            self._clients["anthropic"] = AnthropicProviderClient(settings.anthropic_api_key, settings.provider_timeout_seconds)
+            self._clients["anthropic"] = AnthropicProviderClient(
+                settings.anthropic_api_key,
+                settings.provider_timeout_seconds,
+                max_retries=settings.anthropic_max_retries,
+                max_concurrent_requests=settings.anthropic_max_concurrent_requests,
+            )
 
     def resolve(self, alias: str) -> tuple[AliasConfig, ProviderClient]:
         config = self._models_config.aliases.get(alias)

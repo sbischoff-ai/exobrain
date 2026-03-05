@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import json
+import random
 import time
 import uuid
-from typing import Any, AsyncIterator
+from typing import Any, AsyncIterator, Awaitable, Callable, ClassVar
 
 from openai import APIError, APIStatusError, APITimeoutError, AsyncOpenAI, RateLimitError
 
@@ -27,13 +29,40 @@ from app.providers.base import ProviderClient, ProviderClientError
 
 
 class OpenAIProviderClient(ProviderClient):
+    _shared_clients: ClassVar[dict[tuple[str, float, int], AsyncOpenAI]] = {}
     def __init__(
         self,
         api_key: str,
         timeout_seconds: float = 60.0,
+        max_retries: int = 8,
+        max_concurrent_requests: int = 2,
         client: AsyncOpenAI | None = None,
     ) -> None:
-        self._client = client or AsyncOpenAI(api_key=api_key, timeout=timeout_seconds)
+        self._client = client or self._get_shared_client(api_key, timeout_seconds, max_retries)
+        self._semaphore = asyncio.Semaphore(max(1, max_concurrent_requests))
+
+
+    @classmethod
+    def _get_shared_client(cls, api_key: str, timeout_seconds: float, max_retries: int) -> AsyncOpenAI:
+        key = (api_key, timeout_seconds, max_retries)
+        shared = cls._shared_clients.get(key)
+        if shared is not None:
+            return shared
+        client = AsyncOpenAI(api_key=api_key, timeout=timeout_seconds, max_retries=max_retries)
+        cls._shared_clients[key] = client
+        return client
+
+    async def _with_rate_limit_retry(self, operation: Callable[[], Awaitable[Any]]) -> Any:
+        async with self._semaphore:
+            delay = 1.0
+            for attempt in range(5):
+                try:
+                    return await operation()
+                except RateLimitError:
+                    if attempt == 4:
+                        raise
+                    await asyncio.sleep(delay + random.uniform(0, 0.25))
+                    delay = min(delay * 2.0, 8.0)
 
     def _normalize_chat_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
         normalized = dict(payload)
@@ -172,7 +201,9 @@ class OpenAIProviderClient(ProviderClient):
     async def native_chat(self, request: NativeChatRequest) -> NativeChatResponse:
         payload = self._to_native_payload(request)
         try:
-            response = await self._client.chat.completions.create(**self._normalize_chat_payload(payload))
+            response = await self._with_rate_limit_retry(
+                lambda: self._client.chat.completions.create(**self._normalize_chat_payload(payload))
+            )
             return self._openai_to_native_response(request, response.model_dump(mode="json"))
         except (APITimeoutError,) as exc:
             raise ProviderClientError(status_code=504, message=str(exc)) from exc
@@ -190,7 +221,9 @@ class OpenAIProviderClient(ProviderClient):
         payload["stream"] = True
         pending_tool_calls: dict[int, dict[str, Any]] = {}
         try:
-            stream = await self._client.chat.completions.create(**self._normalize_chat_payload(payload))
+            stream = await self._with_rate_limit_retry(
+                lambda: self._client.chat.completions.create(**self._normalize_chat_payload(payload))
+            )
             async for chunk in stream:
                 data = chunk.model_dump(mode="json")
                 for choice in data.get("choices", []):
@@ -262,7 +295,9 @@ class OpenAIProviderClient(ProviderClient):
 
     async def chat_completions(self, payload: dict[str, Any]) -> dict[str, Any]:
         try:
-            response = await self._client.chat.completions.create(**self._normalize_chat_payload(payload))
+            response = await self._with_rate_limit_retry(
+                lambda: self._client.chat.completions.create(**self._normalize_chat_payload(payload))
+            )
             return response.model_dump(mode="json")
         except (APITimeoutError,) as exc:
             raise ProviderClientError(status_code=504, message=str(exc)) from exc
@@ -277,7 +312,9 @@ class OpenAIProviderClient(ProviderClient):
 
     async def chat_completions_stream(self, payload: dict[str, Any]) -> AsyncIterator[str]:
         try:
-            stream = await self._client.chat.completions.create(**self._normalize_chat_payload(payload))
+            stream = await self._with_rate_limit_retry(
+                lambda: self._client.chat.completions.create(**self._normalize_chat_payload(payload))
+            )
             async for chunk in stream:
                 yield f"data: {chunk.model_dump_json()}\n\n"
             yield "data: [DONE]\n\n"
@@ -294,7 +331,7 @@ class OpenAIProviderClient(ProviderClient):
 
     async def embeddings(self, payload: dict[str, Any]) -> dict[str, Any]:
         try:
-            response = await self._client.embeddings.create(**payload)
+            response = await self._with_rate_limit_retry(lambda: self._client.embeddings.create(**payload))
             return response.model_dump(mode="json")
         except (APITimeoutError,) as exc:
             raise ProviderClientError(status_code=504, message=str(exc)) from exc

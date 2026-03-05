@@ -14,6 +14,13 @@ class Settings(BaseSettings):
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
     anthropic_api_key: str | None = Field(default=None, alias="ANTHROPIC_API_KEY")
     provider_timeout_seconds: float = Field(default=60.0, alias="MODEL_PROVIDER_TIMEOUT_SECONDS")
+    openai_max_retries: int = Field(default=8, alias="MODEL_PROVIDER_OPENAI_MAX_RETRIES")
+    openai_max_concurrent_requests: int = Field(default=2, alias="MODEL_PROVIDER_OPENAI_MAX_CONCURRENT_REQUESTS")
+    anthropic_max_retries: int = Field(default=8, alias="MODEL_PROVIDER_ANTHROPIC_MAX_RETRIES")
+    anthropic_max_concurrent_requests: int = Field(
+        default=2,
+        alias="MODEL_PROVIDER_ANTHROPIC_MAX_CONCURRENT_REQUESTS",
+    )
 
     @property
     def effective_log_level(self) -> str:
