@@ -79,7 +79,13 @@ class ModelProviderChatModel(BaseChatModel):
     ) -> ChatResult:
         payload = self._build_payload(messages, stop=stop, **kwargs)
         client = self.async_http_client or httpx.AsyncClient(timeout=self.timeout)
+
         response = await client.post(f"{self.base_url}/internal/chat/messages", json=payload)
+        if self._should_retry_without_temperature(response):
+            retry_payload = dict(payload)
+            retry_payload.pop("temperature", None)
+            response = await client.post(f"{self.base_url}/internal/chat/messages", json=retry_payload)
+
         response.raise_for_status()
         return self._chat_result_from_response(response.json())
 
@@ -91,6 +97,22 @@ class ModelProviderChatModel(BaseChatModel):
         **kwargs: Any,
     ) -> ChatResult:
         raise NotImplementedError("Use async invocation for model-provider chat model")
+
+
+    def _should_retry_without_temperature(self, response: httpx.Response) -> bool:
+        if response.status_code != 400:
+            return False
+
+        try:
+            payload = response.json()
+        except ValueError:
+            return False
+
+        detail = payload.get("detail") if isinstance(payload, dict) else None
+        if not isinstance(detail, str):
+            return False
+
+        return "Unsupported value: 'temperature'" in detail
 
     def _build_payload(self, messages: list[BaseMessage], *, stop: list[str] | None, **kwargs: Any) -> dict[str, Any]:
         payload: dict[str, Any] = {
