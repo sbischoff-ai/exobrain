@@ -28,6 +28,14 @@ class AnthropicProviderClient(ProviderClient):
     def _to_messages_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
         mapped = dict(payload)
         mapped["max_tokens"] = mapped.get("max_tokens", 1024)
+        tool_choice = mapped.get("tool_choice")
+        if isinstance(tool_choice, str):
+            if tool_choice == "auto":
+                mapped["tool_choice"] = {"type": "auto"}
+            elif tool_choice == "none":
+                mapped["tool_choice"] = {"type": "none"}
+            elif tool_choice == "required":
+                mapped["tool_choice"] = {"type": "any"}
         response_format = mapped.pop("response_format", None)
         if response_format is not None:
             json_schema = response_format.get("json_schema") if isinstance(response_format, dict) else None

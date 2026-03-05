@@ -21,6 +21,7 @@ Provider behavior:
 
 - OpenAI: `response_format` is passed through directly to the OpenAI API.
 - Anthropic: `response_format.json_schema` is translated to Anthropic's output configuration.
+- Anthropic: OpenAI-style string `tool_choice` values are translated (`auto`→`{"type":"auto"}`, `none`→`{"type":"none"}`, `required`→`{"type":"any"}`).
 
 Minimal example:
 
