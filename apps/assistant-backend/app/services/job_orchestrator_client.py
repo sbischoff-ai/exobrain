@@ -39,7 +39,7 @@ class JobOrchestratorClient(JobPublisherProtocol):
     async def watch_job_status(self, *, job_id: str, include_current: bool = True) -> AsyncIterator[job_orchestrator_pb2.JobStatusEvent]:
         stub = self._get_or_create_stub()
         request = job_orchestrator_pb2.WatchJobStatusRequest(job_id=job_id, include_current=include_current)
-        stream = stub.WatchJobStatus(request, timeout=self._connect_timeout_seconds)
+        stream = stub.WatchJobStatus(request)
         async for event in stream:
             yield event
 

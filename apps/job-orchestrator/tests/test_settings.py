@@ -28,3 +28,8 @@ def test_settings_prefers_explicit_api_bind_address() -> None:
         JOB_ORCHESTRATOR_API_BIND_ADDRESS="0.0.0.0:50061",
     )
     assert settings.job_orchestrator_api_bind_target == "0.0.0.0:50061"
+
+
+def test_settings_uses_local_model_provider_default() -> None:
+    settings = Settings()
+    assert settings.model_provider_base_url == "http://localhost:8010/v1"

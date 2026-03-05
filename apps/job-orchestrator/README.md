@@ -139,7 +139,7 @@ Keep request subject patterns narrow enough that they do not also match events/D
 - `JOB_ORCHESTRATOR_WORKER_ENABLED` (default: `true`, run worker process)
 - `KNOWLEDGE_INTERFACE_GRPC_TARGET` (default: `localhost:50051`)
 - `KNOWLEDGE_INTERFACE_CONNECT_TIMEOUT_SECONDS` (default: `5.0`)
-- `MODEL_PROVIDER_BASE_URL` (default: `http://model-provider:8080/v1`, OpenAI-compatible model-provider endpoint used by the step-three extraction agent)
+- `MODEL_PROVIDER_BASE_URL` (default: `http://localhost:8010/v1`, OpenAI-compatible model-provider endpoint used by the step-three extraction agent)
 - `KNOWLEDGE_UPDATE_EXTRACTION_MODEL` (default: `architect`, model alias used for step-three extraction)
 - `APP_ENV` (default: `local`, influences default logging level)
 - `LOG_LEVEL` (optional override; defaults to `DEBUG` in local, `INFO` otherwise)
