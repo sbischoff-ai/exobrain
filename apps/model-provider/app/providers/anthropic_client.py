@@ -7,17 +7,25 @@ from copy import deepcopy
 from typing import Any, AsyncIterator
 
 import jsonref
+from anthropic import APIError, APIStatusError, APITimeoutError, AsyncAnthropic, RateLimitError
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import SchemaError
 
-from anthropic import (
-    APIError,
-    APIStatusError,
-    APITimeoutError,
-    AsyncAnthropic,
-    RateLimitError,
+from app.contracts.native_chat import (
+    AssistantMessage,
+    CompletionFrame,
+    FunctionToolDefinition,
+    NativeChatRequest,
+    NativeChatResponse,
+    StreamFrame,
+    TextBlock,
+    TextDeltaFrame,
+    ToolCallBlock,
+    ToolCallFrame,
+    ToolResultBlock,
+    Usage,
+    UsageFrame,
 )
-
 from app.providers.base import ProviderClient, ProviderClientError
 
 
@@ -30,6 +38,57 @@ class AnthropicProviderClient(ProviderClient):
     ) -> None:
         self._client = client or AsyncAnthropic(api_key=api_key, timeout=timeout_seconds)
 
+    def _native_to_messages_payload(self, request: NativeChatRequest) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "model": request.model,
+            "messages": self._native_messages(request),
+            "max_tokens": request.max_tokens or 1024,
+        }
+        if request.temperature is not None:
+            payload["temperature"] = request.temperature
+        if request.tools:
+            payload["tools"] = [
+                {
+                    "type": "custom",
+                    "name": tool.name,
+                    "description": tool.description or "",
+                    "input_schema": self.normalize_tool_schema(tool.parameters, tool_name=tool.name),
+                }
+                for tool in request.tools
+            ]
+        if request.tool_choice is not None:
+            if request.tool_choice.type in {"auto", "none"}:
+                payload["tool_choice"] = {"type": request.tool_choice.type}
+            elif request.tool_choice.type == "required":
+                payload["tool_choice"] = {"type": "any"}
+            else:
+                payload["tool_choice"] = {"type": "tool", "name": request.tool_choice.name}
+        if request.structured_output is not None:
+            payload["output_config"] = {"format": {"type": "json_schema", "schema": request.structured_output.json_schema}}
+        return payload
+
+    def _native_messages(self, request: NativeChatRequest) -> list[dict[str, Any]]:
+        messages: list[dict[str, Any]] = []
+        for message in request.messages:
+            content: list[dict[str, Any]] = []
+            for block in message.content:
+                if block.type == "text":
+                    content.append({"type": "text", "text": block.text})
+                elif block.type == "tool_call":
+                    content.append({"type": "tool_use", "id": block.id, "name": block.name, "input": block.arguments})
+                elif block.type == "tool_result":
+                    result_content = block.content if isinstance(block.content, str) else json.dumps(block.content)
+                    content.append(
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": block.tool_call_id,
+                            "content": result_content,
+                            "is_error": block.is_error,
+                        }
+                    )
+            messages.append({"role": message.role, "content": content})
+        return messages
+
     def _to_messages_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
         mapped = dict(payload)
         mapped["max_tokens"] = mapped.get("max_tokens", 1024)
@@ -38,18 +97,11 @@ class AnthropicProviderClient(ProviderClient):
         if isinstance(tools, list):
             anthropic_tools: list[dict[str, Any]] = []
             for tool in tools:
-                if (
-                    isinstance(tool, dict)
-                    and tool.get("type") == "function"
-                    and isinstance(tool.get("function"), dict)
-                ):
+                if isinstance(tool, dict) and tool.get("type") == "function" and isinstance(tool.get("function"), dict):
                     function = tool["function"]
                     tool_name = function.get("name")
                     if not isinstance(tool_name, str) or not tool_name:
-                        raise ProviderClientError(
-                            status_code=400,
-                            message="Anthropic tool conversion requires function.name",
-                        )
+                        raise ProviderClientError(status_code=400, message="Anthropic tool conversion requires function.name")
 
                     input_schema = self.normalize_tool_schema(function.get("parameters"), tool_name=tool_name)
 
@@ -61,9 +113,7 @@ class AnthropicProviderClient(ProviderClient):
                             "input_schema": input_schema,
                         }
                     )
-                elif isinstance(tool, dict) and isinstance(tool.get("name"), str) and isinstance(
-                    tool.get("input_schema"), dict
-                ):
+                elif isinstance(tool, dict) and isinstance(tool.get("name"), str) and isinstance(tool.get("input_schema"), dict):
                     anthropic_tools.append(tool)
                 else:
                     raise ProviderClientError(
@@ -110,7 +160,6 @@ class AnthropicProviderClient(ProviderClient):
             schema = deepcopy(parameters)
 
         schema = self._unwrap_json_schema_envelope(schema)
-
         self._remove_openapi_keywords(schema)
 
         if "definitions" in schema and "$defs" not in schema:
@@ -121,39 +170,27 @@ class AnthropicProviderClient(ProviderClient):
         if "type" not in schema:
             schema["type"] = "object"
         elif schema.get("type") != "object":
-            schema = {
-                "type": "object",
-                "properties": {"input": schema},
-                "required": ["input"],
-            }
+            schema = {"type": "object", "properties": {"input": schema}, "required": ["input"]}
 
         if self._schema_has_ref(schema):
             try:
                 schema = jsonref.replace_refs(schema, loader=self._jsonref_loader, proxies=False, lazy_load=False)
-            except Exception as exc:  # pragma: no cover - jsonref throws varying exceptions
-                raise ProviderClientError(
-                    status_code=400,
-                    message=f'Invalid tool schema for tool "{tool_name}": {exc}',
-                ) from exc
+            except Exception as exc:
+                raise ProviderClientError(status_code=400, message=f'Invalid tool schema for tool "{tool_name}": {exc}') from exc
 
         try:
             Draft202012Validator.check_schema(schema)
         except SchemaError as exc:
-            raise ProviderClientError(
-                status_code=400,
-                message=f'Invalid tool schema for tool "{tool_name}": {exc.message}',
-            ) from exc
+            raise ProviderClientError(status_code=400, message=f'Invalid tool schema for tool "{tool_name}": {exc.message}') from exc
 
         return schema
 
     def _unwrap_json_schema_envelope(self, schema: dict[str, Any]) -> dict[str, Any]:
         if schema.get("type") != "json_schema":
             return schema
-
         json_schema = schema.get("json_schema")
         if not isinstance(json_schema, dict):
             return schema
-
         nested_schema = json_schema.get("schema")
         if isinstance(nested_schema, dict) and nested_schema:
             return deepcopy(nested_schema)
@@ -212,28 +249,126 @@ class AnthropicProviderClient(ProviderClient):
             return any(self._schema_has_ref(item) for item in node)
         return False
 
+    def _anthropic_to_native_response(self, request: NativeChatRequest, response: Any) -> NativeChatResponse:
+        blocks: list[TextBlock | ToolCallBlock] = []
+        for block in getattr(response, "content", []):
+            block_type = getattr(block, "type", "")
+            if block_type == "text":
+                blocks.append(TextBlock(text=getattr(block, "text", "")))
+            elif block_type == "tool_use":
+                blocks.append(
+                    ToolCallBlock(
+                        id=getattr(block, "id", f"call_{uuid.uuid4().hex}"),
+                        name=getattr(block, "name", "tool"),
+                        arguments=getattr(block, "input", {}) or {},
+                    )
+                )
+        input_tokens = getattr(response.usage, "input_tokens", 0) if getattr(response, "usage", None) else 0
+        output_tokens = getattr(response.usage, "output_tokens", 0) if getattr(response, "usage", None) else 0
+        return NativeChatResponse(
+            id=getattr(response, "id", f"msg_{uuid.uuid4().hex}"),
+            model=request.model,
+            message=AssistantMessage(content=blocks),
+            finish_reason=getattr(response, "stop_reason", "stop"),
+            usage=Usage(
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                total_tokens=input_tokens + output_tokens,
+            ),
+        )
+
     def _to_openai_response(self, payload: dict[str, Any], response: Any) -> dict[str, Any]:
         text = "".join(block.text for block in response.content if getattr(block, "type", "") == "text")
+        tool_calls = []
+        for block in response.content:
+            if getattr(block, "type", "") != "tool_use":
+                continue
+            tool_calls.append(
+                {
+                    "id": getattr(block, "id", f"call_{uuid.uuid4().hex}"),
+                    "type": "function",
+                    "function": {
+                        "name": getattr(block, "name", "tool"),
+                        "arguments": json.dumps(getattr(block, "input", {}) or {}),
+                    },
+                }
+            )
         input_tokens = getattr(response.usage, "input_tokens", 0) if response.usage else 0
         output_tokens = getattr(response.usage, "output_tokens", 0) if response.usage else 0
+        message: dict[str, Any] = {"role": "assistant", "content": text}
+        if tool_calls:
+            message["tool_calls"] = tool_calls
         return {
             "id": getattr(response, "id", f"chatcmpl-{uuid.uuid4().hex}"),
             "object": "chat.completion",
             "created": int(time.time()),
             "model": payload["model"],
-            "choices": [
-                {
-                    "index": 0,
-                    "message": {"role": "assistant", "content": text},
-                    "finish_reason": getattr(response, "stop_reason", "stop"),
-                }
-            ],
+            "choices": [{"index": 0, "message": message, "finish_reason": getattr(response, "stop_reason", "stop")}],
             "usage": {
                 "prompt_tokens": input_tokens,
                 "completion_tokens": output_tokens,
                 "total_tokens": input_tokens + output_tokens,
             },
         }
+
+    async def native_chat(self, request: NativeChatRequest) -> NativeChatResponse:
+        try:
+            response = await self._client.messages.create(**self._native_to_messages_payload(request))
+            return self._anthropic_to_native_response(request, response)
+        except (APITimeoutError,) as exc:
+            raise ProviderClientError(status_code=504, message=str(exc)) from exc
+        except (RateLimitError,) as exc:
+            raise ProviderClientError(status_code=429, message=str(exc)) from exc
+        except (APIStatusError,) as exc:
+            status = exc.status_code
+            mapped_status = 502 if status and status >= 500 else (status or 502)
+            raise ProviderClientError(status_code=mapped_status, message=str(exc)) from exc
+        except APIError as exc:
+            raise ProviderClientError(status_code=502, message=str(exc)) from exc
+
+    async def native_chat_stream(self, request: NativeChatRequest) -> AsyncIterator[StreamFrame]:
+        payload = self._native_to_messages_payload(request)
+        try:
+            async with self._client.messages.stream(**payload) as stream:
+                async for event in stream:
+                    event_type = getattr(event, "type", "")
+                    if event_type == "content_block_delta" and getattr(event, "delta", None):
+                        delta_text = getattr(event.delta, "text", None)
+                        if delta_text:
+                            yield TextDeltaFrame(text=delta_text)
+                    elif event_type == "content_block_stop" and getattr(event, "content_block", None):
+                        block = event.content_block
+                        if getattr(block, "type", "") == "tool_use":
+                            yield ToolCallFrame(
+                                id=getattr(block, "id", f"call_{uuid.uuid4().hex}"),
+                                name=getattr(block, "name", "tool"),
+                                arguments=getattr(block, "input", {}) or {},
+                            )
+                    elif event_type == "message_delta":
+                        stop_reason = getattr(getattr(event, "delta", None), "stop_reason", None)
+                        if stop_reason:
+                            yield CompletionFrame(finish_reason=stop_reason)
+                    elif event_type == "message_stop":
+                        usage = getattr(getattr(event, "message", None), "usage", None)
+                        input_tokens = getattr(usage, "input_tokens", 0) if usage else 0
+                        output_tokens = getattr(usage, "output_tokens", 0) if usage else 0
+                        yield UsageFrame(
+                            usage=Usage(
+                                input_tokens=input_tokens,
+                                output_tokens=output_tokens,
+                                total_tokens=input_tokens + output_tokens,
+                            )
+                        )
+        except (APITimeoutError,) as exc:
+            raise ProviderClientError(status_code=504, message=str(exc)) from exc
+        except (RateLimitError,) as exc:
+            raise ProviderClientError(status_code=429, message=str(exc)) from exc
+        except (APIStatusError,) as exc:
+            status = exc.status_code
+            mapped_status = 502 if status and status >= 500 else (status or 502)
+            raise ProviderClientError(status_code=mapped_status, message=str(exc)) from exc
+        except APIError as exc:
+            raise ProviderClientError(status_code=502, message=str(exc)) from exc
 
     async def chat_completions(self, payload: dict[str, Any]) -> dict[str, Any]:
         try:
