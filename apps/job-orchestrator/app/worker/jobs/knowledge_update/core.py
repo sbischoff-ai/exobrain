@@ -659,7 +659,7 @@ async def _run_step_five_detailed_comparison(
     settings: Settings,
 ) -> list[ResolvedEntity]:
     from langchain.agents import create_agent
-    from app.services.model_provider_chat_model import ModelProviderChatModel, build_strict_response_format
+    from app.services.model_provider_chat_model import ModelProviderChatModel
 
     get_entity_context_rpc = channel.unary_unary(
         "/exobrain.knowledge.v1.KnowledgeInterface/GetEntityContext",
@@ -680,7 +680,7 @@ async def _run_step_five_detailed_comparison(
             "Compare extracted entity context markdown against candidate entity contexts. "
             "Return strict JSON only with decision as MATCH({entity_id}) or NEW_ENTITY."
         ),
-        response_format=build_strict_response_format(_StepFiveComparisonDecision),
+        response_format=_build_step_five_comparison_schema(),
     )
 
     resolved_entities: list[ResolvedEntity] = []
@@ -805,7 +805,7 @@ async def _run_step_six_relationship_extraction(
     settings: Settings,
 ) -> list[RelationshipPair]:
     from langchain.agents import create_agent
-    from app.services.model_provider_chat_model import ModelProviderChatModel, build_strict_response_format
+    from app.services.model_provider_chat_model import ModelProviderChatModel
 
     extracted_entities_with_ids = [
         {
@@ -834,7 +834,7 @@ async def _run_step_six_relationship_extraction(
             "Identify entity pairs that are related in the markdown batch document. "
             "Return strict JSON only with entity_pairs."
         ),
-        response_format=build_strict_response_format(_StepSixRelationshipExtractionResult),
+        response_format=_build_step_six_relationship_extraction_schema(),
     )
 
     prompt = json.dumps(
