@@ -145,7 +145,14 @@ describe('KnowledgeExplorerView', () => {
 
   it('renders knowledge page details with related links', async () => {
     getCategoryTree.mockResolvedValue({
-      categories: [{ id: 'cat-a', name: 'Category A', page_count: 1, children: [] }]
+      categories: [
+        {
+          id: 'event',
+          name: 'Event',
+          page_count: 2,
+          children: [{ id: 'task', name: 'Task', page_count: 1, children: [] }]
+        }
+      ]
     });
     getCategoryPages.mockResolvedValue({ pages: [] });
     getPage.mockResolvedValue({
@@ -156,7 +163,7 @@ describe('KnowledgeExplorerView', () => {
       created_at: '2026-01-02T03:04:05Z',
       updated_at: '2026-01-03T04:05:06Z',
       links: [{ page_id: 'linked-1', title: 'Linked Page', summary: 'see also' }],
-      category_breadcrumb: { path: [{ id: 'cat-a', name: 'Category A' }] }
+      category_breadcrumb: { path: [{ id: 'task', name: 'Task' }] }
     });
 
     render(KnowledgeExplorerView, {
@@ -171,6 +178,8 @@ describe('KnowledgeExplorerView', () => {
       expect(screen.getByText('Created 2026/01/02 03:04 · Updated 2026/01/03 04:05')).toBeInTheDocument();
       expect(screen.getByRole('heading', { name: 'Related pages' })).toBeInTheDocument();
       expect(screen.getByText('Linked Page')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Event' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Task' })).toBeInTheDocument();
     });
 
     expect(getPage).toHaveBeenCalledWith('page-1');

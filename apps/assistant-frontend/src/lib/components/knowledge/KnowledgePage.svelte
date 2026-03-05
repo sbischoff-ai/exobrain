@@ -6,12 +6,17 @@
   import StreamdownMermaid from 'svelte-streamdown/mermaid';
   import gruvboxDarkMedium from '@shikijs/themes/gruvbox-dark-medium';
 
-  import type { KnowledgeCategoryPageListItem, KnowledgePageDetail } from '$lib/models/knowledge';
+  import type {
+    KnowledgeCategoryPageListItem,
+    KnowledgePageCategoryBreadcrumbItem,
+    KnowledgePageDetail
+  } from '$lib/models/knowledge';
   import { formatTimestamp } from '$lib/utils/datetime';
   import Breadcrumbs from './Breadcrumbs.svelte';
   import PageCard from './PageCard.svelte';
 
   export let page: KnowledgePageDetail | null = null;
+  export let breadcrumbs: KnowledgePageCategoryBreadcrumbItem[] = [];
   export let loading = false;
   export let error = '';
 
@@ -59,7 +64,7 @@
 
 <section class="knowledge-page" aria-label="Knowledge page detail">
   <Breadcrumbs
-    ancestors={page?.category_breadcrumb.path ?? []}
+    ancestors={breadcrumbs}
     current={page ? { id: page.id, name: page.title } : null}
     on:navigateOverview={() => dispatch('navigateOverview')}
     on:navigateCategory={(event) => dispatch('navigateCategory', event.detail)}
