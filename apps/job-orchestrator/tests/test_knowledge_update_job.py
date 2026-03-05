@@ -15,6 +15,7 @@ from app.worker.jobs.knowledge_update_types import (
     ResolvedEntity,
 )
 from app.worker.jobs.knowledge_update import (
+    KnowledgeUpdateStepError,
     _build_batch_document,
     _build_step_two_entity_extraction_json_schema,
     _build_step_two_entity_extraction_system_prompt,
@@ -27,6 +28,7 @@ from app.worker.jobs.knowledge_update import (
     _validate_upsert_graph_delta_payload,
     run,
     _classify_candidate_matches,
+    _call_with_retry,
     _deduplicate_entity_pairs,
     _extract_matched_entity_id,
     _format_exception_for_stderr,
@@ -121,6 +123,43 @@ def test_format_exception_for_stderr_includes_traceback_and_message() -> None:
 
     assert "Traceback (most recent call last):" in formatted
     assert "ValueError: boom" in formatted
+
+
+@pytest.mark.asyncio
+async def test_call_with_retry_retries_transient_failures(monkeypatch: pytest.MonkeyPatch) -> None:
+    attempts = 0
+    delays: list[float] = []
+
+    async def fake_sleep(delay: float) -> None:
+        delays.append(delay)
+
+    monkeypatch.setattr("app.worker.jobs.knowledge_update.asyncio.sleep", fake_sleep)
+
+    async def flaky_call() -> str:
+        nonlocal attempts
+        attempts += 1
+        if attempts < 3:
+            raise TimeoutError("temporary timeout")
+        return "ok"
+
+    result = await _call_with_retry(step_name="step x", operation="op", call=flaky_call)
+
+    assert result == "ok"
+    assert attempts == 3
+    assert len(delays) == 2
+
+
+@pytest.mark.asyncio
+async def test_call_with_retry_wraps_failure_with_step_metadata() -> None:
+    async def non_transient_call() -> None:
+        raise ValueError("bad input")
+
+    with pytest.raises(KnowledgeUpdateStepError) as exc_info:
+        await _call_with_retry(step_name="step y", operation="op", call=non_transient_call)
+
+    assert exc_info.value.step_name == "step y"
+    assert exc_info.value.operation == "op"
+    assert exc_info.value.original_exception_class == "ValueError"
 
 
 def test_build_batch_document_formats_header_and_turns() -> None:
