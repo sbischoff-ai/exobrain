@@ -9,6 +9,7 @@ from app.agents.factory import (
     _load_mock_messages,
     build_main_agent,
 )
+from app.agents.model_provider_chat_model import ModelProviderChatModel
 from app.agents.tools.web import TavilyWebTools
 from app.core.settings import Settings
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
@@ -46,12 +47,27 @@ def test_build_agent_model_uses_fake_list_model_when_mock_enabled(tmp_path) -> N
     assert isinstance(model, FakeListChatModel)
 
 
-def test_build_agent_model_uses_openai_client_for_model_provider_when_mock_disabled() -> None:
+def test_build_agent_model_uses_model_provider_chat_model_when_mock_disabled() -> None:
     settings = Settings(
         MAIN_AGENT_USE_MOCK=False,
         MAIN_AGENT_MODEL="agent",
         MAIN_AGENT_TEMPERATURE=0.2,
         MODEL_PROVIDER_BASE_URL="http://localhost:8010/v1",
+    )
+
+    model = _build_agent_model(settings)
+
+    assert isinstance(model, ModelProviderChatModel)
+    assert model.model == "agent"
+
+
+def test_build_agent_model_uses_openai_fallback_when_enabled() -> None:
+    settings = Settings(
+        MAIN_AGENT_USE_MOCK=False,
+        MAIN_AGENT_MODEL="agent",
+        MAIN_AGENT_TEMPERATURE=0.2,
+        MODEL_PROVIDER_BASE_URL="http://localhost:8010/v1",
+        MAIN_AGENT_USE_OPENAI_FALLBACK=True,
     )
 
     model = _build_agent_model(settings)
