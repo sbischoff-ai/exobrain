@@ -36,6 +36,7 @@
     gap: 0.4rem;
     transition: background-color 150ms ease;
     cursor: pointer;
+    min-width: 0;
   }
 
   .page-card:hover,
@@ -55,6 +56,7 @@
     text-align: left;
     padding: 0;
     margin: 0;
+    min-width: 0;
   }
 
   .page-card:hover .page-link,
