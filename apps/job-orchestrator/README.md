@@ -104,6 +104,12 @@ This API ownership keeps producers decoupled from JetStream subject/version deta
 For `knowledge.update`, clients must provide `user_id` plus the typed `knowledge_update` payload (`journal_reference`, `messages`, and `requested_by_user_id`), and the server uses `user_id` as the envelope correlation id.
 Current `knowledge.update` worker flow uses explicit small steps:
 
+Implementation note: the worker is organized as a thin orchestrator in
+`app/worker/jobs/knowledge_update/__init__.py` with step modules under
+`app/worker/jobs/knowledge_update/steps/step01_graph_seed.py` through
+`step10_mentions.py`. Shared helpers live in adjacent `core.py`, `prompts.py`,
+`schemas.py`, and `types.py` modules.
+
 0. Create chat-message graph delta (deterministic): map payload messages into `node.chat_message` + `node.block` with `SENT_TO` / `SENT_BY` / `DESCRIBED_BY` edges, then validate the intermediate graph payload via protobuf `ParseDict` before continuing.
 1. Create markdown batch document (deterministic): format the conversation into a compact LLM-friendly turn transcript.
 2. Entity extraction (`worker` model): call `GetEntityExtractionSchemaContext` with `requesting_user_id`, inject context into the system prompt, and return strict structured JSON with `extracted_entities` and `extracted_universes`.
