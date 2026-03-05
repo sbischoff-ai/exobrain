@@ -30,6 +30,15 @@ pub(crate) struct ExtractionAllowedEdge {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ExtractionEdgeType {
+    pub edge_type_id: String,
+    pub edge_name: String,
+    pub edge_description: String,
+    pub source_entity_type_id: String,
+    pub target_entity_type_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ExtractionUniverseContext {
     pub id: String,
     pub name: String,
@@ -230,6 +239,95 @@ pub(crate) fn build_extraction_entity_types_from_input(
     entity_types
 }
 
+pub(crate) fn build_extraction_edge_types_from_input(
+    input: ExtractionSchemaBuildInput,
+    first_entity_type: &str,
+    second_entity_type: &str,
+    options: ExtractionSchemaOptions,
+) -> Vec<ExtractionEdgeType> {
+    let first = first_entity_type.trim();
+    let second = second_entity_type.trim();
+    if first.is_empty() || second.is_empty() {
+        return Vec::new();
+    }
+
+    let parent_by_child: BTreeMap<String, String> = input
+        .inheritance
+        .iter()
+        .filter(|parent| options.include_inactive || parent.active)
+        .map(|parent| (parent.child_type_id.clone(), parent.parent_type_id.clone()))
+        .fold(BTreeMap::new(), |mut acc, (child, parent)| {
+            acc.entry(child)
+                .and_modify(|existing| {
+                    if parent < *existing {
+                        *existing = parent.clone();
+                    }
+                })
+                .or_insert(parent);
+            acc
+        });
+
+    let edge_meta_by_id: HashMap<String, (String, String)> = input
+        .edge_types
+        .iter()
+        .filter(|edge| options.include_inactive || edge.active)
+        .map(|edge| {
+            (
+                edge.id.clone(),
+                (edge.name.clone(), edge.description.clone()),
+            )
+        })
+        .collect();
+
+    let mut edge_types = input
+        .edge_rules
+        .iter()
+        .filter(|rule| options.include_inactive || rule.active)
+        .filter(|rule| {
+            let supports_forward =
+                extraction_type_is_assignable(first, &rule.from_node_type_id, &parent_by_child)
+                    && extraction_type_is_assignable(
+                        second,
+                        &rule.to_node_type_id,
+                        &parent_by_child,
+                    );
+            let supports_reverse =
+                extraction_type_is_assignable(second, &rule.from_node_type_id, &parent_by_child)
+                    && extraction_type_is_assignable(
+                        first,
+                        &rule.to_node_type_id,
+                        &parent_by_child,
+                    );
+            supports_forward || supports_reverse
+        })
+        .filter_map(|rule| {
+            let (edge_name, edge_description) = edge_meta_by_id.get(&rule.edge_type_id)?;
+            Some(ExtractionEdgeType {
+                edge_type_id: rule.edge_type_id.clone(),
+                edge_name: edge_name.clone(),
+                edge_description: edge_description.clone(),
+                source_entity_type_id: rule.from_node_type_id.clone(),
+                target_entity_type_id: rule.to_node_type_id.clone(),
+            })
+        })
+        .collect::<Vec<_>>();
+
+    edge_types.sort_by(|a, b| {
+        (
+            a.edge_type_id.as_str(),
+            a.source_entity_type_id.as_str(),
+            a.target_entity_type_id.as_str(),
+        )
+            .cmp(&(
+                b.edge_type_id.as_str(),
+                b.source_entity_type_id.as_str(),
+                b.target_entity_type_id.as_str(),
+            ))
+    });
+
+    edge_types
+}
+
 /// Builds property context for a node type using root-to-leaf inheritance resolution.
 ///
 /// Override precedence for duplicate property names is deterministic:
@@ -396,9 +494,13 @@ fn extraction_allowed_edge_sort_key(
 
 #[cfg(test)]
 mod tests {
-    use super::{build_entity_type_property_context, EntityTypePropertyContextOptions};
+    use super::{
+        build_entity_type_property_context, build_extraction_edge_types_from_input,
+        EntityTypePropertyContextOptions, ExtractionSchemaBuildInput, ExtractionSchemaOptions,
+    };
     use crate::domain::{
-        FullSchema, SchemaNodeTypeHydrated, SchemaType, TypeInheritance, TypeProperty,
+        EdgeEndpointRule, FullSchema, SchemaNodeTypeHydrated, SchemaType, TypeInheritance,
+        TypeProperty,
     };
 
     #[test]
@@ -702,5 +804,73 @@ mod tests {
         .expect_err("unknown type should fail");
 
         assert!(err.to_string().contains("unknown type_id"));
+    }
+
+    #[test]
+    fn extraction_edge_types_match_pair_regardless_of_order() {
+        let input = ExtractionSchemaBuildInput {
+            node_types: vec![],
+            edge_types: vec![
+                SchemaType {
+                    id: "edge.assigned_to".to_string(),
+                    kind: "edge".to_string(),
+                    name: "ASSIGNED_TO".to_string(),
+                    description: "assignment".to_string(),
+                    active: true,
+                },
+                SchemaType {
+                    id: "edge.located_at".to_string(),
+                    kind: "edge".to_string(),
+                    name: "LOCATED_AT".to_string(),
+                    description: "location".to_string(),
+                    active: true,
+                },
+            ],
+            inheritance: vec![TypeInheritance {
+                child_type_id: "node.person".to_string(),
+                parent_type_id: "node.entity".to_string(),
+                description: "inherits".to_string(),
+                active: true,
+            }],
+            edge_rules: vec![
+                EdgeEndpointRule {
+                    edge_type_id: "edge.assigned_to".to_string(),
+                    from_node_type_id: "node.person".to_string(),
+                    to_node_type_id: "node.task".to_string(),
+                    active: true,
+                    description: String::new(),
+                },
+                EdgeEndpointRule {
+                    edge_type_id: "edge.located_at".to_string(),
+                    from_node_type_id: "node.person".to_string(),
+                    to_node_type_id: "node.location".to_string(),
+                    active: true,
+                    description: String::new(),
+                },
+            ],
+        };
+
+        let forward = build_extraction_edge_types_from_input(
+            input.clone(),
+            "node.person",
+            "node.task",
+            ExtractionSchemaOptions {
+                include_inactive: false,
+            },
+        );
+        let reverse = build_extraction_edge_types_from_input(
+            input,
+            "node.task",
+            "node.person",
+            ExtractionSchemaOptions {
+                include_inactive: false,
+            },
+        );
+
+        assert_eq!(forward.len(), 1);
+        assert_eq!(forward[0].edge_type_id, "edge.assigned_to");
+        assert_eq!(forward[0].source_entity_type_id, "node.person");
+        assert_eq!(forward[0].target_entity_type_id, "node.task");
+        assert_eq!(reverse, forward);
     }
 }

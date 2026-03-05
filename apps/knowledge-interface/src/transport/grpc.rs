@@ -10,6 +10,7 @@ use crate::presentation::upsert_delta_json_schema::{
 };
 use crate::service::{
     EntityTypePropertyContextOptions, ExtractionAllowedEdge as ServiceAllowedEdge,
+    ExtractionEdgeType as ServiceExtractionEdgeType,
     ExtractionEntityType as ServiceExtractionEntityType, ExtractionPropertyContext,
     ExtractionSchemaOptions, ExtractionUniverseContext as ServiceExtractionUniverseContext,
     KnowledgeApplication,
@@ -26,12 +27,13 @@ use super::mappers::{
 };
 use super::proto::knowledge_interface_server::{KnowledgeInterface, KnowledgeInterfaceServer};
 use super::proto::{
-    AllowedEdge, ExtractionEntityType, ExtractionEntityTypeWithEdges, ExtractionUniverse,
-    FindEntityCandidatesReply, FindEntityCandidatesRequest, GetEdgeExtractionSchemaContextReply,
-    GetEdgeExtractionSchemaContextRequest, GetEntityContextReply, GetEntityContextRequest,
-    GetEntityExtractionSchemaContextReply, GetEntityExtractionSchemaContextRequest,
-    GetEntityTypePropertyContextReply, GetEntityTypePropertyContextRequest, GetSchemaReply,
-    GetSchemaRequest, GetUpsertGraphDeltaJsonSchemaReply, GetUpsertGraphDeltaJsonSchemaRequest,
+    AllowedEdge, ExtractionEdgeType, ExtractionEntityType, ExtractionEntityTypeWithEdges,
+    ExtractionUniverse, FindEntityCandidatesReply, FindEntityCandidatesRequest,
+    GetEdgeExtractionSchemaContextReply, GetEdgeExtractionSchemaContextRequest,
+    GetEntityContextReply, GetEntityContextRequest, GetEntityExtractionSchemaContextReply,
+    GetEntityExtractionSchemaContextRequest, GetEntityTypePropertyContextReply,
+    GetEntityTypePropertyContextRequest, GetSchemaReply, GetSchemaRequest,
+    GetUpsertGraphDeltaJsonSchemaReply, GetUpsertGraphDeltaJsonSchemaRequest,
     GetUserInitGraphReply, GetUserInitGraphRequest, HealthReply, HealthRequest,
     ListEntitiesByTypeReply, ListEntitiesByTypeRequest, UpsertGraphDeltaReply,
     UpsertGraphDeltaRequest, UpsertSchemaTypeReply, UpsertSchemaTypeRequest,
@@ -118,6 +120,16 @@ fn to_proto_extraction_entity_type_with_edges(
             .into_iter()
             .map(to_proto_allowed_edge)
             .collect(),
+    }
+}
+
+fn to_proto_extraction_edge_type(edge: ServiceExtractionEdgeType) -> ExtractionEdgeType {
+    ExtractionEdgeType {
+        edge_type_id: edge.edge_type_id,
+        edge_name: edge.edge_name,
+        edge_description: edge.edge_description,
+        source_entity_type_id: edge.source_entity_type_id,
+        target_entity_type_id: edge.target_entity_type_id,
     }
 }
 
@@ -236,32 +248,31 @@ impl KnowledgeInterface for KnowledgeGrpcService {
         request: Request<GetEdgeExtractionSchemaContextRequest>,
     ) -> Result<Response<GetEdgeExtractionSchemaContextReply>, Status> {
         let payload = request.into_inner();
-        let source_entity_type_id = payload.source_entity_type_id.trim().to_string();
-        let target_entity_type_id = payload.target_entity_type_id.trim().to_string();
+        let first_entity_type = payload.first_entity_type.trim().to_string();
+        let second_entity_type = payload.second_entity_type.trim().to_string();
 
-        if source_entity_type_id.is_empty() || target_entity_type_id.is_empty() {
+        if first_entity_type.is_empty() || second_entity_type.is_empty() {
             return Err(Status::invalid_argument(
-                "source_entity_type_id and target_entity_type_id are required",
+                "first_entity_type and second_entity_type are required",
             ));
         }
 
-        let entity_types = self
+        let edge_types = self
             .app
-            .get_edge_extraction_schema_types(extraction_options_from_edge_request(&payload))
+            .get_edge_extraction_schema_types(
+                &first_entity_type,
+                &second_entity_type,
+                extraction_options_from_edge_request(&payload),
+            )
             .await
-            .map_err(|e| Status::internal(e.to_string()))?
-            .into_iter()
-            .filter(|entity| {
-                entity.type_id == source_entity_type_id || entity.type_id == target_entity_type_id
-            })
-            .collect::<Vec<_>>();
+            .map_err(|e| Status::internal(e.to_string()))?;
 
         Ok(Response::new(GetEdgeExtractionSchemaContextReply {
-            source_entity_type_id,
-            target_entity_type_id,
-            entity_types: entity_types
+            first_entity_type,
+            second_entity_type,
+            edge_types: edge_types
                 .into_iter()
-                .map(to_proto_extraction_entity_type_with_edges)
+                .map(to_proto_extraction_edge_type)
                 .collect(),
         }))
     }
@@ -480,8 +491,9 @@ pub async fn run_server(
 mod tests {
     use super::{
         entity_type_property_context_options_from_request, extraction_options_from_entity_request,
-        to_proto_extraction_entity_type, to_proto_extraction_entity_type_with_edges,
-        to_proto_extraction_universe, to_proto_property_context, KnowledgeGrpcService,
+        to_proto_extraction_edge_type, to_proto_extraction_entity_type,
+        to_proto_extraction_entity_type_with_edges, to_proto_extraction_universe,
+        to_proto_property_context, KnowledgeGrpcService,
     };
     use crate::domain::{
         EdgeEndpointRule, FullSchema, SchemaEdgeTypeHydrated, SchemaNodeTypeHydrated, SchemaType,
@@ -490,13 +502,14 @@ mod tests {
     use crate::presentation::upsert_delta_json_schema::UPSERT_GRAPH_DELTA_SCHEMA_ID;
     use crate::service::KnowledgeApplication;
     use crate::service::{
-        build_extraction_entity_types, ExtractionAllowedEdge, ExtractionEntityType,
-        ExtractionPropertyContext, ExtractionSchemaOptions, ExtractionUniverseContext,
+        build_extraction_entity_types, ExtractionAllowedEdge, ExtractionEdgeType,
+        ExtractionEntityType, ExtractionPropertyContext, ExtractionSchemaOptions,
+        ExtractionUniverseContext,
     };
     use crate::transport::proto::knowledge_interface_server::KnowledgeInterface;
     use crate::transport::proto::{
-        GetEntityExtractionSchemaContextRequest, GetEntityTypePropertyContextRequest,
-        GetUpsertGraphDeltaJsonSchemaRequest,
+        GetEdgeExtractionSchemaContextRequest, GetEntityExtractionSchemaContextRequest,
+        GetEntityTypePropertyContextRequest, GetUpsertGraphDeltaJsonSchemaRequest,
     };
     use anyhow::{anyhow, Result};
     use async_trait::async_trait;
@@ -866,6 +879,22 @@ mod tests {
     }
 
     #[test]
+    fn edge_extraction_request_uses_new_entity_type_fields() {
+        let request = GetEdgeExtractionSchemaContextRequest {
+            first_entity_type: "node.person".to_string(),
+            second_entity_type: "node.task".to_string(),
+            include_inactive: Some(true),
+            user_id: "user-1".to_string(),
+        };
+
+        let options = super::extraction_options_from_edge_request(&request);
+
+        assert!(options.include_inactive);
+        assert_eq!(request.first_entity_type, "node.person");
+        assert_eq!(request.second_entity_type, "node.task");
+    }
+
+    #[test]
     fn entity_type_property_context_request_defaults_include_inherited() {
         let request = GetEntityTypePropertyContextRequest {
             type_id: "node.person".to_string(),
@@ -954,6 +983,21 @@ mod tests {
         assert_eq!(proto.type_id, "node.person");
         assert_eq!(proto.outgoing_edges.len(), 1);
         assert_eq!(proto.outgoing_edges[0].edge_type_id, "edge.related_to");
+    }
+
+    #[test]
+    fn proto_mapping_preserves_extraction_edge_type_shape() {
+        let proto = to_proto_extraction_edge_type(ExtractionEdgeType {
+            edge_type_id: "edge.assigned_to".to_string(),
+            edge_name: "ASSIGNED_TO".to_string(),
+            edge_description: "assignment".to_string(),
+            source_entity_type_id: "node.person".to_string(),
+            target_entity_type_id: "node.task".to_string(),
+        });
+
+        assert_eq!(proto.edge_type_id, "edge.assigned_to");
+        assert_eq!(proto.source_entity_type_id, "node.person");
+        assert_eq!(proto.target_entity_type_id, "node.task");
     }
 
     #[test]

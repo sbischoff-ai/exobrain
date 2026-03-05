@@ -214,14 +214,14 @@ Use this as step one for extraction to pick entity types and universe assignment
 
 ## GetEdgeExtractionSchemaContext
 
-`GetEdgeExtractionSchemaContext` returns edge options for one specific source/target entity-type pair so callers avoid loading all edge rules for every type.
+`GetEdgeExtractionSchemaContext` returns edge options for one specific entity-type pair so callers avoid loading all edge rules for every type.
 
 ### Full request schema
 
 ```proto
 message GetEdgeExtractionSchemaContextRequest {
-  string source_entity_type_id = 1;
-  string target_entity_type_id = 2;
+  string first_entity_type = 1;
+  string second_entity_type = 2;
   optional bool include_inactive = 3;
   string user_id = 4;
 }
@@ -230,33 +230,22 @@ message GetEdgeExtractionSchemaContextRequest {
 ### Full response schema
 
 ```proto
-message AllowedEdge {
+message ExtractionEdgeType {
   string edge_type_id = 1;
   string edge_name = 2;
   string edge_description = 3;
-  string other_entity_type_id = 4;
-  string other_entity_type_name = 5;
-  optional uint32 min_cardinality = 6;
-  optional uint32 max_cardinality = 7;
-}
-
-message ExtractionEntityTypeWithEdges {
-  string type_id = 1;
-  string name = 2;
-  string description = 3;
-  repeated string inheritance_chain = 4;
-  repeated AllowedEdge outgoing_edges = 5;
-  repeated AllowedEdge incoming_edges = 6;
+  string source_entity_type_id = 4;
+  string target_entity_type_id = 5;
 }
 
 message GetEdgeExtractionSchemaContextReply {
-  string source_entity_type_id = 1;
-  string target_entity_type_id = 2;
-  repeated ExtractionEntityTypeWithEdges entity_types = 3;
+  string first_entity_type = 1;
+  string second_entity_type = 2;
+  repeated ExtractionEdgeType edge_types = 3;
 }
 ```
 
-Use this after entity extraction for each candidate related entity pair to choose an allowed edge type and direction.
+Use this after entity extraction for each candidate related entity pair to choose an allowed edge type and explicit source/target typing. The response includes only edges that support the provided pair in either order.
 
 
 ## GetEntityTypePropertyContext
@@ -517,7 +506,7 @@ message GetEntityContextReply {
 ```
 
 - `entity`: core fields (`id`, `type_id`, `user_id`, `visibility`) plus `name`, `aliases`, `created_at`, and `updated_at`.
-- `entity_properties`: additional flat scalar properties as string values (`{ "key": "value" }`) excluding `name`, `aliases`, `created_at`, and `updated_at`.
+- `entity_properties`: additional flat scalar properties as string values (`{ "key": "value" }`) including all registered schema properties present on the entity (for example `email`, `lat`, `lon`) plus any other persisted scalar fields.
 - `blocks[]`: typed block entries (`id`, `type_id`, `block_level`) plus root-level `text`, `created_at`, `updated_at`, optional `parent_block_id`, additional `properties` (`map<string, string>`), and block-level `neighbors`.
 - `neighbors[]`: outgoing and incoming entity neighbors with edge metadata (`direction`, `edge_type`, `properties`) where `properties` is a flat `map<string, string>`, plus `other_entity` (`id`, optional `description`, optional `name`).
 

@@ -88,10 +88,18 @@ message GetEntityExtractionSchemaContextRequest {
 }
 
 message GetEdgeExtractionSchemaContextRequest {
-  string source_entity_type_id = 1;
-  string target_entity_type_id = 2;
+  string first_entity_type = 1;
+  string second_entity_type = 2;
   optional bool include_inactive = 3;
   string user_id = 4;
+}
+
+message ExtractionEdgeType {
+  string edge_type_id = 1;
+  string edge_name = 2;
+  string edge_description = 3;
+  string source_entity_type_id = 4;
+  string target_entity_type_id = 5;
 }
 
 message AllowedEdge {
@@ -126,9 +134,9 @@ message GetEntityExtractionSchemaContextReply {
 }
 
 message GetEdgeExtractionSchemaContextReply {
-  string source_entity_type_id = 1;
-  string target_entity_type_id = 2;
-  repeated ExtractionEntityTypeWithEdges entity_types = 3;
+  string first_entity_type = 1;
+  string second_entity_type = 2;
+  repeated ExtractionEdgeType edge_types = 3;
 }
 
 message GetEntityTypePropertyContextRequest {
