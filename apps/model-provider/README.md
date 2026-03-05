@@ -61,6 +61,7 @@ Invalid `response_format` payloads (for example malformed schema objects) return
 - Tool definitions and tool choice policy
 - Structured output intent as explicit JSON schema input
 - Streaming event frames (`text_delta`, `tool_call`, `completion`, `usage`)
+- OpenAI streaming `tool_calls[].function.arguments` deltas are reassembled before emitting native `tool_call` frames, so downstream LangChain agents receive complete JSON arguments during tool-use turns.
 
 `/v1/chat/completions` is retained as a compatibility shim that projects between OpenAI payloads and the internal native contract.
 

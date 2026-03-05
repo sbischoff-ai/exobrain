@@ -188,6 +188,7 @@ class OpenAIProviderClient(ProviderClient):
     async def native_chat_stream(self, request: NativeChatRequest) -> AsyncIterator[StreamFrame]:
         payload = self._to_native_payload(request)
         payload["stream"] = True
+        pending_tool_calls: dict[int, dict[str, Any]] = {}
         try:
             stream = await self._client.chat.completions.create(**self._normalize_chat_payload(payload))
             async for chunk in stream:
@@ -197,15 +198,34 @@ class OpenAIProviderClient(ProviderClient):
                     if delta.get("content"):
                         yield TextDeltaFrame(text=delta["content"])
                     for tool_call in delta.get("tool_calls", []) or []:
-                        fn = tool_call.get("function", {})
-                        arguments = fn.get("arguments", "{}")
-                        parsed_arguments = json.loads(arguments) if isinstance(arguments, str) else arguments
-                        yield ToolCallFrame(
-                            id=tool_call.get("id", f"call_{uuid.uuid4().hex}"),
-                            name=fn.get("name", "tool"),
-                            arguments=parsed_arguments if isinstance(parsed_arguments, dict) else {"value": parsed_arguments},
+                        if not isinstance(tool_call, dict):
+                            continue
+                        index = tool_call.get("index", 0)
+                        fn = tool_call.get("function", {}) if isinstance(tool_call.get("function"), dict) else {}
+                        call_state = pending_tool_calls.setdefault(
+                            index,
+                            {
+                                "id": tool_call.get("id"),
+                                "name": fn.get("name"),
+                                "arguments": "",
+                            },
                         )
+
+                        if tool_call.get("id"):
+                            call_state["id"] = tool_call["id"]
+                        if fn.get("name"):
+                            call_state["name"] = fn["name"]
+                        if isinstance(fn.get("arguments"), str):
+                            call_state["arguments"] += fn["arguments"]
+
                     if choice.get("finish_reason"):
+                        for _, item in sorted(pending_tool_calls.items(), key=lambda pair: pair[0]):
+                            yield ToolCallFrame(
+                                id=str(item.get("id") or f"call_{uuid.uuid4().hex}"),
+                                name=str(item.get("name") or "tool"),
+                                arguments=self._coerce_tool_arguments(item.get("arguments")),
+                            )
+                        pending_tool_calls.clear()
                         yield CompletionFrame(finish_reason=choice["finish_reason"])
                 usage_payload = data.get("usage")
                 if isinstance(usage_payload, dict):
@@ -226,6 +246,19 @@ class OpenAIProviderClient(ProviderClient):
             raise ProviderClientError(status_code=mapped_status, message=str(exc)) from exc
         except APIError as exc:
             raise ProviderClientError(status_code=502, message=str(exc)) from exc
+
+    def _coerce_tool_arguments(self, arguments: Any) -> dict[str, Any]:
+        if isinstance(arguments, dict):
+            return arguments
+        if isinstance(arguments, str):
+            try:
+                parsed = json.loads(arguments)
+                if isinstance(parsed, dict):
+                    return parsed
+                return {"value": parsed}
+            except json.JSONDecodeError:
+                return {"raw": arguments}
+        return {"value": arguments}
 
     async def chat_completions(self, payload: dict[str, Any]) -> dict[str, Any]:
         try:
