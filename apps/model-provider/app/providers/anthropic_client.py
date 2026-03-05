@@ -49,7 +49,6 @@ class AnthropicProviderClient(ProviderClient):
         if request.tools:
             payload["tools"] = [
                 {
-                    "type": "custom",
                     "name": tool.name,
                     "description": tool.description or "",
                     "input_schema": self.normalize_tool_schema(tool.parameters, tool_name=tool.name),
@@ -107,14 +106,19 @@ class AnthropicProviderClient(ProviderClient):
 
                     anthropic_tools.append(
                         {
-                            "type": "custom",
                             "name": tool_name,
                             "description": function.get("description") or "",
                             "input_schema": input_schema,
                         }
                     )
                 elif isinstance(tool, dict) and isinstance(tool.get("name"), str) and isinstance(tool.get("input_schema"), dict):
-                    anthropic_tools.append(tool)
+                    anthropic_tools.append(
+                        {
+                            "name": tool["name"],
+                            "description": tool.get("description") or "",
+                            "input_schema": self.normalize_tool_schema(tool.get("input_schema"), tool_name=tool["name"]),
+                        }
+                    )
                 else:
                     raise ProviderClientError(
                         status_code=400,
