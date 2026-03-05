@@ -128,9 +128,16 @@ def _build_agent_model(settings: Settings) -> BaseChatModel:
 
     return ModelProviderChatModel(
         model=settings.main_agent_model,
-        base_url=settings.model_provider_base_url.rstrip("/"),
+        base_url=_normalize_native_model_provider_base_url(settings.model_provider_base_url),
         temperature=settings.main_agent_temperature,
     )
+
+
+def _normalize_native_model_provider_base_url(base_url: str) -> str:
+    normalized = base_url.rstrip("/")
+    if normalized.endswith("/v1"):
+        return normalized[: -len("/v1")]
+    return normalized
 
 
 def _build_web_tools_dependency(settings: Settings) -> TavilyWebTools:
