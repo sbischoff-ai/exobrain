@@ -11,9 +11,11 @@ from app.worker.jobs.knowledge_update import (
     _build_step_two_entity_extraction_json_schema,
     _build_step_two_entity_extraction_system_prompt,
     _build_upsert_graph_delta_step_one,
+    _classify_candidate_matches,
+    _extract_matched_entity_id,
     _format_exception_for_stderr,
     _run_step_two_entity_extraction,
-    _step_three_placeholder,
+    _step_six_placeholder,
     _step_two_store_batch_document,
 )
 
@@ -210,13 +212,35 @@ async def test_run_step_two_entity_extraction_uses_worker_agent(monkeypatch: pyt
     assert captured["response_format"]["type"] == "json_schema"
 
 
-def test_step_three_placeholder_logs_counts(caplog: pytest.LogCaptureFixture) -> None:
-    with caplog.at_level(logging.INFO):
-        _step_three_placeholder(
-            {
-                "extracted_entities": [{"name": "Alice"}],
-                "extracted_universes": [{"name": "Wonderland", "description": "fictional"}],
-            }
-        )
+def test_classify_candidate_matches_uses_requested_thresholds() -> None:
+    assert _classify_candidate_matches([])["status"] == "new_entity"
 
-    assert "knowledge.update step three placeholder reached" in caplog.text
+    strong_match = _classify_candidate_matches([
+        {"entity_id": "entity-1", "score": 0.61},
+        {"entity_id": "entity-2", "score": 0.2},
+    ])
+    assert strong_match["status"] == "matched"
+    assert strong_match["matched_entity_id"] == "entity-1"
+
+    detail_match = _classify_candidate_matches([
+        {"entity_id": "entity-1", "score": 0.4},
+        {"entity_id": "entity-2", "score": 0.2},
+        {"entity_id": "entity-3", "score": 0.1},
+    ])
+    assert detail_match == {
+        "status": "needs_detailed_comparison",
+        "candidate_entity_ids": ["entity-1", "entity-2"],
+    }
+
+
+def test_extract_matched_entity_id_parses_expected_decisions() -> None:
+    assert _extract_matched_entity_id("MATCH(entity-1)") == "entity-1"
+    assert _extract_matched_entity_id("NEW_ENTITY") is None
+    assert _extract_matched_entity_id("unknown") is None
+
+
+def test_step_six_placeholder_logs_counts(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.INFO):
+        _step_six_placeholder([{"resolved_entity_id": "1"}, {"resolved_entity_id": "2"}])
+
+    assert "knowledge.update step six placeholder reached" in caplog.text
