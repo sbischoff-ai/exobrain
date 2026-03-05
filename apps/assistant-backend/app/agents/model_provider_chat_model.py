@@ -30,7 +30,7 @@ class ModelProviderChatModel(BaseChatModel):
 
     @property
     def _identifying_params(self) -> dict[str, Any]:
-        return {"model": self.model, "base_url": self.base_url, "temperature": self.temperature}
+        return {"model": self.model, "base_url": self.base_url}
 
     def bind_tools(
         self,
@@ -112,7 +112,6 @@ class ModelProviderChatModel(BaseChatModel):
             "model": self.model,
             "messages": [self._serialize_message(message) for message in messages],
             "stream": stream,
-            "temperature": self.temperature,
         }
         if stop:
             payload["stop"] = stop

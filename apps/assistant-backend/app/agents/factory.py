@@ -122,14 +122,12 @@ def _build_agent_model(settings: Settings) -> BaseChatModel:
             model=settings.main_agent_model,
             base_url=settings.model_provider_base_url,
             api_key="model-provider",
-            temperature=settings.main_agent_temperature,
             streaming=True,
         )
 
     return ModelProviderChatModel(
         model=settings.main_agent_model,
         base_url=settings.model_provider_base_url,
-        temperature=settings.main_agent_temperature,
     )
 
 
