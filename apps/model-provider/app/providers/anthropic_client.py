@@ -44,6 +44,12 @@ class AnthropicProviderClient(ProviderClient):
                         input_schema = {"type": "object", "properties": {}}
                     elif "type" not in input_schema:
                         input_schema = {"type": "object", **input_schema}
+                    elif input_schema.get("type") != "object":
+                        input_schema = {
+                            "type": "object",
+                            "properties": {"input": input_schema},
+                            "required": ["input"],
+                        }
 
                     anthropic_tools.append(
                         {

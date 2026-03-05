@@ -248,6 +248,36 @@ async def test_anthropic_provider_adds_default_object_schema_for_tool_parameters
 
 
 @pytest.mark.asyncio
+async def test_anthropic_provider_wraps_non_object_tool_parameters() -> None:
+    messages = FakeAnthropicMessages()
+    fake_client = SimpleNamespace(messages=messages)
+    client = AnthropicProviderClient(api_key="x", client=fake_client)
+
+    payload = {
+        "model": "claude-sonnet-4-6",
+        "messages": [{"role": "user", "content": "hi"}],
+        "tools": [
+            {
+                "type": "function",
+                "function": {
+                    "name": "lookup",
+                    "description": "Lookup records",
+                    "parameters": {"type": "string"},
+                },
+            }
+        ],
+    }
+
+    await client.chat_completions(payload)
+
+    assert messages.last_create["tools"][0]["input_schema"] == {
+        "type": "object",
+        "properties": {"input": {"type": "string"}},
+        "required": ["input"],
+    }
+
+
+@pytest.mark.asyncio
 async def test_anthropic_provider_translates_openai_function_tool_choice() -> None:
     messages = FakeAnthropicMessages()
     fake_client = SimpleNamespace(messages=messages)
