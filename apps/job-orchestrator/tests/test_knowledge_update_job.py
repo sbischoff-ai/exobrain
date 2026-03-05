@@ -340,6 +340,68 @@ async def test_run_step_three_extraction_agent_uses_model_provider_tools(monkeyp
 
 
 @pytest.mark.asyncio
+async def test_run_step_three_edge_context_tool_handles_empty_rpc_reply(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from app.settings import Settings
+    from app.worker.jobs import knowledge_update
+
+    class EmptyEdgeContextChannel(_FakeExtractionChannel):
+        def unary_unary(self, method: str, request_serializer, response_deserializer):
+            wrapped = super().unary_unary(method, request_serializer, response_deserializer)
+
+            async def _call(request):
+                if method.endswith("/GetEdgeExtractionSchemaContext"):
+                    return None
+                return await wrapped(request)
+
+            return _call
+
+    class FakeCompiledAgent:
+        async def ainvoke(self, payload: dict[str, object]) -> dict[str, object]:
+            edge_tool = captured_tools["get_edge_extraction_schema_context"]
+            tool_result = await edge_tool.ainvoke(
+                {
+                    "source_entity_type_id": "node.person",
+                    "target_entity_type_id": "node.organization",
+                }
+            )
+            assert tool_result == {
+                "source_entity_type_id": "node.person",
+                "target_entity_type_id": "node.organization",
+                "entity_types": [],
+            }
+            return {"structured_response": {"entities": []}}
+
+    captured_tools: dict[str, object] = {}
+
+    def fake_create_agent(*, model, tools, system_prompt, response_format):
+        del model, system_prompt, response_format
+        for tool in tools:
+            captured_tools[tool.name] = tool
+        return FakeCompiledAgent()
+
+    import langchain.agents
+
+    monkeypatch.setattr(langchain.agents, "create_agent", fake_create_agent)
+
+    payload = KnowledgeUpdatePayload(
+        journal_reference="journal-1",
+        requested_by_user_id="user-1",
+        messages=[{"role": "user", "content": "hello", "created_at": "2026-03-02T12:00:00Z"}],
+    )
+
+    with caplog.at_level(logging.WARNING):
+        result = await knowledge_update._run_step_three_extraction_agent(
+            EmptyEdgeContextChannel(), payload, "--- TURN 1 ---", Settings(model_provider_base_url="http://provider")
+        )
+
+    assert result == {"entities": []}
+    assert "received empty edge extraction schema context" in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_run_step_four_router_agent_returns_structured_response(monkeypatch: pytest.MonkeyPatch) -> None:
     from app.settings import Settings
     from app.worker.jobs import knowledge_update
