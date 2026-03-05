@@ -106,9 +106,12 @@ Current `knowledge.update` worker flow uses explicit small steps:
 
 0. Create chat-message graph delta (deterministic): map payload messages into `node.chat_message` + `node.block` with `SENT_TO` / `SENT_BY` / `DESCRIBED_BY` edges.
 1. Create markdown batch document (deterministic): format the conversation into a compact LLM-friendly turn transcript.
-2. Entity extraction (`worker` model): call `GetEntityExtractionSchemaContext`, inject that context into the system prompt, and return strict structured JSON with `extracted_entities` and `extracted_universes`.
-3. Placeholder: reserved boundary for upcoming post-extraction steps.
-4. Upsert chat-message graph delta: persist step-0 graph data via `UpsertGraphDelta`.
+2. Entity extraction (`worker` model): call `GetEntityExtractionSchemaContext` with `requesting_user_id`, inject context into the system prompt, and return strict structured JSON with `extracted_entities` and `extracted_universes`.
+3. Entity candidate matching (deterministic): for each extracted entity, call `FindEntityCandidates` with names/aliases/description/type and classify by score thresholds (`>0.1`, `>0.6`, `>0.15`) to decide direct match vs. detailed comparison.
+4. Extracted entity contexts (`reasoner` model): create focused markdown per extracted entity with heading depth up to 2 and semantically bounded paragraph/list chunks.
+5. Detailed comparison (`worker` model): for entities requiring further comparison, call `GetEntityContext` (block level 1, with `requesting_user_id`) for each candidate and decide `MATCH({entity_id})` vs `NEW_ENTITY`; unresolved/new entities receive new UUIDs.
+6. Placeholder: reserved boundary for upcoming post-comparison graph writing.
+7. Upsert chat-message graph delta: persist step-0 graph data via `UpsertGraphDelta`.
 
 ## Common commands
 
@@ -137,7 +140,7 @@ Keep request subject patterns narrow enough that they do not also match events/D
 - `JOB_ORCHESTRATOR_WORKER_ENABLED` (default: `true`, run worker process)
 - `KNOWLEDGE_INTERFACE_GRPC_TARGET` (default: `localhost:50051`)
 - `KNOWLEDGE_INTERFACE_CONNECT_TIMEOUT_SECONDS` (default: `5.0`)
-- `MODEL_PROVIDER_BASE_URL` (default: `http://localhost:8010/v1`, model-provider base API URL; clients append `/internal/chat/messages` for the native chat contract used by step-two entity extraction)
+- `MODEL_PROVIDER_BASE_URL` (default: `http://localhost:8010/v1`, model-provider base API URL; clients append `/internal/chat/messages` for the native chat contract used by step-two entity extraction, step-four context extraction, and step-five detailed comparison)
 - `KNOWLEDGE_UPDATE_EXTRACTION_MODEL` (default: `worker`, model alias used for step-two entity extraction)
 - `KNOWLEDGE_UPDATE_MODEL_PROVIDER_TIMEOUT_SECONDS` (default: `100.0`, HTTP timeout for knowledge-update model-provider calls used by entity extraction)
 - `APP_ENV` (default: `local`, influences default logging level)
