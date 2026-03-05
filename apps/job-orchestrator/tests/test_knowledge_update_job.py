@@ -11,11 +11,14 @@ from app.worker.jobs.knowledge_update import (
     _build_step_two_entity_extraction_json_schema,
     _build_step_two_entity_extraction_system_prompt,
     _build_upsert_graph_delta_step_one,
+    _build_step_seven_relationship_match_schema,
+    _build_step_six_relationship_extraction_schema,
     _classify_candidate_matches,
+    _deduplicate_entity_pairs,
     _extract_matched_entity_id,
     _format_exception_for_stderr,
     _run_step_two_entity_extraction,
-    _step_six_placeholder,
+    _step_eight_placeholder,
     _step_two_store_batch_document,
 )
 
@@ -233,14 +236,41 @@ def test_classify_candidate_matches_uses_requested_thresholds() -> None:
     }
 
 
+
+
+def test_step_six_relationship_extraction_schema_requires_entity_pairs() -> None:
+    schema = _build_step_six_relationship_extraction_schema()
+
+    assert schema["required"] == ["entity_pairs"]
+    assert schema["properties"]["entity_pairs"]["items"]["required"] == ["entity_id_1", "entity_id_2"]
+
+
+def test_step_seven_relationship_match_schema_requires_confidence() -> None:
+    schema = _build_step_seven_relationship_match_schema()
+
+    assert schema["required"] == ["from_entity_id", "to_entity_id", "edge_type", "confidence"]
+
+
+def test_deduplicate_entity_pairs_filters_invalid_and_duplicates() -> None:
+    pairs = _deduplicate_entity_pairs(
+        [
+            {"entity_id_1": "a", "entity_id_2": "b"},
+            {"entity_id_1": "b", "entity_id_2": "a"},
+            {"entity_id_1": "a", "entity_id_2": "a"},
+            {"entity_id_1": "a", "entity_id_2": "missing"},
+        ],
+        valid_entity_ids={"a", "b"},
+    )
+
+    assert pairs == [{"entity_id_1": "a", "entity_id_2": "b"}]
 def test_extract_matched_entity_id_parses_expected_decisions() -> None:
     assert _extract_matched_entity_id("MATCH(entity-1)") == "entity-1"
     assert _extract_matched_entity_id("NEW_ENTITY") is None
     assert _extract_matched_entity_id("unknown") is None
 
 
-def test_step_six_placeholder_logs_counts(caplog: pytest.LogCaptureFixture) -> None:
+def test_step_eight_placeholder_logs_counts(caplog: pytest.LogCaptureFixture) -> None:
     with caplog.at_level(logging.INFO):
-        _step_six_placeholder([{"resolved_entity_id": "1"}, {"resolved_entity_id": "2"}])
+        _step_eight_placeholder([{"from_entity_id": "1", "to_entity_id": "2"}])
 
-    assert "knowledge.update step six placeholder reached" in caplog.text
+    assert "knowledge.update step eight placeholder reached" in caplog.text

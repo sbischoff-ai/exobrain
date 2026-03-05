@@ -526,10 +526,235 @@ async def _run_step_five_detailed_comparison(
     return resolved_entities
 
 
-def _step_six_placeholder(resolved_entities: list[dict[str, object]]) -> None:
+def _build_step_six_relationship_extraction_schema() -> dict[str, object]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "entity_pairs": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "entity_id_1": {"type": "string", "minLength": 1},
+                        "entity_id_2": {"type": "string", "minLength": 1},
+                    },
+                    "required": ["entity_id_1", "entity_id_2"],
+                },
+            }
+        },
+        "required": ["entity_pairs"],
+    }
+
+
+def _deduplicate_entity_pairs(
+    entity_pairs: list[dict[str, object]],
+    valid_entity_ids: set[str],
+) -> list[dict[str, str]]:
+    deduped: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for pair in entity_pairs:
+        if not isinstance(pair, dict):
+            continue
+        entity_id_1 = pair.get("entity_id_1")
+        entity_id_2 = pair.get("entity_id_2")
+        if not isinstance(entity_id_1, str) or not isinstance(entity_id_2, str):
+            continue
+        if entity_id_1 == entity_id_2:
+            continue
+        if entity_id_1 not in valid_entity_ids or entity_id_2 not in valid_entity_ids:
+            continue
+        normalized = tuple(sorted((entity_id_1, entity_id_2)))
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        deduped.append({"entity_id_1": entity_id_1, "entity_id_2": entity_id_2})
+    return deduped
+
+
+async def _run_step_six_relationship_extraction(
+    resolved_entities: list[dict[str, object]],
+    markdown_document: str,
+    settings: Settings,
+) -> list[dict[str, str]]:
+    from langchain.agents import create_agent
+    from app.services.model_provider_chat_model import ModelProviderChatModel
+
+    extracted_entities_with_ids = [
+        {
+            "entity_id": item.get("resolved_entity_id"),
+            "name": (item.get("extracted_entity") or {}).get("name") if isinstance(item.get("extracted_entity"), dict) else None,
+            "node_type": (item.get("extracted_entity") or {}).get("node_type") if isinstance(item.get("extracted_entity"), dict) else None,
+        }
+        for item in resolved_entities
+        if isinstance(item, dict) and isinstance(item.get("resolved_entity_id"), str)
+    ]
+    valid_entity_ids = {
+        entity.get("entity_id")
+        for entity in extracted_entities_with_ids
+        if isinstance(entity.get("entity_id"), str)
+    }
+
+    relationship_agent = create_agent(
+        model=ModelProviderChatModel(
+            model="worker",
+            base_url=settings.model_provider_base_url,
+            temperature=0,
+            timeout=settings.knowledge_update_model_provider_timeout_seconds,
+        ),
+        tools=[],
+        system_prompt=(
+            "You are the knowledge.update relationship extraction worker. "
+            "Identify entity pairs that are related in the markdown batch document. "
+            "Return strict JSON only with entity_pairs."
+        ),
+        response_format={"type": "json_schema", "json_schema": _build_step_six_relationship_extraction_schema()},
+    )
+
+    prompt = json.dumps(
+        {
+            "entities": extracted_entities_with_ids,
+            "markdown_batch_document": markdown_document,
+        },
+        ensure_ascii=False,
+    )
+    reply = await relationship_agent.ainvoke({"messages": [{"role": "user", "content": prompt}]})
+    structured = reply.get("structured_response") if isinstance(reply, dict) else None
+    entity_pairs = structured.get("entity_pairs") if isinstance(structured, dict) else None
+    if not isinstance(entity_pairs, list):
+        raise RuntimeError("knowledge.update step six relationship extraction returned invalid entity_pairs")
+
+    return _deduplicate_entity_pairs(entity_pairs, valid_entity_ids)
+
+
+def _build_step_seven_relationship_match_schema() -> dict[str, object]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "from_entity_id": {"type": "string", "minLength": 1},
+            "to_entity_id": {"type": "string", "minLength": 1},
+            "edge_type": {"type": "string", "minLength": 1},
+            "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        },
+        "required": ["from_entity_id", "to_entity_id", "edge_type", "confidence"],
+    }
+
+
+async def _run_step_seven_match_relationship_type_and_score(
+    channel: grpc.aio.Channel,
+    payload: KnowledgeUpdatePayload,
+    resolved_entities: list[dict[str, object]],
+    entity_context_documents: list[str],
+    entity_pairs: list[dict[str, str]],
+    settings: Settings,
+) -> list[dict[str, object]]:
+    from langchain.agents import create_agent
+    from app.services.model_provider_chat_model import ModelProviderChatModel
+
+    get_edge_extraction_schema_context_rpc = channel.unary_unary(
+        "/exobrain.knowledge.v1.KnowledgeInterface/GetEdgeExtractionSchemaContext",
+        request_serializer=knowledge_pb2.GetEdgeExtractionSchemaContextRequest.SerializeToString,
+        response_deserializer=knowledge_pb2.GetEdgeExtractionSchemaContextReply.FromString,
+    )
+
+    resolution_by_id: dict[str, dict[str, object]] = {}
+    for item in resolved_entities:
+        if not isinstance(item, dict):
+            continue
+        entity_id = item.get("resolved_entity_id")
+        if not isinstance(entity_id, str):
+            continue
+        entity_index = int(item.get("entity_index", -1)) if isinstance(item.get("entity_index"), int) else -1
+        focused_markdown = entity_context_documents[entity_index] if 0 <= entity_index < len(entity_context_documents) else ""
+        resolution_by_id[entity_id] = {
+            "entity_id": entity_id,
+            "node_type": (item.get("extracted_entity") or {}).get("node_type") if isinstance(item.get("extracted_entity"), dict) else "",
+            "name": (item.get("extracted_entity") or {}).get("name") if isinstance(item.get("extracted_entity"), dict) else "",
+            "focused_markdown": focused_markdown,
+        }
+
+    relationship_match_agent = create_agent(
+        model=ModelProviderChatModel(
+            model="worker",
+            base_url=settings.model_provider_base_url,
+            temperature=0,
+            timeout=settings.knowledge_update_model_provider_timeout_seconds,
+        ),
+        tools=[],
+        system_prompt=(
+            "You are the knowledge.update relationship matching worker. "
+            "Given two entities, their focused contexts, and allowed edge schema context, return the best "
+            "relationship direction, edge type, and confidence between 0 and 1. "
+            "Return strict JSON only."
+        ),
+        response_format={"type": "json_schema", "json_schema": _build_step_seven_relationship_match_schema()},
+    )
+
+    matched_relationships: list[dict[str, object]] = []
+    for pair in entity_pairs:
+        entity_id_1 = pair.get("entity_id_1")
+        entity_id_2 = pair.get("entity_id_2")
+        if entity_id_1 not in resolution_by_id or entity_id_2 not in resolution_by_id:
+            continue
+
+        entity_1 = resolution_by_id[entity_id_1]
+        entity_2 = resolution_by_id[entity_id_2]
+        node_type_1 = entity_1.get("node_type") if isinstance(entity_1.get("node_type"), str) else ""
+        node_type_2 = entity_2.get("node_type") if isinstance(entity_2.get("node_type"), str) else ""
+        if not node_type_1 or not node_type_2:
+            continue
+
+        edge_context_reply = await get_edge_extraction_schema_context_rpc(
+            knowledge_pb2.GetEdgeExtractionSchemaContextRequest(
+                first_entity_type=node_type_1,
+                second_entity_type=node_type_2,
+                user_id=payload.requested_by_user_id,
+            )
+        )
+        edge_context = _message_to_dict(edge_context_reply, rpc_name="GetEdgeExtractionSchemaContext")
+        prompt = json.dumps(
+            {
+                "entity_1": entity_1,
+                "entity_2": entity_2,
+                "edge_extraction_schema_context": edge_context,
+            },
+            ensure_ascii=False,
+        )
+
+        reply = await relationship_match_agent.ainvoke({"messages": [{"role": "user", "content": prompt}]})
+        structured = reply.get("structured_response") if isinstance(reply, dict) else None
+        if not isinstance(structured, dict):
+            raise RuntimeError("knowledge.update step seven returned invalid relationship match output")
+
+        from_entity_id = structured.get("from_entity_id")
+        to_entity_id = structured.get("to_entity_id")
+        edge_type = structured.get("edge_type")
+        confidence = structured.get("confidence")
+        if not isinstance(from_entity_id, str) or not isinstance(to_entity_id, str):
+            continue
+        if {from_entity_id, to_entity_id} != {entity_id_1, entity_id_2}:
+            continue
+        if not isinstance(edge_type, str) or not isinstance(confidence, (float, int)):
+            continue
+
+        matched_relationships.append(
+            {
+                "from_entity_id": from_entity_id,
+                "to_entity_id": to_entity_id,
+                "edge_type": edge_type,
+                "confidence": float(confidence),
+            }
+        )
+
+    return matched_relationships
+
+
+def _step_eight_placeholder(matched_relationships: list[dict[str, object]]) -> None:
     logger.info(
-        "knowledge.update step six placeholder reached",
-        extra={"resolved_entities": len(resolved_entities)},
+        "knowledge.update step eight placeholder reached",
+        extra={"matched_relationships": len(matched_relationships)},
     )
 
 
@@ -578,7 +803,20 @@ async def run(job: JobEnvelope) -> None:
             step_four_entity_contexts,
             settings,
         )
-        _step_six_placeholder(step_five_resolved_entities)
+        step_six_entity_pairs = await _run_step_six_relationship_extraction(
+            step_five_resolved_entities,
+            step_one_markdown_document,
+            settings,
+        )
+        step_seven_relationships = await _run_step_seven_match_relationship_type_and_score(
+            channel,
+            payload,
+            step_five_resolved_entities,
+            step_four_entity_contexts,
+            step_six_entity_pairs,
+            settings,
+        )
+        _step_eight_placeholder(step_seven_relationships)
 
         upsert_graph_delta = channel.unary_unary(
             "/exobrain.knowledge.v1.KnowledgeInterface/UpsertGraphDelta",
@@ -588,7 +826,7 @@ async def run(job: JobEnvelope) -> None:
         upsert_request = ParseDict(step_zero_graph_delta, knowledge_pb2.UpsertGraphDeltaRequest())
         upsert_reply = await upsert_graph_delta(upsert_request)
         logger.info(
-            "knowledge.update step seven upserted chat message graph delta",
+            "knowledge.update step nine upserted chat message graph delta",
             extra={
                 "entities_upserted": upsert_reply.entities_upserted,
                 "blocks_upserted": upsert_reply.blocks_upserted,
