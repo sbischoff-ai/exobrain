@@ -9,6 +9,8 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from langchain_openai import ChatOpenAI
 
+from app.agents.model_provider_chat_model import ModelProviderChatModel
+
 from app.agents.base import ChatAgent
 from app.agents.main_assistant import MainAssistantAgent
 from app.agents.tools import TavilyWebTools, build_web_tools, default_stream_event_mappers
@@ -103,12 +105,19 @@ def _build_agent_model(settings: Settings) -> BaseChatModel:
         return FakeListChatModel(responses=fake_responses)
 
     logger.info("using model-provider assistant agent", extra={"model_alias": settings.main_agent_model})
-    return ChatOpenAI(
+    if settings.main_agent_use_openai_fallback:
+        return ChatOpenAI(
+            model=settings.main_agent_model,
+            base_url=settings.model_provider_base_url,
+            api_key="model-provider",
+            temperature=settings.main_agent_temperature,
+            streaming=True,
+        )
+
+    return ModelProviderChatModel(
         model=settings.main_agent_model,
-        base_url=settings.model_provider_base_url,
-        api_key="model-provider",
+        base_url=settings.model_provider_base_url.rstrip("/"),
         temperature=settings.main_agent_temperature,
-        streaming=True,
     )
 
 

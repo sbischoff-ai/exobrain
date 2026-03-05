@@ -175,6 +175,7 @@ Model/tool vars:
 - `MAIN_AGENT_USE_MOCK=true|false`
 - `MAIN_AGENT_MOCK_MESSAGES_FILE`
 - `MODEL_PROVIDER_BASE_URL` (default `http://localhost:8010/v1`)
+- `MAIN_AGENT_USE_OPENAI_FALLBACK=true|false` (temporary migration flag; when `true`, use `ChatOpenAI` compatibility path instead of native internal contract adapter)
 - `MAIN_AGENT_MODEL` (alias, default `agent`)
 - `TAVILY_API_KEY` (required for real web tools)
 - `WEB_TOOLS_USE_MOCK=true|false`

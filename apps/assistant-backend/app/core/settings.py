@@ -26,6 +26,7 @@ class Settings(BaseSettings):
         alias="MODEL_PROVIDER_BASE_URL",
     )
     main_agent_temperature: float = Field(default=0.0, alias="MAIN_AGENT_TEMPERATURE")
+    main_agent_use_openai_fallback: bool = Field(default=False, alias="MAIN_AGENT_USE_OPENAI_FALLBACK")
     main_agent_system_prompt: str = Field(
         default=_DEFAULT_MAIN_AGENT_SYSTEM_PROMPT,
         alias="MAIN_AGENT_SYSTEM_PROMPT",
