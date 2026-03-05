@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import KnowledgeExplorerView from './KnowledgeExplorerView.svelte';
@@ -93,7 +93,7 @@ describe('KnowledgeExplorerView', () => {
       expect(screen.getByRole('navigation', { name: 'Knowledge breadcrumbs' })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Overview' })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Root' })).toBeInTheDocument();
-      expect(screen.getByText('Child Page')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Child Page' })).toBeInTheDocument();
     });
 
     await fireEvent.click(screen.getByRole('button', { name: 'Overview' }));
@@ -216,4 +216,54 @@ describe('KnowledgeExplorerView', () => {
 
     expect(getPage).toHaveBeenCalledWith('page-1');
   });
+
+  it('preserves category chain breadcrumbs for pages when API breadcrumb path is empty', async () => {
+    getCategoryTree.mockResolvedValue({
+      categories: [
+        {
+          id: 'root',
+          name: 'Root',
+          page_count: 1,
+          children: [{ id: 'child', name: 'Child', page_count: 1, children: [] }]
+        }
+      ]
+    });
+    getCategoryPages.mockResolvedValue({ pages: [{ id: 'p-1', title: 'Child Page', summary: null }] });
+    getPage.mockResolvedValue({
+      id: 'p-1',
+      title: 'Child Page',
+      summary: null,
+      content_markdown: 'Body',
+      created_at: null,
+      updated_at: null,
+      links: [],
+      category_breadcrumb: { path: [] }
+    });
+
+    const { rerender } = render(KnowledgeExplorerView, {
+      props: {
+        explorerRoute: { type: 'category', id: 'child' },
+        expandedCategories: {}
+      }
+    });
+
+    await waitFor(() => {
+      const breadcrumbs = screen.getByRole('navigation', { name: 'Knowledge breadcrumbs' });
+      expect(within(breadcrumbs).getByRole('button', { name: 'Root' })).toBeInTheDocument();
+      expect(within(breadcrumbs).getByText('Child')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Child Page' })).toBeInTheDocument();
+    });
+
+    await fireEvent.click(screen.getByText('Child Page'));
+    await rerender({ explorerRoute: { type: 'page', id: 'p-1' }, expandedCategories: {} });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Knowledge page detail')).toBeInTheDocument();
+      const breadcrumbs = screen.getByRole('navigation', { name: 'Knowledge breadcrumbs' });
+      expect(within(breadcrumbs).getByRole('button', { name: 'Root' })).toBeInTheDocument();
+      expect(within(breadcrumbs).getByRole('button', { name: 'Child' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Child Page' })).toBeInTheDocument();
+    });
+  });
+
 });

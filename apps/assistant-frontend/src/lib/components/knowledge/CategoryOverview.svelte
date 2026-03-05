@@ -10,7 +10,10 @@
 
   export let previews: CategoryOverviewPreview[] = [];
 
-  const dispatch = createEventDispatcher<{ openCategory: { categoryId: string }; openPage: { pageId: string } }>();
+  const dispatch = createEventDispatcher<{
+    openCategory: { categoryId: string };
+    openPage: { pageId: string; categoryId: string };
+  }>();
 
   function openCategory(categoryId: string): void {
     dispatch('openCategory', { categoryId });
@@ -50,7 +53,10 @@
         {:else}
           <div class="preview-pages">
             {#each preview.pages as page (page.id)}
-              <PageCard {page} on:open={(event) => dispatch('openPage', event.detail)} />
+              <PageCard
+                {page}
+                on:open={(event) => dispatch('openPage', { ...event.detail, categoryId: preview.category.id })}
+              />
             {/each}
           </div>
         {/if}

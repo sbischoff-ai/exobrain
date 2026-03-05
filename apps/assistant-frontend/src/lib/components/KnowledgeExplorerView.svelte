@@ -32,6 +32,7 @@
   let pageDetail: KnowledgePageDetail | null = null;
   let lastLoadedCategoryId = '';
   let lastLoadedPageId = '';
+  let lastContextCategoryId = '';
 
   const dispatch = createEventDispatcher<{
     navigate: { route: ExplorerRouteState };
@@ -40,7 +41,9 @@
 
   $: currentCategory = explorerRoute.type === 'category' ? findCategoryById(rootCategories, explorerRoute.id) : null;
   $: categoryBreadcrumbs = currentCategory ? findCategoryBreadcrumbs(rootCategories, currentCategory.id) : [];
-  $: pageBreadcrumbs = pageDetail ? buildPageBreadcrumbs(pageDetail.category_breadcrumb.path, rootCategories) : [];
+  $: pageBreadcrumbs = pageDetail
+    ? buildPageBreadcrumbs(pageDetail.category_breadcrumb.path, rootCategories, lastContextCategoryId)
+    : [];
   $: categoryTreeNodes = currentCategory ? [currentCategory] : rootCategories;
 
   onMount(async () => {
@@ -99,6 +102,8 @@
         return;
       }
 
+      lastContextCategoryId = explorerRoute.id;
+
       loading = true;
       requestError = '';
       try {
@@ -135,7 +140,19 @@
   }
 
   function navigate(route: ExplorerRouteState): void {
+    if (route.type === 'category') {
+      lastContextCategoryId = route.id;
+    }
+
     dispatch('navigate', { route });
+  }
+
+  function openPage(pageId: string, categoryId?: string): void {
+    if (categoryId) {
+      lastContextCategoryId = categoryId;
+    }
+
+    navigate({ type: 'page', id: pageId });
   }
 
   function updateExpanded(categoryId: string, expanded: boolean): void {
@@ -231,11 +248,12 @@
 
   function buildPageBreadcrumbs(
     rawPath: KnowledgePageCategoryBreadcrumbItem[],
-    nodes: KnowledgeCategoryNode[]
+    nodes: KnowledgeCategoryNode[],
+    contextCategoryId: string
   ): KnowledgePageCategoryBreadcrumbItem[] {
     const leaf = rawPath.at(-1);
     if (!leaf) {
-      return [];
+      return contextCategoryId ? findCategoryPath(nodes, contextCategoryId) : [];
     }
 
     const fullPath = findCategoryPath(nodes, leaf.id);
@@ -263,7 +281,7 @@
       <CategoryOverview
         previews={overviewPreviews}
         on:openCategory={(event) => navigate({ type: 'category', id: event.detail.categoryId })}
-        on:openPage={(event) => navigate({ type: 'page', id: event.detail.pageId })}
+        on:openPage={(event) => openPage(event.detail.pageId, event.detail.categoryId)}
       />
     {:else if explorerRoute.type === 'category'}
       <CategoryPage
@@ -281,7 +299,7 @@
         {expandedCategories}
         on:navigateOverview={() => navigate({ type: 'overview' })}
         on:navigateCategory={(event) => navigate({ type: 'category', id: event.detail.categoryId })}
-        on:openPage={(event) => navigate({ type: 'page', id: event.detail.pageId })}
+        on:openPage={(event) => openPage(event.detail.pageId, explorerRoute.id)}
         on:toggleCategory={(event) => updateExpanded(event.detail.categoryId, event.detail.expanded)}
       />
     {:else}
@@ -292,7 +310,7 @@
         error={requestError}
         on:navigateOverview={() => navigate({ type: 'overview' })}
         on:navigateCategory={(event) => navigate({ type: 'category', id: event.detail.categoryId })}
-        on:openPage={(event) => navigate({ type: 'page', id: event.detail.pageId })}
+        on:openPage={(event) => openPage(event.detail.pageId)}
       />
     {/if}
   </div>
