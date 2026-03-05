@@ -50,7 +50,7 @@ class ModelProviderChatModel(BaseChatModel):
 
     @property
     def _identifying_params(self) -> dict[str, Any]:
-        return {"model": self.model, "base_url": self.base_url, "temperature": self.temperature}
+        return {"model": self.model, "base_url": self.base_url}
 
     def bind_tools(self, tools, *, tool_choice: str | None = None, **kwargs: Any):
         serialized_tools = [self._serialize_tool(tool) for tool in tools]
@@ -81,11 +81,6 @@ class ModelProviderChatModel(BaseChatModel):
         client = self.async_http_client or httpx.AsyncClient(timeout=self.timeout)
 
         response = await client.post(f"{self.base_url}/internal/chat/messages", json=payload)
-        if self._should_retry_without_temperature(response):
-            retry_payload = dict(payload)
-            retry_payload.pop("temperature", None)
-            response = await client.post(f"{self.base_url}/internal/chat/messages", json=retry_payload)
-
         response.raise_for_status()
         return self._chat_result_from_response(response.json())
 
@@ -99,27 +94,11 @@ class ModelProviderChatModel(BaseChatModel):
         raise NotImplementedError("Use async invocation for model-provider chat model")
 
 
-    def _should_retry_without_temperature(self, response: httpx.Response) -> bool:
-        if response.status_code != 400:
-            return False
-
-        try:
-            payload = response.json()
-        except ValueError:
-            return False
-
-        detail = payload.get("detail") if isinstance(payload, dict) else None
-        if not isinstance(detail, str):
-            return False
-
-        return "Unsupported value: 'temperature'" in detail
-
     def _build_payload(self, messages: list[BaseMessage], *, stop: list[str] | None, **kwargs: Any) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "model": self.model,
             "messages": [self._serialize_message(message) for message in messages],
             "stream": False,
-            "temperature": self.temperature,
         }
         if stop:
             payload["stop"] = stop

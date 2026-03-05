@@ -471,7 +471,6 @@ async def _run_step_two_entity_extraction(
         model=ModelProviderChatModel(
             model=settings.knowledge_update_extraction_model,
             base_url=settings.model_provider_base_url,
-            temperature=0,
             timeout=settings.knowledge_update_model_provider_timeout_seconds,
         ),
         tools=[],
@@ -601,7 +600,6 @@ async def _run_step_four_create_entity_contexts(
         model=ModelProviderChatModel(
             model="reasoner",
             base_url=settings.model_provider_base_url,
-            temperature=0,
             timeout=settings.knowledge_update_model_provider_timeout_seconds,
         ),
         tools=[],
@@ -671,7 +669,6 @@ async def _run_step_five_detailed_comparison(
         model=ModelProviderChatModel(
             model="worker",
             base_url=settings.model_provider_base_url,
-            temperature=0,
             timeout=settings.knowledge_update_model_provider_timeout_seconds,
         ),
         tools=[],
@@ -825,7 +822,6 @@ async def _run_step_six_relationship_extraction(
         model=ModelProviderChatModel(
             model="worker",
             base_url=settings.model_provider_base_url,
-            temperature=0,
             timeout=settings.knowledge_update_model_provider_timeout_seconds,
         ),
         tools=[],
@@ -903,7 +899,6 @@ async def _run_step_seven_match_relationship_type_and_score(
         model=ModelProviderChatModel(
             model="worker",
             base_url=settings.model_provider_base_url,
-            temperature=0,
             timeout=settings.knowledge_update_model_provider_timeout_seconds,
         ),
         tools=[],
@@ -1086,7 +1081,6 @@ async def _run_step_eight_build_final_entity_context_graphs(
             model=ModelProviderChatModel(
                 model=model_name,
                 base_url=settings.model_provider_base_url,
-                temperature=0,
                 timeout=settings.knowledge_update_model_provider_timeout_seconds,
             ),
             tools=[],
@@ -1332,7 +1326,6 @@ async def _run_step_ten_finalize_graph_delta(
         model=ModelProviderChatModel(
             model="worker",
             base_url=settings.model_provider_base_url,
-            temperature=0,
             timeout=settings.knowledge_update_model_provider_timeout_seconds,
         ),
         tools=[],
