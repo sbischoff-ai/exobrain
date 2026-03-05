@@ -161,4 +161,5 @@ Keep request subject patterns narrow enough that they do not also match events/D
 - If `knowledge.update` retries with timeout errors, verify `KNOWLEDGE_INTERFACE_GRPC_TARGET` points to a reachable knowledge-interface gRPC endpoint.
 - If `knowledge.update` fails with `unhandled errors in a TaskGroup`, inspect the forwarded worker `stderr` traceback in orchestrator logs; worker entrypoint now emits full Python tracebacks (not just the top-level message) to pinpoint which step failed.
 - If `knowledge.update` fails around entity extraction context loading, verify knowledge-interface is reachable and `GetEntityExtractionSchemaContext` can be called with the requesting user id.
+- If `knowledge.update` step 5 fails with OpenAI `400 Bad Request`, verify structured-output schemas are sent as the inner JSON schema object (not an OpenAI `{"type":"json_schema","json_schema":...}` envelope) on the native `/internal/chat/messages` contract.
 - If producers fail with `UNAVAILABLE` on `EnqueueJob`, confirm the orchestrator API process is running and reachable at `JOB_ORCHESTRATOR_API_BIND_ADDRESS` / `JOB_ORCHESTRATOR_API_PORT`.

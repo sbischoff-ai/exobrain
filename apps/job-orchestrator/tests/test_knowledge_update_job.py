@@ -214,7 +214,8 @@ async def test_run_step_two_entity_extraction_uses_worker_agent(monkeypatch: pyt
     assert result["extracted_universes"] == []
     assert captured["model_name"] == "worker"
     assert captured["tools"] == []
-    assert captured["response_format"]["type"] == "json_schema"
+    assert captured["response_format"]["type"] == "object"
+    assert captured["response_format"]["required"] == ["extracted_entities", "extracted_universes"]
 
 
 def test_classify_candidate_matches_uses_requested_thresholds() -> None:
