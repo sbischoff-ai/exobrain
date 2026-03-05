@@ -11,6 +11,7 @@ from app.worker.jobs.knowledge_update import (
     _build_step_two_entity_extraction_json_schema,
     _build_step_two_entity_extraction_system_prompt,
     _build_upsert_graph_delta_step_one,
+    _build_step_eight_final_entity_context_graph_schema,
     _build_step_seven_relationship_match_schema,
     _build_step_six_relationship_extraction_schema,
     _classify_candidate_matches,
@@ -18,7 +19,7 @@ from app.worker.jobs.knowledge_update import (
     _extract_matched_entity_id,
     _format_exception_for_stderr,
     _run_step_two_entity_extraction,
-    _step_eight_placeholder,
+    _step_nine_placeholder,
     _step_two_store_batch_document,
 )
 
@@ -238,6 +239,13 @@ def test_classify_candidate_matches_uses_requested_thresholds() -> None:
 
 
 
+
+
+def test_step_eight_final_entity_context_graph_schema_requires_entity_and_blocks() -> None:
+    schema = _build_step_eight_final_entity_context_graph_schema()
+
+    assert schema["required"] == ["entity", "blocks"]
+    assert schema["properties"]["blocks"]["items"]["required"] == ["block_id", "text"]
 def test_step_six_relationship_extraction_schema_requires_entity_pairs() -> None:
     schema = _build_step_six_relationship_extraction_schema()
 
@@ -269,8 +277,8 @@ def test_extract_matched_entity_id_parses_expected_decisions() -> None:
     assert _extract_matched_entity_id("unknown") is None
 
 
-def test_step_eight_placeholder_logs_counts(caplog: pytest.LogCaptureFixture) -> None:
+def test_step_nine_placeholder_logs_counts(caplog: pytest.LogCaptureFixture) -> None:
     with caplog.at_level(logging.INFO):
-        _step_eight_placeholder([{"from_entity_id": "1", "to_entity_id": "2"}])
+        _step_nine_placeholder([{"entity": {"entity_id": "1"}, "blocks": []}])
 
-    assert "knowledge.update step eight placeholder reached" in caplog.text
+    assert "knowledge.update step nine placeholder reached" in caplog.text
