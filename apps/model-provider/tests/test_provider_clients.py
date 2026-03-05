@@ -140,6 +140,24 @@ async def test_openai_provider_native_and_compat_chat_round_trip() -> None:
     assert native.message.content[1].type == "tool_call"
     assert fake.called_with is not None
     assert fake.called_with["tool_choice"] == "required"
+    assert fake.called_with["response_format"]["json_schema"]["name"] == "answer"
+
+
+@pytest.mark.asyncio
+async def test_openai_provider_sets_default_structured_output_name() -> None:
+    fake = FakeOpenAIClient()
+    client = OpenAIProviderClient(api_key="x", client=fake)
+
+    request = NativeChatRequest(
+        model="gpt-5-mini",
+        messages=[{"role": "user", "content": [{"type": "text", "text": "hi"}]}],
+        structured_output=StructuredOutputIntent(schema={"type": "object"}),
+    )
+
+    await client.native_chat(request)
+
+    assert fake.called_with is not None
+    assert fake.called_with["response_format"]["json_schema"]["name"] == "structured_output"
 
     frames = []
     async for frame in client.native_chat_stream(request):
