@@ -42,7 +42,12 @@
   $: currentCategory = explorerRoute.type === 'category' ? findCategoryById(rootCategories, explorerRoute.id) : null;
   $: categoryBreadcrumbs = currentCategory ? findCategoryBreadcrumbs(rootCategories, currentCategory.id) : [];
   $: pageBreadcrumbs = pageDetail
-    ? buildPageBreadcrumbs(pageDetail.category_breadcrumb.path, rootCategories, lastContextCategoryId)
+    ? buildPageBreadcrumbs(
+        pageDetail.category_breadcrumb.path,
+        rootCategories,
+        lastContextCategoryId,
+        pageDetail.category_id
+      )
     : [];
   $: categoryTreeNodes = currentCategory ? [currentCategory] : rootCategories;
 
@@ -249,15 +254,23 @@
   function buildPageBreadcrumbs(
     rawPath: KnowledgePageCategoryBreadcrumbItem[],
     nodes: KnowledgeCategoryNode[],
-    contextCategoryId: string
+    contextCategoryId: string,
+    pageCategoryId: string | null
   ): KnowledgePageCategoryBreadcrumbItem[] {
     const leaf = rawPath.at(-1);
-    if (!leaf) {
-      return contextCategoryId ? findCategoryPath(nodes, contextCategoryId) : [];
+    if (leaf) {
+      const fullPath = findCategoryPath(nodes, leaf.id);
+      return fullPath.length > 0 ? fullPath : rawPath;
     }
 
-    const fullPath = findCategoryPath(nodes, leaf.id);
-    return fullPath.length > 0 ? fullPath : rawPath;
+    if (pageCategoryId) {
+      const fullPath = findCategoryPath(nodes, pageCategoryId);
+      if (fullPath.length > 0) {
+        return fullPath;
+      }
+    }
+
+    return contextCategoryId ? findCategoryPath(nodes, contextCategoryId) : [];
   }
 </script>
 

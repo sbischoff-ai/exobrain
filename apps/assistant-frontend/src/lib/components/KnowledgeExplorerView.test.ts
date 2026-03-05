@@ -190,6 +190,7 @@ describe('KnowledgeExplorerView', () => {
     getPage.mockResolvedValue({
       id: 'page-1',
       title: 'Page Title',
+      category_id: 'task',
       summary: null,
       content_markdown: '## Body',
       created_at: '2026-01-02T03:04:05Z',
@@ -232,6 +233,7 @@ describe('KnowledgeExplorerView', () => {
     getPage.mockResolvedValue({
       id: 'p-1',
       title: 'Child Page',
+      category_id: 'child',
       summary: null,
       content_markdown: 'Body',
       created_at: null,
@@ -263,6 +265,44 @@ describe('KnowledgeExplorerView', () => {
       expect(within(breadcrumbs).getByRole('button', { name: 'Root' })).toBeInTheDocument();
       expect(within(breadcrumbs).getByRole('button', { name: 'Child' })).toBeInTheDocument();
       expect(screen.getByRole('heading', { name: 'Child Page' })).toBeInTheDocument();
+    });
+  });
+
+  it('resolves page breadcrumbs from category_id when breadcrumb path is empty', async () => {
+    getCategoryTree.mockResolvedValue({
+      categories: [
+        {
+          id: 'root',
+          name: 'Root',
+          page_count: 1,
+          children: [{ id: 'child', name: 'Child', page_count: 1, children: [] }]
+        }
+      ]
+    });
+    getCategoryPages.mockResolvedValue({ pages: [] });
+    getPage.mockResolvedValue({
+      id: 'p-1',
+      title: 'Child Page',
+      category_id: 'child',
+      summary: null,
+      content_markdown: 'Body',
+      created_at: null,
+      updated_at: null,
+      links: [],
+      category_breadcrumb: { path: [] }
+    });
+
+    render(KnowledgeExplorerView, {
+      props: {
+        explorerRoute: { type: 'page', id: 'p-1' },
+        expandedCategories: {}
+      }
+    });
+
+    await waitFor(() => {
+      const breadcrumbs = screen.getByRole('navigation', { name: 'Knowledge breadcrumbs' });
+      expect(within(breadcrumbs).getByRole('button', { name: 'Root' })).toBeInTheDocument();
+      expect(within(breadcrumbs).getByRole('button', { name: 'Child' })).toBeInTheDocument();
     });
   });
 

@@ -252,6 +252,7 @@ class KnowledgeService:
             )
         return {
             "id": entity.id,
+            "category_id": entity.type_id,
             "title": entity.name,
             "summary": self._extract_summary_from_described_by_block(reply.blocks),
             "metadata": {
