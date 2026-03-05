@@ -23,7 +23,7 @@ Provider behavior:
 - OpenAI: `response_format` is passed through directly to the OpenAI API.
 - Anthropic: `response_format.json_schema` is translated to Anthropic's output configuration.
 - Anthropic: OpenAI-style string `tool_choice` values are translated (`auto`→`{"type":"auto"}`, `none`→`{"type":"none"}`, `required`→`{"type":"any"}`).
-- Anthropic: OpenAI-style function tools are translated to Anthropic custom tools (`{"type":"function","function":{...}}` → `{"type":"custom","name","description","input_schema"}`).
+- Anthropic: OpenAI-style function tools are translated to Anthropic custom tool objects (`{"type":"function","function":{...}}` → `{"name","description","input_schema"}`).
 - Anthropic: tool `input_schema` is always normalized to an object schema; non-object function `parameters` are wrapped under `{"input": ...}` for compatibility.
 - Anthropic: OpenAI/LangChain tool schemas are normalized (OpenAPI-only keys removed, `definitions`→`$defs`, `$ref` inlined) and validated with JSON Schema Draft 2020-12 before request dispatch; invalid schemas return HTTP 400.
 - Anthropic: LangChain/OpenAI tool envelopes (`{"type":"json_schema","json_schema":{...}}`) are unwrapped to their inner `schema` before normalization to avoid invalid Anthropic tool schema errors.

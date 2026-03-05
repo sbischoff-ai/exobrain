@@ -151,7 +151,8 @@ async def test_anthropic_provider_native_preserves_tool_use_content() -> None:
 
     assert response.message.content[0].type == "tool_call"
     assert response.message.content[1].type == "text"
-    assert messages.last_create["tools"][0]["type"] == "custom"
+    assert "type" not in messages.last_create["tools"][0]
+    assert messages.last_create["tools"][0]["name"] == "lookup"
     assert messages.last_create["output_config"]["format"]["type"] == "json_schema"
 
     projected = await client.chat_completions(
