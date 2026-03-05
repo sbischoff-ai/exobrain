@@ -266,3 +266,119 @@ def test_append_mentions_edges_adds_valid_mappings_only() -> None:
     assert mentions_edge["to_id"] == "entity-1"
     assert mentions_edge["visibility"] == "PRIVATE"
     assert mentions_edge["properties"] == [{"key": "confidence", "float_value": 0.9}]
+
+class _FakeExtractionChannel:
+    def unary_unary(self, method: str, request_serializer, response_deserializer):
+        assert request_serializer is not None
+        assert response_deserializer is not None
+
+        async def _call(request):
+            if method.endswith("/GetExtractionSchemaContext"):
+                return knowledge_pb2.GetExtractionSchemaContextReply(prompt_context_markdown="## Schema")
+            if method.endswith("/GetUpsertGraphDeltaJsonSchema"):
+                return knowledge_pb2.GetUpsertGraphDeltaJsonSchemaReply(
+                    json_schema='{"type":"object","properties":{"entities":{"type":"array"}}}'
+                )
+            if method.endswith("/FindEntityCandidates"):
+                return knowledge_pb2.FindEntityCandidatesReply()
+            if method.endswith("/GetEntityContext"):
+                return knowledge_pb2.GetEntityContextReply()
+            if method.endswith("/GetEntityTypePropertyContext"):
+                return knowledge_pb2.GetEntityTypePropertyContextReply()
+            raise AssertionError(f"unexpected method: {method}")
+
+        return _call
+
+
+@pytest.mark.asyncio
+async def test_run_step_three_extraction_agent_uses_model_provider_tools(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.settings import Settings
+    from app.worker.jobs import knowledge_update
+
+    captured: dict[str, object] = {}
+
+    class FakeCompiledAgent:
+        async def ainvoke(self, payload: dict[str, object]) -> dict[str, object]:
+            captured["ainvoke_payload"] = payload
+            return {"structured_response": {"entities": [{"id": "entity-1"}]}}
+
+    def fake_create_agent(*, model, tools, system_prompt, response_format):
+        captured["model_class"] = model.__class__.__name__
+        captured["tools"] = [tool.name for tool in tools]
+        captured["serialized_tools"] = [model._serialize_tool(tool) for tool in tools]
+        captured["response_format"] = response_format
+        captured["system_prompt"] = system_prompt
+        return FakeCompiledAgent()
+
+    # Patch the imported symbol inside function scope via langchain.agents module.
+    import langchain.agents
+
+    monkeypatch.setattr(langchain.agents, "create_agent", fake_create_agent)
+
+    payload = KnowledgeUpdatePayload(
+        journal_reference="journal-1",
+        requested_by_user_id="user-1",
+        messages=[{"role": "user", "content": "hello", "created_at": "2026-03-02T12:00:00Z"}],
+    )
+
+    settings = Settings(model_provider_base_url="http://provider/v1")
+    result = await knowledge_update._run_step_three_extraction_agent(
+        _FakeExtractionChannel(), payload, "--- TURN 1 ---", settings
+    )
+
+    assert result == {"entities": [{"id": "entity-1"}]}
+    assert captured["model_class"] == "ModelProviderChatModel"
+    assert captured["tools"] == [
+        "find_entity_candidates",
+        "get_entity_context",
+        "get_entity_type_property_context",
+    ]
+    assert all(item["type"] == "function" for item in captured["serialized_tools"])
+    assert all("parameters" in item for item in captured["serialized_tools"])
+    assert captured["response_format"]["type"] == "json_schema"
+
+
+@pytest.mark.asyncio
+async def test_run_step_four_router_agent_returns_structured_response(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.settings import Settings
+    from app.worker.jobs import knowledge_update
+
+    class FakeCompiledAgent:
+        async def ainvoke(self, payload: dict[str, object]) -> dict[str, object]:
+            return {
+                "structured_response": {
+                    "mappings": [
+                        {
+                            "block_id": "block-1",
+                            "entity_id": "entity-1",
+                            "confidence": 0.95,
+                            "reason": "explicit mention",
+                        }
+                    ]
+                }
+            }
+
+    def fake_create_agent(*, model, tools, system_prompt, response_format):
+        assert model.__class__.__name__ == "ModelProviderChatModel"
+        assert tools == []
+        assert response_format["type"] == "json_schema"
+        return FakeCompiledAgent()
+
+    import langchain.agents
+
+    monkeypatch.setattr(langchain.agents, "create_agent", fake_create_agent)
+
+    mappings = await knowledge_update._run_step_four_router_agent(
+        step_one_graph_delta={"blocks": [{"id": "block-1", "properties": [{"key": "text", "string_value": "Alice"}]}]},
+        step_three_graph_delta={"entities": [{"id": "entity-1", "properties": [{"key": "name", "string_value": "Alice"}]}]},
+        settings=Settings(model_provider_base_url="http://provider/v1"),
+    )
+
+    assert mappings == [
+        {
+            "block_id": "block-1",
+            "entity_id": "entity-1",
+            "confidence": 0.95,
+            "reason": "explicit mention",
+        }
+    ]
