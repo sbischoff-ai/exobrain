@@ -420,4 +420,136 @@ async def test_anthropic_provider_passes_through_anthropic_custom_tools() -> Non
 
     await client.chat_completions(payload)
 
-    assert messages.last_create["tools"] == payload["tools"]
+    assert messages.last_create["tools"] == [
+        {
+            "type": "custom",
+            "name": "lookup",
+            "description": "Lookup records",
+            "input_schema": {"type": "object", "properties": {}},
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_anthropic_provider_drops_response_format_shim_tool_and_extracts_schema() -> None:
+    messages = FakeAnthropicMessages()
+    fake_client = SimpleNamespace(messages=messages)
+    client = AnthropicProviderClient(api_key="x", client=fake_client)
+
+    payload = {
+        "model": "claude-sonnet-4-6",
+        "messages": [{"role": "user", "content": "hi"}],
+        "tools": [
+            {
+                "type": "function",
+                "function": {
+                    "name": "response_format_9641",
+                    "description": "Response format tool for json schema output",
+                    "parameters": {
+                        "json_schema": {
+                            "type": "object",
+                            "properties": {"answer": {"type": "string"}},
+                            "required": ["answer"],
+                        }
+                    },
+                },
+            }
+        ],
+    }
+
+    await client.chat_completions(payload)
+
+    assert messages.last_create["tools"] == []
+    assert messages.last_create["output_config"] == {
+        "format": {
+            "type": "json_schema",
+            "schema": {
+                "type": "object",
+                "properties": {"answer": {"type": "string"}},
+                "required": ["answer"],
+            },
+        }
+    }
+
+
+@pytest.mark.asyncio
+async def test_anthropic_provider_drops_response_format_shim_when_response_format_present() -> None:
+    messages = FakeAnthropicMessages()
+    fake_client = SimpleNamespace(messages=messages)
+    client = AnthropicProviderClient(api_key="x", client=fake_client)
+
+    payload = {
+        "model": "claude-sonnet-4-6",
+        "messages": [{"role": "user", "content": "hi"}],
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "answer",
+                "schema": {
+                    "type": "object",
+                    "properties": {"value": {"type": "string"}},
+                    "required": ["value"],
+                },
+            },
+        },
+        "tools": [
+            {
+                "type": "function",
+                "function": {
+                    "name": "response_format_111",
+                    "description": "Response format tool",
+                    "parameters": {
+                        "json_schema": {
+                            "type": "object",
+                            "properties": {"answer": {"type": "number"}},
+                        }
+                    },
+                },
+            }
+        ],
+    }
+
+    await client.chat_completions(payload)
+
+    assert messages.last_create["tools"] == []
+    assert messages.last_create["output_config"] == {
+        "format": {
+            "type": "json_schema",
+            "schema": {
+                "type": "object",
+                "properties": {"value": {"type": "string"}},
+                "required": ["value"],
+            },
+        }
+    }
+
+
+@pytest.mark.asyncio
+async def test_anthropic_provider_rejects_invalid_tool_schema_with_tool_name() -> None:
+    messages = FakeAnthropicMessages()
+    fake_client = SimpleNamespace(messages=messages)
+    client = AnthropicProviderClient(api_key="x", client=fake_client)
+
+    payload = {
+        "model": "claude-sonnet-4-6",
+        "messages": [{"role": "user", "content": "hi"}],
+        "tools": [
+            {
+                "type": "function",
+                "function": {
+                    "name": "lookup",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"x": {"type": "string"}},
+                        "required": "x",
+                    },
+                },
+            }
+        ],
+    }
+
+    with pytest.raises(ProviderClientError) as exc_info:
+        await client.chat_completions(payload)
+
+    assert exc_info.value.status_code == 400
+    assert 'Invalid tool schema for tool "lookup"' in exc_info.value.message

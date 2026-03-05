@@ -34,6 +34,10 @@ class AnthropicProviderClient(ProviderClient):
         mapped = dict(payload)
         mapped["max_tokens"] = mapped.get("max_tokens", 1024)
 
+        response_format = mapped.pop("response_format", None)
+        if response_format is not None:
+            mapped["output_config"] = self._output_config_from_response_format(response_format)
+
         tools = mapped.get("tools")
         if isinstance(tools, list):
             anthropic_tools: list[dict[str, Any]] = []
@@ -51,20 +55,42 @@ class AnthropicProviderClient(ProviderClient):
                             message="Anthropic tool conversion requires function.name",
                         )
 
-                    input_schema = self.normalize_tool_schema(function.get("parameters"), tool_name=tool_name)
+                    description = function.get("description") or ""
+                    parameters = function.get("parameters")
+                    if self._is_response_format_shim(tool_name, description, parameters):
+                        if "output_config" not in mapped:
+                            schema = self._extract_response_format_schema(parameters)
+                            if schema is not None:
+                                mapped["output_config"] = {"format": {"type": "json_schema", "schema": schema}}
+                        continue
+
+                    input_schema = self.normalize_tool_schema(parameters, tool_name=tool_name)
 
                     anthropic_tools.append(
                         {
                             "type": "custom",
                             "name": tool_name,
-                            "description": function.get("description") or "",
+                            "description": description,
                             "input_schema": input_schema,
                         }
                     )
                 elif isinstance(tool, dict) and isinstance(tool.get("name"), str) and isinstance(
                     tool.get("input_schema"), dict
                 ):
-                    anthropic_tools.append(tool)
+                    tool_name = tool["name"]
+                    description = tool.get("description") or ""
+                    input_schema = tool["input_schema"]
+                    if self._is_response_format_shim(tool_name, description, input_schema):
+                        if "output_config" not in mapped:
+                            schema = self._extract_response_format_schema(input_schema)
+                            if schema is not None:
+                                mapped["output_config"] = {"format": {"type": "json_schema", "schema": schema}}
+                        continue
+
+                    normalized_tool = dict(tool)
+                    normalized_tool["input_schema"] = self.normalize_tool_schema(input_schema, tool_name=tool_name)
+                    normalized_tool["type"] = "custom"
+                    anthropic_tools.append(normalized_tool)
                 else:
                     raise ProviderClientError(
                         status_code=400,
@@ -84,18 +110,44 @@ class AnthropicProviderClient(ProviderClient):
             function = tool_choice.get("function")
             if isinstance(function, dict) and function.get("name"):
                 mapped["tool_choice"] = {"type": "tool", "name": function["name"]}
-
-        response_format = mapped.pop("response_format", None)
-        if response_format is not None:
-            json_schema = response_format.get("json_schema") if isinstance(response_format, dict) else None
-            schema = json_schema.get("schema") if isinstance(json_schema, dict) else None
-            if not isinstance(schema, dict) or not schema:
-                raise ProviderClientError(
-                    status_code=400,
-                    message="response_format.json_schema.schema must be a non-empty object for Anthropic",
-                )
-            mapped["output_config"] = {"format": {"type": "json_schema", "schema": schema}}
         return mapped
+
+    def _output_config_from_response_format(self, response_format: Any) -> dict[str, Any]:
+        json_schema = response_format.get("json_schema") if isinstance(response_format, dict) else None
+        schema = json_schema.get("schema") if isinstance(json_schema, dict) else None
+        if not isinstance(schema, dict) or not schema:
+            raise ProviderClientError(
+                status_code=400,
+                message="response_format.json_schema.schema must be a non-empty object for Anthropic",
+            )
+        return {"format": {"type": "json_schema", "schema": schema}}
+
+    def _is_response_format_shim(self, tool_name: str, description: str, parameters: Any) -> bool:
+        lower_name = tool_name.lower()
+        if lower_name.startswith("response_format"):
+            return True
+
+        if "response format" in description.lower() and "json" in description.lower():
+            return True
+
+        return isinstance(parameters, dict) and isinstance(parameters.get("json_schema"), dict)
+
+    def _extract_response_format_schema(self, parameters: Any) -> dict[str, Any] | None:
+        if not isinstance(parameters, dict):
+            return None
+
+        json_schema = parameters.get("json_schema")
+        if not isinstance(json_schema, dict):
+            return None
+
+        schema = json_schema.get("schema")
+        if isinstance(schema, dict) and schema:
+            return schema
+
+        if json_schema:
+            return json_schema
+
+        return None
 
     def normalize_tool_schema(self, parameters: Any, *, tool_name: str) -> dict[str, Any]:
         if not isinstance(parameters, dict):
@@ -137,7 +189,6 @@ class AnthropicProviderClient(ProviderClient):
             ) from exc
 
         return schema
-
 
     def _rewrite_definition_refs(self, node: Any) -> None:
         if isinstance(node, dict):

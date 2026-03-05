@@ -26,6 +26,7 @@ Provider behavior:
 - Anthropic: tool `input_schema` is always normalized to an object schema; non-object function `parameters` are wrapped under `{"input": ...}` for compatibility.
 - Anthropic: OpenAI/LangChain tool schemas are normalized (OpenAPI-only keys removed, `definitions`→`$defs`, `$ref` inlined) and validated with JSON Schema Draft 2020-12 before request dispatch; invalid schemas return HTTP 400.
 - Anthropic: OpenAI-style forced function tool choice is translated (`{"type":"function","function":{"name":"X"}}`→`{"type":"tool","name":"X"}`).
+- Anthropic: LangChain/OpenAI structured-output shim tools (for example names prefixed with `response_format`) are dropped from `tools`; if they carry a JSON schema and `response_format` is absent, the schema is mapped to Anthropic `output_config`.
 
 Minimal example:
 
