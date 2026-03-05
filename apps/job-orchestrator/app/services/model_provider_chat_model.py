@@ -131,7 +131,11 @@ class ModelProviderChatModel(BaseChatModel):
         if isinstance(tool_choice, str):
             if tool_choice == "required":
                 return {"type": "required"}
+            if tool_choice == "any":
+                return {"type": "required"}
             return {"type": tool_choice}
+        if tool_choice.get("type") == "any":
+            return {"type": "required"}
         if tool_choice.get("type") == "function":
             function = tool_choice.get("function", {})
             return {"type": "tool", "name": function.get("name", "tool")}
@@ -173,4 +177,3 @@ class ModelProviderChatModel(BaseChatModel):
         if isinstance(content, list):
             return "".join(str(item.get("text", "")) if isinstance(item, dict) else str(item) for item in content)
         return str(content)
-
