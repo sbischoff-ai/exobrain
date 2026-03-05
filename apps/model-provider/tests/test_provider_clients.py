@@ -314,3 +314,110 @@ async def test_anthropic_provider_rejects_invalid_response_format_schema() -> No
 
     assert exc_info.value.status_code == 400
     assert exc_info.value.message == "response_format.json_schema.schema must be a non-empty object for Anthropic"
+
+
+@pytest.mark.asyncio
+async def test_anthropic_provider_normalizes_tool_schema_keywords_defs_and_refs() -> None:
+    messages = FakeAnthropicMessages()
+    fake_client = SimpleNamespace(messages=messages)
+    client = AnthropicProviderClient(api_key="x", client=fake_client)
+
+    payload = {
+        "model": "claude-sonnet-4-6",
+        "messages": [{"role": "user", "content": "hi"}],
+        "tools": [
+            {
+                "type": "function",
+                "function": {
+                    "name": "lookup",
+                    "parameters": {
+                        "definitions": {"city": {"type": "string", "example": "Paris"}},
+                        "properties": {"city": {"$ref": "#/definitions/city", "nullable": True}},
+                        "required": ["city"],
+                    },
+                },
+            }
+        ],
+    }
+
+    await client.chat_completions(payload)
+
+    input_schema = messages.last_create["tools"][0]["input_schema"]
+    assert input_schema["type"] == "object"
+    assert "$defs" in input_schema
+    assert "definitions" not in input_schema
+    assert "example" not in input_schema["$defs"]["city"]
+    assert input_schema["properties"]["city"] == {"type": "string"}
+
+
+@pytest.mark.asyncio
+async def test_anthropic_provider_rejects_invalid_tool_shape() -> None:
+    messages = FakeAnthropicMessages()
+    fake_client = SimpleNamespace(messages=messages)
+    client = AnthropicProviderClient(api_key="x", client=fake_client)
+
+    payload = {
+        "model": "claude-sonnet-4-6",
+        "messages": [{"role": "user", "content": "hi"}],
+        "tools": [{"type": "weird"}],
+    }
+
+    with pytest.raises(ProviderClientError) as exc_info:
+        await client.chat_completions(payload)
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.message == "Anthropic tools must be OpenAI function tools or Anthropic custom tools"
+
+
+@pytest.mark.asyncio
+async def test_anthropic_provider_rejects_external_ref_tool_schema() -> None:
+    messages = FakeAnthropicMessages()
+    fake_client = SimpleNamespace(messages=messages)
+    client = AnthropicProviderClient(api_key="x", client=fake_client)
+
+    payload = {
+        "model": "claude-sonnet-4-6",
+        "messages": [{"role": "user", "content": "hi"}],
+        "tools": [
+            {
+                "type": "function",
+                "function": {
+                    "name": "lookup",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"city": {"$ref": "https://example.com/schema.json"}},
+                    },
+                },
+            }
+        ],
+    }
+
+    with pytest.raises(ProviderClientError) as exc_info:
+        await client.chat_completions(payload)
+
+    assert exc_info.value.status_code == 400
+    assert 'Invalid tool schema for tool "lookup"' in exc_info.value.message
+
+
+@pytest.mark.asyncio
+async def test_anthropic_provider_passes_through_anthropic_custom_tools() -> None:
+    messages = FakeAnthropicMessages()
+    fake_client = SimpleNamespace(messages=messages)
+    client = AnthropicProviderClient(api_key="x", client=fake_client)
+
+    payload = {
+        "model": "claude-sonnet-4-6",
+        "messages": [{"role": "user", "content": "hi"}],
+        "tools": [
+            {
+                "type": "custom",
+                "name": "lookup",
+                "description": "Lookup records",
+                "input_schema": {"type": "object", "properties": {}},
+            }
+        ],
+    }
+
+    await client.chat_completions(payload)
+
+    assert messages.last_create["tools"] == payload["tools"]
