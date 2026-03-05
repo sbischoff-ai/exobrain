@@ -155,3 +155,45 @@ def test_chat_completions_shim_projects_tool_calls(monkeypatch) -> None:
     assert body["model"] == "agent"
     assert body["choices"][0]["message"]["tool_calls"][0]["function"]["name"] == "lookup"
     assert body["usage"]["total_tokens"] == 11
+
+
+@pytest.mark.asyncio
+async def test_architect_rate_limiter_sleeps_when_budget_exceeded(monkeypatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+
+    main = importlib.import_module("app.main")
+
+    slept: list[float] = []
+
+    async def fake_sleep(seconds: float) -> None:
+        slept.append(seconds)
+
+    monkeypatch.setattr(main.asyncio, "sleep", fake_sleep)
+
+    limiter = main.ArchitectTokenRateLimiter(max_tokens_per_minute=1000)
+    await limiter.throttle_for_payload("architect", {"text": "x" * 1600})
+    await limiter.throttle_for_payload("architect", {"text": "x" * 3200})
+
+    assert slept
+    assert slept[0] > 0
+
+
+@pytest.mark.asyncio
+async def test_architect_rate_limiter_ignores_non_architect_alias(monkeypatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+
+    main = importlib.import_module("app.main")
+
+    slept: list[float] = []
+
+    async def fake_sleep(seconds: float) -> None:
+        slept.append(seconds)
+
+    monkeypatch.setattr(main.asyncio, "sleep", fake_sleep)
+
+    limiter = main.ArchitectTokenRateLimiter(max_tokens_per_minute=1)
+    await limiter.throttle_for_payload("agent", {"text": "x" * 10000})
+
+    assert slept == []

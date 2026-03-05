@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
 import uuid
+from collections import deque
+from datetime import UTC, datetime
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -37,6 +40,39 @@ from app.providers.openai_client import OpenAIProviderClient
 from app.settings import Settings, get_settings
 
 logger = logging.getLogger(__name__)
+
+
+class ArchitectTokenRateLimiter:
+    def __init__(self, max_tokens_per_minute: int, *, window_seconds: int = 60) -> None:
+        self._max_tokens_per_minute = max_tokens_per_minute
+        self._window_seconds = window_seconds
+        self._entries: deque[tuple[int, datetime]] = deque()
+        self._lock = asyncio.Lock()
+
+    async def throttle_for_payload(self, alias: str, payload: Any) -> None:
+        if alias != "architect":
+            return
+
+        async with self._lock:
+            now = datetime.now(UTC)
+            token_estimate = round(len(json.dumps(payload, default=str)) / 4)
+            self._entries.append((token_estimate, now))
+            self._trim_expired(now)
+
+            token_sum = sum(tokens for tokens, _ in self._entries)
+            if token_sum < self._max_tokens_per_minute or len(self._entries) < 2:
+                return
+
+            previous_timestamp = self._entries[-2][1]
+            elapsed = (now - previous_timestamp).total_seconds()
+            sleep_seconds = max(0.0, self._window_seconds - elapsed)
+            if sleep_seconds > 0:
+                await asyncio.sleep(sleep_seconds)
+
+    def _trim_expired(self, now: datetime) -> None:
+        cutoff = now.timestamp() - self._window_seconds
+        while self._entries and self._entries[0][1].timestamp() < cutoff:
+            self._entries.popleft()
 
 
 class ProviderRegistry:
@@ -289,6 +325,7 @@ settings = get_settings()
 logging.basicConfig(level=settings.effective_log_level)
 models_config = load_models_config(settings.model_provider_config_path)
 registry = ProviderRegistry(settings, models_config)
+architect_rate_limiter = ArchitectTokenRateLimiter(settings.architect_model_max_tokens_per_minute)
 app = FastAPI(title="model-provider", version="0.1.0")
 
 
@@ -314,6 +351,7 @@ async def internal_chat_messages(request: NativeChatRequest, x_request_id: str |
     alias_config, provider_client = registry.resolve(request.model)
 
     request_payload = request.model_copy(update={"model": alias_config.upstream_model})
+    await architect_rate_limiter.throttle_for_payload(request.model, request_payload.model_dump(mode="json"))
     start = time.perf_counter()
 
     try:
@@ -366,6 +404,7 @@ async def chat_completions(request: Request, x_request_id: str | None = Header(d
 
     try:
         native_request = _to_native_request(payload, alias_config)
+        await architect_rate_limiter.throttle_for_payload(alias, native_request.model_dump(mode="json"))
         if native_request.stream:
             message_id = f"chatcmpl-{uuid.uuid4().hex}"
 

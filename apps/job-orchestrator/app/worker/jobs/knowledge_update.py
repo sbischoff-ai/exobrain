@@ -251,6 +251,7 @@ async def _run_step_four_router_agent(
         model="router",
         base_url=settings.model_provider_base_url,
         temperature=0,
+        timeout=settings.knowledge_update_model_provider_timeout_seconds,
     )
     response_schema = _build_step_four_router_json_schema()
     prompt = _build_step_four_router_prompt(step_one_graph_delta, step_three_graph_delta)
@@ -480,6 +481,7 @@ async def _run_step_three_extraction_agent(
         model=settings.knowledge_update_extraction_model,
         base_url=settings.model_provider_base_url,
         temperature=0,
+        timeout=settings.knowledge_update_model_provider_timeout_seconds,
     )
 
     compiled_agent = create_agent(
