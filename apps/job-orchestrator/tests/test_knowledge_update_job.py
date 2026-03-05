@@ -11,6 +11,7 @@ from app.worker.jobs.knowledge_update_types import (
     FinalEntityContextGraph,
     MatchedRelationship,
     RelationshipPair,
+    ResolvedEntity,
 )
 from app.worker.jobs.knowledge_update import (
     _build_batch_document,
@@ -27,7 +28,13 @@ from app.worker.jobs.knowledge_update import (
     _extract_matched_entity_id,
     _format_exception_for_stderr,
     _run_step_two_entity_extraction,
-        _step_two_store_batch_document,
+    _run_step_four_create_entity_contexts,
+    _run_step_five_detailed_comparison,
+    _run_step_six_relationship_extraction,
+    _run_step_seven_match_relationship_type_and_score,
+    _run_step_eight_build_final_entity_context_graphs,
+    _run_step_ten_finalize_graph_delta,
+    _step_two_store_batch_document,
 )
 
 
@@ -220,8 +227,9 @@ async def test_run_step_two_entity_extraction_uses_worker_agent(monkeypatch: pyt
     assert result.extracted_universes == []
     assert captured["model_name"] == "worker"
     assert captured["tools"] == []
-    assert captured["response_format"]["type"] == "object"
-    assert captured["response_format"]["required"] == ["extracted_entities", "extracted_universes"]
+    assert captured["response_format"]["type"] == "json_schema"
+    assert captured["response_format"]["json_schema"]["strict"] is True
+    assert captured["response_format"]["json_schema"]["schema"]["required"] == ["extracted_entities", "extracted_universes"]
 
 
 def test_classify_candidate_matches_uses_requested_thresholds() -> None:
@@ -341,3 +349,139 @@ def test_step_nine_merge_graph_delta_maps_blocks_edges_and_universes() -> None:
     assert "DESCRIBED_BY" in edge_types
     assert "SUMMARIZES" in edge_types
     assert "edge.related_to" in edge_types
+
+
+class _NoopChannel:
+    def unary_unary(self, method: str, request_serializer, response_deserializer):
+        assert request_serializer is not None
+        assert response_deserializer is not None
+
+        async def _call(request):
+            if method.endswith("/GetEntityContext"):
+                return knowledge_pb2.GetEntityContextReply()
+            if method.endswith("/GetEdgeExtractionSchemaContext"):
+                return knowledge_pb2.GetEdgeExtractionSchemaContextReply()
+            if method.endswith("/GetEntityTypePropertyContext"):
+                return knowledge_pb2.GetEntityTypePropertyContextReply()
+            raise AssertionError(f"unexpected method: {method}")
+
+        return _call
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("runner_name", "runner_args"),
+    [
+        (
+            "_run_step_two_entity_extraction",
+            lambda settings: (FakeEntityExtractionChannel(), KnowledgeUpdatePayload(
+                journal_reference="journal-1",
+                requested_by_user_id="user-1",
+                messages=[{"role": "user", "content": "hello", "created_at": "2026-03-02T12:00:00Z"}],
+            ), "--- TURN 1 ---", settings),
+        ),
+        (
+            "_run_step_four_create_entity_contexts",
+            lambda settings: (
+                EntityExtractionResult.model_validate({
+                    "extracted_entities": [{"name": "Alice", "node_type": "node.person", "aliases": [], "short_description": "A person"}],
+                    "extracted_universes": [],
+                }),
+                "--- TURN 1 ---",
+                settings,
+            ),
+        ),
+        (
+            "_run_step_five_detailed_comparison",
+            lambda settings: (
+                _NoopChannel(),
+                KnowledgeUpdatePayload(journal_reference="journal-1", requested_by_user_id="user-1", messages=[]),
+                [],
+                [],
+                settings,
+            ),
+        ),
+        (
+            "_run_step_six_relationship_extraction",
+            lambda settings: (
+                [],
+                "--- TURN 1 ---",
+                settings,
+            ),
+        ),
+        (
+            "_run_step_seven_match_relationship_type_and_score",
+            lambda settings: (
+                _NoopChannel(),
+                KnowledgeUpdatePayload(journal_reference="journal-1", requested_by_user_id="user-1", messages=[]),
+                [],
+                ["# Alice"],
+                [],
+                settings,
+            ),
+        ),
+        (
+            "_run_step_eight_build_final_entity_context_graphs",
+            lambda settings: (
+                _NoopChannel(),
+                KnowledgeUpdatePayload(journal_reference="journal-1", requested_by_user_id="user-1", messages=[]),
+                [
+                    ResolvedEntity.model_validate(
+                        {
+                            "entity_index": 0,
+                            "resolution_status": "new_entity",
+                            "resolved_entity_id": "entity-1",
+                            "extracted_entity": {"name": "Alice", "node_type": "node.person", "aliases": [], "short_description": "A person"},
+                        }
+                    )
+                ],
+                ["# Alice"],
+                settings,
+            ),
+        ),
+        (
+            "_run_step_ten_finalize_graph_delta",
+            lambda settings: (
+                {"entities": [], "blocks": [], "edges": []},
+                settings,
+                "user-1",
+            ),
+        ),
+    ],
+)
+async def test_worker_agents_use_strict_response_format(monkeypatch: pytest.MonkeyPatch, runner_name: str, runner_args) -> None:
+    import app.worker.jobs.knowledge_update as knowledge_update
+    import langchain.agents
+    from app.settings import Settings
+
+    captured: dict[str, object] = {}
+
+    class FakeCompiledAgent:
+        async def ainvoke(self, payload: dict[str, object]) -> dict[str, object]:
+            if runner_name == "_run_step_two_entity_extraction":
+                return {"structured_response": {"extracted_entities": [], "extracted_universes": []}}
+            if runner_name == "_run_step_four_create_entity_contexts":
+                return {"structured_response": {"focused_markdown": "# entity"}}
+            if runner_name == "_run_step_five_detailed_comparison":
+                return {"structured_response": {"decision": "NEW_ENTITY"}}
+            if runner_name == "_run_step_six_relationship_extraction":
+                return {"structured_response": {"entity_pairs": []}}
+            if runner_name == "_run_step_seven_match_relationship_type_and_score":
+                return {"structured_response": {"from_entity_id": "entity-1", "to_entity_id": "entity-1", "edge_type": "edge.related", "confidence": 0.9}}
+            if runner_name == "_run_step_eight_build_final_entity_context_graphs":
+                return {"structured_response": {"entity": {"entity_id": "entity-1", "node_type": "node.person"}, "blocks": []}}
+            return {"structured_response": {"mentions": []}}
+
+    def fake_create_agent(*, model, tools, system_prompt, response_format):
+        captured["response_format"] = response_format
+        return FakeCompiledAgent()
+
+    monkeypatch.setattr(langchain.agents, "create_agent", fake_create_agent)
+
+    settings = Settings(model_provider_base_url="http://provider", knowledge_update_extraction_model="worker")
+    runner = getattr(knowledge_update, runner_name)
+    args = runner_args(settings)
+    await runner(*args)
+
+    assert captured["response_format"]["type"] == "json_schema"
+    assert captured["response_format"]["json_schema"]["strict"] is True
