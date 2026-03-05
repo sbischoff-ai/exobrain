@@ -32,4 +32,4 @@ def test_settings_prefers_explicit_api_bind_address() -> None:
 
 def test_settings_uses_local_model_provider_default() -> None:
     settings = Settings()
-    assert settings.model_provider_base_url == "http://localhost:8010/v1"
+    assert settings.model_provider_base_url == "http://localhost:8010"

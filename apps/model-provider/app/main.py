@@ -298,7 +298,7 @@ async def list_models() -> dict[str, list[dict[str, str]]]:
     }
 
 
-@app.post("/internal/v1/chat/messages", response_model=NativeChatResponse)
+@app.post("/v1/internal/chat/messages", response_model=NativeChatResponse)
 async def internal_chat_messages(request: NativeChatRequest, x_request_id: str | None = Header(default=None)) -> Response:
     request_id = x_request_id or str(uuid.uuid4())
     alias_config, provider_client = registry.resolve(request.model)

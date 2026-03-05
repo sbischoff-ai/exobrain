@@ -4,7 +4,6 @@ import pytest
 
 from app.agents.factory import (
     MockTavilyWebTools,
-    _normalize_native_model_provider_base_url,
     _build_agent_model,
     _build_web_tools_dependency,
     _load_mock_messages,
@@ -53,7 +52,7 @@ def test_build_agent_model_uses_model_provider_chat_model_when_mock_disabled() -
         MAIN_AGENT_USE_MOCK=False,
         MAIN_AGENT_MODEL="agent",
         MAIN_AGENT_TEMPERATURE=0.2,
-        MODEL_PROVIDER_BASE_URL="http://localhost:8010/v1",
+        MODEL_PROVIDER_BASE_URL="http://localhost:8010",
     )
 
     model = _build_agent_model(settings)
@@ -63,25 +62,13 @@ def test_build_agent_model_uses_model_provider_chat_model_when_mock_disabled() -
     assert model.base_url == "http://localhost:8010"
 
 
-@pytest.mark.parametrize(
-    ("input_url", "expected_url"),
-    [
-        ("http://localhost:8010/v1", "http://localhost:8010"),
-        ("http://localhost:8010/v1/", "http://localhost:8010"),
-        ("http://localhost:8010", "http://localhost:8010"),
-        ("http://localhost:8010/custom", "http://localhost:8010/custom"),
-    ],
-)
-def test_normalize_native_model_provider_base_url(input_url: str, expected_url: str) -> None:
-    assert _normalize_native_model_provider_base_url(input_url) == expected_url
-
 
 def test_build_agent_model_uses_openai_fallback_when_enabled() -> None:
     settings = Settings(
         MAIN_AGENT_USE_MOCK=False,
         MAIN_AGENT_MODEL="agent",
         MAIN_AGENT_TEMPERATURE=0.2,
-        MODEL_PROVIDER_BASE_URL="http://localhost:8010/v1",
+        MODEL_PROVIDER_BASE_URL="http://localhost:8010",
         MAIN_AGENT_USE_OPENAI_FALLBACK=True,
     )
 
@@ -96,7 +83,7 @@ def test_build_agent_model_uses_openai_compat_when_contract_mode_legacy() -> Non
         MAIN_AGENT_USE_MOCK=False,
         MAIN_AGENT_MODEL="agent",
         MAIN_AGENT_TEMPERATURE=0.2,
-        MODEL_PROVIDER_BASE_URL="http://localhost:8010/v1",
+        MODEL_PROVIDER_BASE_URL="http://localhost:8010",
         MAIN_AGENT_MODEL_CONTRACT_MODE="legacy_openai_compatible",
     )
 
@@ -111,7 +98,7 @@ def test_build_agent_model_uses_openai_compat_when_rollout_fallback_enabled() ->
         MAIN_AGENT_USE_MOCK=False,
         MAIN_AGENT_MODEL="agent",
         MAIN_AGENT_TEMPERATURE=0.2,
-        MODEL_PROVIDER_BASE_URL="http://localhost:8010/v1",
+        MODEL_PROVIDER_BASE_URL="http://localhost:8010",
         MAIN_AGENT_MODEL_CONTRACT_MODE="native",
         MAIN_AGENT_USE_OPENAI_FALLBACK=True,
     )
