@@ -6,6 +6,7 @@ OpenAI-compatible gateway that maps internal model aliases to upstream providers
 
 - `GET /v1/models`
 - `POST /v1/chat/completions`
+- `POST /internal/v1/chat/messages`
 - `POST /v1/embeddings`
 
 ## Behavior
@@ -50,6 +51,18 @@ Minimal example:
 ```
 
 Invalid `response_format` payloads (for example malformed schema objects) return a 4xx validation error from the gateway or upstream provider.
+
+
+### Native internal chat contract
+
+`POST /internal/v1/chat/messages` is the provider-native internal interface. It models:
+
+- Message blocks (`text`, `tool_result`, `tool_call`) across `system`/`user`/`assistant` messages
+- Tool definitions and tool choice policy
+- Structured output intent as explicit JSON schema input
+- Streaming event frames (`text_delta`, `tool_call`, `completion`, `usage`)
+
+`/v1/chat/completions` is retained as a compatibility shim that projects between OpenAI payloads and the internal native contract.
 
 ## Local run
 

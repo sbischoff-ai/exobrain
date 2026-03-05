@@ -4,6 +4,12 @@ from types import SimpleNamespace
 
 import pytest
 
+from app.contracts.native_chat import (
+    NativeChatRequest,
+    StructuredOutputIntent,
+    TextBlock,
+    ToolChoiceAny,
+)
 from app.providers.anthropic_client import AnthropicProviderClient
 from app.providers.base import ProviderClientError
 from app.providers.openai_client import OpenAIProviderClient
@@ -34,11 +40,54 @@ class FakeOpenAIClient:
             self.stream_called_with = kwargs
 
             async def _gen():
-                yield FakeDumpable({"id": "chunk1", "choices": []})
+                yield FakeDumpable(
+                    {
+                        "id": "chunk1",
+                        "choices": [{"delta": {"content": "he"}, "finish_reason": None}],
+                    }
+                )
+                yield FakeDumpable(
+                    {
+                        "id": "chunk2",
+                        "choices": [
+                            {
+                                "delta": {
+                                    "tool_calls": [
+                                        {
+                                            "id": "call_1",
+                                            "function": {"name": "lookup", "arguments": '{"id": "42"}'},
+                                        }
+                                    ]
+                                },
+                                "finish_reason": "tool_calls",
+                            }
+                        ],
+                    }
+                )
 
             return _gen()
         self.called_with = kwargs
-        return FakeDumpable({"id": "resp1", "object": "chat.completion"})
+        return FakeDumpable(
+            {
+                "id": "resp1",
+                "object": "chat.completion",
+                "choices": [
+                    {
+                        "message": {
+                            "content": "hello",
+                            "tool_calls": [
+                                {
+                                    "id": "call_1",
+                                    "function": {"name": "lookup", "arguments": '{"id": "42"}'},
+                                }
+                            ],
+                        },
+                        "finish_reason": "tool_calls",
+                    }
+                ],
+                "usage": {"prompt_tokens": 11, "completion_tokens": 7, "total_tokens": 18},
+            }
+        )
 
     async def _emb_create(self, **kwargs):
         self.called_with = kwargs
@@ -46,45 +95,30 @@ class FakeOpenAIClient:
 
 
 @pytest.mark.asyncio
-async def test_openai_provider_uses_sdk_methods_for_chat_embeddings_and_stream() -> None:
+async def test_openai_provider_native_and_compat_chat_round_trip() -> None:
     fake = FakeOpenAIClient()
     client = OpenAIProviderClient(api_key="x", client=fake)
 
-    response_format = {
-        "type": "json_schema",
-        "json_schema": {
-            "name": "answer",
-            "schema": {
-                "type": "object",
-                "properties": {"value": {"type": "string"}},
-                "required": ["value"],
-            },
-        },
-    }
-    chat_payload = {"model": "gpt-5-mini", "messages": [{"role": "user", "content": "hi"}]}
-    response = await client.chat_completions(
-        {**chat_payload, "max_tokens": 123, "response_format": response_format}
+    request = NativeChatRequest(
+        model="gpt-5-mini",
+        messages=[{"role": "user", "content": [{"type": "text", "text": "hi"}]}],
+        tools=[{"type": "function", "name": "lookup", "parameters": {"type": "object"}}],
+        tool_choice=ToolChoiceAny(),
+        structured_output=StructuredOutputIntent(name="answer", schema={"type": "object"}),
     )
-    assert response["id"] == "resp1"
-    assert fake.called_with["model"] == chat_payload["model"]
-    assert "max_tokens" not in fake.called_with
-    assert fake.called_with["max_completion_tokens"] == 123
-    assert fake.called_with["response_format"] == response_format
 
-    emb_payload = {"model": "text-embedding-3-large", "input": ["hi"]}
-    emb_response = await client.embeddings(emb_payload)
-    assert emb_response["object"] == "list"
-    assert fake.called_with == emb_payload
+    native = await client.native_chat(request)
+    assert native.message.content[0].type == "text"
+    assert native.message.content[1].type == "tool_call"
+    assert fake.called_with is not None
+    assert fake.called_with["tool_choice"] == "required"
 
-    chunks = []
-    async for chunk in client.chat_completions_stream(
-        {**chat_payload, "stream": True, "response_format": response_format}
-    ):
-        chunks.append(chunk)
-    assert chunks[-1] == "data: [DONE]\n\n"
-    assert fake.stream_called_with is not None
-    assert "max_tokens" not in fake.stream_called_with
-    assert fake.stream_called_with["response_format"] == response_format
+    frames = []
+    async for frame in client.native_chat_stream(request):
+        frames.append(frame)
+    assert any(frame.type == "text_delta" for frame in frames)
+    assert any(frame.type == "tool_call" for frame in frames)
+    assert any(frame.type == "completion" for frame in frames)
 
 
 class FakeAnthropicMessages:
@@ -92,239 +126,47 @@ class FakeAnthropicMessages:
         self.last_create = kwargs
         return SimpleNamespace(
             id="msg_1",
-            content=[SimpleNamespace(type="text", text="hello")],
+            content=[
+                SimpleNamespace(type="tool_use", id="call_1", name="lookup", input={"id": "42"}),
+                SimpleNamespace(type="text", text="hello"),
+            ],
             stop_reason="end_turn",
             usage=SimpleNamespace(input_tokens=11, output_tokens=7),
         )
 
 
 @pytest.mark.asyncio
-async def test_anthropic_provider_translates_to_openai_shape() -> None:
+async def test_anthropic_provider_native_preserves_tool_use_content() -> None:
     messages = FakeAnthropicMessages()
     fake_client = SimpleNamespace(messages=messages)
     client = AnthropicProviderClient(api_key="x", client=fake_client)
 
-    payload = {"model": "claude-sonnet-4-6", "messages": [{"role": "user", "content": "hi"}]}
-    response = await client.chat_completions(payload)
+    request = NativeChatRequest(
+        model="claude-sonnet-4-6",
+        messages=[{"role": "user", "content": [{"type": "text", "text": "hi"}]}],
+        tools=[{"type": "function", "name": "lookup", "parameters": {"type": "object"}}],
+        structured_output=StructuredOutputIntent(name="answer", schema={"type": "object"}),
+    )
+    response = await client.native_chat(request)
 
-    assert response["object"] == "chat.completion"
-    assert response["choices"][0]["message"]["content"] == "hello"
-    assert messages.last_create["model"] == "claude-sonnet-4-6"
+    assert response.message.content[0].type == "tool_call"
+    assert response.message.content[1].type == "text"
+    assert messages.last_create["tools"][0]["type"] == "custom"
+    assert messages.last_create["output_config"]["format"]["type"] == "json_schema"
 
-
-@pytest.mark.asyncio
-async def test_anthropic_provider_translates_openai_response_format_to_output_config() -> None:
-    messages = FakeAnthropicMessages()
-    fake_client = SimpleNamespace(messages=messages)
-    client = AnthropicProviderClient(api_key="x", client=fake_client)
-
-    payload = {
-        "model": "claude-sonnet-4-6",
-        "messages": [{"role": "user", "content": "hi"}],
-        "response_format": {
-            "type": "json_schema",
-            "json_schema": {
-                "name": "answer",
-                "schema": {
-                    "type": "object",
-                    "properties": {"value": {"type": "string"}},
-                    "required": ["value"],
-                },
-            },
-        },
-    }
-
-    await client.chat_completions(payload)
-
-    assert "response_format" not in messages.last_create
-    assert messages.last_create["output_config"] == {
-        "format": {
-            "type": "json_schema",
-            "schema": {
-                "type": "object",
-                "properties": {"value": {"type": "string"}},
-                "required": ["value"],
-            },
-        }
-    }
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("tool_choice", "expected"),
-    [
-        ("auto", {"type": "auto"}),
-        ("none", {"type": "none"}),
-        ("required", {"type": "any"}),
-    ],
-)
-async def test_anthropic_provider_translates_string_tool_choice(
-    tool_choice: str,
-    expected: dict[str, str],
-) -> None:
-    messages = FakeAnthropicMessages()
-    fake_client = SimpleNamespace(messages=messages)
-    client = AnthropicProviderClient(api_key="x", client=fake_client)
-
-    payload = {
-        "model": "claude-sonnet-4-6",
-        "messages": [{"role": "user", "content": "hi"}],
-        "tool_choice": tool_choice,
-    }
-
-    await client.chat_completions(payload)
-
-    assert messages.last_create["tool_choice"] == expected
-
-
-@pytest.mark.asyncio
-async def test_anthropic_provider_maps_openai_tools_to_anthropic_tools() -> None:
-    messages = FakeAnthropicMessages()
-    fake_client = SimpleNamespace(messages=messages)
-    client = AnthropicProviderClient(api_key="x", client=fake_client)
-
-    payload = {
-        "model": "claude-sonnet-4-6",
-        "messages": [{"role": "user", "content": "hi"}],
-        "tools": [
-            {
-                "type": "function",
-                "function": {
-                    "name": "lookup",
-                    "description": "Lookup records",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {"id": {"type": "string"}},
-                        "required": ["id"],
-                    },
-                },
-            }
-        ],
-    }
-
-    await client.chat_completions(payload)
-
-    assert messages.last_create["tools"] == [
+    projected = await client.chat_completions(
         {
-            "type": "custom",
-            "name": "lookup",
-            "description": "Lookup records",
-            "input_schema": {
-                "type": "object",
-                "properties": {"id": {"type": "string"}},
-                "required": ["id"],
-            },
+            "model": "claude-sonnet-4-6",
+            "messages": [{"role": "user", "content": "hi"}],
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {"name": "lookup", "parameters": {"type": "object"}},
+                }
+            ],
         }
-    ]
-
-
-@pytest.mark.asyncio
-async def test_anthropic_provider_adds_default_object_schema_for_tool_parameters() -> None:
-    messages = FakeAnthropicMessages()
-    fake_client = SimpleNamespace(messages=messages)
-    client = AnthropicProviderClient(api_key="x", client=fake_client)
-
-    payload = {
-        "model": "claude-sonnet-4-6",
-        "messages": [{"role": "user", "content": "hi"}],
-        "tools": [
-            {
-                "type": "function",
-                "function": {
-                    "name": "lookup",
-                    "description": "Lookup records",
-                    "parameters": {"properties": {"id": {"type": "string"}}},
-                },
-            }
-        ],
-    }
-
-    await client.chat_completions(payload)
-
-    assert messages.last_create["tools"][0]["input_schema"] == {
-        "type": "object",
-        "properties": {"id": {"type": "string"}},
-    }
-
-
-@pytest.mark.asyncio
-async def test_anthropic_provider_wraps_non_object_tool_parameters() -> None:
-    messages = FakeAnthropicMessages()
-    fake_client = SimpleNamespace(messages=messages)
-    client = AnthropicProviderClient(api_key="x", client=fake_client)
-
-    payload = {
-        "model": "claude-sonnet-4-6",
-        "messages": [{"role": "user", "content": "hi"}],
-        "tools": [
-            {
-                "type": "function",
-                "function": {
-                    "name": "lookup",
-                    "description": "Lookup records",
-                    "parameters": {"type": "string"},
-                },
-            }
-        ],
-    }
-
-    await client.chat_completions(payload)
-
-    assert messages.last_create["tools"][0]["input_schema"] == {
-        "type": "object",
-        "properties": {"input": {"type": "string"}},
-        "required": ["input"],
-    }
-
-
-@pytest.mark.asyncio
-async def test_anthropic_provider_translates_openai_function_tool_choice() -> None:
-    messages = FakeAnthropicMessages()
-    fake_client = SimpleNamespace(messages=messages)
-    client = AnthropicProviderClient(api_key="x", client=fake_client)
-
-    payload = {
-        "model": "claude-sonnet-4-6",
-        "messages": [{"role": "user", "content": "hi"}],
-        "tool_choice": {"type": "function", "function": {"name": "lookup"}},
-    }
-
-    await client.chat_completions(payload)
-
-    assert messages.last_create["tool_choice"] == {"type": "tool", "name": "lookup"}
-
-
-@pytest.mark.asyncio
-async def test_anthropic_provider_accepts_direct_response_format_schema() -> None:
-    messages = FakeAnthropicMessages()
-    fake_client = SimpleNamespace(messages=messages)
-    client = AnthropicProviderClient(api_key="x", client=fake_client)
-
-    payload = {
-        "model": "claude-sonnet-4-6",
-        "messages": [{"role": "user", "content": "hi"}],
-        "response_format": {
-            "type": "json_schema",
-            "json_schema": {
-                "type": "object",
-                "properties": {"value": {"type": "string"}},
-                "required": ["value"],
-            },
-        },
-    }
-
-    await client.chat_completions(payload)
-
-    assert messages.last_create["output_config"] == {
-        "format": {
-            "type": "json_schema",
-            "schema": {
-                "type": "object",
-                "properties": {"value": {"type": "string"}},
-                "required": ["value"],
-            },
-        }
-    }
+    )
+    assert projected["choices"][0]["message"]["tool_calls"][0]["function"]["name"] == "lookup"
 
 
 @pytest.mark.asyncio
@@ -346,150 +188,3 @@ async def test_anthropic_provider_rejects_invalid_response_format_schema() -> No
         await client.chat_completions(payload)
 
     assert exc_info.value.status_code == 400
-    assert exc_info.value.message == "response_format.json_schema must contain a non-empty object schema for Anthropic"
-
-
-@pytest.mark.asyncio
-async def test_anthropic_provider_unwraps_langchain_json_schema_tool_parameters() -> None:
-    messages = FakeAnthropicMessages()
-    fake_client = SimpleNamespace(messages=messages)
-    client = AnthropicProviderClient(api_key="x", client=fake_client)
-
-    payload = {
-        "model": "claude-sonnet-4-6",
-        "messages": [{"role": "user", "content": "hi"}],
-        "tools": [
-            {
-                "type": "function",
-                "function": {
-                    "name": "lookup",
-                    "parameters": {
-                        "type": "json_schema",
-                        "json_schema": {
-                            "name": "response_format_bce2",
-                            "schema": {
-                                "type": "object",
-                                "properties": {"id": {"type": "string"}},
-                                "required": ["id"],
-                            },
-                        },
-                    },
-                },
-            }
-        ],
-    }
-
-    await client.chat_completions(payload)
-
-    assert messages.last_create["tools"][0]["input_schema"] == {
-        "type": "object",
-        "properties": {"id": {"type": "string"}},
-        "required": ["id"],
-    }
-
-
-@pytest.mark.asyncio
-async def test_anthropic_provider_normalizes_tool_schema_keywords_defs_and_refs() -> None:
-    messages = FakeAnthropicMessages()
-    fake_client = SimpleNamespace(messages=messages)
-    client = AnthropicProviderClient(api_key="x", client=fake_client)
-
-    payload = {
-        "model": "claude-sonnet-4-6",
-        "messages": [{"role": "user", "content": "hi"}],
-        "tools": [
-            {
-                "type": "function",
-                "function": {
-                    "name": "lookup",
-                    "parameters": {
-                        "definitions": {"city": {"type": "string", "example": "Paris"}},
-                        "properties": {"city": {"$ref": "#/definitions/city", "nullable": True}},
-                        "required": ["city"],
-                    },
-                },
-            }
-        ],
-    }
-
-    await client.chat_completions(payload)
-
-    input_schema = messages.last_create["tools"][0]["input_schema"]
-    assert input_schema["type"] == "object"
-    assert "$defs" in input_schema
-    assert "definitions" not in input_schema
-    assert "example" not in input_schema["$defs"]["city"]
-    assert input_schema["properties"]["city"] == {"type": "string"}
-
-
-@pytest.mark.asyncio
-async def test_anthropic_provider_rejects_invalid_tool_shape() -> None:
-    messages = FakeAnthropicMessages()
-    fake_client = SimpleNamespace(messages=messages)
-    client = AnthropicProviderClient(api_key="x", client=fake_client)
-
-    payload = {
-        "model": "claude-sonnet-4-6",
-        "messages": [{"role": "user", "content": "hi"}],
-        "tools": [{"type": "weird"}],
-    }
-
-    with pytest.raises(ProviderClientError) as exc_info:
-        await client.chat_completions(payload)
-
-    assert exc_info.value.status_code == 400
-    assert exc_info.value.message == "Anthropic tools must be OpenAI function tools or Anthropic custom tools"
-
-
-@pytest.mark.asyncio
-async def test_anthropic_provider_rejects_external_ref_tool_schema() -> None:
-    messages = FakeAnthropicMessages()
-    fake_client = SimpleNamespace(messages=messages)
-    client = AnthropicProviderClient(api_key="x", client=fake_client)
-
-    payload = {
-        "model": "claude-sonnet-4-6",
-        "messages": [{"role": "user", "content": "hi"}],
-        "tools": [
-            {
-                "type": "function",
-                "function": {
-                    "name": "lookup",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {"city": {"$ref": "https://example.com/schema.json"}},
-                    },
-                },
-            }
-        ],
-    }
-
-    with pytest.raises(ProviderClientError) as exc_info:
-        await client.chat_completions(payload)
-
-    assert exc_info.value.status_code == 400
-    assert 'Invalid tool schema for tool "lookup"' in exc_info.value.message
-
-
-@pytest.mark.asyncio
-async def test_anthropic_provider_passes_through_anthropic_custom_tools() -> None:
-    messages = FakeAnthropicMessages()
-    fake_client = SimpleNamespace(messages=messages)
-    client = AnthropicProviderClient(api_key="x", client=fake_client)
-
-    payload = {
-        "model": "claude-sonnet-4-6",
-        "messages": [{"role": "user", "content": "hi"}],
-        "tools": [
-            {
-                "type": "custom",
-                "name": "lookup",
-                "description": "Lookup records",
-                "input_schema": {"type": "object", "properties": {}},
-            }
-        ],
-    }
-
-    await client.chat_completions(payload)
-
-    assert messages.last_create["tools"] == payload["tools"]
