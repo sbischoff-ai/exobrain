@@ -39,11 +39,14 @@ class AnthropicProviderClient(ProviderClient):
         self._client = client or AsyncAnthropic(api_key=api_key, timeout=timeout_seconds)
 
     def _native_to_messages_payload(self, request: NativeChatRequest) -> dict[str, Any]:
+        system_content, messages = self._native_messages(request)
         payload: dict[str, Any] = {
             "model": request.model,
-            "messages": self._native_messages(request),
+            "messages": messages,
             "max_tokens": request.max_tokens or 1024,
         }
+        if system_content:
+            payload["system"] = system_content
         if request.temperature is not None:
             payload["temperature"] = request.temperature
         if request.tools:
@@ -66,9 +69,16 @@ class AnthropicProviderClient(ProviderClient):
             payload["output_config"] = {"format": {"type": "json_schema", "schema": request.structured_output.json_schema}}
         return payload
 
-    def _native_messages(self, request: NativeChatRequest) -> list[dict[str, Any]]:
+    def _native_messages(self, request: NativeChatRequest) -> tuple[list[dict[str, str]], list[dict[str, Any]]]:
+        system_blocks: list[dict[str, str]] = []
         messages: list[dict[str, Any]] = []
         for message in request.messages:
+            if message.role == "system":
+                for block in message.content:
+                    if block.type == "text":
+                        system_blocks.append({"type": "text", "text": block.text})
+                continue
+
             content: list[dict[str, Any]] = []
             for block in message.content:
                 if block.type == "text":
@@ -86,7 +96,7 @@ class AnthropicProviderClient(ProviderClient):
                         }
                     )
             messages.append({"role": message.role, "content": content})
-        return messages
+        return system_blocks, messages
 
     def _to_messages_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
         mapped = dict(payload)

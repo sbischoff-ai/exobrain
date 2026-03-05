@@ -164,7 +164,10 @@ async def test_anthropic_provider_native_preserves_tool_use_content() -> None:
 
     request = NativeChatRequest(
         model="claude-sonnet-4-6",
-        messages=[{"role": "user", "content": [{"type": "text", "text": "hi"}]}],
+        messages=[
+            {"role": "system", "content": [{"type": "text", "text": "You are a test assistant"}]},
+            {"role": "user", "content": [{"type": "text", "text": "hi"}]},
+        ],
         tools=[{"type": "function", "name": "lookup", "parameters": {"type": "object"}}],
         structured_output=StructuredOutputIntent(name="answer", schema={"type": "object"}),
     )
@@ -175,6 +178,8 @@ async def test_anthropic_provider_native_preserves_tool_use_content() -> None:
     assert "type" not in messages.last_create["tools"][0]
     assert messages.last_create["tools"][0]["name"] == "lookup"
     assert messages.last_create["output_config"]["format"]["type"] == "json_schema"
+    assert messages.last_create["system"] == [{"type": "text", "text": "You are a test assistant"}]
+    assert all(item["role"] != "system" for item in messages.last_create["messages"])
 
     projected = await client.chat_completions(
         {
