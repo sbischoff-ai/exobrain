@@ -4,10 +4,11 @@ import argparse
 import asyncio
 import json
 import logging
+import random
 import re
 import sys
 import traceback
-from typing import TypeVar
+from typing import Awaitable, Callable, TypeVar
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
 import grpc
@@ -33,6 +34,99 @@ logger = logging.getLogger(__name__)
 _MATCH_DECISION_PATTERN = re.compile(r"^MATCH\((?P<entity_id>[^)]+)\)$")
 _PARSE_DICT_FIELD_PATTERN = re.compile(r"Failed to parse (?P<field>[A-Za-z_][A-Za-z0-9_]*) field")
 _ModelT = TypeVar("_ModelT", bound=BaseModel)
+_ResultT = TypeVar("_ResultT")
+
+
+class KnowledgeUpdateStepError(RuntimeError):
+    def __init__(self, *, step_name: str, operation: str, original_exception: BaseException) -> None:
+        self.step_name = step_name
+        self.operation = operation
+        self.original_exception_class = type(original_exception).__name__
+        message = (
+            "knowledge.update step failed"
+            f" step_name={step_name}"
+            f" operation={operation}"
+            f" original_exception_class={self.original_exception_class}"
+            f" detail={original_exception}"
+        )
+        super().__init__(message)
+
+
+def _is_transient_error(exc: BaseException) -> bool:
+    if isinstance(exc, (asyncio.TimeoutError, TimeoutError, grpc.RpcError)):
+        if isinstance(exc, grpc.aio.AioRpcError):
+            return exc.code() in {
+                grpc.StatusCode.DEADLINE_EXCEEDED,
+                grpc.StatusCode.UNAVAILABLE,
+                grpc.StatusCode.RESOURCE_EXHAUSTED,
+                grpc.StatusCode.INTERNAL,
+            }
+        return True
+
+    status_code = getattr(exc, "status_code", None)
+    response = getattr(exc, "response", None)
+    if status_code is None and response is not None:
+        status_code = getattr(response, "status_code", None)
+    if isinstance(status_code, int) and 500 <= status_code <= 599:
+        return True
+
+    transient_http_error_names = {
+        "TimeoutException",
+        "TransportError",
+        "ReadTimeout",
+        "ConnectTimeout",
+        "RemoteProtocolError",
+    }
+    return type(exc).__name__ in transient_http_error_names
+
+
+async def _call_with_retry(
+    *,
+    step_name: str,
+    operation: str,
+    call: Callable[[], Awaitable[_ResultT]],
+    max_attempts: int = 3,
+    base_delay_seconds: float = 0.2,
+    max_delay_seconds: float = 2.0,
+) -> _ResultT:
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return await call()
+        except Exception as exc:  # noqa: BLE001
+            if not _is_transient_error(exc) or attempt >= max_attempts:
+                logger.error(
+                    "knowledge.update step operation failed",
+                    extra={
+                        "step_name": step_name,
+                        "operation": operation,
+                        "attempt": attempt,
+                        "max_attempts": max_attempts,
+                        "exception_class": type(exc).__name__,
+                    },
+                )
+                raise KnowledgeUpdateStepError(
+                    step_name=step_name,
+                    operation=operation,
+                    original_exception=exc,
+                ) from exc
+
+            backoff = min(max_delay_seconds, base_delay_seconds * (2 ** (attempt - 1)))
+            jitter = random.uniform(0.0, backoff * 0.2)
+            delay_seconds = backoff + jitter
+            logger.warning(
+                "knowledge.update retrying transient failure",
+                extra={
+                    "step_name": step_name,
+                    "operation": operation,
+                    "attempt": attempt,
+                    "max_attempts": max_attempts,
+                    "delay_seconds": delay_seconds,
+                    "exception_class": type(exc).__name__,
+                },
+            )
+            await asyncio.sleep(delay_seconds)
+
+    raise RuntimeError("knowledge.update retry loop exhausted")
 
 
 def _compact_validation_summary(exc: ValidationError) -> str:
@@ -144,11 +238,15 @@ async def _build_upsert_graph_delta_step_one(
         request_serializer=knowledge_pb2.GetUserInitGraphRequest.SerializeToString,
         response_deserializer=knowledge_pb2.GetUserInitGraphReply.FromString,
     )
-    init_graph = await get_user_init_graph(
-        knowledge_pb2.GetUserInitGraphRequest(
-            user_id=payload.requested_by_user_id,
-            user_name=payload.requested_by_user_id,
-        )
+    init_graph = await _call_with_retry(
+        step_name="step zero",
+        operation="GetUserInitGraph",
+        call=lambda: get_user_init_graph(
+            knowledge_pb2.GetUserInitGraphRequest(
+                user_id=payload.requested_by_user_id,
+                user_name=payload.requested_by_user_id,
+            )
+        ),
     )
 
     request = knowledge_pb2.UpsertGraphDeltaRequest()
@@ -332,10 +430,14 @@ async def _run_step_two_entity_extraction(
         request_serializer=knowledge_pb2.GetEntityExtractionSchemaContextRequest.SerializeToString,
         response_deserializer=knowledge_pb2.GetEntityExtractionSchemaContextReply.FromString,
     )
-    context_reply = await get_entity_extraction_schema_context_rpc(
-        knowledge_pb2.GetEntityExtractionSchemaContextRequest(
-            user_id=payload.requested_by_user_id,
-        )
+    context_reply = await _call_with_retry(
+        step_name="step two",
+        operation="GetEntityExtractionSchemaContext",
+        call=lambda: get_entity_extraction_schema_context_rpc(
+            knowledge_pb2.GetEntityExtractionSchemaContextRequest(
+                user_id=payload.requested_by_user_id,
+            )
+        ),
     )
     context_dict = _message_to_dict(context_reply, rpc_name="GetEntityExtractionSchemaContext")
 
@@ -350,7 +452,11 @@ async def _run_step_two_entity_extraction(
         system_prompt=_build_step_two_entity_extraction_system_prompt(context_dict),
         response_format=build_strict_response_format(_build_step_two_entity_extraction_json_schema()),
     )
-    reply = await compiled_agent.ainvoke({"messages": [{"role": "user", "content": markdown_document}]})
+    reply = await _call_with_retry(
+        step_name="step two",
+        operation="entity_extraction_agent.ainvoke",
+        call=lambda: compiled_agent.ainvoke({"messages": [{"role": "user", "content": markdown_document}]}),
+    )
     structured = reply.get("structured_response") if isinstance(reply, dict) else None
     if not isinstance(structured, dict):
         raise RuntimeError("knowledge.update step two validation failed: missing structured_response")
@@ -404,13 +510,17 @@ async def _run_step_three_entity_candidate_matching(
         node_type = extracted_entity.node_type
         short_description = extracted_entity.short_description
 
-        candidates_reply = await find_candidates_rpc(
-            knowledge_pb2.FindEntityCandidatesRequest(
-                names=names,
-                potential_type_ids=[node_type] if node_type else [],
-                short_description=short_description,
-                user_id=payload.requested_by_user_id,
-            )
+        candidates_reply = await _call_with_retry(
+            step_name="step three",
+            operation="FindEntityCandidates",
+            call=lambda: find_candidates_rpc(
+                knowledge_pb2.FindEntityCandidatesRequest(
+                    names=names,
+                    potential_type_ids=[node_type] if node_type else [],
+                    short_description=short_description,
+                    user_id=payload.requested_by_user_id,
+                )
+            ),
         )
         candidate_dicts = _message_to_dict(candidates_reply, rpc_name="FindEntityCandidates").get("candidates", [])
         classification = _classify_candidate_matches(
@@ -482,7 +592,11 @@ async def _run_step_four_create_entity_contexts(
             },
             ensure_ascii=False,
         )
-        reply = await compiled_agent.ainvoke({"messages": [{"role": "user", "content": prompt}]})
+        reply = await _call_with_retry(
+            step_name="step four",
+            operation="entity_context_agent.ainvoke",
+            call=lambda: compiled_agent.ainvoke({"messages": [{"role": "user", "content": prompt}]}),
+        )
         structured = reply.get("structured_response") if isinstance(reply, dict) else None
         if not isinstance(structured, dict) or not isinstance(structured.get("focused_markdown"), str):
             raise RuntimeError("knowledge.update step four reasoner returned invalid focused_markdown")
@@ -559,12 +673,16 @@ async def _run_step_five_detailed_comparison(
             candidate_ids = [item for item in match_item.candidate_entity_ids if isinstance(item, str)]
             candidate_contexts: list[dict[str, object]] = []
             for candidate_id in candidate_ids:
-                context_reply = await get_entity_context_rpc(
-                    knowledge_pb2.GetEntityContextRequest(
-                        entity_id=candidate_id,
-                        user_id=payload.requested_by_user_id,
-                        max_block_level=1,
-                    )
+                context_reply = await _call_with_retry(
+                    step_name="step five",
+                    operation="GetEntityContext",
+                    call=lambda: get_entity_context_rpc(
+                        knowledge_pb2.GetEntityContextRequest(
+                            entity_id=candidate_id,
+                            user_id=payload.requested_by_user_id,
+                            max_block_level=1,
+                        )
+                    ),
                 )
                 candidate_contexts.append(_message_to_dict(context_reply, rpc_name="GetEntityContext"))
 
@@ -576,7 +694,11 @@ async def _run_step_five_detailed_comparison(
                 },
                 ensure_ascii=False,
             )
-            reply = await comparison_agent.ainvoke({"messages": [{"role": "user", "content": prompt}]})
+            reply = await _call_with_retry(
+                step_name="step five",
+                operation="detailed_comparison_agent.ainvoke",
+                call=lambda: comparison_agent.ainvoke({"messages": [{"role": "user", "content": prompt}]}),
+            )
             structured = reply.get("structured_response") if isinstance(reply, dict) else None
             if not isinstance(structured, dict):
                 raise RuntimeError("knowledge.update step five validation failed: missing structured_response")
@@ -696,7 +818,11 @@ async def _run_step_six_relationship_extraction(
         },
         ensure_ascii=False,
     )
-    reply = await relationship_agent.ainvoke({"messages": [{"role": "user", "content": prompt}]})
+    reply = await _call_with_retry(
+        step_name="step six",
+        operation="relationship_extraction_agent.ainvoke",
+        call=lambda: relationship_agent.ainvoke({"messages": [{"role": "user", "content": prompt}]}),
+    )
     structured = reply.get("structured_response") if isinstance(reply, dict) else None
     if not isinstance(structured, dict):
         raise RuntimeError("knowledge.update step six validation failed: missing structured_response")
@@ -781,12 +907,16 @@ async def _run_step_seven_match_relationship_type_and_score(
             skipped_invalid += 1
             continue
 
-        edge_context_reply = await get_edge_extraction_schema_context_rpc(
-            knowledge_pb2.GetEdgeExtractionSchemaContextRequest(
-                first_entity_type=node_type_1,
-                second_entity_type=node_type_2,
-                user_id=payload.requested_by_user_id,
-            )
+        edge_context_reply = await _call_with_retry(
+            step_name="step seven",
+            operation="GetEdgeExtractionSchemaContext",
+            call=lambda: get_edge_extraction_schema_context_rpc(
+                knowledge_pb2.GetEdgeExtractionSchemaContextRequest(
+                    first_entity_type=node_type_1,
+                    second_entity_type=node_type_2,
+                    user_id=payload.requested_by_user_id,
+                )
+            ),
         )
         edge_context = _message_to_dict(edge_context_reply, rpc_name="GetEdgeExtractionSchemaContext")
         prompt = json.dumps(
@@ -798,7 +928,11 @@ async def _run_step_seven_match_relationship_type_and_score(
             ensure_ascii=False,
         )
 
-        reply = await relationship_match_agent.ainvoke({"messages": [{"role": "user", "content": prompt}]})
+        reply = await _call_with_retry(
+            step_name="step seven",
+            operation="relationship_match_agent.ainvoke",
+            call=lambda: relationship_match_agent.ainvoke({"messages": [{"role": "user", "content": prompt}]}),
+        )
         structured = reply.get("structured_response") if isinstance(reply, dict) else None
         if not isinstance(structured, dict):
             raise RuntimeError("knowledge.update step seven validation failed: missing structured_response")
@@ -876,12 +1010,16 @@ async def _run_step_eight_build_final_entity_context_graphs(
         if not node_type:
             raise RuntimeError(f"knowledge.update step eight validation failed: missing node_type for entity {entity_id}")
 
-        type_context_reply = await get_entity_type_property_context_rpc(
-            knowledge_pb2.GetEntityTypePropertyContextRequest(
-                type_id=node_type,
-                user_id=payload.requested_by_user_id,
-                include_inherited=True,
-            )
+        type_context_reply = await _call_with_retry(
+            step_name="step eight",
+            operation="GetEntityTypePropertyContext",
+            call=lambda: get_entity_type_property_context_rpc(
+                knowledge_pb2.GetEntityTypePropertyContextRequest(
+                    type_id=node_type,
+                    user_id=payload.requested_by_user_id,
+                    include_inherited=True,
+                )
+            ),
         )
         type_context = _message_to_dict(type_context_reply, rpc_name="GetEntityTypePropertyContext")
 
@@ -899,12 +1037,16 @@ async def _run_step_eight_build_final_entity_context_graphs(
 
         if resolution_status == "matched":
             model_name = "reasoner"
-            context_reply = await get_entity_context_rpc(
-                knowledge_pb2.GetEntityContextRequest(
-                    entity_id=entity_id,
-                    user_id=payload.requested_by_user_id,
-                    max_block_level=2,
-                )
+            context_reply = await _call_with_retry(
+                step_name="step eight",
+                operation="GetEntityContext",
+                call=lambda: get_entity_context_rpc(
+                    knowledge_pb2.GetEntityContextRequest(
+                        entity_id=entity_id,
+                        user_id=payload.requested_by_user_id,
+                        max_block_level=2,
+                    )
+                ),
             )
             existing_entity_context = _message_to_dict(context_reply, rpc_name="GetEntityContext")
             system_prompt = (
@@ -936,7 +1078,11 @@ async def _run_step_eight_build_final_entity_context_graphs(
             },
             ensure_ascii=False,
         )
-        reply = await compiled_agent.ainvoke({"messages": [{"role": "user", "content": prompt}]})
+        reply = await _call_with_retry(
+            step_name="step eight",
+            operation="final_entity_graph_agent.ainvoke",
+            call=lambda: compiled_agent.ainvoke({"messages": [{"role": "user", "content": prompt}]}),
+        )
         structured = reply.get("structured_response") if isinstance(reply, dict) else None
         if not isinstance(structured, dict):
             raise RuntimeError("knowledge.update step eight validation failed: missing structured_response")
@@ -1171,7 +1317,11 @@ async def _run_step_ten_finalize_graph_delta(
         response_format=build_strict_response_format(_StepTenMentionsResult),
     )
     prompt = json.dumps({"blocks": blocks, "entities": entities}, ensure_ascii=False)
-    reply = await agent.ainvoke({"messages": [{"role": "user", "content": prompt}]})
+    reply = await _call_with_retry(
+        step_name="step ten",
+        operation="graph_finalizer_agent.ainvoke",
+        call=lambda: agent.ainvoke({"messages": [{"role": "user", "content": prompt}]}),
+    )
     structured = reply.get("structured_response") if isinstance(reply, dict) else None
     if not isinstance(structured, dict):
         raise RuntimeError("knowledge.update step ten validation failed: missing structured_response")
@@ -1306,7 +1456,11 @@ async def run(job: JobEnvelope) -> None:
             response_deserializer=knowledge_pb2.UpsertGraphDeltaReply.FromString,
         )
         upsert_request = _validate_upsert_graph_delta_payload("step ten", step_ten_final_graph_delta)
-        upsert_reply = await upsert_graph_delta(upsert_request)
+        upsert_reply = await _call_with_retry(
+            step_name="step eleven",
+            operation="UpsertGraphDelta",
+            call=lambda: upsert_graph_delta(upsert_request),
+        )
         logger.info(
             "knowledge.update step eleven upserted final graph delta",
             extra={

@@ -117,6 +117,12 @@ Current `knowledge.update` worker flow uses explicit small steps:
 10. Finalize graph delta (`worker` model): detect block-to-entity mentions and append `MENTIONS` edges with confidence and `status=asserted`; validate the finalized payload via protobuf `ParseDict` before upsert.
 11. Upsert graph delta (deterministic): persist the final merged graph delta via `UpsertGraphDelta`.
 
+Operational hardening notes for `knowledge.update`:
+
+- Every `channel.unary_unary(...)` gRPC call and every `agent.ainvoke(...)` model-provider call is wrapped with bounded retry logic using exponential backoff plus jitter.
+- Retries are limited to transient failures (timeouts, transport-level issues, and 5xx-style upstream failures).
+- Final failures are raised as step-scoped `KnowledgeUpdateStepError` instances carrying `step_name`, `operation`, and original exception class so logs are diagnosable without scraping full tracebacks.
+
 ## Common commands
 
 Apply local migrations:
