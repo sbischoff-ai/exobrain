@@ -1,6 +1,6 @@
 from functools import lru_cache
 from typing import Literal
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     log_level: str | None = Field(default=None, alias="LOG_LEVEL")
     main_agent_model: str = Field(default="agent", alias="MAIN_AGENT_MODEL")
     model_provider_base_url: str = Field(
-        default="http://localhost:8010",
+        default="http://localhost:8010/v1",
         alias="MODEL_PROVIDER_BASE_URL",
     )
     main_agent_temperature: float = Field(default=0.0, alias="MAIN_AGENT_TEMPERATURE")
@@ -99,6 +99,14 @@ class Settings(BaseSettings):
     @property
     def enable_swagger(self) -> bool:
         return self.app_env.lower() == "local"
+
+    @field_validator("model_provider_base_url", mode="before")
+    @classmethod
+    def _normalize_model_provider_base_url(cls, value: str) -> str:
+        normalized = str(value).rstrip("/")
+        if normalized.endswith("/v1"):
+            return normalized
+        return f"{normalized}/v1"
 
     @property
     def effective_log_level(self) -> str:

@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -32,7 +32,7 @@ class Settings(BaseSettings):
         gt=0,
     )
     model_provider_base_url: str = Field(
-        default="http://localhost:8010",
+        default="http://localhost:8010/v1",
         alias="MODEL_PROVIDER_BASE_URL",
     )
     knowledge_update_extraction_model: str = Field(
@@ -48,6 +48,15 @@ class Settings(BaseSettings):
     job_orchestrator_api_enabled: bool = Field(default=True, alias="JOB_ORCHESTRATOR_API_ENABLED")
     job_orchestrator_worker_enabled: bool = Field(default=True, alias="JOB_ORCHESTRATOR_WORKER_ENABLED")
     reshape_schema_query: str = Field(default="", alias="RESHAPE_SCHEMA_QUERY")
+
+
+    @field_validator("model_provider_base_url", mode="before")
+    @classmethod
+    def _normalize_model_provider_base_url(cls, value: str) -> str:
+        normalized = str(value).rstrip("/")
+        if normalized.endswith("/v1"):
+            return normalized
+        return f"{normalized}/v1"
 
     @property
     def job_orchestrator_api_bind_target(self) -> str:
