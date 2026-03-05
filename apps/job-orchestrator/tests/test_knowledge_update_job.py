@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from types import SimpleNamespace
 
 import pytest
 
@@ -23,6 +24,8 @@ from app.worker.jobs.knowledge_update import (
     _build_step_seven_relationship_match_schema,
     _build_step_six_relationship_extraction_schema,
     _build_step_ten_mentions_schema,
+    _validate_upsert_graph_delta_payload,
+    run,
     _classify_candidate_matches,
     _deduplicate_entity_pairs,
     _extract_matched_entity_id,
@@ -485,3 +488,146 @@ async def test_worker_agents_use_strict_response_format(monkeypatch: pytest.Monk
 
     assert captured["response_format"]["type"] == "json_schema"
     assert captured["response_format"]["json_schema"]["strict"] is True
+
+
+def test_validate_upsert_graph_delta_payload_reports_invalid_field_path() -> None:
+    with pytest.raises(RuntimeError) as exc_info:
+        _validate_upsert_graph_delta_payload(
+            "step nine",
+            {
+                "entities": [
+                    {
+                        "id": "entity-1",
+                        "type_id": "node.person",
+                        "user_id": "user-1",
+                        "visibility": "PRIVATE",
+                        "properties": [{"key": "name", "string_value": "Alice", "invalid_field": "nope"}],
+                    }
+                ]
+            },
+        )
+
+    assert "step nine" in str(exc_info.value)
+    assert "entities.properties" in str(exc_info.value)
+
+
+class _FakeGrpcChannelContext:
+    def __init__(self) -> None:
+        self._upsert_calls = 0
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+    async def channel_ready(self) -> None:
+        return None
+
+    def unary_unary(self, method: str, request_serializer, response_deserializer):
+        assert request_serializer is not None
+        assert response_deserializer is not None
+
+        async def _call(request):
+            self._upsert_calls += 1
+            return knowledge_pb2.UpsertGraphDeltaReply(entities_upserted=1, blocks_upserted=1, edges_upserted=1)
+
+        return _call
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("invalid_step", "expected_step", "expected_path"),
+    [
+        ("step_zero", "step zero", "entities.properties"),
+        ("step_nine", "step nine", "entities.properties"),
+        ("step_ten", "step ten", "entities.properties"),
+    ],
+)
+async def test_run_fails_fast_with_step_specific_parse_dict_validation(
+    monkeypatch: pytest.MonkeyPatch,
+    invalid_step: str,
+    expected_step: str,
+    expected_path: str,
+) -> None:
+    import app.worker.jobs.knowledge_update as knowledge_update
+
+    payload = {
+        "journal_reference": "journal-1",
+        "requested_by_user_id": "user-1",
+        "messages": [{"role": "user", "content": "hello", "created_at": "2026-03-02T12:00:00Z"}],
+    }
+    job = SimpleNamespace(payload=payload)
+
+    valid_graph = {"entities": [], "blocks": [], "edges": [], "universes": []}
+    invalid_graph = {
+        "entities": [
+            {
+                "id": "entity-1",
+                "type_id": "node.person",
+                "user_id": "user-1",
+                "visibility": "PRIVATE",
+                "properties": [{"key": "name", "string_value": "Alice", "invalid_field": "bad"}],
+            }
+        ],
+        "blocks": [],
+        "edges": [],
+        "universes": [],
+    }
+
+    async def fake_step_zero(channel, parsed_payload):
+        assert parsed_payload.requested_by_user_id == "user-1"
+        return invalid_graph if invalid_step == "step_zero" else valid_graph
+
+    monkeypatch.setattr(knowledge_update, "_build_upsert_graph_delta_step_one", fake_step_zero)
+    monkeypatch.setattr(knowledge_update, "_step_two_store_batch_document", lambda _payload: "doc")
+
+    async def fake_step_two(*_args, **_kwargs):
+        return EntityExtractionResult.model_validate({"extracted_entities": [], "extracted_universes": []})
+
+    async def fake_step_three(*_args, **_kwargs):
+        return []
+
+    async def fake_step_four(*_args, **_kwargs):
+        return []
+
+    async def fake_step_five(*_args, **_kwargs):
+        return []
+
+    async def fake_step_six(*_args, **_kwargs):
+        return []
+
+    async def fake_step_seven(*_args, **_kwargs):
+        return []
+
+    async def fake_step_eight(*_args, **_kwargs):
+        return []
+
+    def fake_step_nine(*_args, **_kwargs):
+        return invalid_graph if invalid_step == "step_nine" else valid_graph
+
+    async def fake_step_ten(*_args, **_kwargs):
+        return invalid_graph if invalid_step == "step_ten" else valid_graph
+
+    monkeypatch.setattr(knowledge_update, "_run_step_two_entity_extraction", fake_step_two)
+    monkeypatch.setattr(knowledge_update, "_run_step_three_entity_candidate_matching", fake_step_three)
+    monkeypatch.setattr(knowledge_update, "_run_step_four_create_entity_contexts", fake_step_four)
+    monkeypatch.setattr(knowledge_update, "_run_step_five_detailed_comparison", fake_step_five)
+    monkeypatch.setattr(knowledge_update, "_run_step_six_relationship_extraction", fake_step_six)
+    monkeypatch.setattr(knowledge_update, "_run_step_seven_match_relationship_type_and_score", fake_step_seven)
+    monkeypatch.setattr(knowledge_update, "_run_step_eight_build_final_entity_context_graphs", fake_step_eight)
+    monkeypatch.setattr(knowledge_update, "_build_step_nine_merge_graph_delta", fake_step_nine)
+    monkeypatch.setattr(knowledge_update, "_run_step_ten_finalize_graph_delta", fake_step_ten)
+
+    monkeypatch.setattr(knowledge_update, "get_settings", lambda: SimpleNamespace(
+        knowledge_interface_grpc_target="localhost:50051",
+        knowledge_interface_connect_timeout_seconds=0.1,
+    ))
+    monkeypatch.setattr(knowledge_update.grpc.aio, "insecure_channel", lambda _target: _FakeGrpcChannelContext())
+
+    with pytest.raises(RuntimeError) as exc_info:
+        await run(job)
+
+    error_message = str(exc_info.value)
+    assert expected_step in error_message
+    assert expected_path in error_message

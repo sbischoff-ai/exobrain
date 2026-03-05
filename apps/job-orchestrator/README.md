@@ -104,7 +104,7 @@ This API ownership keeps producers decoupled from JetStream subject/version deta
 For `knowledge.update`, clients must provide `user_id` plus the typed `knowledge_update` payload (`journal_reference`, `messages`, and `requested_by_user_id`), and the server uses `user_id` as the envelope correlation id.
 Current `knowledge.update` worker flow uses explicit small steps:
 
-0. Create chat-message graph delta (deterministic): map payload messages into `node.chat_message` + `node.block` with `SENT_TO` / `SENT_BY` / `DESCRIBED_BY` edges.
+0. Create chat-message graph delta (deterministic): map payload messages into `node.chat_message` + `node.block` with `SENT_TO` / `SENT_BY` / `DESCRIBED_BY` edges, then validate the intermediate graph payload via protobuf `ParseDict` before continuing.
 1. Create markdown batch document (deterministic): format the conversation into a compact LLM-friendly turn transcript.
 2. Entity extraction (`worker` model): call `GetEntityExtractionSchemaContext` with `requesting_user_id`, inject context into the system prompt, and return strict structured JSON with `extracted_entities` and `extracted_universes`.
 3. Entity candidate matching (deterministic): for each extracted entity, call `FindEntityCandidates` with names/aliases/description/type and classify by score thresholds (`>0.1`, `>0.6`, `>0.15`) to decide direct match vs. detailed comparison.
@@ -113,8 +113,8 @@ Current `knowledge.update` worker flow uses explicit small steps:
 6. Relationship extraction (`worker` model): derive related entity pairs from markdown using the resolved entity IDs from step 5; step output is validated with typed Pydantic models before deduplication/filtering.
 7. Relationship type + score (`worker` model): for each related pair, call `GetEdgeExtractionSchemaContext` (with `requesting_user_id`) and choose direction/edge type/confidence.
 8. Build final entity context graphs (`worker`/`reasoner`): for each resolved entity, call `GetEntityTypePropertyContext` (with `requesting_user_id`) and produce entity + block-tree payloads; matched entities also include `GetEntityContext` (block level 2) context for minimal updates.
-9. Merge graph delta (deterministic): merge step-0 chat-message graph delta with step-8 final entity context graphs (mapping entity/block payloads, replacing `NEW_BLOCK_N` placeholders with UUIDs), step-7 relationship edges (`status=asserted`), and step-2 fictional universes.
-10. Finalize graph delta (`worker` model): detect block-to-entity mentions and append `MENTIONS` edges with confidence and `status=asserted`.
+9. Merge graph delta (deterministic): merge step-0 chat-message graph delta with step-8 final entity context graphs (mapping entity/block payloads, replacing `NEW_BLOCK_N` placeholders with UUIDs), step-7 relationship edges (`status=asserted`), and step-2 fictional universes, then validate the merged payload via protobuf `ParseDict`.
+10. Finalize graph delta (`worker` model): detect block-to-entity mentions and append `MENTIONS` edges with confidence and `status=asserted`; validate the finalized payload via protobuf `ParseDict` before upsert.
 11. Upsert graph delta (deterministic): persist the final merged graph delta via `UpsertGraphDelta`.
 
 ## Common commands
