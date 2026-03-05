@@ -155,5 +155,6 @@ Keep request subject patterns narrow enough that they do not also match events/D
 
 - If `knowledge.update` retries with timeout errors, verify `KNOWLEDGE_INTERFACE_GRPC_TARGET` points to a reachable knowledge-interface gRPC endpoint.
 - If `knowledge.update` fails with `unhandled errors in a TaskGroup`, inspect the forwarded worker `stderr` traceback in orchestrator logs; worker entrypoint now emits full Python tracebacks (not just the top-level message) to pinpoint which step failed.
+- If `knowledge.update` fails around `GetEdgeExtractionSchemaContext`, verify knowledge-interface is running a build that returns a non-empty protobuf reply for that RPC; current worker builds now guard against empty replies and degrade to an empty edge-context payload with a warning so extraction can continue.
 - If `knowledge.update` fails with model-provider `422 Unprocessable Entity` during step-three extraction, ensure you are running a build that maps LangChain tool choice `"any"` to model-provider `{"type": "required"}` in the custom chat model request payload.
 - If producers fail with `UNAVAILABLE` on `EnqueueJob`, confirm the orchestrator API process is running and reachable at `JOB_ORCHESTRATOR_API_BIND_ADDRESS` / `JOB_ORCHESTRATOR_API_PORT`.

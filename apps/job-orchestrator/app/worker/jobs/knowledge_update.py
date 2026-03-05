@@ -32,6 +32,12 @@ def _require_created_at(created_at: str | None, sequence_number: int) -> str:
     raise ValueError(f"knowledge.update message at sequence {sequence_number} missing created_at")
 
 
+def _message_to_dict(reply: object, *, rpc_name: str) -> dict[str, object]:
+    if reply is None:
+        raise RuntimeError(f"knowledge.update received empty response from {rpc_name}")
+    return MessageToDict(reply, preserving_proto_field_name=True)
+
+
 async def _build_upsert_graph_delta_step_one(
     channel: grpc.aio.Channel,
     payload: KnowledgeUpdatePayload,
@@ -104,7 +110,7 @@ async def _build_upsert_graph_delta_step_one(
             ]
         )
 
-    return MessageToDict(request, preserving_proto_field_name=True)
+    return _message_to_dict(request, rpc_name="UpsertGraphDeltaRequest")
 
 
 def _canonicalize_speaker(role: str | None) -> str:
@@ -381,8 +387,9 @@ async def _run_step_three_extraction_agent(
     entity_schema_context_reply = await get_entity_extraction_schema_context_rpc(
         knowledge_pb2.GetEntityExtractionSchemaContextRequest(user_id=payload.requested_by_user_id)
     )
-    entity_schema_context = MessageToDict(
-        entity_schema_context_reply, preserving_proto_field_name=True
+    entity_schema_context = _message_to_dict(
+        entity_schema_context_reply,
+        rpc_name="GetEntityExtractionSchemaContext",
     )
     json_schema_reply = await get_upsert_graph_delta_json_schema(
         knowledge_pb2.GetUpsertGraphDeltaJsonSchemaRequest()
@@ -409,7 +416,20 @@ async def _run_step_three_extraction_agent(
                 user_id=payload.requested_by_user_id,
             )
         )
-        return MessageToDict(reply, preserving_proto_field_name=True)
+        if reply is None:
+            logger.warning(
+                "knowledge.update received empty edge extraction schema context",
+                extra={
+                    "source_entity_type_id": source_entity_type_id,
+                    "target_entity_type_id": target_entity_type_id,
+                },
+            )
+            return {
+                "source_entity_type_id": source_entity_type_id,
+                "target_entity_type_id": target_entity_type_id,
+                "entity_types": [],
+            }
+        return _message_to_dict(reply, rpc_name="GetEdgeExtractionSchemaContext")
 
     @tool
     async def find_entity_candidates(
@@ -434,7 +454,7 @@ async def _run_step_three_extraction_agent(
                 limit=limit,
             )
         )
-        return MessageToDict(reply, preserving_proto_field_name=True)
+        return _message_to_dict(reply, rpc_name="FindEntityCandidates")
 
     @tool
     async def get_entity_context(entity_id: str, max_block_level: int = 2) -> dict[str, object]:
@@ -452,7 +472,7 @@ async def _run_step_three_extraction_agent(
                 max_block_level=max_block_level,
             )
         )
-        return MessageToDict(reply, preserving_proto_field_name=True)
+        return _message_to_dict(reply, rpc_name="GetEntityContext")
 
     @tool
     async def get_entity_type_property_context(type_id: str) -> dict[str, object]:
@@ -470,7 +490,7 @@ async def _run_step_three_extraction_agent(
                 include_inherited=True,
             )
         )
-        return MessageToDict(reply, preserving_proto_field_name=True)
+        return _message_to_dict(reply, rpc_name="GetEntityTypePropertyContext")
 
     system_prompt = _build_step_three_system_prompt(
         entity_extraction_schema_context=entity_schema_context,
