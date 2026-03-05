@@ -205,4 +205,4 @@ async def test_watch_job_status_streams_events(monkeypatch: pytest.MonkeyPatch) 
     request, timeout = created_stubs[0].watch_requests[0]
     assert request.job_id == "22222222-2222-2222-2222-222222222222"
     assert request.include_current is False
-    assert timeout == 5.0
+    assert timeout is None
