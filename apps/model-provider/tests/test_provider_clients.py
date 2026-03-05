@@ -295,6 +295,39 @@ async def test_anthropic_provider_translates_openai_function_tool_choice() -> No
 
 
 @pytest.mark.asyncio
+async def test_anthropic_provider_accepts_direct_response_format_schema() -> None:
+    messages = FakeAnthropicMessages()
+    fake_client = SimpleNamespace(messages=messages)
+    client = AnthropicProviderClient(api_key="x", client=fake_client)
+
+    payload = {
+        "model": "claude-sonnet-4-6",
+        "messages": [{"role": "user", "content": "hi"}],
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+                "type": "object",
+                "properties": {"value": {"type": "string"}},
+                "required": ["value"],
+            },
+        },
+    }
+
+    await client.chat_completions(payload)
+
+    assert messages.last_create["output_config"] == {
+        "format": {
+            "type": "json_schema",
+            "schema": {
+                "type": "object",
+                "properties": {"value": {"type": "string"}},
+                "required": ["value"],
+            },
+        }
+    }
+
+
+@pytest.mark.asyncio
 async def test_anthropic_provider_rejects_invalid_response_format_schema() -> None:
     messages = FakeAnthropicMessages()
     fake_client = SimpleNamespace(messages=messages)
@@ -313,7 +346,46 @@ async def test_anthropic_provider_rejects_invalid_response_format_schema() -> No
         await client.chat_completions(payload)
 
     assert exc_info.value.status_code == 400
-    assert exc_info.value.message == "response_format.json_schema.schema must be a non-empty object for Anthropic"
+    assert exc_info.value.message == "response_format.json_schema must contain a non-empty object schema for Anthropic"
+
+
+@pytest.mark.asyncio
+async def test_anthropic_provider_unwraps_langchain_json_schema_tool_parameters() -> None:
+    messages = FakeAnthropicMessages()
+    fake_client = SimpleNamespace(messages=messages)
+    client = AnthropicProviderClient(api_key="x", client=fake_client)
+
+    payload = {
+        "model": "claude-sonnet-4-6",
+        "messages": [{"role": "user", "content": "hi"}],
+        "tools": [
+            {
+                "type": "function",
+                "function": {
+                    "name": "lookup",
+                    "parameters": {
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": "response_format_bce2",
+                            "schema": {
+                                "type": "object",
+                                "properties": {"id": {"type": "string"}},
+                                "required": ["id"],
+                            },
+                        },
+                    },
+                },
+            }
+        ],
+    }
+
+    await client.chat_completions(payload)
+
+    assert messages.last_create["tools"][0]["input_schema"] == {
+        "type": "object",
+        "properties": {"id": {"type": "string"}},
+        "required": ["id"],
+    }
 
 
 @pytest.mark.asyncio
