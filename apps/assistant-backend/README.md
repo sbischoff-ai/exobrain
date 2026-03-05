@@ -174,7 +174,7 @@ Model/tool vars:
 - Main agent prompt includes markdown rendering guidance for math and diagrams (`$...$`, `$$...$$`, and ```mermaid fenced blocks; display math is expected on its own lines).
 - `MAIN_AGENT_USE_MOCK=true|false`
 - `MAIN_AGENT_MOCK_MESSAGES_FILE`
-- `MODEL_PROVIDER_BASE_URL` (default `http://localhost:8010`; native contract calls `/v1/internal/chat/messages` directly from this base URL)
+- `MODEL_PROVIDER_BASE_URL` (default `http://localhost:8010/v1`; clients append `/internal/chat/messages` to this base URL)
 - `MAIN_AGENT_MODEL_CONTRACT_MODE=native|legacy_openai_compatible` (default `native`; `native` uses `ModelProviderChatModel` with the internal `/v1/internal/chat/messages` contract, `legacy_openai_compatible` uses `ChatOpenAI` against the OpenAI-compatible endpoint shape)
 - `MAIN_AGENT_USE_OPENAI_FALLBACK=true|false` (rollout safety flag; when `true`, force `ChatOpenAI` compatibility mode even if contract mode is `native`)
 - `MAIN_AGENT_MODEL` (alias, default `agent`)

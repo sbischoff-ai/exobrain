@@ -51,7 +51,7 @@ class ModelProviderChatModel(BaseChatModel):
     ) -> ChatResult:
         payload = self._build_payload(messages, stop=stop, **kwargs)
         client = self.async_http_client or httpx.AsyncClient(timeout=self.timeout)
-        response = await client.post(f"{self.base_url}/v1/internal/chat/messages", json=payload)
+        response = await client.post(f"{self.base_url}/internal/chat/messages", json=payload)
         response.raise_for_status()
         return self._chat_result_from_response(response.json())
 

@@ -139,7 +139,7 @@ Keep request subject patterns narrow enough that they do not also match events/D
 - `JOB_ORCHESTRATOR_WORKER_ENABLED` (default: `true`, run worker process)
 - `KNOWLEDGE_INTERFACE_GRPC_TARGET` (default: `localhost:50051`)
 - `KNOWLEDGE_INTERFACE_CONNECT_TIMEOUT_SECONDS` (default: `5.0`)
-- `MODEL_PROVIDER_BASE_URL` (default: `http://localhost:8010`, model-provider endpoint used by step-three extraction and step-four routing agents via the internal `ModelProviderChatModel` contract for tool calling and structured output)
+- `MODEL_PROVIDER_BASE_URL` (default: `http://localhost:8010/v1`, model-provider base API URL; clients append `/internal/chat/messages` for the native chat contract used by step-three extraction and step-four routing agents)
 - `KNOWLEDGE_UPDATE_EXTRACTION_MODEL` (default: `architect`, model alias used for step-three extraction)
 - `APP_ENV` (default: `local`, influences default logging level)
 - `LOG_LEVEL` (optional override; defaults to `DEBUG` in local, `INFO` otherwise)

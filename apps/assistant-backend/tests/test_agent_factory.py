@@ -59,7 +59,7 @@ def test_build_agent_model_uses_model_provider_chat_model_when_mock_disabled() -
 
     assert isinstance(model, ModelProviderChatModel)
     assert model.model == "agent"
-    assert model.base_url == "http://localhost:8010"
+    assert model.base_url == "http://localhost:8010/v1"
 
 
 

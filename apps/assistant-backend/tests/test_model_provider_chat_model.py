@@ -14,6 +14,7 @@ def test_plain_chat_round_trip() -> None:
 
     def handler(request: httpx.Request) -> httpx.Response:
         captured.update(json.loads(request.content))
+        captured["path"] = request.url.path
         return httpx.Response(
             200,
             json={
@@ -29,13 +30,14 @@ def test_plain_chat_round_trip() -> None:
         )
 
     client = httpx.Client(transport=httpx.MockTransport(handler), base_url="http://test")
-    model = ModelProviderChatModel(model="agent", base_url="http://test", http_client=client)
+    model = ModelProviderChatModel(model="agent", base_url="http://test/v1", http_client=client)
 
     response = model.invoke([HumanMessage(content="hi")])
 
     assert response.content == "hello from provider"
     assert captured["messages"][0]["role"] == "user"
     assert captured["messages"][0]["content"][0]["text"] == "hi"
+    assert captured["path"] == "/v1/internal/chat/messages"
 
 
 def test_tool_call_request_and_response() -> None:
@@ -46,6 +48,7 @@ def test_tool_call_request_and_response() -> None:
 
     def handler(request: httpx.Request) -> httpx.Response:
         captured.update(json.loads(request.content))
+        captured["path"] = request.url.path
         return httpx.Response(
             200,
             json={
@@ -68,7 +71,7 @@ def test_tool_call_request_and_response() -> None:
         )
 
     client = httpx.Client(transport=httpx.MockTransport(handler), base_url="http://test")
-    model = ModelProviderChatModel(model="agent", base_url="http://test", http_client=client)
+    model = ModelProviderChatModel(model="agent", base_url="http://test/v1", http_client=client)
 
     response = model.bind_tools([lookup_tool], tool_choice="required").invoke([HumanMessage(content="lookup")])
 
@@ -76,6 +79,7 @@ def test_tool_call_request_and_response() -> None:
     assert captured["tools"][0]["name"] == "lookup_tool"
     assert response.tool_calls[0]["name"] == "lookup_tool"
     assert response.tool_calls[0]["args"] == {"identifier": "42"}
+    assert captured["path"] == "/v1/internal/chat/messages"
 
 
 def test_structured_output_payload() -> None:
@@ -86,6 +90,7 @@ def test_structured_output_payload() -> None:
 
     def handler(request: httpx.Request) -> httpx.Response:
         captured.update(json.loads(request.content))
+        captured["path"] = request.url.path
         return httpx.Response(
             200,
             json={
@@ -98,7 +103,7 @@ def test_structured_output_payload() -> None:
         )
 
     client = httpx.Client(transport=httpx.MockTransport(handler), base_url="http://test")
-    model = ModelProviderChatModel(model="agent", base_url="http://test", http_client=client)
+    model = ModelProviderChatModel(model="agent", base_url="http://test/v1", http_client=client)
 
     model.with_structured_output(
         {
@@ -111,11 +116,16 @@ def test_structured_output_payload() -> None:
 
     assert captured["structured_output"]["name"] == "answer"
     assert captured["structured_output"]["schema"]["type"] == "object"
+    assert captured["path"] == "/v1/internal/chat/messages"
 
 
 @pytest.mark.asyncio
 async def test_streaming_chunk_assembly() -> None:
+    captured_path: str | None = None
+
     async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal captured_path
+        captured_path = request.url.path
         body = "".join(
             [
                 'data: {"type":"text_delta","text":"hello "}\n\n',
@@ -128,7 +138,7 @@ async def test_streaming_chunk_assembly() -> None:
         return httpx.Response(200, text=body, headers={"content-type": "text/event-stream"})
 
     async_client = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="http://test")
-    model = ModelProviderChatModel(model="agent", base_url="http://test", async_http_client=async_client)
+    model = ModelProviderChatModel(model="agent", base_url="http://test/v1", async_http_client=async_client)
 
     chunks = [chunk async for chunk in model.astream([HumanMessage(content="hi")])]
 
@@ -141,3 +151,4 @@ async def test_streaming_chunk_assembly() -> None:
 
     assert text == "hello world"
     assert tool_chunks[0]["name"] == "lookup"
+    assert captured_path == "/v1/internal/chat/messages"
