@@ -113,8 +113,9 @@ Current `knowledge.update` worker flow uses explicit small steps:
 6. Relationship extraction (`worker` model): derive related entity pairs from markdown using the resolved entity IDs from step 5.
 7. Relationship type + score (`worker` model): for each related pair, call `GetEdgeExtractionSchemaContext` (with `requesting_user_id`) and choose direction/edge type/confidence.
 8. Build final entity context graphs (`worker`/`reasoner`): for each resolved entity, call `GetEntityTypePropertyContext` (with `requesting_user_id`) and produce entity + block-tree payloads; matched entities also include `GetEntityContext` (block level 2) context for minimal updates.
-9. Placeholder: reserved boundary for upcoming graph-delta merge/upsert wiring of extracted entities/blocks/relationships.
-10. Upsert chat-message graph delta: persist step-0 graph data via `UpsertGraphDelta`.
+9. Merge graph delta (deterministic): merge step-0 chat-message graph delta with step-8 final entity context graphs (mapping entity/block payloads, replacing `NEW_BLOCK_N` placeholders with UUIDs), step-7 relationship edges (`status=asserted`), and step-2 fictional universes.
+10. Finalize graph delta (`worker` model): detect block-to-entity mentions and append `MENTIONS` edges with confidence and `status=asserted`.
+11. Upsert graph delta (deterministic): persist the final merged graph delta via `UpsertGraphDelta`.
 
 ## Common commands
 
