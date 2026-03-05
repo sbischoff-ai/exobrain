@@ -80,7 +80,7 @@ def test_internal_native_chat_endpoint_round_trip(monkeypatch) -> None:
 
     client = TestClient(main.app)
     response = client.post(
-        "/internal/v1/chat/messages",
+        "/v1/internal/chat/messages",
         json={
             "model": "agent",
             "messages": [{"role": "user", "content": [{"type": "text", "text": "hello"}]}],

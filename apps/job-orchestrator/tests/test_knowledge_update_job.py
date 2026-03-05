@@ -321,7 +321,7 @@ async def test_run_step_three_extraction_agent_uses_model_provider_tools(monkeyp
         messages=[{"role": "user", "content": "hello", "created_at": "2026-03-02T12:00:00Z"}],
     )
 
-    settings = Settings(model_provider_base_url="http://provider/v1")
+    settings = Settings(model_provider_base_url="http://provider")
     result = await knowledge_update._run_step_three_extraction_agent(
         _FakeExtractionChannel(), payload, "--- TURN 1 ---", settings
     )
@@ -371,7 +371,7 @@ async def test_run_step_four_router_agent_returns_structured_response(monkeypatc
     mappings = await knowledge_update._run_step_four_router_agent(
         step_one_graph_delta={"blocks": [{"id": "block-1", "properties": [{"key": "text", "string_value": "Alice"}]}]},
         step_three_graph_delta={"entities": [{"id": "entity-1", "properties": [{"key": "name", "string_value": "Alice"}]}]},
-        settings=Settings(model_provider_base_url="http://provider/v1"),
+        settings=Settings(model_provider_base_url="http://provider"),
     )
 
     assert mappings == [

@@ -60,7 +60,7 @@ class ModelProviderChatModel(BaseChatModel):
     ) -> ChatResult:
         payload = self._build_payload(messages, stop=stop, stream=False, **kwargs)
         client = self.http_client or httpx.Client(timeout=self.timeout)
-        response = client.post(f"{self.base_url}/internal/v1/chat/messages", json=payload)
+        response = client.post(f"{self.base_url}/v1/internal/chat/messages", json=payload)
         response.raise_for_status()
         return self._chat_result_from_response(response.json())
 
@@ -73,14 +73,14 @@ class ModelProviderChatModel(BaseChatModel):
     ) -> ChatResult:
         payload = self._build_payload(messages, stop=stop, stream=False, **kwargs)
         client = self.async_http_client or httpx.AsyncClient(timeout=self.timeout)
-        response = await client.post(f"{self.base_url}/internal/v1/chat/messages", json=payload)
+        response = await client.post(f"{self.base_url}/v1/internal/chat/messages", json=payload)
         response.raise_for_status()
         return self._chat_result_from_response(response.json())
 
     def _stream(self, messages: list[BaseMessage], stop: list[str] | None = None, run_manager: Any | None = None, **kwargs: Any) -> Iterator[ChatGenerationChunk]:
         payload = self._build_payload(messages, stop=stop, stream=True, **kwargs)
         client = self.http_client or httpx.Client(timeout=self.timeout)
-        with client.stream("POST", f"{self.base_url}/internal/v1/chat/messages", json=payload) as response:
+        with client.stream("POST", f"{self.base_url}/v1/internal/chat/messages", json=payload) as response:
             response.raise_for_status()
             for chunk in self._iter_sse_chunks(response.iter_lines()):
                 yield chunk
@@ -94,7 +94,7 @@ class ModelProviderChatModel(BaseChatModel):
     ) -> AsyncIterator[ChatGenerationChunk]:
         payload = self._build_payload(messages, stop=stop, stream=True, **kwargs)
         client = self.async_http_client or httpx.AsyncClient(timeout=self.timeout)
-        async with client.stream("POST", f"{self.base_url}/internal/v1/chat/messages", json=payload) as response:
+        async with client.stream("POST", f"{self.base_url}/v1/internal/chat/messages", json=payload) as response:
             response.raise_for_status()
             async for line in response.aiter_lines():
                 if not line.startswith("data: "):

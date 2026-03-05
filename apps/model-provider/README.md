@@ -6,7 +6,7 @@ OpenAI-compatible gateway that maps internal model aliases to upstream providers
 
 - `GET /v1/models`
 - `POST /v1/chat/completions`
-- `POST /internal/v1/chat/messages`
+- `POST /v1/internal/chat/messages`
 - `POST /v1/embeddings`
 
 ## Behavior
@@ -55,7 +55,7 @@ Invalid `response_format` payloads (for example malformed schema objects) return
 
 ### Native internal chat contract
 
-`POST /internal/v1/chat/messages` is the provider-native internal interface. It models:
+`POST /v1/internal/chat/messages` is the provider-native internal interface. It models:
 
 - Message blocks (`text`, `tool_result`, `tool_call`) across `system`/`user`/`assistant` messages
 - Tool definitions and tool choice policy

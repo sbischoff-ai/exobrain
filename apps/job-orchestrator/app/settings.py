@@ -32,7 +32,7 @@ class Settings(BaseSettings):
         gt=0,
     )
     model_provider_base_url: str = Field(
-        default="http://localhost:8010/v1",
+        default="http://localhost:8010",
         alias="MODEL_PROVIDER_BASE_URL",
     )
     knowledge_update_extraction_model: str = Field(

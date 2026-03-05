@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     log_level: str | None = Field(default=None, alias="LOG_LEVEL")
     main_agent_model: str = Field(default="agent", alias="MAIN_AGENT_MODEL")
     model_provider_base_url: str = Field(
-        default="http://localhost:8010/v1",
+        default="http://localhost:8010",
         alias="MODEL_PROVIDER_BASE_URL",
     )
     main_agent_temperature: float = Field(default=0.0, alias="MAIN_AGENT_TEMPERATURE")
