@@ -139,7 +139,7 @@ How to interpret scores:
 
 - Use `GetSchema` when clients need the canonical, lossless schema model (types, properties, inheritance, and edge rules) for admin tooling, migrations, or schema UIs.
 - Use `GetEntityExtractionSchemaContext` when clients need only universe + entity-type context for entity extraction.
-- Use `GetEdgeExtractionSchemaContext` when clients need edge options for one specific source/target entity-type pair.
+- Use `GetEdgeExtractionSchemaContext` when clients need edge options for one specific entity-type pair (input order does not matter).
 
 ## GetUpsertGraphDeltaJsonSchema for LLM structured output
 

@@ -24,11 +24,11 @@ mod extraction_schema;
 mod ingestion;
 
 pub(crate) use extraction_schema::{
-    build_entity_type_property_context, build_extraction_entity_types,
-    build_extraction_entity_types_from_input, EntityTypePropertyContext,
-    EntityTypePropertyContextOptions, ExtractionAllowedEdge, ExtractionEntityType,
-    ExtractionPropertyContext, ExtractionSchemaBuildInput, ExtractionSchemaOptions,
-    ExtractionUniverseContext,
+    build_entity_type_property_context, build_extraction_edge_types_from_input,
+    build_extraction_entity_types, build_extraction_entity_types_from_input,
+    EntityTypePropertyContext, EntityTypePropertyContextOptions, ExtractionAllowedEdge,
+    ExtractionEdgeType, ExtractionEntityType, ExtractionPropertyContext,
+    ExtractionSchemaBuildInput, ExtractionSchemaOptions, ExtractionUniverseContext,
 };
 
 const EXOBRAIN_USER_ID: &str = "exobrain";
@@ -38,17 +38,6 @@ const COMMON_EXOBRAIN_ENTITY_ID: &str = "8c75cc89-6204-4fed-aec1-34d032ff95ee";
 const COMMON_EXOBRAIN_BLOCK_ID: &str = "ea5ca80f-346b-4f66-bff2-d307ce5d7da9";
 const LIST_ENTITIES_BY_TYPE_DEFAULT_PAGE_SIZE: u32 = 50;
 const LIST_ENTITIES_BY_TYPE_MAX_PAGE_SIZE: u32 = 200;
-const CONTEXT_CORE_FIELD_DENYLIST: [&str; 6] = [
-    "created_at",
-    "id",
-    "type_id",
-    "updated_at",
-    "user_id",
-    "visibility",
-];
-const ENTITY_CONTEXT_PROMOTED_FIELD_DENYLIST: [&str; 3] = ["name", "aliases", "text"];
-const BLOCK_CONTEXT_PROMOTED_FIELD_DENYLIST: [&str; 1] = ["text"];
-
 pub struct KnowledgeApplication {
     schema_repository: Arc<dyn SchemaRepository>,
     graph_repository: Arc<dyn GraphRepository>,
@@ -153,20 +142,24 @@ impl KnowledgeApplication {
 
     pub async fn get_edge_extraction_schema_types(
         &self,
+        first_entity_type: &str,
+        second_entity_type: &str,
         options: ExtractionSchemaOptions,
-    ) -> Result<Vec<ExtractionEntityType>> {
+    ) -> Result<Vec<ExtractionEdgeType>> {
         let node_types = self.schema_repository.get_by_kind(SchemaKind::Node).await?;
         let edge_types = self.schema_repository.get_by_kind(SchemaKind::Edge).await?;
         let inheritance = self.schema_repository.get_type_inheritance().await?;
         let edge_rules = self.schema_repository.get_edge_endpoint_rules().await?;
 
-        Ok(build_extraction_entity_types_from_input(
+        Ok(build_extraction_edge_types_from_input(
             ExtractionSchemaBuildInput {
                 node_types,
                 edge_types,
                 inheritance,
                 edge_rules,
             },
+            first_entity_type,
+            second_entity_type,
             options,
         ))
     }
@@ -1009,12 +1002,6 @@ mod tests {
                 parents: Mutex::new(HashMap::new()),
                 properties: Mutex::new(default_schema_properties()),
             }
-        }
-
-        fn with_properties(properties: Vec<TypeProperty>) -> Self {
-            let mut repo = Self::new();
-            repo.properties = Mutex::new(properties);
-            repo
         }
     }
 
@@ -3248,52 +3235,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn get_entity_context_filters_entity_properties_using_schema_and_core_denylist() {
+    async fn get_entity_context_keeps_all_entity_properties_from_graph_context() {
         let seen_queries = Arc::new(Mutex::new(Vec::new()));
-        let schema_repo = FakeSchemaRepo::with_properties(vec![
-            TypeProperty {
-                owner_type_id: "node.person".to_string(),
-                prop_name: "favorite_color".to_string(),
-                value_type: "string".to_string(),
-                required: false,
-                readable: true,
-                writable: true,
-                active: true,
-                description: String::new(),
-            },
-            TypeProperty {
-                owner_type_id: "node.person".to_string(),
-                prop_name: "created_at".to_string(),
-                value_type: "string".to_string(),
-                required: false,
-                readable: true,
-                writable: true,
-                active: true,
-                description: String::new(),
-            },
-            TypeProperty {
-                owner_type_id: "node.person".to_string(),
-                prop_name: "secret_note".to_string(),
-                value_type: "string".to_string(),
-                required: false,
-                readable: false,
-                writable: true,
-                active: true,
-                description: String::new(),
-            },
-            TypeProperty {
-                owner_type_id: "node.person".to_string(),
-                prop_name: "inactive_field".to_string(),
-                value_type: "string".to_string(),
-                required: false,
-                readable: true,
-                writable: true,
-                active: false,
-                description: String::new(),
-            },
-        ]);
         let app = KnowledgeApplication::new(
-            Arc::new(schema_repo),
+            Arc::new(FakeSchemaRepo::new()),
             Arc::new(ContextGraphRepository {
                 seen_queries: Arc::clone(&seen_queries),
                 result: sample_entity_context_result(),
@@ -3310,77 +3255,17 @@ mod tests {
             .await
             .expect("query should succeed");
 
-        assert_eq!(result.entity.properties.len(), 1);
+        assert_eq!(result.entity.properties.len(), 3);
         assert_eq!(result.entity.properties[0].key, "favorite_color");
+        assert_eq!(result.entity.properties[1].key, "created_at");
+        assert_eq!(result.entity.properties[2].key, "non_schema_extra");
     }
 
     #[tokio::test]
-    async fn get_entity_context_filters_block_properties_using_schema_and_denylist() {
+    async fn get_entity_context_keeps_all_block_properties_from_graph_context() {
         let seen_queries = Arc::new(Mutex::new(Vec::new()));
-        let schema_repo = FakeSchemaRepo::with_properties(vec![
-            TypeProperty {
-                owner_type_id: "node.person".to_string(),
-                prop_name: "favorite_color".to_string(),
-                value_type: "string".to_string(),
-                required: false,
-                readable: true,
-                writable: true,
-                active: true,
-                description: String::new(),
-            },
-            TypeProperty {
-                owner_type_id: "block.note".to_string(),
-                prop_name: "summary".to_string(),
-                value_type: "string".to_string(),
-                required: false,
-                readable: true,
-                writable: true,
-                active: true,
-                description: String::new(),
-            },
-            TypeProperty {
-                owner_type_id: "block.note".to_string(),
-                prop_name: "created_at".to_string(),
-                value_type: "string".to_string(),
-                required: false,
-                readable: true,
-                writable: true,
-                active: true,
-                description: String::new(),
-            },
-            TypeProperty {
-                owner_type_id: "block.note".to_string(),
-                prop_name: "text".to_string(),
-                value_type: "string".to_string(),
-                required: false,
-                readable: true,
-                writable: true,
-                active: true,
-                description: String::new(),
-            },
-            TypeProperty {
-                owner_type_id: "block.note".to_string(),
-                prop_name: "private_note".to_string(),
-                value_type: "string".to_string(),
-                required: false,
-                readable: false,
-                writable: true,
-                active: true,
-                description: String::new(),
-            },
-            TypeProperty {
-                owner_type_id: "block.note".to_string(),
-                prop_name: "inactive_note".to_string(),
-                value_type: "string".to_string(),
-                required: false,
-                readable: true,
-                writable: true,
-                active: false,
-                description: String::new(),
-            },
-        ]);
         let app = KnowledgeApplication::new(
-            Arc::new(schema_repo),
+            Arc::new(FakeSchemaRepo::new()),
             Arc::new(ContextGraphRepository {
                 seen_queries: Arc::clone(&seen_queries),
                 result: sample_entity_context_result(),
@@ -3398,8 +3283,11 @@ mod tests {
             .expect("query should succeed");
 
         assert_eq!(result.blocks.len(), 1);
-        assert_eq!(result.blocks[0].properties.len(), 1);
+        assert_eq!(result.blocks[0].properties.len(), 4);
         assert_eq!(result.blocks[0].properties[0].key, "summary");
+        assert_eq!(result.blocks[0].properties[1].key, "created_at");
+        assert_eq!(result.blocks[0].properties[2].key, "text");
+        assert_eq!(result.blocks[0].properties[3].key, "non_schema_extra");
         assert_eq!(result.blocks[0].neighbors.len(), 1);
         assert_eq!(result.blocks[0].neighbors[0].properties.len(), 1);
         assert_eq!(result.blocks[0].neighbors[0].properties[0].key, "since");
