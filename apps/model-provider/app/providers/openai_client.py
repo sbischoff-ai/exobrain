@@ -94,7 +94,7 @@ class OpenAIProviderClient(ProviderClient):
                     messages.append(
                         {
                             "role": "assistant",
-                            "content": "",
+                            "content": None,
                             "tool_calls": [
                                 {
                                     "id": block.id,
@@ -121,9 +121,10 @@ class OpenAIProviderClient(ProviderClient):
     def _native_response_format(self, intent: StructuredOutputIntent | None) -> dict[str, Any] | None:
         if intent is None:
             return None
-        payload: dict[str, Any] = {"schema": intent.json_schema}
-        if intent.name:
-            payload["name"] = intent.name
+        payload: dict[str, Any] = {
+            "name": intent.name or "structured_output",
+            "schema": intent.json_schema,
+        }
         if intent.strict:
             payload["strict"] = True
         return {"type": "json_schema", "json_schema": payload}
