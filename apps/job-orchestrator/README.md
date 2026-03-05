@@ -110,8 +110,10 @@ Current `knowledge.update` worker flow uses explicit small steps:
 3. Entity candidate matching (deterministic): for each extracted entity, call `FindEntityCandidates` with names/aliases/description/type and classify by score thresholds (`>0.1`, `>0.6`, `>0.15`) to decide direct match vs. detailed comparison.
 4. Extracted entity contexts (`reasoner` model): create focused markdown per extracted entity with heading depth up to 2 and semantically bounded paragraph/list chunks.
 5. Detailed comparison (`worker` model): for entities requiring further comparison, call `GetEntityContext` (block level 1, with `requesting_user_id`) for each candidate and decide `MATCH({entity_id})` vs `NEW_ENTITY`; unresolved/new entities receive new UUIDs.
-6. Placeholder: reserved boundary for upcoming post-comparison graph writing.
-7. Upsert chat-message graph delta: persist step-0 graph data via `UpsertGraphDelta`.
+6. Relationship extraction (`worker` model): derive related entity pairs from markdown using the resolved entity IDs from step 5.
+7. Relationship type + score (`worker` model): for each related pair, call `GetEdgeExtractionSchemaContext` (with `requesting_user_id`) and choose direction/edge type/confidence.
+8. Placeholder: reserved boundary for upcoming post-relationship graph writing.
+9. Upsert chat-message graph delta: persist step-0 graph data via `UpsertGraphDelta`.
 
 ## Common commands
 
