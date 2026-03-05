@@ -4,7 +4,7 @@ Rust + tonic gRPC service for GraphRAG ingestion and canonical KG schema registr
 
 ## What this service is
 
-- Provides full schema introspection (`GetSchema`) and extraction-focused schema projection (`GetExtractionSchemaContext`).
+- Provides full schema introspection (`GetSchema`) and extraction-focused schema projections (`GetEntityExtractionSchemaContext`, `GetEdgeExtractionSchemaContext`).
 - Provides schema type upsert (`UpsertSchemaType`).
 - Accepts schema-driven graph writes through `UpsertGraphDelta`.
 - Exposes `GetUserInitGraph` to seed a new user-scoped starter subgraph.
@@ -53,9 +53,8 @@ grpcui -plaintext localhost:50051
 - `entity_listing.rs` for paginated list-by-type query normalization.
 - `candidate_search.rs` for candidate resolution query handling.
 
-Presentation renderers under `src/presentation/` format domain context into markdown prompts:
+Presentation renderers under `src/presentation/` format entity context into markdown prompts:
 
-- `extraction_prompt.rs` for extraction schema prompt markdown.
 - `entity_context_prompt.rs` for `GetEntityContextResult` markdown rendering with deterministic block trees.
 
 ## Domain typing boundaries
@@ -136,10 +135,11 @@ How to interpret scores:
 - Candidates are sorted descending by score and capped by `limit`.
 
 
-## Choosing between GetSchema and GetExtractionSchemaContext
+## Choosing between GetSchema and extraction context RPCs
 
 - Use `GetSchema` when clients need the canonical, lossless schema model (types, properties, inheritance, and edge rules) for admin tooling, migrations, or schema UIs.
-- Use `GetExtractionSchemaContext` when clients need a prompt-ready, deterministic view for entity/relationship extraction (flattened inheritance + incoming/outgoing edge expansions per entity type, plus caller-visible universe context).
+- Use `GetEntityExtractionSchemaContext` when clients need only universe + entity-type context for entity extraction.
+- Use `GetEdgeExtractionSchemaContext` when clients need edge options for one specific source/target entity-type pair.
 
 ## GetUpsertGraphDeltaJsonSchema for LLM structured output
 

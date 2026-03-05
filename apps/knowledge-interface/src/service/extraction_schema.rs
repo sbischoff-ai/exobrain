@@ -7,7 +7,6 @@ use crate::domain::{FullSchema, SchemaKind};
 
 #[derive(Debug, Clone)]
 pub(crate) struct ExtractionSchemaOptions {
-    pub include_edge_properties: bool,
     pub include_inactive: bool,
 }
 
@@ -68,7 +67,6 @@ pub(crate) fn build_extraction_entity_types(
     schema: FullSchema,
     options: ExtractionSchemaOptions,
 ) -> Vec<ExtractionEntityType> {
-    let _include_edge_properties = options.include_edge_properties;
     let node_types = schema.node_types;
     let edge_types = schema.edge_types;
 

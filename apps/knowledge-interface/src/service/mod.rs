@@ -3724,7 +3724,6 @@ mod tests {
         let entity_types = build_extraction_entity_types(
             schema,
             ExtractionSchemaOptions {
-                include_edge_properties: false,
                 include_inactive: false,
             },
         );
@@ -3786,7 +3785,6 @@ mod tests {
         let entity_types = build_extraction_entity_types(
             schema,
             ExtractionSchemaOptions {
-                include_edge_properties: false,
                 include_inactive: false,
             },
         );
@@ -3866,7 +3864,6 @@ mod tests {
         let entity_types = build_extraction_entity_types(
             schema,
             ExtractionSchemaOptions {
-                include_edge_properties: false,
                 include_inactive: false,
             },
         );
@@ -3931,7 +3928,6 @@ mod tests {
         let entity_types = build_extraction_entity_types(
             schema,
             ExtractionSchemaOptions {
-                include_edge_properties: false,
                 include_inactive: false,
             },
         );
@@ -4009,7 +4005,6 @@ mod tests {
         let entity_types = build_extraction_entity_types(
             schema,
             ExtractionSchemaOptions {
-                include_edge_properties: false,
                 include_inactive: false,
             },
         );

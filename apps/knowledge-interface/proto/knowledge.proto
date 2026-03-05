@@ -7,7 +7,8 @@ service KnowledgeInterface {
   rpc Health(HealthRequest) returns (HealthReply);
   rpc GetSchema(GetSchemaRequest) returns (GetSchemaReply);
   rpc GetUpsertGraphDeltaJsonSchema(GetUpsertGraphDeltaJsonSchemaRequest) returns (GetUpsertGraphDeltaJsonSchemaReply);
-  rpc GetExtractionSchemaContext(GetExtractionSchemaContextRequest) returns (GetExtractionSchemaContextReply);
+  rpc GetEntityExtractionSchemaContext(GetEntityExtractionSchemaContextRequest) returns (GetEntityExtractionSchemaContextReply);
+  rpc GetEdgeExtractionSchemaContext(GetEdgeExtractionSchemaContextRequest) returns (GetEdgeExtractionSchemaContextReply);
   rpc GetEntityTypePropertyContext(GetEntityTypePropertyContextRequest) returns (GetEntityTypePropertyContextReply);
   rpc UpsertSchemaType(UpsertSchemaTypeRequest) returns (UpsertSchemaTypeReply);
   rpc UpsertGraphDelta(UpsertGraphDeltaRequest) returns (UpsertGraphDeltaReply);
@@ -81,10 +82,16 @@ message GetUpsertGraphDeltaJsonSchemaReply {
   optional string version = 4;
 }
 
-message GetExtractionSchemaContextRequest {
-  optional bool include_edge_properties = 1;
+message GetEntityExtractionSchemaContextRequest {
   optional bool include_inactive = 2;
   string user_id = 3;
+}
+
+message GetEdgeExtractionSchemaContextRequest {
+  string source_entity_type_id = 1;
+  string target_entity_type_id = 2;
+  optional bool include_inactive = 3;
+  string user_id = 4;
 }
 
 message AllowedEdge {
@@ -102,14 +109,26 @@ message ExtractionEntityType {
   string name = 2;
   string description = 3;
   repeated string inheritance_chain = 4;
+}
+
+message ExtractionEntityTypeWithEdges {
+  string type_id = 1;
+  string name = 2;
+  string description = 3;
+  repeated string inheritance_chain = 4;
   repeated AllowedEdge outgoing_edges = 5;
   repeated AllowedEdge incoming_edges = 6;
 }
 
-message GetExtractionSchemaContextReply {
+message GetEntityExtractionSchemaContextReply {
   repeated ExtractionEntityType entity_types = 1;
-  optional string prompt_context_markdown = 2;
-  repeated ExtractionUniverse universes = 3;
+  repeated ExtractionUniverse universes = 2;
+}
+
+message GetEdgeExtractionSchemaContextReply {
+  string source_entity_type_id = 1;
+  string target_entity_type_id = 2;
+  repeated ExtractionEntityTypeWithEdges entity_types = 3;
 }
 
 message GetEntityTypePropertyContextRequest {

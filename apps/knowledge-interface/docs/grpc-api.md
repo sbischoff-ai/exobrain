@@ -1,7 +1,7 @@
 # Knowledge Interface gRPC API and Graph Delta Contract
 
 This document describes what clients must send to `UpsertGraphDelta` and
-`GetUserInitGraph`, plus how to query `FindEntityCandidates`, `GetEntityContext`, and `GetExtractionSchemaContext`.
+`GetUserInitGraph`, plus how to query `FindEntityCandidates`, `GetEntityContext`, `GetEntityExtractionSchemaContext`, and `GetEdgeExtractionSchemaContext`.
 
 ## Core rule
 
@@ -175,40 +175,57 @@ LLM.generate(structured_output_schema=json_schema) -> upsert_payload
 UpsertGraphDelta(upsert_payload)
 ```
 
-## GetExtractionSchemaContext
+## GetEntityExtractionSchemaContext
 
-`GetExtractionSchemaContext` returns a normalized, deterministic, LLM-focused view of the schema. Use it when a caller needs:
-
-- inheritance chains flattened per entity type
-- allowed outgoing and incoming edge expansions per entity type
-- stable ordering for deterministic prompt construction and cache keys
-
-### Endpoint purpose
-
-- **Primary**: build extraction prompts grounded in currently active schema types and edge rules.
-- **Secondary**: expose a compact, client-friendly structure without requiring each client to resolve inheritance and edge endpoints itself.
+`GetEntityExtractionSchemaContext` returns a normalized, deterministic, LLM-focused view of entity extraction context only (universes + entity types, no edge expansions).
 
 ### Full request schema
 
 ```proto
-message GetExtractionSchemaContextRequest {
-  optional bool include_edge_properties = 1;
+message GetEntityExtractionSchemaContextRequest {
   optional bool include_inactive = 2;
   string user_id = 3;
 }
 ```
 
-Request behavior:
+### Full response schema
 
-- `include_edge_properties`
-  - currently reserved for richer edge payload expansion
-  - omitted/`null` behaves as `false`
-- `include_inactive`
-  - includes inactive types/rules when `true`
-  - omitted/`null` behaves as `false`
-- `user_id`
-  - required
-  - used to include caller-visible universes (`PRIVATE` for that user + `SHARED`)
+```proto
+message ExtractionEntityType {
+  string type_id = 1;
+  string name = 2;
+  string description = 3;
+  repeated string inheritance_chain = 4;
+}
+
+message ExtractionUniverse {
+  string id = 1;
+  string name = 2;
+  optional string described_by_text = 3;
+}
+
+message GetEntityExtractionSchemaContextReply {
+  repeated ExtractionEntityType entity_types = 1;
+  repeated ExtractionUniverse universes = 2;
+}
+```
+
+Use this as step one for extraction to pick entity types and universe assignment while keeping token usage low.
+
+## GetEdgeExtractionSchemaContext
+
+`GetEdgeExtractionSchemaContext` returns edge options for one specific source/target entity-type pair so callers avoid loading all edge rules for every type.
+
+### Full request schema
+
+```proto
+message GetEdgeExtractionSchemaContextRequest {
+  string source_entity_type_id = 1;
+  string target_entity_type_id = 2;
+  optional bool include_inactive = 3;
+  string user_id = 4;
+}
+```
 
 ### Full response schema
 
@@ -223,7 +240,7 @@ message AllowedEdge {
   optional uint32 max_cardinality = 7;
 }
 
-message ExtractionEntityType {
+message ExtractionEntityTypeWithEdges {
   string type_id = 1;
   string name = 2;
   string description = 3;
@@ -232,59 +249,14 @@ message ExtractionEntityType {
   repeated AllowedEdge incoming_edges = 6;
 }
 
-message ExtractionUniverse {
-  string id = 1;
-  string name = 2;
-  optional string described_by_text = 3;
-}
-
-message GetExtractionSchemaContextReply {
-  repeated ExtractionEntityType entity_types = 1;
-  optional string prompt_context_markdown = 2;
-  repeated ExtractionUniverse universes = 3;
+message GetEdgeExtractionSchemaContextReply {
+  string source_entity_type_id = 1;
+  string target_entity_type_id = 2;
+  repeated ExtractionEntityTypeWithEdges entity_types = 3;
 }
 ```
 
-Response behavior:
-
-- `entity_types` are sorted by `type_id` and exclude the abstract `node` type.
-- `outgoing_edges` and `incoming_edges` are sorted deterministically by edge type and counterpart type.
-- `inheritance_chain` is flattened root-first (for example `node.entity -> node.person`).
-- `prompt_context_markdown` is derived from `entity_types` and can be embedded directly in prompts.
-- `universes` are sorted by `id` and include optional root `DESCRIBED_BY` text so extractors can distinguish real-world vs fictional context.
-
-### Example response (small schema subset)
-
-```json
-{
-  "entityTypes": [
-    {
-      "typeId": "node.person",
-      "name": "Person",
-      "description": "A human person",
-      "inheritanceChain": ["node.entity", "node.person"],
-      "outgoingEdges": [
-        {
-          "edgeTypeId": "edge.related_to",
-          "edgeName": "RELATED_TO",
-          "edgeDescription": "Generic relationship",
-          "otherEntityTypeId": "node.organization",
-          "otherEntityTypeName": "Organization"
-        }
-      ],
-      "incomingEdges": []
-    }
-  ],
-  "promptContextMarkdown": "# Extraction schema context\n..."
-}
-```
-
-### Guidance for LLM prompt usage
-
-- Prefer `entity_types` as the source of truth for programmatic prompt assembly and validation.
-- Use `prompt_context_markdown` for fast prompt bootstrapping when you need a readable schema summary.
-- Inject only relevant entity types/edges for the current extraction task to reduce token usage.
-- Re-fetch when schema might have changed; ordering is deterministic so prompt diffs are meaningful.
+Use this after entity extraction for each candidate related entity pair to choose an allowed edge type and direction.
 
 
 ## GetEntityTypePropertyContext

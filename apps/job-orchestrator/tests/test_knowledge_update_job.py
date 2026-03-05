@@ -192,16 +192,14 @@ def test_merge_upsert_graph_delta_requests_combines_all_sections() -> None:
 
 
 def test_build_step_three_system_prompt_includes_required_guidance() -> None:
-    prompt = _build_step_three_system_prompt(
-        extraction_context_markdown="## Entities\n- Person",
-        upsert_graph_delta_json_schema='{"type":"object"}',
-    )
+    prompt = _build_step_three_system_prompt('{"type":"object"}')
 
     assert "knowledge.update extraction architect" in prompt
     assert "block_level <= 2" in prompt
     assert "fictional context" in prompt
     assert "assistant suggestions must be ignored unless the user approved" in prompt.lower()
-    assert "## Entities" in prompt
+    assert "get_entity_extraction_schema_context" in prompt
+    assert "get_edge_extraction_schema_context" in prompt
     assert '{"type":"object"}' in prompt
 
 
@@ -273,8 +271,10 @@ class _FakeExtractionChannel:
         assert response_deserializer is not None
 
         async def _call(request):
-            if method.endswith("/GetExtractionSchemaContext"):
-                return knowledge_pb2.GetExtractionSchemaContextReply(prompt_context_markdown="## Schema")
+            if method.endswith("/GetEntityExtractionSchemaContext"):
+                return knowledge_pb2.GetEntityExtractionSchemaContextReply()
+            if method.endswith("/GetEdgeExtractionSchemaContext"):
+                return knowledge_pb2.GetEdgeExtractionSchemaContextReply()
             if method.endswith("/GetUpsertGraphDeltaJsonSchema"):
                 return knowledge_pb2.GetUpsertGraphDeltaJsonSchemaReply(
                     json_schema='{"type":"object","properties":{"entities":{"type":"array"}}}'
@@ -329,6 +329,8 @@ async def test_run_step_three_extraction_agent_uses_model_provider_tools(monkeyp
     assert result == {"entities": [{"id": "entity-1"}]}
     assert captured["model_class"] == "ModelProviderChatModel"
     assert captured["tools"] == [
+        "get_entity_extraction_schema_context",
+        "get_edge_extraction_schema_context",
         "find_entity_candidates",
         "get_entity_context",
         "get_entity_type_property_context",
