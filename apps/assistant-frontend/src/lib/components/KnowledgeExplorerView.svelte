@@ -40,6 +40,7 @@
 
   $: currentCategory = explorerRoute.type === 'category' ? findCategoryById(rootCategories, explorerRoute.id) : null;
   $: categoryBreadcrumbs = currentCategory ? findCategoryBreadcrumbs(rootCategories, currentCategory.id) : [];
+  $: pageBreadcrumbs = pageDetail ? buildPageBreadcrumbs(pageDetail.category_breadcrumb.path, rootCategories) : [];
   $: categoryTreeNodes = currentCategory ? [currentCategory] : rootCategories;
 
   onMount(async () => {
@@ -209,18 +210,36 @@
   }
 
   function findCategoryBreadcrumbs(nodes: KnowledgeCategoryNode[], id: string): KnowledgePageCategoryBreadcrumbItem[] {
+    const path = findCategoryPath(nodes, id);
+    return path.slice(0, -1);
+  }
+
+  function findCategoryPath(nodes: KnowledgeCategoryNode[], id: string): KnowledgePageCategoryBreadcrumbItem[] {
     for (const node of nodes) {
       if (node.id === id) {
-        return [];
+        return [{ id: node.id, name: node.name }];
       }
 
-      const nested = findCategoryBreadcrumbs(node.children, id);
-      if (nested.length > 0 || node.children.some((child) => child.id === id)) {
+      const nested = findCategoryPath(node.children, id);
+      if (nested.length > 0) {
         return [{ id: node.id, name: node.name }, ...nested];
       }
     }
 
     return [];
+  }
+
+  function buildPageBreadcrumbs(
+    rawPath: KnowledgePageCategoryBreadcrumbItem[],
+    nodes: KnowledgeCategoryNode[]
+  ): KnowledgePageCategoryBreadcrumbItem[] {
+    const leaf = rawPath.at(-1);
+    if (!leaf) {
+      return [];
+    }
+
+    const fullPath = findCategoryPath(nodes, leaf.id);
+    return fullPath.length > 0 ? fullPath : rawPath;
   }
 </script>
 
@@ -268,6 +287,7 @@
     {:else}
       <KnowledgePage
         page={pageDetail}
+        breadcrumbs={pageBreadcrumbs}
         loading={loading}
         error={requestError}
         on:navigateOverview={() => navigate({ type: 'overview' })}
