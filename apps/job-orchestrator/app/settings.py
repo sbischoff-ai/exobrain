@@ -39,6 +39,11 @@ class Settings(BaseSettings):
         default="architect",
         alias="KNOWLEDGE_UPDATE_EXTRACTION_MODEL",
     )
+    knowledge_update_model_provider_timeout_seconds: float = Field(
+        default=100.0,
+        alias="KNOWLEDGE_UPDATE_MODEL_PROVIDER_TIMEOUT_SECONDS",
+        ge=100.0,
+    )
     job_orchestrator_api_bind_address: str | None = Field(
         default=None,
         alias="JOB_ORCHESTRATOR_API_BIND_ADDRESS",

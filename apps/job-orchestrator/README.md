@@ -141,6 +141,7 @@ Keep request subject patterns narrow enough that they do not also match events/D
 - `KNOWLEDGE_INTERFACE_CONNECT_TIMEOUT_SECONDS` (default: `5.0`)
 - `MODEL_PROVIDER_BASE_URL` (default: `http://localhost:8010/v1`, model-provider base API URL; clients append `/internal/chat/messages` for the native chat contract used by step-three extraction and step-four routing agents)
 - `KNOWLEDGE_UPDATE_EXTRACTION_MODEL` (default: `architect`, model alias used for step-three extraction)
+- `KNOWLEDGE_UPDATE_MODEL_PROVIDER_TIMEOUT_SECONDS` (default: `100.0`, HTTP timeout for knowledge-update model-provider calls used by extraction and routing agents)
 - `APP_ENV` (default: `local`, influences default logging level)
 - `LOG_LEVEL` (optional override; defaults to `DEBUG` in local, `INFO` otherwise)
 - `RESHAPE_SCHEMA_QUERY` (optional)

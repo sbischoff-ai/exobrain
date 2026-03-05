@@ -38,3 +38,8 @@ def test_settings_uses_local_model_provider_default() -> None:
 def test_settings_normalizes_model_provider_base_url() -> None:
     settings = Settings(MODEL_PROVIDER_BASE_URL="http://provider")
     assert settings.model_provider_base_url == "http://provider/v1"
+
+
+def test_settings_defaults_knowledge_update_model_provider_timeout() -> None:
+    settings = Settings()
+    assert settings.knowledge_update_model_provider_timeout_seconds == 100.0
