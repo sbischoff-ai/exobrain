@@ -3,7 +3,12 @@ from __future__ import annotations
 import json
 import time
 import uuid
+from copy import deepcopy
 from typing import Any, AsyncIterator
+
+import jsonref
+from jsonschema import Draft202012Validator
+from jsonschema.exceptions import SchemaError
 
 from anthropic import (
     APIError,
@@ -39,28 +44,32 @@ class AnthropicProviderClient(ProviderClient):
                     and isinstance(tool.get("function"), dict)
                 ):
                     function = tool["function"]
-                    input_schema = function.get("parameters")
-                    if not isinstance(input_schema, dict):
-                        input_schema = {"type": "object", "properties": {}}
-                    elif "type" not in input_schema:
-                        input_schema = {"type": "object", **input_schema}
-                    elif input_schema.get("type") != "object":
-                        input_schema = {
-                            "type": "object",
-                            "properties": {"input": input_schema},
-                            "required": ["input"],
-                        }
+                    tool_name = function.get("name")
+                    if not isinstance(tool_name, str) or not tool_name:
+                        raise ProviderClientError(
+                            status_code=400,
+                            message="Anthropic tool conversion requires function.name",
+                        )
+
+                    input_schema = self.normalize_tool_schema(function.get("parameters"), tool_name=tool_name)
 
                     anthropic_tools.append(
                         {
                             "type": "custom",
-                            "name": function.get("name"),
+                            "name": tool_name,
                             "description": function.get("description") or "",
                             "input_schema": input_schema,
                         }
                     )
-                elif isinstance(tool, dict):
+                elif isinstance(tool, dict) and isinstance(tool.get("name"), str) and isinstance(
+                    tool.get("input_schema"), dict
+                ):
                     anthropic_tools.append(tool)
+                else:
+                    raise ProviderClientError(
+                        status_code=400,
+                        message="Anthropic tools must be OpenAI function tools or Anthropic custom tools",
+                    )
             mapped["tools"] = anthropic_tools
 
         tool_choice = mapped.get("tool_choice")
@@ -87,6 +96,81 @@ class AnthropicProviderClient(ProviderClient):
                 )
             mapped["output_config"] = {"format": {"type": "json_schema", "schema": schema}}
         return mapped
+
+    def normalize_tool_schema(self, parameters: Any, *, tool_name: str) -> dict[str, Any]:
+        if not isinstance(parameters, dict):
+            schema: dict[str, Any] = {"type": "object", "properties": {}}
+        else:
+            schema = deepcopy(parameters)
+
+        self._remove_openapi_keywords(schema)
+
+        if "definitions" in schema and "$defs" not in schema:
+            schema["$defs"] = schema.pop("definitions")
+
+        self._rewrite_definition_refs(schema)
+
+        if "type" not in schema:
+            schema["type"] = "object"
+        elif schema.get("type") != "object":
+            schema = {
+                "type": "object",
+                "properties": {"input": schema},
+                "required": ["input"],
+            }
+
+        if self._schema_has_ref(schema):
+            try:
+                schema = jsonref.replace_refs(schema, loader=self._jsonref_loader, proxies=False, lazy_load=False)
+            except Exception as exc:  # pragma: no cover - jsonref throws varying exceptions
+                raise ProviderClientError(
+                    status_code=400,
+                    message=f'Invalid tool schema for tool "{tool_name}": {exc}',
+                ) from exc
+
+        try:
+            Draft202012Validator.check_schema(schema)
+        except SchemaError as exc:
+            raise ProviderClientError(
+                status_code=400,
+                message=f'Invalid tool schema for tool "{tool_name}": {exc.message}',
+            ) from exc
+
+        return schema
+
+
+    def _rewrite_definition_refs(self, node: Any) -> None:
+        if isinstance(node, dict):
+            ref_value = node.get("$ref")
+            if isinstance(ref_value, str) and ref_value.startswith("#/definitions/"):
+                node["$ref"] = ref_value.replace("#/definitions/", "#/$defs/", 1)
+            for value in node.values():
+                self._rewrite_definition_refs(value)
+        elif isinstance(node, list):
+            for item in node:
+                self._rewrite_definition_refs(item)
+
+    def _jsonref_loader(self, uri: str, **kwargs: Any) -> Any:
+        raise ValueError(f"External $ref is not allowed: {uri}")
+
+    def _remove_openapi_keywords(self, node: Any) -> None:
+        if isinstance(node, dict):
+            for key in ["nullable", "discriminator", "example", "examples", "xml", "externalDocs", "deprecated"]:
+                node.pop(key, None)
+            for value in node.values():
+                self._remove_openapi_keywords(value)
+        elif isinstance(node, list):
+            for item in node:
+                self._remove_openapi_keywords(item)
+
+    def _schema_has_ref(self, node: Any) -> bool:
+        if isinstance(node, dict):
+            if "$ref" in node:
+                return True
+            return any(self._schema_has_ref(value) for value in node.values())
+        if isinstance(node, list):
+            return any(self._schema_has_ref(item) for item in node)
+        return False
 
     def _to_openai_response(self, payload: dict[str, Any], response: Any) -> dict[str, Any]:
         text = "".join(block.text for block in response.content if getattr(block, "type", "") == "text")
