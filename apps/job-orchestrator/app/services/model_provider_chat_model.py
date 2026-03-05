@@ -51,8 +51,15 @@ class ModelProviderChatModel(BaseChatModel):
     ) -> ChatResult:
         payload = self._build_payload(messages, stop=stop, **kwargs)
         client = self.async_http_client or httpx.AsyncClient(timeout=self.timeout)
-        response = await client.post(f"{self.base_url}/internal/chat/messages", json=payload)
-        response.raise_for_status()
+        try:
+            response = await client.post(f"{self.base_url}/internal/chat/messages", json=payload)
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            body = exc.response.text.strip() if exc.response is not None else ""
+            detail = body[:2000] if body else str(exc)
+            raise RuntimeError(
+                f"model-provider request failed with status {exc.response.status_code if exc.response is not None else 'unknown'}: {detail}"
+            ) from exc
         return self._chat_result_from_response(response.json())
 
     def _generate(

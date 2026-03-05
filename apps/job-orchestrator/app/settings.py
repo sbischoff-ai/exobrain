@@ -36,7 +36,7 @@ class Settings(BaseSettings):
         alias="MODEL_PROVIDER_BASE_URL",
     )
     knowledge_update_extraction_model: str = Field(
-        default="architect",
+        default="worker",
         alias="KNOWLEDGE_UPDATE_EXTRACTION_MODEL",
     )
     knowledge_update_model_provider_timeout_seconds: float = Field(

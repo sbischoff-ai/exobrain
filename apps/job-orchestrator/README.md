@@ -102,15 +102,20 @@ assistant-backend
 
 This API ownership keeps producers decoupled from JetStream subject/version details and lets the orchestrator enforce payload validation centrally.
 For `knowledge.update`, clients must provide `user_id` plus the typed `knowledge_update` payload (`journal_reference`, `messages`, and `requested_by_user_id`), and the server uses `user_id` as the envelope correlation id.
-Current `knowledge.update` worker flow uses five explicit steps arranged as a task group:
+Current `knowledge.update` worker flow uses explicit small steps:
 
-1. Step one builds a baseline `UpsertGraphDelta` request body from message payloads (after one `GetUserInitGraph` lookup).
-2. Step two preprocesses the chat sequence into a deterministic markdown batch document with turn boundaries, speaker tags, timestamps, and an optional metadata header.
-3. Step three runs a LangChain extraction agent (`architect` model via model-provider) against the step-two markdown, calling `GetEntityExtractionSchemaContext` once up front for system-context priming, then using `GetEdgeExtractionSchemaContext` as a tool for pairwise edge decisions, structured output schema from `GetUpsertGraphDeltaJsonSchema`, and graph lookup tools backed by `FindEntityCandidates`, `GetEntityContext`, and `GetEntityTypePropertyContext`.
-4. Step four runs a router agent (`router` model) that maps step-one chat blocks to step-three entities with confidence scores, then appends corresponding `MENTIONS` edges to the merged graph delta.
-5. Step five upserts the merged `UpsertGraphDelta` payload via `UpsertGraphDelta`.
-
-Execution uses two parallel tasks: task one runs step one, and task two runs steps two+three; steps four and five run after both task results are available.
+0. Create chat-message graph delta (deterministic): map payload messages into `node.chat_message` + `node.block` with `SENT_TO` / `SENT_BY` / `DESCRIBED_BY` edges.
+1. Create markdown batch document (deterministic): format the conversation into a compact LLM-friendly turn transcript.
+2. Entity extraction (`worker` model): call `GetEntityExtractionSchemaContext` with `requesting_user_id`, inject context into the system prompt, and return strict structured JSON with `extracted_entities` and `extracted_universes`.
+3. Entity candidate matching (deterministic): for each extracted entity, call `FindEntityCandidates` with names/aliases/description/type and classify by score thresholds (`>0.1`, `>0.6`, `>0.15`) to decide direct match vs. detailed comparison.
+4. Extracted entity contexts (`reasoner` model): create focused markdown per extracted entity with heading depth up to 2 and semantically bounded paragraph/list chunks.
+5. Detailed comparison (`worker` model): for entities requiring further comparison, call `GetEntityContext` (block level 1, with `requesting_user_id`) for each candidate and decide `MATCH({entity_id})` vs `NEW_ENTITY`; unresolved/new entities receive new UUIDs.
+6. Relationship extraction (`worker` model): derive related entity pairs from markdown using the resolved entity IDs from step 5.
+7. Relationship type + score (`worker` model): for each related pair, call `GetEdgeExtractionSchemaContext` (with `requesting_user_id`) and choose direction/edge type/confidence.
+8. Build final entity context graphs (`worker`/`reasoner`): for each resolved entity, call `GetEntityTypePropertyContext` (with `requesting_user_id`) and produce entity + block-tree payloads; matched entities also include `GetEntityContext` (block level 2) context for minimal updates.
+9. Merge graph delta (deterministic): merge step-0 chat-message graph delta with step-8 final entity context graphs (mapping entity/block payloads, replacing `NEW_BLOCK_N` placeholders with UUIDs), step-7 relationship edges (`status=asserted`), and step-2 fictional universes.
+10. Finalize graph delta (`worker` model): detect block-to-entity mentions and append `MENTIONS` edges with confidence and `status=asserted`.
+11. Upsert graph delta (deterministic): persist the final merged graph delta via `UpsertGraphDelta`.
 
 ## Common commands
 
@@ -139,9 +144,9 @@ Keep request subject patterns narrow enough that they do not also match events/D
 - `JOB_ORCHESTRATOR_WORKER_ENABLED` (default: `true`, run worker process)
 - `KNOWLEDGE_INTERFACE_GRPC_TARGET` (default: `localhost:50051`)
 - `KNOWLEDGE_INTERFACE_CONNECT_TIMEOUT_SECONDS` (default: `5.0`)
-- `MODEL_PROVIDER_BASE_URL` (default: `http://localhost:8010/v1`, model-provider base API URL; clients append `/internal/chat/messages` for the native chat contract used by step-three extraction and step-four routing agents)
-- `KNOWLEDGE_UPDATE_EXTRACTION_MODEL` (default: `architect`, model alias used for step-three extraction)
-- `KNOWLEDGE_UPDATE_MODEL_PROVIDER_TIMEOUT_SECONDS` (default: `100.0`, HTTP timeout for knowledge-update model-provider calls used by extraction and routing agents)
+- `MODEL_PROVIDER_BASE_URL` (default: `http://localhost:8010/v1`, model-provider base API URL; clients append `/internal/chat/messages` for the native chat contract used by step-two entity extraction, step-four context extraction, and step-five detailed comparison)
+- `KNOWLEDGE_UPDATE_EXTRACTION_MODEL` (default: `worker`, model alias used for step-two entity extraction)
+- `KNOWLEDGE_UPDATE_MODEL_PROVIDER_TIMEOUT_SECONDS` (default: `100.0`, HTTP timeout for knowledge-update model-provider calls used by entity extraction)
 - `APP_ENV` (default: `local`, influences default logging level)
 - `LOG_LEVEL` (optional override; defaults to `DEBUG` in local, `INFO` otherwise)
 - `RESHAPE_SCHEMA_QUERY` (optional)
@@ -155,6 +160,7 @@ Keep request subject patterns narrow enough that they do not also match events/D
 
 - If `knowledge.update` retries with timeout errors, verify `KNOWLEDGE_INTERFACE_GRPC_TARGET` points to a reachable knowledge-interface gRPC endpoint.
 - If `knowledge.update` fails with `unhandled errors in a TaskGroup`, inspect the forwarded worker `stderr` traceback in orchestrator logs; worker entrypoint now emits full Python tracebacks (not just the top-level message) to pinpoint which step failed.
-- If `knowledge.update` fails around `GetEdgeExtractionSchemaContext`, verify knowledge-interface is running a build that returns a non-empty protobuf reply for that RPC; current worker builds now guard against empty replies and degrade to an empty edge-context payload with a warning so extraction can continue.
-- If `knowledge.update` fails with model-provider `422 Unprocessable Entity` during step-three extraction, ensure you are running a build that maps LangChain tool choice `"any"` to model-provider `{"type": "required"}` in the custom chat model request payload.
+- If `knowledge.update` fails around entity extraction context loading, verify knowledge-interface is reachable and `GetEntityExtractionSchemaContext` can be called with the requesting user id.
+- If step-5 detailed comparison hits model-provider `400` errors, verify prompt sizing. The worker now deterministically uses a compact step-5 payload (bounded candidate contexts + trimmed markdown) to stay within provider limits and logs prompt size for debugging.
+- model-provider HTTP failures now include upstream response bodies in worker exceptions; use these messages to distinguish schema/tool-choice errors from context-length errors.
 - If producers fail with `UNAVAILABLE` on `EnqueueJob`, confirm the orchestrator API process is running and reachable at `JOB_ORCHESTRATOR_API_BIND_ADDRESS` / `JOB_ORCHESTRATOR_API_PORT`.

@@ -87,3 +87,23 @@ def test_model_provider_chat_model_serializes_dict_any_tool_choice_as_required()
     )
 
     assert payload["tool_choice"] == {"type": "required"}
+
+
+@pytest.mark.asyncio
+async def test_model_provider_chat_model_surfaces_error_body_on_http_status() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        del request
+        return httpx.Response(
+            400,
+            json={"error": {"message": "invalid_request_error: too many tokens"}},
+        )
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="http://test")
+    model = ModelProviderChatModel(model="architect", base_url="http://test/v1", async_http_client=client)
+
+    with pytest.raises(RuntimeError) as exc_info:
+        await model.ainvoke([HumanMessage(content="hello")])
+
+    message = str(exc_info.value)
+    assert "status 400" in message
+    assert "too many tokens" in message
