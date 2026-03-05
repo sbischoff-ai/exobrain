@@ -76,6 +76,36 @@ def test_build_agent_model_uses_openai_fallback_when_enabled() -> None:
     assert model.model_name == "agent"
 
 
+def test_build_agent_model_uses_openai_compat_when_contract_mode_legacy() -> None:
+    settings = Settings(
+        MAIN_AGENT_USE_MOCK=False,
+        MAIN_AGENT_MODEL="agent",
+        MAIN_AGENT_TEMPERATURE=0.2,
+        MODEL_PROVIDER_BASE_URL="http://localhost:8010/v1",
+        MAIN_AGENT_MODEL_CONTRACT_MODE="legacy_openai_compatible",
+    )
+
+    model = _build_agent_model(settings)
+
+    assert isinstance(model, ChatOpenAI)
+    assert model.model_name == "agent"
+
+
+def test_build_agent_model_uses_openai_compat_when_rollout_fallback_enabled() -> None:
+    settings = Settings(
+        MAIN_AGENT_USE_MOCK=False,
+        MAIN_AGENT_MODEL="agent",
+        MAIN_AGENT_TEMPERATURE=0.2,
+        MODEL_PROVIDER_BASE_URL="http://localhost:8010/v1",
+        MAIN_AGENT_MODEL_CONTRACT_MODE="native",
+        MAIN_AGENT_USE_OPENAI_FALLBACK=True,
+    )
+
+    model = _build_agent_model(settings)
+
+    assert isinstance(model, ChatOpenAI)
+
+
 def test_build_web_tools_dependency_uses_tavily_by_default() -> None:
     dependency = _build_web_tools_dependency(Settings(WEB_TOOLS_USE_MOCK=False))
 

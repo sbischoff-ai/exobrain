@@ -104,8 +104,20 @@ def _build_agent_model(settings: Settings) -> BaseChatModel:
         logger.info("using FakeListChatModel assistant agent", extra={"responses_count": len(fake_responses)})
         return FakeListChatModel(responses=fake_responses)
 
-    logger.info("using model-provider assistant agent", extra={"model_alias": settings.main_agent_model})
-    if settings.main_agent_use_openai_fallback:
+    use_openai_compat = (
+        settings.main_agent_model_contract_mode == "legacy_openai_compatible"
+        or settings.main_agent_use_openai_fallback
+    )
+    logger.info(
+        "building assistant model",
+        extra={
+            "model_alias": settings.main_agent_model,
+            "contract_mode": settings.main_agent_model_contract_mode,
+            "openai_fallback": settings.main_agent_use_openai_fallback,
+            "using_openai_compat": use_openai_compat,
+        },
+    )
+    if use_openai_compat:
         return ChatOpenAI(
             model=settings.main_agent_model,
             base_url=settings.model_provider_base_url,
