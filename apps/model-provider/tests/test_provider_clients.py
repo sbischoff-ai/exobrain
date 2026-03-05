@@ -150,6 +150,34 @@ async def test_anthropic_provider_translates_openai_response_format_to_output_co
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("tool_choice", "expected"),
+    [
+        ("auto", {"type": "auto"}),
+        ("none", {"type": "none"}),
+        ("required", {"type": "any"}),
+    ],
+)
+async def test_anthropic_provider_translates_string_tool_choice(
+    tool_choice: str,
+    expected: dict[str, str],
+) -> None:
+    messages = FakeAnthropicMessages()
+    fake_client = SimpleNamespace(messages=messages)
+    client = AnthropicProviderClient(api_key="x", client=fake_client)
+
+    payload = {
+        "model": "claude-sonnet-4-6",
+        "messages": [{"role": "user", "content": "hi"}],
+        "tool_choice": tool_choice,
+    }
+
+    await client.chat_completions(payload)
+
+    assert messages.last_create["tool_choice"] == expected
+
+
+@pytest.mark.asyncio
 async def test_anthropic_provider_rejects_invalid_response_format_schema() -> None:
     messages = FakeAnthropicMessages()
     fake_client = SimpleNamespace(messages=messages)
