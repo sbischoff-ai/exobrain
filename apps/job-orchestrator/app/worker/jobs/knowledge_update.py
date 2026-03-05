@@ -11,6 +11,7 @@ from typing import TypeVar
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
 import grpc
+from google.protobuf.json_format import ParseError
 from google.protobuf.json_format import MessageToDict, ParseDict
 from pydantic import BaseModel, ValidationError
 
@@ -30,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 
 _MATCH_DECISION_PATTERN = re.compile(r"^MATCH\((?P<entity_id>[^)]+)\)$")
+_PARSE_DICT_FIELD_PATTERN = re.compile(r"Failed to parse (?P<field>[A-Za-z_][A-Za-z0-9_]*) field")
 _ModelT = TypeVar("_ModelT", bound=BaseModel)
 
 
@@ -46,6 +48,23 @@ def _validate_model(step_name: str, model: type[_ModelT], payload: object) -> _M
     except ValidationError as exc:
         summary = _compact_validation_summary(exc)
         raise RuntimeError(f"knowledge.update {step_name} validation failed: {summary}") from exc
+
+
+def _extract_parse_dict_field_path(exc: ParseError) -> str:
+    parts = _PARSE_DICT_FIELD_PATTERN.findall(str(exc))
+    if parts:
+        return ".".join(parts)
+    return "<unknown>"
+
+
+def _validate_upsert_graph_delta_payload(step_name: str, payload: dict[str, object]) -> knowledge_pb2.UpsertGraphDeltaRequest:
+    try:
+        return ParseDict(payload, knowledge_pb2.UpsertGraphDeltaRequest())
+    except ParseError as exc:
+        field_path = _extract_parse_dict_field_path(exc)
+        raise RuntimeError(
+            f"knowledge.update {step_name} validation failed at '{field_path}': {exc}"
+        ) from exc
 
 
 class _StepFiveComparisonDecision(BaseModel):
@@ -1222,6 +1241,7 @@ async def run(job: JobEnvelope) -> None:
             ) from exc
 
         step_zero_graph_delta = await _build_upsert_graph_delta_step_one(channel, payload)
+        _validate_upsert_graph_delta_payload("step zero", step_zero_graph_delta)
         step_one_markdown_document = _step_two_store_batch_document(payload)
         step_two_extraction = await _run_step_two_entity_extraction(
             channel,
@@ -1273,6 +1293,7 @@ async def run(job: JobEnvelope) -> None:
             step_seven_relationships,
             step_eight_final_entity_context_graphs,
         )
+        _validate_upsert_graph_delta_payload("step nine", step_nine_merged_graph_delta)
         step_ten_final_graph_delta = await _run_step_ten_finalize_graph_delta(
             step_nine_merged_graph_delta,
             settings,
@@ -1284,7 +1305,7 @@ async def run(job: JobEnvelope) -> None:
             request_serializer=knowledge_pb2.UpsertGraphDeltaRequest.SerializeToString,
             response_deserializer=knowledge_pb2.UpsertGraphDeltaReply.FromString,
         )
-        upsert_request = ParseDict(step_ten_final_graph_delta, knowledge_pb2.UpsertGraphDeltaRequest())
+        upsert_request = _validate_upsert_graph_delta_payload("step ten", step_ten_final_graph_delta)
         upsert_reply = await upsert_graph_delta(upsert_request)
         logger.info(
             "knowledge.update step eleven upserted final graph delta",
