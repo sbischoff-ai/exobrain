@@ -10,14 +10,6 @@
     toggle: { categoryId: string; expanded: boolean };
     selectCategory: { categoryId: string };
   }>();
-
-  function isExpanded(node: KnowledgeCategoryNode): boolean {
-    if (node.children.length === 0) {
-      return false;
-    }
-
-    return expandedCategories[node.id] ?? true;
-  }
 </script>
 
 <ul class="category-tree">
@@ -28,10 +20,10 @@
           <button
             type="button"
             class="toggle"
-            aria-label={isExpanded(node) ? `Collapse ${node.name}` : `Expand ${node.name}`}
-            on:click|stopPropagation={() => dispatch('toggle', { categoryId: node.id, expanded: !isExpanded(node) })}
+            aria-label={node.children.length > 0 && (expandedCategories[node.id] ?? true) ? `Collapse ${node.name}` : `Expand ${node.name}`}
+            on:click|stopPropagation={() => dispatch('toggle', { categoryId: node.id, expanded: !(node.children.length > 0 && (expandedCategories[node.id] ?? true)) })}
           >
-            {isExpanded(node) ? '▾' : '▸'}
+            {node.children.length > 0 && (expandedCategories[node.id] ?? true) ? '▾' : '▸'}
           </button>
         {:else}
           <span class="toggle-placeholder" aria-hidden="true"></span>
@@ -48,7 +40,7 @@
         </button>
       </div>
 
-      {#if node.children.length > 0 && isExpanded(node)}
+      {#if node.children.length > 0 && (expandedCategories[node.id] ?? true)}
         <svelte:self
           nodes={node.children}
           {expandedCategories}
