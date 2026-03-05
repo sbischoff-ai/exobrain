@@ -129,7 +129,7 @@ async def test_streaming_chunk_assembly() -> None:
         body = "".join(
             [
                 'data: {"type":"text_delta","text":"hello "}\n\n',
-                'data: {"type":"tool_call","id":"call_1","name":"lookup","arguments":{"id":"42"}}\n\n',
+                'data: {"type":"tool_call","id":"call_1","name":"lookup","index":1,"arguments":{"id":"42"}}\n\n',
                 'data: {"type":"text_delta","text":"world"}\n\n',
                 'data: {"type":"completion","finish_reason":"stop"}\n\n',
                 'data: [DONE]\n\n',
@@ -151,4 +151,5 @@ async def test_streaming_chunk_assembly() -> None:
 
     assert text == "hello world"
     assert tool_chunks[0]["name"] == "lookup"
+    assert tool_chunks[0]["index"] == 1
     assert captured_path == "/v1/internal/chat/messages"

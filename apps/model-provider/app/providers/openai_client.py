@@ -207,6 +207,7 @@ class OpenAIProviderClient(ProviderClient):
                             {
                                 "id": tool_call.get("id"),
                                 "name": fn.get("name"),
+                                "index": int(index) if isinstance(index, int) else 0,
                                 "arguments": "",
                             },
                         )
@@ -223,6 +224,7 @@ class OpenAIProviderClient(ProviderClient):
                             yield ToolCallFrame(
                                 id=str(item.get("id") or f"call_{uuid.uuid4().hex}"),
                                 name=str(item.get("name") or "tool"),
+                                index=int(item.get("index") or 0),
                                 arguments=self._coerce_tool_arguments(item.get("arguments")),
                             )
                         pending_tool_calls.clear()

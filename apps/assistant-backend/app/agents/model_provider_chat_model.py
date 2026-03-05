@@ -232,7 +232,7 @@ class ModelProviderChatModel(BaseChatModel):
                             "id": frame.get("id"),
                             "name": frame.get("name"),
                             "args": json.dumps(frame.get("arguments", {})),
-                            "index": 0,
+                            "index": int(frame.get("index", 0) or 0),
                             "type": "tool_call_chunk",
                         }
                     ],

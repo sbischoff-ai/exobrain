@@ -57,7 +57,12 @@ class FakeOpenAIClient:
                                             "index": 0,
                                             "id": "call_1",
                                             "function": {"name": "lookup", "arguments": '{"id"'},
-                                        }
+                                        },
+                                        {
+                                            "index": 1,
+                                            "id": "call_2",
+                                            "function": {"name": "web_fetch", "arguments": '{"url"'},
+                                        },
                                     ]
                                 },
                                 "finish_reason": None,
@@ -75,7 +80,11 @@ class FakeOpenAIClient:
                                         {
                                             "index": 0,
                                             "function": {"arguments": ': "42"}'},
-                                        }
+                                        },
+                                        {
+                                            "index": 1,
+                                            "function": {"arguments": ': "https://example.com"}'},
+                                        },
                                     ]
                                 },
                                 "finish_reason": "tool_calls",
@@ -137,8 +146,13 @@ async def test_openai_provider_native_and_compat_chat_round_trip() -> None:
         frames.append(frame)
     assert any(frame.type == "text_delta" for frame in frames)
     tool_frames = [frame for frame in frames if frame.type == "tool_call"]
-    assert tool_frames
+    assert len(tool_frames) == 2
+    assert tool_frames[0].name == "lookup"
+    assert tool_frames[0].index == 0
     assert tool_frames[0].arguments == {"id": "42"}
+    assert tool_frames[1].name == "web_fetch"
+    assert tool_frames[1].index == 1
+    assert tool_frames[1].arguments == {"url": "https://example.com"}
     assert any(frame.type == "completion" for frame in frames)
 
 
