@@ -6,7 +6,7 @@ import httpx
 import pytest
 from langchain_core.messages import HumanMessage
 
-from app.services.model_provider_chat_model import ModelProviderChatModel
+from app.services.model_provider_chat_model import ModelProviderChatModel, build_strict_response_format
 
 
 @pytest.mark.asyncio
@@ -134,3 +134,40 @@ async def test_model_provider_chat_model_unwraps_openai_response_format_envelope
         "properties": {"decision": {"type": "string"}},
         "required": ["decision"],
     }
+
+
+@pytest.mark.asyncio
+async def test_model_provider_chat_model_respects_strict_json_schema_response_format() -> None:
+    captured: dict[str, object] = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        captured.update(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json={
+                "id": "chat_4",
+                "model": "worker",
+                "message": {"role": "assistant", "content": [{"type": "text", "text": "ok"}]},
+                "finish_reason": "stop",
+                "usage": {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2},
+            },
+        )
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="http://test")
+    model = ModelProviderChatModel(model="worker", base_url="http://test/v1", async_http_client=client)
+
+    configured = model.with_structured_output(
+        build_strict_response_format(
+            {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {"decision": {"type": "string"}},
+                "required": ["decision"],
+            }
+        )
+    )
+
+    response = await configured.ainvoke([HumanMessage(content="compare")])
+
+    assert response.content == "ok"
+    assert captured["structured_output"]["strict"] is True

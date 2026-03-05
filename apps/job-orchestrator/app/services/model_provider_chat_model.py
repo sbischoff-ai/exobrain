@@ -14,6 +14,29 @@ _TOOL_CHOICE_KWARG = "model_provider_tool_choice"
 _STRUCTURED_OUTPUT_KWARG = "model_provider_structured_output"
 
 
+def build_strict_response_format(schema: dict[str, Any] | type) -> dict[str, Any]:
+    schema_payload: dict[str, Any]
+    if (
+        isinstance(schema, dict)
+        and schema.get("type") == "json_schema"
+        and isinstance(schema.get("json_schema"), dict)
+        and isinstance(schema["json_schema"].get("schema"), dict)
+    ):
+        schema_payload = schema["json_schema"]["schema"]
+    elif isinstance(schema, dict) and (schema.get("type") == "object" or "properties" in schema):
+        schema_payload = schema
+    else:
+        schema_payload = convert_to_json_schema(schema)
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": schema_payload.get("title") or "structured_output",
+            "schema": schema_payload,
+            "strict": True,
+        },
+    }
+
+
 class ModelProviderChatModel(BaseChatModel):
     model: str
     base_url: str
@@ -34,22 +57,16 @@ class ModelProviderChatModel(BaseChatModel):
         return self.bind(**{_TOOLS_KWARG: serialized_tools, _TOOL_CHOICE_KWARG: tool_choice, **kwargs})
 
     def with_structured_output(self, schema: dict[str, Any] | type, **kwargs: Any):
-        schema_payload: dict[str, Any]
-        if (
-            isinstance(schema, dict)
-            and schema.get("type") == "json_schema"
-            and isinstance(schema.get("json_schema"), dict)
-            and isinstance(schema["json_schema"].get("schema"), dict)
-        ):
-            # Some callers pass an OpenAI-style response_format envelope.
-            # The native structured_output contract expects the inner JSON Schema object.
-            schema_payload = schema["json_schema"]["schema"]
-        else:
-            schema_payload = convert_to_json_schema(schema)
+        strict = kwargs.pop("strict", None)
+        schema_payload = self._normalize_structured_output_schema(schema)
+        if strict is None and isinstance(schema, dict) and schema.get("type") == "json_schema":
+            json_schema = schema.get("json_schema")
+            if isinstance(json_schema, dict) and isinstance(json_schema.get("strict"), bool):
+                strict = json_schema["strict"]
         structured_output = {
             "name": schema_payload.get("title") or "structured_output",
             "schema": schema_payload,
-            "strict": bool(kwargs.pop("strict", False)),
+            "strict": bool(strict),
         }
         return self.bind(**{_STRUCTURED_OUTPUT_KWARG: structured_output, **kwargs})
 
@@ -181,6 +198,20 @@ class ModelProviderChatModel(BaseChatModel):
             id=payload.get("id"),
         )
         return ChatResult(generations=[ChatGeneration(message=ai_message)])
+
+    def _normalize_structured_output_schema(self, schema: dict[str, Any] | type) -> dict[str, Any]:
+        if (
+            isinstance(schema, dict)
+            and schema.get("type") == "json_schema"
+            and isinstance(schema.get("json_schema"), dict)
+            and isinstance(schema["json_schema"].get("schema"), dict)
+        ):
+            # Some callers pass an OpenAI-style response_format envelope.
+            # The native structured_output contract expects the inner JSON Schema object.
+            return schema["json_schema"]["schema"]
+        if isinstance(schema, dict) and (schema.get("type") == "object" or "properties" in schema):
+            return schema
+        return convert_to_json_schema(schema)
 
     def _content_to_text(self, content: Any) -> str:
         if isinstance(content, str):
