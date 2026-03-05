@@ -7,19 +7,92 @@ import logging
 import re
 import sys
 import traceback
+from typing import TypeVar
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
 import grpc
 from google.protobuf.json_format import MessageToDict, ParseDict
+from pydantic import BaseModel, ValidationError
 
 from app.contracts import JobEnvelope, KnowledgeUpdatePayload
 from app.services.grpc import knowledge_pb2
 from app.settings import Settings, get_settings
+from app.worker.jobs.knowledge_update_types import (
+    CandidateMatchResult,
+    EntityExtractionResult,
+    FinalEntityContextGraph,
+    MatchedRelationship,
+    RelationshipPair,
+    ResolvedEntity,
+)
 
 logger = logging.getLogger(__name__)
 
 
 _MATCH_DECISION_PATTERN = re.compile(r"^MATCH\((?P<entity_id>[^)]+)\)$")
+_ModelT = TypeVar("_ModelT", bound=BaseModel)
+
+
+def _compact_validation_summary(exc: ValidationError) -> str:
+    return "; ".join(
+        f"{'.'.join(str(part) for part in err['loc'])}: {err['msg']}"
+        for err in exc.errors()[:3]
+    )
+
+
+def _validate_model(step_name: str, model: type[_ModelT], payload: object) -> _ModelT:
+    try:
+        return model.model_validate(payload)
+    except ValidationError as exc:
+        summary = _compact_validation_summary(exc)
+        raise RuntimeError(f"knowledge.update {step_name} validation failed: {summary}") from exc
+
+
+class _StepFiveComparisonDecision(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    decision: str
+
+
+class _StepFourEntityContextResult(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    focused_markdown: str
+
+
+class _StepSixRelationshipExtractionResult(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    entity_pairs: list[RelationshipPair]
+
+
+class _StepSevenRelationshipMatchResult(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    from_entity_id: str
+    to_entity_id: str
+    edge_type: str
+    confidence: float
+
+
+class _StepTenMention(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    block_id: str
+    entity_id: str
+    confidence: float
+
+
+class _StepTenMentionsResult(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    mentions: list[_StepTenMention]
+
+
+class _RpcMessageDict(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    payload: dict[str, object]
 
 
 def _format_exception_for_stderr(exc: BaseException) -> str:
@@ -39,7 +112,8 @@ def _require_created_at(created_at: str | None, sequence_number: int) -> str:
 def _message_to_dict(reply: object, *, rpc_name: str) -> dict[str, object]:
     if reply is None:
         raise RuntimeError(f"knowledge.update received empty response from {rpc_name}")
-    return MessageToDict(reply, preserving_proto_field_name=True)
+    raw_payload = MessageToDict(reply, preserving_proto_field_name=True)
+    return _validate_model(f"{rpc_name} gRPC response", _RpcMessageDict, {"payload": raw_payload}).payload
 
 
 async def _build_upsert_graph_delta_step_one(
@@ -230,7 +304,7 @@ async def _run_step_two_entity_extraction(
     payload: KnowledgeUpdatePayload,
     markdown_document: str,
     settings: Settings,
-) -> dict[str, object]:
+) -> EntityExtractionResult:
     from langchain.agents import create_agent
     from app.services.model_provider_chat_model import ModelProviderChatModel
 
@@ -260,16 +334,8 @@ async def _run_step_two_entity_extraction(
     reply = await compiled_agent.ainvoke({"messages": [{"role": "user", "content": markdown_document}]})
     structured = reply.get("structured_response") if isinstance(reply, dict) else None
     if not isinstance(structured, dict):
-        raise RuntimeError("knowledge.update step two agent returned no structured_response")
-
-    entities = structured.get("extracted_entities")
-    universes = structured.get("extracted_universes")
-    if not isinstance(entities, list) or not isinstance(universes, list):
-        raise RuntimeError("knowledge.update step two agent returned invalid extraction payload")
-    return {
-        "extracted_entities": [item for item in entities if isinstance(item, dict)],
-        "extracted_universes": [item for item in universes if isinstance(item, dict)],
-    }
+        raise RuntimeError("knowledge.update step two validation failed: missing structured_response")
+    return _validate_model("step two", EntityExtractionResult, structured)
 
 
 def _classify_candidate_matches(candidates: list[dict[str, object]]) -> dict[str, object]:
@@ -303,30 +369,21 @@ def _classify_candidate_matches(candidates: list[dict[str, object]]) -> dict[str
 async def _run_step_three_entity_candidate_matching(
     channel: grpc.aio.Channel,
     payload: KnowledgeUpdatePayload,
-    extraction: dict[str, object],
-) -> list[dict[str, object]]:
+    extraction: EntityExtractionResult,
+) -> list[CandidateMatchResult]:
     find_candidates_rpc = channel.unary_unary(
         "/exobrain.knowledge.v1.KnowledgeInterface/FindEntityCandidates",
         request_serializer=knowledge_pb2.FindEntityCandidatesRequest.SerializeToString,
         response_deserializer=knowledge_pb2.FindEntityCandidatesReply.FromString,
     )
 
-    results: list[dict[str, object]] = []
-    extracted_entities = extraction.get("extracted_entities", []) or []
-    for index, extracted_entity in enumerate(extracted_entities):
-        if not isinstance(extracted_entity, dict):
-            continue
-        aliases = extracted_entity.get("aliases")
-        alias_names = [alias for alias in aliases if isinstance(alias, str)] if isinstance(aliases, list) else []
-        entity_name = extracted_entity.get("name") if isinstance(extracted_entity.get("name"), str) else ""
+    results: list[CandidateMatchResult] = []
+    for index, extracted_entity in enumerate(extraction.extracted_entities):
+        alias_names = [alias for alias in extracted_entity.aliases if isinstance(alias, str)]
+        entity_name = extracted_entity.name
         names = [name for name in [entity_name, *alias_names] if name]
-
-        node_type = extracted_entity.get("node_type") if isinstance(extracted_entity.get("node_type"), str) else ""
-        short_description = (
-            extracted_entity.get("short_description")
-            if isinstance(extracted_entity.get("short_description"), str)
-            else ""
-        )
+        node_type = extracted_entity.node_type
+        short_description = extracted_entity.short_description
 
         candidates_reply = await find_candidates_rpc(
             knowledge_pb2.FindEntityCandidatesRequest(
@@ -340,14 +397,13 @@ async def _run_step_three_entity_candidate_matching(
         classification = _classify_candidate_matches(
             [candidate for candidate in candidate_dicts if isinstance(candidate, dict)]
         )
-        results.append(
-            {
-                "entity_index": index,
-                "extracted_entity": extracted_entity,
-                "candidate_matches": candidate_dicts,
-                **classification,
-            }
-        )
+        result_payload = {
+            "entity_index": index,
+            "extracted_entity": extracted_entity.model_dump(),
+            "candidate_matches": [item for item in candidate_dicts if isinstance(item, dict)],
+            **classification,
+        }
+        results.append(_validate_model("step three", CandidateMatchResult, result_payload))
 
     return results
 
@@ -364,7 +420,7 @@ def _build_step_four_entity_context_schema() -> dict[str, object]:
 
 
 async def _run_step_four_create_entity_contexts(
-    extraction: dict[str, object],
+    extraction: EntityExtractionResult,
     markdown_document: str,
     settings: Settings,
 ) -> list[str]:
@@ -399,12 +455,10 @@ async def _run_step_four_create_entity_contexts(
     )
 
     documents: list[str] = []
-    for extracted_entity in extraction.get("extracted_entities", []) or []:
-        if not isinstance(extracted_entity, dict):
-            continue
+    for extracted_entity in extraction.extracted_entities:
         prompt = json.dumps(
             {
-                "entity": extracted_entity,
+                "entity": extracted_entity.model_dump(),
                 "markdown_batch_document": markdown_document,
             },
             ensure_ascii=False,
@@ -413,7 +467,8 @@ async def _run_step_four_create_entity_contexts(
         structured = reply.get("structured_response") if isinstance(reply, dict) else None
         if not isinstance(structured, dict) or not isinstance(structured.get("focused_markdown"), str):
             raise RuntimeError("knowledge.update step four reasoner returned invalid focused_markdown")
-        documents.append(structured["focused_markdown"])
+        parsed = _validate_model("step four", _StepFourEntityContextResult, structured)
+        documents.append(parsed.focused_markdown)
     return documents
 
 
@@ -440,10 +495,10 @@ def _extract_matched_entity_id(decision: str) -> str | None:
 async def _run_step_five_detailed_comparison(
     channel: grpc.aio.Channel,
     payload: KnowledgeUpdatePayload,
-    candidate_matching: list[dict[str, object]],
+    candidate_matching: list[CandidateMatchResult],
     entity_context_documents: list[str],
     settings: Settings,
-) -> list[dict[str, object]]:
+) -> list[ResolvedEntity]:
     from langchain.agents import create_agent
     from app.services.model_provider_chat_model import ModelProviderChatModel
 
@@ -466,27 +521,23 @@ async def _run_step_five_detailed_comparison(
             "Compare extracted entity context markdown against candidate entity contexts. "
             "Return strict JSON only with decision as MATCH({entity_id}) or NEW_ENTITY."
         ),
-        response_format=_build_step_five_comparison_schema(),
+        response_format=_StepFiveComparisonDecision,
     )
 
-    resolved_entities: list[dict[str, object]] = []
+    resolved_entities: list[ResolvedEntity] = []
     for match_item in candidate_matching:
-        extracted_entity = match_item.get("extracted_entity")
-        if not isinstance(extracted_entity, dict):
-            continue
+        extracted_entity = match_item.extracted_entity
 
-        status = match_item.get("status")
+        status = match_item.status
         resolution_status = "new_entity"
         resolved_entity_id: str
-        if status == "matched" and isinstance(match_item.get("matched_entity_id"), str):
-            resolved_entity_id = match_item["matched_entity_id"]
+        if status == "matched" and match_item.matched_entity_id:
+            resolved_entity_id = match_item.matched_entity_id
             resolution_status = "matched"
         elif status == "needs_detailed_comparison":
-            entity_index = int(match_item.get("entity_index", -1))
+            entity_index = int(match_item.entity_index)
             focused_markdown = entity_context_documents[entity_index] if 0 <= entity_index < len(entity_context_documents) else ""
-            candidate_ids = [
-                item for item in (match_item.get("candidate_entity_ids") or []) if isinstance(item, str)
-            ]
+            candidate_ids = [item for item in match_item.candidate_entity_ids if isinstance(item, str)]
             candidate_contexts: list[dict[str, object]] = []
             for candidate_id in candidate_ids:
                 context_reply = await get_entity_context_rpc(
@@ -508,7 +559,10 @@ async def _run_step_five_detailed_comparison(
             )
             reply = await comparison_agent.ainvoke({"messages": [{"role": "user", "content": prompt}]})
             structured = reply.get("structured_response") if isinstance(reply, dict) else None
-            decision = structured.get("decision") if isinstance(structured, dict) else None
+            if not isinstance(structured, dict):
+                raise RuntimeError("knowledge.update step five validation failed: missing structured_response")
+            decision_payload = _validate_model("step five", _StepFiveComparisonDecision, structured)
+            decision = decision_payload.decision
             matched_entity_id = _extract_matched_entity_id(decision) if isinstance(decision, str) else None
             if matched_entity_id and matched_entity_id in candidate_ids:
                 resolved_entity_id = matched_entity_id
@@ -518,14 +572,13 @@ async def _run_step_five_detailed_comparison(
         else:
             resolved_entity_id = str(uuid4())
 
-        resolved_entities.append(
-            {
-                "entity_index": match_item.get("entity_index"),
-                "extracted_entity": extracted_entity,
-                "resolved_entity_id": resolved_entity_id,
-                "resolution_status": resolution_status,
-            }
-        )
+        resolved_payload = {
+            "entity_index": match_item.entity_index,
+            "extracted_entity": extracted_entity.model_dump(),
+            "resolved_entity_id": resolved_entity_id,
+            "resolution_status": resolution_status,
+        }
+        resolved_entities.append(_validate_model("step five", ResolvedEntity, resolved_payload))
 
     return resolved_entities
 
@@ -553,46 +606,47 @@ def _build_step_six_relationship_extraction_schema() -> dict[str, object]:
 
 
 def _deduplicate_entity_pairs(
-    entity_pairs: list[dict[str, object]],
+    entity_pairs: list[RelationshipPair],
     valid_entity_ids: set[str],
-) -> list[dict[str, str]]:
-    deduped: list[dict[str, str]] = []
+) -> list[RelationshipPair]:
+    deduped: list[RelationshipPair] = []
     seen: set[tuple[str, str]] = set()
+    skipped_invalid = 0
     for pair in entity_pairs:
-        if not isinstance(pair, dict):
-            continue
-        entity_id_1 = pair.get("entity_id_1")
-        entity_id_2 = pair.get("entity_id_2")
-        if not isinstance(entity_id_1, str) or not isinstance(entity_id_2, str):
-            continue
+        entity_id_1 = pair.entity_id_1
+        entity_id_2 = pair.entity_id_2
         if entity_id_1 == entity_id_2:
+            skipped_invalid += 1
             continue
         if entity_id_1 not in valid_entity_ids or entity_id_2 not in valid_entity_ids:
+            skipped_invalid += 1
             continue
         normalized = tuple(sorted((entity_id_1, entity_id_2)))
         if normalized in seen:
+            skipped_invalid += 1
             continue
         seen.add(normalized)
-        deduped.append({"entity_id_1": entity_id_1, "entity_id_2": entity_id_2})
+        deduped.append(RelationshipPair(entity_id_1=entity_id_1, entity_id_2=entity_id_2))
+    if skipped_invalid:
+        logger.warning("knowledge.update step six skipped invalid relationship pairs", extra={"skipped": skipped_invalid})
     return deduped
 
 
 async def _run_step_six_relationship_extraction(
-    resolved_entities: list[dict[str, object]],
+    resolved_entities: list[ResolvedEntity],
     markdown_document: str,
     settings: Settings,
-) -> list[dict[str, str]]:
+) -> list[RelationshipPair]:
     from langchain.agents import create_agent
     from app.services.model_provider_chat_model import ModelProviderChatModel
 
     extracted_entities_with_ids = [
         {
-            "entity_id": item.get("resolved_entity_id"),
-            "name": (item.get("extracted_entity") or {}).get("name") if isinstance(item.get("extracted_entity"), dict) else None,
-            "node_type": (item.get("extracted_entity") or {}).get("node_type") if isinstance(item.get("extracted_entity"), dict) else None,
+            "entity_id": item.resolved_entity_id,
+            "name": item.extracted_entity.name,
+            "node_type": item.extracted_entity.node_type,
         }
         for item in resolved_entities
-        if isinstance(item, dict) and isinstance(item.get("resolved_entity_id"), str)
     ]
     valid_entity_ids = {
         entity.get("entity_id")
@@ -613,7 +667,7 @@ async def _run_step_six_relationship_extraction(
             "Identify entity pairs that are related in the markdown batch document. "
             "Return strict JSON only with entity_pairs."
         ),
-        response_format=_build_step_six_relationship_extraction_schema(),
+        response_format=_StepSixRelationshipExtractionResult,
     )
 
     prompt = json.dumps(
@@ -625,11 +679,10 @@ async def _run_step_six_relationship_extraction(
     )
     reply = await relationship_agent.ainvoke({"messages": [{"role": "user", "content": prompt}]})
     structured = reply.get("structured_response") if isinstance(reply, dict) else None
-    entity_pairs = structured.get("entity_pairs") if isinstance(structured, dict) else None
-    if not isinstance(entity_pairs, list):
-        raise RuntimeError("knowledge.update step six relationship extraction returned invalid entity_pairs")
-
-    return _deduplicate_entity_pairs(entity_pairs, valid_entity_ids)
+    if not isinstance(structured, dict):
+        raise RuntimeError("knowledge.update step six validation failed: missing structured_response")
+    pairs_payload = _validate_model("step six", _StepSixRelationshipExtractionResult, structured)
+    return _deduplicate_entity_pairs(pairs_payload.entity_pairs, valid_entity_ids)
 
 
 def _build_step_seven_relationship_match_schema() -> dict[str, object]:
@@ -649,11 +702,11 @@ def _build_step_seven_relationship_match_schema() -> dict[str, object]:
 async def _run_step_seven_match_relationship_type_and_score(
     channel: grpc.aio.Channel,
     payload: KnowledgeUpdatePayload,
-    resolved_entities: list[dict[str, object]],
+    resolved_entities: list[ResolvedEntity],
     entity_context_documents: list[str],
-    entity_pairs: list[dict[str, str]],
+    entity_pairs: list[RelationshipPair],
     settings: Settings,
-) -> list[dict[str, object]]:
+) -> list[MatchedRelationship]:
     from langchain.agents import create_agent
     from app.services.model_provider_chat_model import ModelProviderChatModel
 
@@ -665,17 +718,13 @@ async def _run_step_seven_match_relationship_type_and_score(
 
     resolution_by_id: dict[str, dict[str, object]] = {}
     for item in resolved_entities:
-        if not isinstance(item, dict):
-            continue
-        entity_id = item.get("resolved_entity_id")
-        if not isinstance(entity_id, str):
-            continue
-        entity_index = int(item.get("entity_index", -1)) if isinstance(item.get("entity_index"), int) else -1
+        entity_id = item.resolved_entity_id
+        entity_index = int(item.entity_index)
         focused_markdown = entity_context_documents[entity_index] if 0 <= entity_index < len(entity_context_documents) else ""
         resolution_by_id[entity_id] = {
             "entity_id": entity_id,
-            "node_type": (item.get("extracted_entity") or {}).get("node_type") if isinstance(item.get("extracted_entity"), dict) else "",
-            "name": (item.get("extracted_entity") or {}).get("name") if isinstance(item.get("extracted_entity"), dict) else "",
+            "node_type": item.extracted_entity.node_type,
+            "name": item.extracted_entity.name,
             "focused_markdown": focused_markdown,
         }
 
@@ -696,11 +745,13 @@ async def _run_step_seven_match_relationship_type_and_score(
         response_format=_build_step_seven_relationship_match_schema(),
     )
 
-    matched_relationships: list[dict[str, object]] = []
+    matched_relationships: list[MatchedRelationship] = []
+    skipped_invalid = 0
     for pair in entity_pairs:
-        entity_id_1 = pair.get("entity_id_1")
-        entity_id_2 = pair.get("entity_id_2")
+        entity_id_1 = pair.entity_id_1
+        entity_id_2 = pair.entity_id_2
         if entity_id_1 not in resolution_by_id or entity_id_2 not in resolution_by_id:
+            skipped_invalid += 1
             continue
 
         entity_1 = resolution_by_id[entity_id_1]
@@ -708,6 +759,7 @@ async def _run_step_seven_match_relationship_type_and_score(
         node_type_1 = entity_1.get("node_type") if isinstance(entity_1.get("node_type"), str) else ""
         node_type_2 = entity_2.get("node_type") if isinstance(entity_2.get("node_type"), str) else ""
         if not node_type_1 or not node_type_2:
+            skipped_invalid += 1
             continue
 
         edge_context_reply = await get_edge_extraction_schema_context_rpc(
@@ -730,27 +782,22 @@ async def _run_step_seven_match_relationship_type_and_score(
         reply = await relationship_match_agent.ainvoke({"messages": [{"role": "user", "content": prompt}]})
         structured = reply.get("structured_response") if isinstance(reply, dict) else None
         if not isinstance(structured, dict):
-            raise RuntimeError("knowledge.update step seven returned invalid relationship match output")
-
-        from_entity_id = structured.get("from_entity_id")
-        to_entity_id = structured.get("to_entity_id")
-        edge_type = structured.get("edge_type")
-        confidence = structured.get("confidence")
-        if not isinstance(from_entity_id, str) or not isinstance(to_entity_id, str):
+            raise RuntimeError("knowledge.update step seven validation failed: missing structured_response")
+        match_result = _validate_model("step seven", _StepSevenRelationshipMatchResult, structured)
+        if {match_result.from_entity_id, match_result.to_entity_id} != {entity_id_1, entity_id_2}:
+            skipped_invalid += 1
             continue
-        if {from_entity_id, to_entity_id} != {entity_id_1, entity_id_2}:
-            continue
-        if not isinstance(edge_type, str) or not isinstance(confidence, (float, int)):
-            continue
-
         matched_relationships.append(
-            {
-                "from_entity_id": from_entity_id,
-                "to_entity_id": to_entity_id,
-                "edge_type": edge_type,
-                "confidence": float(confidence),
-            }
+            MatchedRelationship(
+                from_entity_id=match_result.from_entity_id,
+                to_entity_id=match_result.to_entity_id,
+                edge_type=match_result.edge_type,
+                confidence=float(match_result.confidence),
+            )
         )
+
+    if skipped_invalid:
+        logger.warning("knowledge.update step seven skipped invalid relationship matches", extra={"skipped": skipped_invalid})
 
     return matched_relationships
 
@@ -782,10 +829,10 @@ def _build_step_eight_final_entity_context_graph_schema() -> dict[str, object]:
 async def _run_step_eight_build_final_entity_context_graphs(
     channel: grpc.aio.Channel,
     payload: KnowledgeUpdatePayload,
-    resolved_entities: list[dict[str, object]],
+    resolved_entities: list[ResolvedEntity],
     entity_context_documents: list[str],
     settings: Settings,
-) -> list[dict[str, object]]:
+) -> list[FinalEntityContextGraph]:
     from langchain.agents import create_agent
     from app.services.model_provider_chat_model import ModelProviderChatModel
 
@@ -801,20 +848,14 @@ async def _run_step_eight_build_final_entity_context_graphs(
     )
 
     schema = _build_step_eight_final_entity_context_graph_schema()
-    final_graphs: list[dict[str, object]] = []
+    final_graphs: list[FinalEntityContextGraph] = []
 
     for resolved in resolved_entities:
-        if not isinstance(resolved, dict):
-            continue
-        extracted = resolved.get("extracted_entity")
-        if not isinstance(extracted, dict):
-            continue
-        entity_id = resolved.get("resolved_entity_id")
-        if not isinstance(entity_id, str):
-            continue
-        node_type = extracted.get("node_type") if isinstance(extracted.get("node_type"), str) else ""
+        extracted = resolved.extracted_entity.model_dump()
+        entity_id = resolved.resolved_entity_id
+        node_type = resolved.extracted_entity.node_type
         if not node_type:
-            continue
+            raise RuntimeError(f"knowledge.update step eight validation failed: missing node_type for entity {entity_id}")
 
         type_context_reply = await get_entity_type_property_context_rpc(
             knowledge_pb2.GetEntityTypePropertyContextRequest(
@@ -825,8 +866,8 @@ async def _run_step_eight_build_final_entity_context_graphs(
         )
         type_context = _message_to_dict(type_context_reply, rpc_name="GetEntityTypePropertyContext")
 
-        resolution_status = resolved.get("resolution_status")
-        entity_index = resolved.get("entity_index") if isinstance(resolved.get("entity_index"), int) else -1
+        resolution_status = resolved.resolution_status
+        entity_index = resolved.entity_index
         focused_markdown = entity_context_documents[entity_index] if 0 <= entity_index < len(entity_context_documents) else ""
 
         existing_entity_context: dict[str, object] | None = None
@@ -879,8 +920,8 @@ async def _run_step_eight_build_final_entity_context_graphs(
         reply = await compiled_agent.ainvoke({"messages": [{"role": "user", "content": prompt}]})
         structured = reply.get("structured_response") if isinstance(reply, dict) else None
         if not isinstance(structured, dict):
-            raise RuntimeError("knowledge.update step eight final context graph returned invalid payload")
-        final_graphs.append(structured)
+            raise RuntimeError("knowledge.update step eight validation failed: missing structured_response")
+        final_graphs.append(_validate_model("step eight", FinalEntityContextGraph, structured))
 
     return final_graphs
 
@@ -902,9 +943,9 @@ def _to_property_value_dict(key: str, value: object) -> dict[str, object] | None
 def _build_step_nine_merge_graph_delta(
     payload: KnowledgeUpdatePayload,
     step_zero_graph_delta: dict[str, object],
-    step_two_extraction: dict[str, object],
-    step_seven_relationships: list[dict[str, object]],
-    step_eight_final_entity_context_graphs: list[dict[str, object]],
+    step_two_extraction: EntityExtractionResult,
+    step_seven_relationships: list[MatchedRelationship],
+    step_eight_final_entity_context_graphs: list[FinalEntityContextGraph],
 ) -> dict[str, object]:
     merged = {
         "universes": list(step_zero_graph_delta.get("universes", []) or []),
@@ -914,12 +955,10 @@ def _build_step_nine_merge_graph_delta(
     }
 
     universe_id_by_name: dict[str, str] = {}
-    for universe in step_two_extraction.get("extracted_universes", []) or []:
-        if not isinstance(universe, dict):
-            continue
-        universe_name = universe.get("name")
-        if not isinstance(universe_name, str) or not universe_name:
-            continue
+    for universe in step_two_extraction.extracted_universes:
+        universe_name = universe.name
+        if not universe_name:
+            raise RuntimeError("knowledge.update step nine validation failed: extracted universe missing name")
         universe_id = str(uuid4())
         universe_id_by_name[universe_name] = universe_id
         merged["universes"].append(
@@ -932,15 +971,11 @@ def _build_step_nine_merge_graph_delta(
         )
 
     for item in step_eight_final_entity_context_graphs:
-        if not isinstance(item, dict):
-            continue
-        entity_payload = item.get("entity")
-        if not isinstance(entity_payload, dict):
-            continue
+        entity_payload = item.entity
         entity_id = entity_payload.get("entity_id")
         node_type = entity_payload.get("node_type")
         if not isinstance(entity_id, str) or not isinstance(node_type, str):
-            continue
+            raise RuntimeError("knowledge.update step nine validation failed: final entity payload missing entity_id/node_type")
 
         universe_id = entity_payload.get("universe_id")
         if not isinstance(universe_id, str):
@@ -967,17 +1002,13 @@ def _build_step_nine_merge_graph_delta(
             entity_node["universe_id"] = universe_id
         merged["entities"].append(entity_node)
 
-        blocks = item.get("blocks")
-        if not isinstance(blocks, list):
-            continue
+        blocks = item.blocks
 
         id_map: dict[str, str] = {}
         for block in blocks:
-            if not isinstance(block, dict):
-                continue
-            raw_id = block.get("block_id")
-            if not isinstance(raw_id, str) or not raw_id:
-                continue
+            raw_id = block.block_id
+            if not raw_id:
+                raise RuntimeError(f"knowledge.update step nine validation failed: entity {entity_id} has block without block_id")
             if raw_id.startswith("NEW_BLOCK_"):
                 id_map[raw_id] = str(uuid4())
             else:
@@ -985,13 +1016,11 @@ def _build_step_nine_merge_graph_delta(
 
         has_root = False
         for block in blocks:
-            if not isinstance(block, dict):
-                continue
-            raw_id = block.get("block_id")
-            if not isinstance(raw_id, str) or raw_id not in id_map:
-                continue
+            raw_id = block.block_id
+            if raw_id not in id_map:
+                raise RuntimeError(f"knowledge.update step nine validation failed: entity {entity_id} references unknown block_id")
             block_id = id_map[raw_id]
-            text = block.get("text") if isinstance(block.get("text"), str) else ""
+            text = block.text
             merged["blocks"].append(
                 {
                     "id": block_id,
@@ -1001,7 +1030,7 @@ def _build_step_nine_merge_graph_delta(
                     "properties": [{"key": "text", "string_value": text}],
                 }
             )
-            parent_raw = block.get("parent_block_id")
+            parent_raw = block.parent_block_id
             parent_id = id_map.get(parent_raw) if isinstance(parent_raw, str) else None
             if parent_id:
                 merged["edges"].append(
@@ -1028,16 +1057,10 @@ def _build_step_nine_merge_graph_delta(
             logger.warning("knowledge.update step nine entity has no root block", extra={"entity_id": entity_id})
 
     for relationship in step_seven_relationships:
-        if not isinstance(relationship, dict):
-            continue
-        from_id = relationship.get("from_entity_id")
-        to_id = relationship.get("to_entity_id")
-        edge_type = relationship.get("edge_type")
-        confidence = relationship.get("confidence")
-        if not isinstance(from_id, str) or not isinstance(to_id, str) or not isinstance(edge_type, str):
-            continue
-        if not isinstance(confidence, (int, float)):
-            continue
+        from_id = relationship.from_entity_id
+        to_id = relationship.to_entity_id
+        edge_type = relationship.edge_type
+        confidence = relationship.confidence
         merged["edges"].append(
             {
                 "from_id": from_id,
@@ -1126,31 +1149,31 @@ async def _run_step_ten_finalize_graph_delta(
             "You are the knowledge.update graph finalizer worker. "
             "Identify which blocks mention which entities. Return strict JSON only."
         ),
-        response_format=_build_step_ten_mentions_schema(),
+        response_format=_StepTenMentionsResult,
     )
     prompt = json.dumps({"blocks": blocks, "entities": entities}, ensure_ascii=False)
     reply = await agent.ainvoke({"messages": [{"role": "user", "content": prompt}]})
     structured = reply.get("structured_response") if isinstance(reply, dict) else None
-    mentions = structured.get("mentions") if isinstance(structured, dict) else None
-    if not isinstance(mentions, list):
-        raise RuntimeError("knowledge.update step ten returned invalid mentions output")
+    if not isinstance(structured, dict):
+        raise RuntimeError("knowledge.update step ten validation failed: missing structured_response")
+    mentions = _validate_model("step ten", _StepTenMentionsResult, structured).mentions
 
     mentions_edges: list[dict[str, object]] = []
     seen: set[tuple[str, str]] = set()
+    skipped_invalid = 0
     for mention in mentions:
-        if not isinstance(mention, dict):
+        block_id = mention.block_id
+        entity_id = mention.entity_id
+        confidence = mention.confidence
+        if block_id not in valid_block_ids:
+            skipped_invalid += 1
             continue
-        block_id = mention.get("block_id")
-        entity_id = mention.get("entity_id")
-        confidence = mention.get("confidence")
-        if not isinstance(block_id, str) or block_id not in valid_block_ids:
-            continue
-        if not isinstance(entity_id, str) or entity_id not in valid_entity_ids:
-            continue
-        if not isinstance(confidence, (int, float)):
+        if entity_id not in valid_entity_ids:
+            skipped_invalid += 1
             continue
         key = (block_id, entity_id)
         if key in seen:
+            skipped_invalid += 1
             continue
         seen.add(key)
         mentions_edges.append(
@@ -1166,6 +1189,9 @@ async def _run_step_ten_finalize_graph_delta(
                 ],
             }
         )
+
+    if skipped_invalid:
+        logger.warning("knowledge.update step ten skipped invalid mentions", extra={"skipped": skipped_invalid})
 
     merged_graph_delta["edges"] = [*(merged_graph_delta.get("edges", []) or []), *mentions_edges]
     logger.info(

@@ -6,6 +6,12 @@ import pytest
 
 from app.contracts import KnowledgeUpdatePayload
 from app.services.grpc import knowledge_pb2
+from app.worker.jobs.knowledge_update_types import (
+    EntityExtractionResult,
+    FinalEntityContextGraph,
+    MatchedRelationship,
+    RelationshipPair,
+)
 from app.worker.jobs.knowledge_update import (
     _build_batch_document,
     _build_step_two_entity_extraction_json_schema,
@@ -210,8 +216,8 @@ async def test_run_step_two_entity_extraction_uses_worker_agent(monkeypatch: pyt
         Settings(model_provider_base_url="http://provider", knowledge_update_extraction_model="worker"),
     )
 
-    assert result["extracted_entities"][0]["name"] == "Alice"
-    assert result["extracted_universes"] == []
+    assert result.extracted_entities[0].name == "Alice"
+    assert result.extracted_universes == []
     assert captured["model_name"] == "worker"
     assert captured["tools"] == []
     assert captured["response_format"]["type"] == "object"
@@ -264,15 +270,15 @@ def test_step_seven_relationship_match_schema_requires_confidence() -> None:
 def test_deduplicate_entity_pairs_filters_invalid_and_duplicates() -> None:
     pairs = _deduplicate_entity_pairs(
         [
-            {"entity_id_1": "a", "entity_id_2": "b"},
-            {"entity_id_1": "b", "entity_id_2": "a"},
-            {"entity_id_1": "a", "entity_id_2": "a"},
-            {"entity_id_1": "a", "entity_id_2": "missing"},
+            RelationshipPair(entity_id_1="a", entity_id_2="b"),
+            RelationshipPair(entity_id_1="b", entity_id_2="a"),
+            RelationshipPair(entity_id_1="a", entity_id_2="a"),
+            RelationshipPair(entity_id_1="a", entity_id_2="missing"),
         ],
         valid_entity_ids={"a", "b"},
     )
 
-    assert pairs == [{"entity_id_1": "a", "entity_id_2": "b"}]
+    assert pairs == [RelationshipPair(entity_id_1="a", entity_id_2="b")]
 def test_extract_matched_entity_id_parses_expected_decisions() -> None:
     assert _extract_matched_entity_id("MATCH(entity-1)") == "entity-1"
     assert _extract_matched_entity_id("NEW_ENTITY") is None
@@ -295,24 +301,36 @@ def test_step_nine_merge_graph_delta_maps_blocks_edges_and_universes() -> None:
     merged = _build_step_nine_merge_graph_delta(
         payload=payload,
         step_zero_graph_delta={"entities": [], "blocks": [], "edges": [], "universes": []},
-        step_two_extraction={"extracted_universes": [{"name": "Wonderland", "description": "fictional"}]},
+        step_two_extraction=EntityExtractionResult.model_validate(
+            {
+                "extracted_entities": [],
+                "extracted_universes": [{"name": "Wonderland", "description": "fictional"}],
+            }
+        ),
         step_seven_relationships=[
-            {"from_entity_id": "e1", "to_entity_id": "e2", "edge_type": "edge.related_to", "confidence": 0.8}
+            MatchedRelationship(
+                from_entity_id="e1",
+                to_entity_id="e2",
+                edge_type="edge.related_to",
+                confidence=0.8,
+            )
         ],
         step_eight_final_entity_context_graphs=[
-            {
-                "entity": {
-                    "entity_id": "e1",
-                    "node_type": "node.person",
-                    "name": "Alice",
-                    "aliases": ["A"],
-                    "universe_name": "Wonderland",
-                },
-                "blocks": [
-                    {"block_id": "NEW_BLOCK_1", "parent_block_id": "", "text": "root"},
-                    {"block_id": "NEW_BLOCK_2", "parent_block_id": "NEW_BLOCK_1", "text": "child"},
-                ],
-            }
+            FinalEntityContextGraph.model_validate(
+                {
+                    "entity": {
+                        "entity_id": "e1",
+                        "node_type": "node.person",
+                        "name": "Alice",
+                        "aliases": ["A"],
+                        "universe_name": "Wonderland",
+                    },
+                    "blocks": [
+                        {"block_id": "NEW_BLOCK_1", "parent_block_id": "", "text": "root"},
+                        {"block_id": "NEW_BLOCK_2", "parent_block_id": "NEW_BLOCK_1", "text": "child"},
+                    ],
+                }
+            )
         ],
     )
 
@@ -323,4 +341,3 @@ def test_step_nine_merge_graph_delta_maps_blocks_edges_and_universes() -> None:
     assert "DESCRIBED_BY" in edge_types
     assert "SUMMARIZES" in edge_types
     assert "edge.related_to" in edge_types
-
