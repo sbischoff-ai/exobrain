@@ -852,6 +852,25 @@ async def _run_step_six_relationship_extraction(
     return _deduplicate_entity_pairs(pairs_payload.entity_pairs, valid_entity_ids)
 
 
+
+
+def _build_edge_extraction_schema_context_request(
+    first_entity_type: str,
+    second_entity_type: str,
+    user_id: str,
+) -> knowledge_pb2.GetEdgeExtractionSchemaContextRequest:
+    field_names = {
+        field.name for field in knowledge_pb2.GetEdgeExtractionSchemaContextRequest.DESCRIPTOR.fields
+    }
+    payload: dict[str, object] = {"user_id": user_id}
+    if {"source_entity_type_id", "target_entity_type_id"}.issubset(field_names):
+        payload["source_entity_type_id"] = first_entity_type
+        payload["target_entity_type_id"] = second_entity_type
+    else:
+        payload["first_entity_type"] = first_entity_type
+        payload["second_entity_type"] = second_entity_type
+    return knowledge_pb2.GetEdgeExtractionSchemaContextRequest(**payload)
+
 def _build_step_seven_relationship_match_schema() -> dict[str, object]:
     return {
         "type": "object",
@@ -932,7 +951,7 @@ async def _run_step_seven_match_relationship_type_and_score(
             step_name="step seven",
             operation="GetEdgeExtractionSchemaContext",
             call=lambda: get_edge_extraction_schema_context_rpc(
-                knowledge_pb2.GetEdgeExtractionSchemaContextRequest(
+                _build_edge_extraction_schema_context_request(
                     first_entity_type=node_type_1,
                     second_entity_type=node_type_2,
                     user_id=payload.requested_by_user_id,
