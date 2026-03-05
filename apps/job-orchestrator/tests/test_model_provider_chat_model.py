@@ -87,3 +87,50 @@ def test_model_provider_chat_model_serializes_dict_any_tool_choice_as_required()
     )
 
     assert payload["tool_choice"] == {"type": "required"}
+
+
+@pytest.mark.asyncio
+async def test_model_provider_chat_model_unwraps_openai_response_format_envelope() -> None:
+    captured: dict[str, object] = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        captured.update(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json={
+                "id": "chat_3",
+                "model": "worker",
+                "message": {"role": "assistant", "content": [{"type": "text", "text": "ok"}]},
+                "finish_reason": "stop",
+                "usage": {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2},
+            },
+        )
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="http://test")
+    model = ModelProviderChatModel(model="worker", base_url="http://test/v1", async_http_client=client)
+
+    configured = model.with_structured_output(
+        {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "comparison",
+                "schema": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {"decision": {"type": "string"}},
+                    "required": ["decision"],
+                },
+            },
+        }
+    )
+
+    response = await configured.ainvoke([HumanMessage(content="compare")])
+
+    assert response.content == "ok"
+    assert captured["structured_output"]["name"] == "structured_output"
+    assert captured["structured_output"]["schema"] == {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {"decision": {"type": "string"}},
+        "required": ["decision"],
+    }

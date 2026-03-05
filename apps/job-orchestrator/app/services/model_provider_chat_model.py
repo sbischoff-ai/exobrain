@@ -34,7 +34,18 @@ class ModelProviderChatModel(BaseChatModel):
         return self.bind(**{_TOOLS_KWARG: serialized_tools, _TOOL_CHOICE_KWARG: tool_choice, **kwargs})
 
     def with_structured_output(self, schema: dict[str, Any] | type, **kwargs: Any):
-        schema_payload = convert_to_json_schema(schema)
+        schema_payload: dict[str, Any]
+        if (
+            isinstance(schema, dict)
+            and schema.get("type") == "json_schema"
+            and isinstance(schema.get("json_schema"), dict)
+            and isinstance(schema["json_schema"].get("schema"), dict)
+        ):
+            # Some callers pass an OpenAI-style response_format envelope.
+            # The native structured_output contract expects the inner JSON Schema object.
+            schema_payload = schema["json_schema"]["schema"]
+        else:
+            schema_payload = convert_to_json_schema(schema)
         structured_output = {
             "name": schema_payload.get("title") or "structured_output",
             "schema": schema_payload,
