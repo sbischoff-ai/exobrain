@@ -88,11 +88,17 @@ class AnthropicProviderClient(ProviderClient):
         response_format = mapped.pop("response_format", None)
         if response_format is not None:
             json_schema = response_format.get("json_schema") if isinstance(response_format, dict) else None
-            schema = json_schema.get("schema") if isinstance(json_schema, dict) else None
+            schema = None
+            if isinstance(json_schema, dict):
+                nested_schema = json_schema.get("schema")
+                if isinstance(nested_schema, dict) and nested_schema:
+                    schema = nested_schema
+                elif self._looks_like_json_schema_object(json_schema):
+                    schema = json_schema
             if not isinstance(schema, dict) or not schema:
                 raise ProviderClientError(
                     status_code=400,
-                    message="response_format.json_schema.schema must be a non-empty object for Anthropic",
+                    message="response_format.json_schema must contain a non-empty object schema for Anthropic",
                 )
             mapped["output_config"] = {"format": {"type": "json_schema", "schema": schema}}
         return mapped
@@ -102,6 +108,8 @@ class AnthropicProviderClient(ProviderClient):
             schema: dict[str, Any] = {"type": "object", "properties": {}}
         else:
             schema = deepcopy(parameters)
+
+        schema = self._unwrap_json_schema_envelope(schema)
 
         self._remove_openapi_keywords(schema)
 
@@ -138,6 +146,38 @@ class AnthropicProviderClient(ProviderClient):
 
         return schema
 
+    def _unwrap_json_schema_envelope(self, schema: dict[str, Any]) -> dict[str, Any]:
+        if schema.get("type") != "json_schema":
+            return schema
+
+        json_schema = schema.get("json_schema")
+        if not isinstance(json_schema, dict):
+            return schema
+
+        nested_schema = json_schema.get("schema")
+        if isinstance(nested_schema, dict) and nested_schema:
+            return deepcopy(nested_schema)
+        if json_schema:
+            return deepcopy(json_schema)
+        return schema
+
+    def _looks_like_json_schema_object(self, schema: dict[str, Any]) -> bool:
+        schema_keywords = {
+            "$ref",
+            "type",
+            "properties",
+            "required",
+            "items",
+            "anyOf",
+            "allOf",
+            "oneOf",
+            "enum",
+            "const",
+            "additionalProperties",
+            "patternProperties",
+            "not",
+        }
+        return any(keyword in schema for keyword in schema_keywords)
 
     def _rewrite_definition_refs(self, node: Any) -> None:
         if isinstance(node, dict):
