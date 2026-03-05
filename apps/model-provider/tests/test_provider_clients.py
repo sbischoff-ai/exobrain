@@ -269,3 +269,34 @@ def test_provider_clients_do_not_share_singleton_across_different_configs() -> N
     openai_b = OpenAIProviderClient(api_key="key", timeout_seconds=30.0, max_retries=8)
 
     assert openai_a._client is not openai_b._client
+
+
+@pytest.mark.asyncio
+async def test_openai_provider_serializes_assistant_tool_calls_with_null_content() -> None:
+    fake = FakeOpenAIClient()
+    client = OpenAIProviderClient(api_key="x", client=fake)
+
+    request = NativeChatRequest(
+        model="gpt-5-mini",
+        messages=[
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "tool_call", "id": "call_1", "name": "lookup", "arguments": {"id": "42"}}
+                ],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "tool_result", "tool_call_id": "call_1", "content": {"ok": True}}
+                ],
+            },
+        ],
+    )
+
+    await client.native_chat(request)
+
+    assert fake.called_with is not None
+    assert fake.called_with["messages"][0]["role"] == "assistant"
+    assert fake.called_with["messages"][0]["content"] is None
+    assert fake.called_with["messages"][0]["tool_calls"][0]["id"] == "call_1"

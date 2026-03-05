@@ -94,7 +94,7 @@ class OpenAIProviderClient(ProviderClient):
                     messages.append(
                         {
                             "role": "assistant",
-                            "content": "",
+                            "content": None,
                             "tool_calls": [
                                 {
                                     "id": block.id,
