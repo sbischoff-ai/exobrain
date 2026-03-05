@@ -54,8 +54,27 @@ class FakeOpenAIClient:
                                 "delta": {
                                     "tool_calls": [
                                         {
+                                            "index": 0,
                                             "id": "call_1",
-                                            "function": {"name": "lookup", "arguments": '{"id": "42"}'},
+                                            "function": {"name": "lookup", "arguments": '{"id"'},
+                                        }
+                                    ]
+                                },
+                                "finish_reason": None,
+                            }
+                        ],
+                    }
+                )
+                yield FakeDumpable(
+                    {
+                        "id": "chunk3",
+                        "choices": [
+                            {
+                                "delta": {
+                                    "tool_calls": [
+                                        {
+                                            "index": 0,
+                                            "function": {"arguments": ': "42"}'},
                                         }
                                     ]
                                 },
@@ -117,7 +136,9 @@ async def test_openai_provider_native_and_compat_chat_round_trip() -> None:
     async for frame in client.native_chat_stream(request):
         frames.append(frame)
     assert any(frame.type == "text_delta" for frame in frames)
-    assert any(frame.type == "tool_call" for frame in frames)
+    tool_frames = [frame for frame in frames if frame.type == "tool_call"]
+    assert tool_frames
+    assert tool_frames[0].arguments == {"id": "42"}
     assert any(frame.type == "completion" for frame in frames)
 
 
