@@ -4,6 +4,7 @@ import pytest
 
 from app.agents.factory import (
     MockTavilyWebTools,
+    _normalize_native_model_provider_base_url,
     _build_agent_model,
     _build_web_tools_dependency,
     _load_mock_messages,
@@ -59,6 +60,20 @@ def test_build_agent_model_uses_model_provider_chat_model_when_mock_disabled() -
 
     assert isinstance(model, ModelProviderChatModel)
     assert model.model == "agent"
+    assert model.base_url == "http://localhost:8010"
+
+
+@pytest.mark.parametrize(
+    ("input_url", "expected_url"),
+    [
+        ("http://localhost:8010/v1", "http://localhost:8010"),
+        ("http://localhost:8010/v1/", "http://localhost:8010"),
+        ("http://localhost:8010", "http://localhost:8010"),
+        ("http://localhost:8010/custom", "http://localhost:8010/custom"),
+    ],
+)
+def test_normalize_native_model_provider_base_url(input_url: str, expected_url: str) -> None:
+    assert _normalize_native_model_provider_base_url(input_url) == expected_url
 
 
 def test_build_agent_model_uses_openai_fallback_when_enabled() -> None:
