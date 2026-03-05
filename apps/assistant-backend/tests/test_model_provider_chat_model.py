@@ -37,6 +37,7 @@ def test_plain_chat_round_trip() -> None:
     assert response.content == "hello from provider"
     assert captured["messages"][0]["role"] == "user"
     assert captured["messages"][0]["content"][0]["text"] == "hi"
+    assert "temperature" not in captured
     assert captured["path"] == "/v1/internal/chat/messages"
 
 
