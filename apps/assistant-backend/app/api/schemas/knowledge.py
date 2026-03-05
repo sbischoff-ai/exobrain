@@ -96,6 +96,10 @@ class KnowledgePageDetailResponse(BaseModel):
         ...,
         description="Mapped page identifier",
     )
+    category_id: str = Field(
+        ...,
+        description="Node type identifier for the page entity category",
+    )
     title: str = Field(
         ...,
         validation_alias=AliasChoices("title"),

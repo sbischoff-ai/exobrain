@@ -91,6 +91,7 @@ describe('knowledgeService', () => {
         JSON.stringify({
           id: 'entity-1',
           title: 'Entity One',
+          category_id: 'node.child',
           summary: 'Root',
           metadata: {
             created_at: '2026-02-19T09:00:00Z',
@@ -113,6 +114,7 @@ describe('knowledgeService', () => {
 
     expect(response).toEqual({
       id: 'entity-1',
+      category_id: 'node.child',
       title: 'Entity One',
       summary: 'Root',
       content_markdown: 'Root\\n\\nChild',
@@ -142,6 +144,7 @@ describe('knowledgeService', () => {
           },
           links: [],
           content_markdown: 'Content',
+          category_id: 'node.task',
           category_breadcrumb: {
             path: [
               { id: 'node.event', name: 'Event' },
@@ -155,6 +158,7 @@ describe('knowledgeService', () => {
 
     const response = await knowledgeService.getPage('entity-7');
 
+    expect(response.category_id).toBe('node.task');
     expect(response.category_breadcrumb.path).toEqual([
       { id: 'node.event', name: 'Event' },
       { id: 'node.task', name: 'Task' }
@@ -171,6 +175,7 @@ describe('knowledgeService', () => {
           updated_at: '2026-03-01T09:00:00Z',
           links: [],
           content_markdown: 'Content',
+          category_id: 'node.note',
           category_breadcrumb: []
         }),
         { status: 200 }
@@ -179,6 +184,7 @@ describe('knowledgeService', () => {
 
     const response = await knowledgeService.getPage('entity-9');
 
+    expect(response.category_id).toBe('node.note');
     expect(response.created_at).toBe('2026-03-01T08:00:00Z');
     expect(response.updated_at).toBe('2026-03-01T09:00:00Z');
   });

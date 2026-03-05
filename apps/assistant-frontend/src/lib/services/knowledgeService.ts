@@ -39,6 +39,7 @@ interface BackendKnowledgePageDetailResponse {
   links?: unknown;
   content_markdown?: unknown;
   category_breadcrumb?: unknown;
+  category_id?: unknown;
   created_at?: unknown;
   updated_at?: unknown;
 }
@@ -187,6 +188,7 @@ function normalizePageDetail(value: BackendKnowledgePageDetailResponse): Knowled
 
   return {
     id: typeof value.id === 'string' ? value.id : '',
+    category_id: typeof value.category_id === 'string' ? value.category_id : null,
     title: typeof value.title === 'string' ? value.title : '',
     summary: typeof value.summary === 'string' ? value.summary : null,
     content_markdown: typeof value.content_markdown === 'string' ? value.content_markdown : '',

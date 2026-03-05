@@ -42,6 +42,7 @@ export interface KnowledgePageCategoryBreadcrumb {
 
 export interface KnowledgePageDetail {
   id: string;
+  category_id: string | null;
   title: string;
   summary: string | null;
   content_markdown: string;

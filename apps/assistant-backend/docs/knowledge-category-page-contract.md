@@ -93,6 +93,7 @@ Returns page detail from `GetEntityContext` (`max_block_level=2`).
 ```json
 {
   "id": "entity-1",
+  "category_id": "node.task",
   "title": "Entity One",
   "summary": "Root",
   "metadata": {
@@ -112,6 +113,7 @@ Returns page detail from `GetEntityContext` (`max_block_level=2`).
 
 ### Notes
 
+- `category_id` is the entity node type id from `GetEntityContext.entity.type_id`; clients can map it through `GET /api/knowledge/category` to resolve breadcrumb ancestry.
 - `summary` is sourced from the text of the direct `DESCRIBED_BY` block (root block at level 0).
 - `metadata` contains only canonical timestamps (`created_at`, `updated_at`).
 - `links` are mapped from neighbor entities.

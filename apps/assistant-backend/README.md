@@ -130,6 +130,7 @@ Example response:
 ```json
 {
   "id": "entity-1",
+  "category_id": "node.task",
   "title": "Entity One",
   "summary": "Entity summary",
   "metadata": {
