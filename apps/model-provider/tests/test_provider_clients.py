@@ -178,6 +178,93 @@ async def test_anthropic_provider_translates_string_tool_choice(
 
 
 @pytest.mark.asyncio
+async def test_anthropic_provider_maps_openai_tools_to_anthropic_tools() -> None:
+    messages = FakeAnthropicMessages()
+    fake_client = SimpleNamespace(messages=messages)
+    client = AnthropicProviderClient(api_key="x", client=fake_client)
+
+    payload = {
+        "model": "claude-sonnet-4-6",
+        "messages": [{"role": "user", "content": "hi"}],
+        "tools": [
+            {
+                "type": "function",
+                "function": {
+                    "name": "lookup",
+                    "description": "Lookup records",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"id": {"type": "string"}},
+                        "required": ["id"],
+                    },
+                },
+            }
+        ],
+    }
+
+    await client.chat_completions(payload)
+
+    assert messages.last_create["tools"] == [
+        {
+            "type": "custom",
+            "name": "lookup",
+            "description": "Lookup records",
+            "input_schema": {
+                "type": "object",
+                "properties": {"id": {"type": "string"}},
+                "required": ["id"],
+            },
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_anthropic_provider_adds_default_object_schema_for_tool_parameters() -> None:
+    messages = FakeAnthropicMessages()
+    fake_client = SimpleNamespace(messages=messages)
+    client = AnthropicProviderClient(api_key="x", client=fake_client)
+
+    payload = {
+        "model": "claude-sonnet-4-6",
+        "messages": [{"role": "user", "content": "hi"}],
+        "tools": [
+            {
+                "type": "function",
+                "function": {
+                    "name": "lookup",
+                    "description": "Lookup records",
+                    "parameters": {"properties": {"id": {"type": "string"}}},
+                },
+            }
+        ],
+    }
+
+    await client.chat_completions(payload)
+
+    assert messages.last_create["tools"][0]["input_schema"] == {
+        "type": "object",
+        "properties": {"id": {"type": "string"}},
+    }
+
+
+@pytest.mark.asyncio
+async def test_anthropic_provider_translates_openai_function_tool_choice() -> None:
+    messages = FakeAnthropicMessages()
+    fake_client = SimpleNamespace(messages=messages)
+    client = AnthropicProviderClient(api_key="x", client=fake_client)
+
+    payload = {
+        "model": "claude-sonnet-4-6",
+        "messages": [{"role": "user", "content": "hi"}],
+        "tool_choice": {"type": "function", "function": {"name": "lookup"}},
+    }
+
+    await client.chat_completions(payload)
+
+    assert messages.last_create["tool_choice"] == {"type": "tool", "name": "lookup"}
+
+
+@pytest.mark.asyncio
 async def test_anthropic_provider_rejects_invalid_response_format_schema() -> None:
     messages = FakeAnthropicMessages()
     fake_client = SimpleNamespace(messages=messages)
