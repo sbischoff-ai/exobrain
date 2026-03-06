@@ -80,43 +80,6 @@ pub(crate) struct EntityTypePropertyContext {
     pub properties: Vec<ExtractionPropertyContext>,
 }
 
-pub(crate) fn build_extraction_entity_types(
-    schema: FullSchema,
-    options: ExtractionSchemaOptions,
-) -> Vec<ExtractionEntityType> {
-    let FullSchema {
-        node_types: hydrated_node_types,
-        edge_types: hydrated_edge_types,
-    } = schema;
-
-    let node_types = hydrated_node_types
-        .iter()
-        .map(|node| node.schema_type.clone())
-        .collect();
-    let edge_types = hydrated_edge_types
-        .iter()
-        .map(|edge| edge.schema_type.clone())
-        .collect();
-    let inheritance = hydrated_node_types
-        .into_iter()
-        .flat_map(|node| node.parents)
-        .collect();
-    let edge_rules = hydrated_edge_types
-        .into_iter()
-        .flat_map(|edge| edge.rules)
-        .collect();
-
-    build_extraction_entity_types_from_input(
-        ExtractionSchemaBuildInput {
-            node_types,
-            edge_types,
-            inheritance,
-            edge_rules,
-        },
-        options,
-    )
-}
-
 pub(crate) fn build_extraction_entity_types_from_input(
     input: ExtractionSchemaBuildInput,
     options: ExtractionSchemaOptions,

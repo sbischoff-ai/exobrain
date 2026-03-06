@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SchemaKind {
     Node,
@@ -62,10 +60,6 @@ impl EntityId {
         }
         Ok(Self(trimmed.to_string()))
     }
-
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -81,10 +75,6 @@ impl UniverseId {
             return Err(format!("universe id '{}' must be a valid UUID", value));
         }
         Ok(Self(trimmed.to_string()))
-    }
-
-    pub fn as_str(&self) -> &str {
-        &self.0
     }
 }
 
@@ -249,7 +239,6 @@ pub struct NodeRelationshipCounts {
 #[derive(Debug, Clone)]
 pub struct ExistingBlockContext {
     pub root_entity_id: String,
-    pub universe_id: String,
     pub block_level: i64,
 }
 
@@ -385,7 +374,6 @@ pub struct TypedEntityListItem {
 #[derive(Debug, Clone)]
 pub struct ListEntitiesByTypeResult {
     pub entities: Vec<TypedEntityListItem>,
-    pub page_size: u32,
     pub offset: u64,
     pub next_page_token: Option<String>,
 }
