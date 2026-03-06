@@ -54,6 +54,7 @@ _build_step_nine_merge_graph_delta = step09_merge_graph.run
 _build_step_ten_mentions_schema = step10_mentions.build_json_schema
 _run_step_ten_finalize_graph_delta = step10_mentions.run
 _validate_upsert_graph_delta_payload = validate_upsert_graph_delta_payload
+_preflight_validate_graph_delta_entities = core._preflight_validate_graph_delta_entities
 
 
 async def run(job: JobEnvelope) -> None:
@@ -118,6 +119,11 @@ async def run(job: JobEnvelope) -> None:
         step_ten_final_graph_delta = await step10_mentions.run(
             step_nine_merged_graph_delta,
             settings,
+            payload.requested_by_user_id,
+        )
+        await core._preflight_validate_graph_delta_entities(
+            channel,
+            step_ten_final_graph_delta,
             payload.requested_by_user_id,
         )
 

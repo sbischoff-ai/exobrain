@@ -1254,6 +1254,169 @@ def _to_property_value_dict(key: str, value: object) -> dict[str, object] | None
     return None
 
 
+_PROPERTY_VALUE_FIELDS = (
+    "bool_value",
+    "int_value",
+    "float_value",
+    "string_value",
+    "datetime_value",
+    "json_value",
+)
+
+
+def _extract_property_value_field(property_payload: dict[str, object]) -> str | None:
+    present_fields = [field for field in _PROPERTY_VALUE_FIELDS if field in property_payload]
+    if len(present_fields) == 1:
+        return present_fields[0]
+    return None
+
+
+def _is_value_type_compatible(*, expected_value_type: str, provided_field: str) -> bool:
+    value_type = expected_value_type.strip().lower()
+    compatibility: dict[str, set[str]] = {
+        "bool": {"bool_value"},
+        "boolean": {"bool_value"},
+        "int": {"int_value"},
+        "integer": {"int_value"},
+        "float": {"float_value", "int_value"},
+        "double": {"float_value", "int_value"},
+        "number": {"float_value", "int_value"},
+        "string": {"string_value"},
+        "datetime": {"datetime_value"},
+        "timestamp": {"datetime_value"},
+        "date": {"datetime_value"},
+        "json": {"json_value"},
+        "object": {"json_value"},
+        "array": {"json_value"},
+    }
+    supported_fields = compatibility.get(value_type)
+    if supported_fields is None:
+        return False
+    return provided_field in supported_fields
+
+
+def _validate_entity_payload_against_property_context(
+    *,
+    entity_id: str,
+    type_id: str,
+    properties: list[dict[str, object]],
+    type_context: dict[str, object],
+) -> list[str]:
+    context_properties = type_context.get("properties")
+    if not isinstance(context_properties, list):
+        return [f"type context missing properties for type '{type_id}'"]
+
+    writable_context_by_key: dict[str, dict[str, object]] = {}
+    required_writable_keys: set[str] = set()
+    for context_property in context_properties:
+        if not isinstance(context_property, dict):
+            continue
+        key = context_property.get("prop_name")
+        writable = context_property.get("writable")
+        required = context_property.get("required")
+        if not isinstance(key, str) or not key:
+            continue
+        if writable is True:
+            writable_context_by_key[key] = context_property
+            if required is True:
+                required_writable_keys.add(key)
+
+    issues: list[str] = []
+    provided_keys: set[str] = set()
+    for index, property_payload in enumerate(properties):
+        key = property_payload.get("key")
+        if not isinstance(key, str) or not key:
+            issues.append(f"property at index {index} has missing/invalid key")
+            continue
+        provided_keys.add(key)
+        context_property = writable_context_by_key.get(key)
+        if context_property is None:
+            issues.append(f"property '{key}' is not writable for type '{type_id}'")
+            continue
+
+        provided_field = _extract_property_value_field(property_payload)
+        if provided_field is None:
+            issues.append(f"property '{key}' must set exactly one value field")
+            continue
+
+        expected_value_type = context_property.get("value_type")
+        if not isinstance(expected_value_type, str) or not expected_value_type:
+            issues.append(f"property '{key}' context is missing value_type")
+            continue
+        if not _is_value_type_compatible(expected_value_type=expected_value_type, provided_field=provided_field):
+            issues.append(
+                f"property '{key}' expects value_type '{expected_value_type}' but received '{provided_field}'"
+            )
+
+    missing_required = sorted(required_writable_keys - provided_keys)
+    if missing_required:
+        issues.append(f"missing required writable properties: {', '.join(missing_required)}")
+
+    return issues
+
+
+async def _preflight_validate_graph_delta_entities(
+    channel: grpc.aio.Channel,
+    graph_delta: dict[str, object],
+    requesting_user_id: str,
+) -> None:
+    get_entity_type_property_context_rpc = channel.unary_unary(
+        "/exobrain.knowledge.v1.KnowledgeInterface/GetEntityTypePropertyContext",
+        request_serializer=knowledge_pb2.GetEntityTypePropertyContextRequest.SerializeToString,
+        response_deserializer=knowledge_pb2.GetEntityTypePropertyContextReply.FromString,
+    )
+
+    type_context_by_type_id: dict[str, dict[str, object]] = {}
+    entity_issues: list[str] = []
+
+    for entity in graph_delta.get("entities", []) or []:
+        if not isinstance(entity, dict):
+            continue
+        entity_id = entity.get("id")
+        type_id = entity.get("type_id")
+        raw_properties = entity.get("properties")
+
+        if not isinstance(entity_id, str) or not entity_id or not isinstance(type_id, str) or not type_id:
+            entity_issues.append(
+                f"entity_id={entity_id if isinstance(entity_id, str) else '<missing>'}: missing id/type_id"
+            )
+            continue
+        if not isinstance(raw_properties, list) or any(not isinstance(p, dict) for p in raw_properties):
+            entity_issues.append(f"entity_id={entity_id}: properties must be a list of objects")
+            continue
+
+        type_context = type_context_by_type_id.get(type_id)
+        if type_context is None:
+            type_context_reply = await _call_with_retry(
+                step_name="step ten preflight",
+                operation="GetEntityTypePropertyContext",
+                call=lambda: get_entity_type_property_context_rpc(
+                    knowledge_pb2.GetEntityTypePropertyContextRequest(
+                        type_id=type_id,
+                        user_id=requesting_user_id,
+                        include_inherited=True,
+                    )
+                ),
+            )
+            type_context = _message_to_dict(type_context_reply, rpc_name="GetEntityTypePropertyContext")
+            type_context_by_type_id[type_id] = type_context
+
+        issues = _validate_entity_payload_against_property_context(
+            entity_id=entity_id,
+            type_id=type_id,
+            properties=raw_properties,
+            type_context=type_context,
+        )
+        if issues:
+            entity_issues.append(f"entity_id={entity_id}: {'; '.join(issues)}")
+
+    if entity_issues:
+        raise RuntimeError(
+            "knowledge.update step ten preflight validation failed: "
+            f"{'; '.join(entity_issues)}"
+        )
+
+
 def _build_step_nine_merge_graph_delta(
     payload: KnowledgeUpdatePayload,
     step_zero_graph_delta: dict[str, object],
