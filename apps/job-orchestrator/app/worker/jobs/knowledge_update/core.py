@@ -9,7 +9,7 @@ import re
 import sys
 import traceback
 from typing import Awaitable, Callable, TypeVar
-from uuid import NAMESPACE_URL, uuid4, uuid5
+from uuid import UUID, NAMESPACE_URL, uuid4, uuid5
 
 import grpc
 from google.protobuf.json_format import ParseError
@@ -257,6 +257,14 @@ def _message_entity_name(journal_reference: str, sequence_number: int) -> str:
     return f"{journal_reference} message {sequence_number}"
 
 
+def _default_edge_properties(confidence: float, provenance_hint: str = "placeholder") -> list[dict[str, object]]:
+    return [
+        {"key": "confidence", "float_value": float(confidence)},
+        {"key": "status", "string_value": "asserted"},
+        {"key": "provenance_hint", "string_value": provenance_hint},
+    ]
+
+
 def _require_created_at(created_at: str | None, sequence_number: int) -> str:
     if created_at:
         return created_at
@@ -330,6 +338,11 @@ async def _build_upsert_graph_delta_step_one(
                     edge_type="SENT_TO",
                     user_id=payload.requested_by_user_id,
                     visibility=knowledge_pb2.PRIVATE,
+                    properties=[
+                        knowledge_pb2.PropertyValue(key="confidence", float_value=1.0),
+                        knowledge_pb2.PropertyValue(key="status", string_value="asserted"),
+                        knowledge_pb2.PropertyValue(key="provenance_hint", string_value="placeholder"),
+                    ],
                 ),
                 knowledge_pb2.GraphEdge(
                     from_id=message_entity_id,
@@ -337,6 +350,11 @@ async def _build_upsert_graph_delta_step_one(
                     edge_type="SENT_BY",
                     user_id=payload.requested_by_user_id,
                     visibility=knowledge_pb2.PRIVATE,
+                    properties=[
+                        knowledge_pb2.PropertyValue(key="confidence", float_value=1.0),
+                        knowledge_pb2.PropertyValue(key="status", string_value="asserted"),
+                        knowledge_pb2.PropertyValue(key="provenance_hint", string_value="placeholder"),
+                    ],
                 ),
                 knowledge_pb2.GraphEdge(
                     from_id=message_entity_id,
@@ -344,6 +362,11 @@ async def _build_upsert_graph_delta_step_one(
                     edge_type="DESCRIBED_BY",
                     user_id=payload.requested_by_user_id,
                     visibility=knowledge_pb2.PRIVATE,
+                    properties=[
+                        knowledge_pb2.PropertyValue(key="confidence", float_value=1.0),
+                        knowledge_pb2.PropertyValue(key="status", string_value="asserted"),
+                        knowledge_pb2.PropertyValue(key="provenance_hint", string_value="placeholder"),
+                    ],
                 ),
             ]
         )
@@ -1083,20 +1106,24 @@ def _build_step_eight_final_entity_context_graph_schema() -> dict[str, object]:
 def _normalize_step_eight_structured_response(
     structured: dict[str, object],
     resolved: ResolvedEntity,
+    *,
+    writable_property_keys: set[str],
 ) -> dict[str, object]:
     normalized = dict(structured)
     raw_entity = normalized.get("entity")
     entity = dict(raw_entity) if isinstance(raw_entity, dict) else {}
 
     extracted = resolved.extracted_entity
-    if "short_description" not in entity and extracted.short_description:
-        entity["short_description"] = extracted.short_description
     if "universe_id" not in entity and extracted.universe_id:
         entity["universe_id"] = extracted.universe_id
 
-    if entity != raw_entity:
+    structural_keys = {"entity_id", "node_type", "universe_id", "universe_name"}
+    allowed_keys = structural_keys | writable_property_keys
+    filtered_entity = {key: value for key, value in entity.items() if key in allowed_keys}
+
+    if filtered_entity != raw_entity:
         logger.warning(
-            "knowledge.update step eight applied optional defaults from fallback context",
+            "knowledge.update step eight normalized entity payload from model response",
             extra={
                 "entity_id": resolved.resolved_entity_id,
                 "resolution_status": resolved.resolution_status,
@@ -1104,8 +1131,24 @@ def _normalize_step_eight_structured_response(
             },
         )
 
-    normalized["entity"] = entity
+    normalized["entity"] = filtered_entity
     return normalized
+
+
+def _extract_writable_property_keys(type_context: dict[str, object]) -> set[str]:
+    context_properties = type_context.get("properties")
+    if not isinstance(context_properties, list):
+        return set()
+
+    writable_keys: set[str] = set()
+    for context_property in context_properties:
+        if not isinstance(context_property, dict):
+            continue
+        key = context_property.get("prop_name")
+        writable = context_property.get("writable")
+        if isinstance(key, str) and key and writable is True:
+            writable_keys.add(key)
+    return writable_keys
 
 
 def _assert_step_eight_required_entity_fields(payload: dict[str, object], entity_id: str) -> None:
@@ -1170,6 +1213,7 @@ async def _run_step_eight_build_final_entity_context_graphs(
             ),
         )
         type_context = _message_to_dict(type_context_reply, rpc_name="GetEntityTypePropertyContext")
+        writable_property_keys = _extract_writable_property_keys(type_context)
 
         resolution_status = resolved.resolution_status
         entity_index = resolved.entity_index
@@ -1180,6 +1224,9 @@ async def _run_step_eight_build_final_entity_context_graphs(
         system_prompt = (
             "You are the knowledge.update final entity context graph worker. "
             "Given focused markdown and writable property context, build an entity payload and block tree. "
+            "For blocks: preserve existing block IDs from provided context exactly as-is; "
+            "for newly created blocks, use a temporary placeholder ID you invent (for example NEW_BLOCK_1). "
+            "Set parent_block_id to those same block IDs/placeholders when linking children. "
             "Return strict JSON only with entity and blocks."
         )
 
@@ -1201,6 +1248,9 @@ async def _run_step_eight_build_final_entity_context_graphs(
                 "You are the knowledge.update final entity context graph reasoner. "
                 "Given existing entity context and focused markdown, propose minimal updates/additions to entity "
                 "properties and block tree. Amending existing blocks should be rare. "
+                "For blocks: preserve existing block IDs from provided context exactly as-is; "
+                "for newly created blocks, use a temporary placeholder ID you invent (for example NEW_BLOCK_1). "
+                "Set parent_block_id to those same block IDs/placeholders when linking children. "
                 "Return strict JSON only with entity and blocks."
             )
 
@@ -1233,7 +1283,11 @@ async def _run_step_eight_build_final_entity_context_graphs(
         structured = reply.get("structured_response") if isinstance(reply, dict) else None
         if not isinstance(structured, dict):
             raise RuntimeError("knowledge.update step eight validation failed: missing structured_response")
-        normalized = _normalize_step_eight_structured_response(structured, resolved)
+        normalized = _normalize_step_eight_structured_response(
+            structured,
+            resolved,
+            writable_property_keys=writable_property_keys,
+        )
         _assert_step_eight_required_entity_fields(normalized, entity_id)
         final_graphs.append(_validate_model("step eight", FinalEntityContextGraph, normalized))
 
@@ -1417,6 +1471,59 @@ async def _preflight_validate_graph_delta_entities(
         )
 
 
+def _preflight_validate_graph_delta_edges(graph_delta: dict[str, object]) -> None:
+    edge_issues: list[str] = []
+
+    for index, edge in enumerate(graph_delta.get("edges", []) or []):
+        if not isinstance(edge, dict):
+            continue
+
+        properties = edge.get("properties")
+        if not isinstance(properties, list) or any(not isinstance(item, dict) for item in properties):
+            edge_issues.append(f"edge_index={index}: properties must be a list of objects")
+            continue
+
+        props_by_key = {
+            prop.get("key"): prop
+            for prop in properties
+            if isinstance(prop.get("key"), str) and prop.get("key")
+        }
+
+        confidence_prop = props_by_key.get("confidence")
+        if confidence_prop is None:
+            edge_issues.append(f"edge_index={index}: missing required edge property 'confidence'")
+        else:
+            confidence_field = _extract_property_value_field(confidence_prop)
+            if confidence_field not in {"float_value", "int_value"}:
+                edge_issues.append(
+                    f"edge_index={index}: property 'confidence' must use float_value or int_value"
+                )
+
+        status_prop = props_by_key.get("status")
+        if status_prop is None:
+            edge_issues.append(f"edge_index={index}: missing required edge property 'status'")
+        else:
+            status_field = _extract_property_value_field(status_prop)
+            if status_field != "string_value":
+                edge_issues.append(f"edge_index={index}: property 'status' must use string_value")
+
+        provenance_hint_prop = props_by_key.get("provenance_hint")
+        if provenance_hint_prop is None:
+            edge_issues.append(f"edge_index={index}: missing required edge property 'provenance_hint'")
+        else:
+            provenance_hint_field = _extract_property_value_field(provenance_hint_prop)
+            if provenance_hint_field != "string_value":
+                edge_issues.append(
+                    f"edge_index={index}: property 'provenance_hint' must use string_value"
+                )
+
+    if edge_issues:
+        raise RuntimeError(
+            "knowledge.update step ten preflight validation failed: "
+            f"{'; '.join(edge_issues)}"
+        )
+
+
 def _build_step_nine_merge_graph_delta(
     payload: KnowledgeUpdatePayload,
     step_zero_graph_delta: dict[str, object],
@@ -1424,11 +1531,19 @@ def _build_step_nine_merge_graph_delta(
     step_seven_relationships: list[MatchedRelationship],
     step_eight_final_entity_context_graphs: list[FinalEntityContextGraph],
 ) -> dict[str, object]:
+    # Step 0 chat-message graph delta merge intentionally disabled for sparse test runs.
+    # Keep `step_zero_graph_delta` in the signature for easy re-enable later.
+    # merged = {
+    #     "universes": list(step_zero_graph_delta.get("universes", []) or []),
+    #     "entities": list(step_zero_graph_delta.get("entities", []) or []),
+    #     "blocks": list(step_zero_graph_delta.get("blocks", []) or []),
+    #     "edges": list(step_zero_graph_delta.get("edges", []) or []),
+    # }
     merged = {
-        "universes": list(step_zero_graph_delta.get("universes", []) or []),
-        "entities": list(step_zero_graph_delta.get("entities", []) or []),
-        "blocks": list(step_zero_graph_delta.get("blocks", []) or []),
-        "edges": list(step_zero_graph_delta.get("edges", []) or []),
+        "universes": [],
+        "entities": [],
+        "blocks": [],
+        "edges": [],
     }
 
     universe_id_by_name: dict[str, str] = {}
@@ -1480,58 +1595,109 @@ def _build_step_nine_merge_graph_delta(
         merged["entities"].append(entity_node)
 
         blocks = item.blocks
-
-        id_map: dict[str, str] = {}
+        parent_by_block_id: dict[str, str | None] = {}
         for block in blocks:
             raw_id = block.block_id
             if not raw_id:
-                raise RuntimeError(f"knowledge.update step nine validation failed: entity {entity_id} has block without block_id")
-            if raw_id.startswith("NEW_BLOCK_"):
-                id_map[raw_id] = str(uuid4())
-            else:
-                id_map[raw_id] = raw_id
+                raise RuntimeError(
+                    f"knowledge.update step nine validation failed: entity_id={entity_id} reason=block without block_id"
+                )
+            if raw_id in parent_by_block_id:
+                raise RuntimeError(
+                    f"knowledge.update step nine validation failed: entity_id={entity_id} reason=duplicate block_id={raw_id}"
+                )
 
-        has_root = False
+            parent_raw = block.parent_block_id
+            normalized_parent = parent_raw.strip() if isinstance(parent_raw, str) else ""
+            parent_by_block_id[raw_id] = normalized_parent or None
+
+        roots = [block_id for block_id, parent_id in parent_by_block_id.items() if parent_id is None]
+        if len(roots) != 1:
+            raise RuntimeError(
+                "knowledge.update step nine validation failed: "
+                f"entity_id={entity_id} reason=expected exactly one root block but found {len(roots)}"
+            )
+
+        for block_id, parent_id in parent_by_block_id.items():
+            if parent_id is not None and parent_id not in parent_by_block_id:
+                raise RuntimeError(
+                    "knowledge.update step nine validation failed: "
+                    f"entity_id={entity_id} reason=dangling parent_block_id={parent_id} for block_id={block_id}"
+                )
+
+        visit_state: dict[str, int] = {}
+
+        def _visit(node_id: str) -> None:
+            state = visit_state.get(node_id, 0)
+            if state == 1:
+                raise RuntimeError(
+                    "knowledge.update step nine validation failed: "
+                    f"entity_id={entity_id} reason=cycle detected in block tree"
+                )
+            if state == 2:
+                return
+
+            visit_state[node_id] = 1
+            parent_id = parent_by_block_id[node_id]
+            if parent_id is not None:
+                _visit(parent_id)
+            visit_state[node_id] = 2
+
+        for block_id in parent_by_block_id:
+            _visit(block_id)
+
+        id_map: dict[str, str] = {}
+        for raw_id in parent_by_block_id:
+            try:
+                UUID(raw_id)
+                id_map[raw_id] = raw_id
+            except ValueError:
+                id_map[raw_id] = str(uuid4())
+
+        root_block_id = roots[0]
+        entity_block_nodes: list[dict[str, object]] = []
+        entity_block_edges: list[dict[str, object]] = []
         for block in blocks:
             raw_id = block.block_id
             if raw_id not in id_map:
                 raise RuntimeError(f"knowledge.update step nine validation failed: entity {entity_id} references unknown block_id")
+
             block_id = id_map[raw_id]
-            text = block.text
-            merged["blocks"].append(
+            entity_block_nodes.append(
                 {
                     "id": block_id,
                     "type_id": "node.block",
                     "user_id": payload.requested_by_user_id,
                     "visibility": "PRIVATE",
-                    "properties": [{"key": "text", "string_value": text}],
+                    "properties": [{"key": "text", "string_value": block.text}],
                 }
             )
-            parent_raw = block.parent_block_id
-            parent_id = id_map.get(parent_raw) if isinstance(parent_raw, str) else None
-            if parent_id:
-                merged["edges"].append(
+
+            parent_id = parent_by_block_id[raw_id]
+            if parent_id is not None:
+                entity_block_edges.append(
                     {
-                        "from_id": parent_id,
+                        "from_id": id_map[parent_id],
                         "to_id": block_id,
                         "edge_type": "SUMMARIZES",
                         "user_id": payload.requested_by_user_id,
                         "visibility": "PRIVATE",
+                        "properties": _default_edge_properties(1.0),
                     }
                 )
-            else:
-                has_root = True
-                merged["edges"].append(
-                    {
-                        "from_id": entity_id,
-                        "to_id": block_id,
-                        "edge_type": "DESCRIBED_BY",
-                        "user_id": payload.requested_by_user_id,
-                        "visibility": "PRIVATE",
-                    }
-                )
-        if not has_root:
-            logger.warning("knowledge.update step nine entity has no root block", extra={"entity_id": entity_id})
+
+        entity_block_edges.append(
+            {
+                "from_id": entity_id,
+                "to_id": id_map[root_block_id],
+                "edge_type": "DESCRIBED_BY",
+                "user_id": payload.requested_by_user_id,
+                "visibility": "PRIVATE",
+                "properties": _default_edge_properties(1.0),
+            }
+        )
+        merged["blocks"].extend(entity_block_nodes)
+        merged["edges"].extend(entity_block_edges)
 
     for relationship in step_seven_relationships:
         from_id = relationship.from_entity_id
@@ -1545,10 +1711,7 @@ def _build_step_nine_merge_graph_delta(
                 "edge_type": edge_type,
                 "user_id": payload.requested_by_user_id,
                 "visibility": "PRIVATE",
-                "properties": [
-                    {"key": "confidence", "float_value": float(confidence)},
-                    {"key": "status", "string_value": "asserted"},
-                ],
+                "properties": _default_edge_properties(confidence),
             }
         )
 
@@ -1663,10 +1826,7 @@ async def _run_step_ten_finalize_graph_delta(
                 "edge_type": "MENTIONS",
                 "user_id": requesting_user_id,
                 "visibility": "PRIVATE",
-                "properties": [
-                    {"key": "confidence", "float_value": float(confidence)},
-                    {"key": "status", "string_value": "asserted"},
-                ],
+                "properties": _default_edge_properties(confidence),
             }
         )
 
@@ -1766,6 +1926,12 @@ async def run(job: JobEnvelope) -> None:
             request_serializer=knowledge_pb2.UpsertGraphDeltaRequest.SerializeToString,
             response_deserializer=knowledge_pb2.UpsertGraphDeltaReply.FromString,
         )
+        await _preflight_validate_graph_delta_entities(
+            channel,
+            step_ten_final_graph_delta,
+            payload.requested_by_user_id,
+        )
+        _preflight_validate_graph_delta_edges(step_ten_final_graph_delta)
         upsert_request = _validate_upsert_graph_delta_payload("step ten", step_ten_final_graph_delta)
         upsert_reply = await _call_with_retry(
             step_name="step eleven",

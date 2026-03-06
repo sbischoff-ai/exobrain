@@ -425,7 +425,11 @@
       "properties": [
         {
           "key": "text",
+<<<<<<< codex/create-large-graph-test-data-set-w0x0ry
           "string_value": "## Actuary workspace overview\n\nThe test user is a life insurance actuary supporting the policy administration platform at Aurora Life Insurance. Current focus includes mortality assumptions, underwriting constraints, reserves, and release readiness."
+=======
+          "string_value": "## Actuary workspace overview\\n\\nThe test user is a life insurance actuary supporting the policy administration platform at Aurora Life Insurance. Current focus includes mortality assumptions, underwriting constraints, reserves, and release readiness."
+>>>>>>> main
         }
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
@@ -437,7 +441,11 @@
       "properties": [
         {
           "key": "text",
+<<<<<<< codex/create-large-graph-test-data-set-w0x0ry
           "string_value": "### Team responsibilities\n\nThe Actuarial Modeling Team owns experience studies and table updates. The Policy Administration Platform Squad owns API validations and deployment workflows."
+=======
+          "string_value": "### Team responsibilities\\n\\nThe Actuarial Modeling Team owns experience studies and table updates. The Policy Administration Platform Squad owns API validations and deployment workflows."
+>>>>>>> main
         }
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
@@ -449,7 +457,11 @@
       "properties": [
         {
           "key": "text",
+<<<<<<< codex/create-large-graph-test-data-set-w0x0ry
           "string_value": "### Colleagues\n\nMaya Patel leads product pricing. Ethan Ross leads platform engineering. Priya Nandakumar is QA lead for policy workflows. Jonas Keller is product manager for life products."
+=======
+          "string_value": "### Colleagues\\n\\nMaya Patel leads product pricing. Ethan Ross leads platform engineering. Priya Nandakumar is QA lead for policy workflows. Jonas Keller is product manager for life products."
+>>>>>>> main
         }
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
@@ -461,7 +473,11 @@
       "properties": [
         {
           "key": "text",
+<<<<<<< codex/create-large-graph-test-data-set-w0x0ry
           "string_value": "## Task backlog summary\n\nOpen tasks cover assumption calibration, API premium floor checks, reserve communication, and UAT scenario writing."
+=======
+          "string_value": "## Task backlog summary\\n\\nOpen tasks cover assumption calibration, API premium floor checks, reserve communication, and UAT scenario writing."
+>>>>>>> main
         }
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
@@ -473,7 +489,11 @@
       "properties": [
         {
           "key": "text",
+<<<<<<< codex/create-large-graph-test-data-set-w0x0ry
           "string_value": "### Mortality calibration task details\n\nCalibrate 2027 mortality assumptions using recent claims and lapse-adjusted exposure windows. Compare against standard table and produce deltas by issue age band."
+=======
+          "string_value": "### Mortality calibration task details\\n\\nCalibrate 2027 mortality assumptions using recent claims and lapse-adjusted exposure windows. Compare against standard table and produce deltas by issue age band."
+>>>>>>> main
         }
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
@@ -485,7 +505,11 @@
       "properties": [
         {
           "key": "text",
+<<<<<<< codex/create-large-graph-test-data-set-w0x0ry
           "string_value": "#### Calibration quality checks\n\nInclude credibility weighting, anti-selection flags, and seasonality sensitivity. Document model fit statistics and caveats for regulators."
+=======
+          "string_value": "#### Calibration quality checks\\n\\nInclude credibility weighting, anti-selection flags, and seasonality sensitivity. Document model fit statistics and caveats for regulators."
+>>>>>>> main
         }
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
@@ -497,7 +521,11 @@
       "properties": [
         {
           "key": "text",
+<<<<<<< codex/create-large-graph-test-data-set-w0x0ry
           "string_value": "### Premium floor task details\n\nImplement premium floor validation in policy API so monthly premium values below 12.50 EUR are rejected with a clear error code and audit entry."
+=======
+          "string_value": "### Premium floor task details\\n\\nImplement premium floor validation in policy API so monthly premium values below 12.50 EUR are rejected with a clear error code and audit entry."
+>>>>>>> main
         }
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
@@ -509,7 +537,11 @@
       "properties": [
         {
           "key": "text",
+<<<<<<< codex/create-large-graph-test-data-set-w0x0ry
           "string_value": "### Reserve impact note task details\n\nSummarize the reserve change effect for ALI-TermSecure and ALI-WholeLife Plus under revised mortality and smoker classification assumptions."
+=======
+          "string_value": "### Reserve impact note task details\\n\\nSummarize the reserve change effect for ALI-TermSecure and ALI-WholeLife Plus under revised mortality and smoker classification assumptions."
+>>>>>>> main
         }
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
@@ -521,7 +553,11 @@
       "properties": [
         {
           "key": "text",
+<<<<<<< codex/create-large-graph-test-data-set-w0x0ry
           "string_value": "### UAT scenarios task details\n\nCreate scenarios for issue age boundary checks, smoker class decisioning, premium floor behavior, and quote override approval path."
+=======
+          "string_value": "### UAT scenarios task details\\n\\nCreate scenarios for issue age boundary checks, smoker class decisioning, premium floor behavior, and quote override approval path."
+>>>>>>> main
         }
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
@@ -533,7 +569,11 @@
       "properties": [
         {
           "key": "text",
+<<<<<<< codex/create-large-graph-test-data-set-w0x0ry
           "string_value": "## Business rules reference\n\nAge rule, smoker eligibility rule, and premium floor rule are enforced by the underwriting decision engine and policy quote service."
+=======
+          "string_value": "## Business rules reference\\n\\nAge rule, smoker eligibility rule, and premium floor rule are enforced by the underwriting decision engine and policy quote service."
+>>>>>>> main
         }
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
@@ -545,7 +585,11 @@
       "properties": [
         {
           "key": "text",
+<<<<<<< codex/create-large-graph-test-data-set-w0x0ry
           "string_value": "### Product context\n\nALI-TermSecure targets level term protection with digital onboarding; ALI-WholeLife Plus includes cash-value accumulation and tighter underwriting controls."
+=======
+          "string_value": "### Product context\\n\\nALI-TermSecure targets level term protection with digital onboarding; ALI-WholeLife Plus includes cash-value accumulation and tighter underwriting controls."
+>>>>>>> main
         }
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
@@ -557,7 +601,11 @@
       "properties": [
         {
           "key": "text",
+<<<<<<< codex/create-large-graph-test-data-set-w0x0ry
           "string_value": "### Component architecture\n\nPolicy quote service calls underwriting decision engine for risk class and then reserve projection pipeline for pricing guardrails."
+=======
+          "string_value": "### Component architecture\\n\\nPolicy quote service calls underwriting decision engine for risk class and then reserve projection pipeline for pricing guardrails."
+>>>>>>> main
         }
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
@@ -569,7 +617,11 @@
       "properties": [
         {
           "key": "text",
+<<<<<<< codex/create-large-graph-test-data-set-w0x0ry
           "string_value": "#### Integration contract notes\n\nThe policy API validates payload shape first, then evaluates business rules, then returns a deterministic pricing decision id for auditability."
+=======
+          "string_value": "#### Integration contract notes\\n\\nThe policy API validates payload shape first, then evaluates business rules, then returns a deterministic pricing decision id for auditability."
+>>>>>>> main
         }
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
@@ -581,7 +633,11 @@
       "properties": [
         {
           "key": "text",
+<<<<<<< codex/create-large-graph-test-data-set-w0x0ry
           "string_value": "## Release 2026.09 plan\n\nRelease includes premium floor enforcement, updated smoker class thresholds, and dashboards for reserve adequacy monitoring."
+=======
+          "string_value": "## Release 2026.09 plan\\n\\nRelease includes premium floor enforcement, updated smoker class thresholds, and dashboards for reserve adequacy monitoring."
+>>>>>>> main
         }
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
@@ -593,7 +649,11 @@
       "properties": [
         {
           "key": "text",
+<<<<<<< codex/create-large-graph-test-data-set-w0x0ry
           "string_value": "### Release risk log\n\nKey risks are stale mortality assumptions, mismatch between rules engine and API validation, and incomplete UAT for boundary ages."
+=======
+          "string_value": "### Release risk log\\n\\nKey risks are stale mortality assumptions, mismatch between rules engine and API validation, and incomplete UAT for boundary ages."
+>>>>>>> main
         }
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
@@ -605,7 +665,11 @@
       "properties": [
         {
           "key": "text",
+<<<<<<< codex/create-large-graph-test-data-set-w0x0ry
           "string_value": "### CAB review prep\n\nPrepare one-page justification of assumption shifts, expected reserve movement, and policyholder communication impact."
+=======
+          "string_value": "### CAB review prep\\n\\nPrepare one-page justification of assumption shifts, expected reserve movement, and policyholder communication impact."
+>>>>>>> main
         }
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
@@ -617,7 +681,11 @@
       "properties": [
         {
           "key": "text",
+<<<<<<< codex/create-large-graph-test-data-set-w0x0ry
           "string_value": "### Message draft to engineering\n\nShare mortality calibration summary, implementation dependency list, and target merge window before freeze date."
+=======
+          "string_value": "### Message draft to engineering\\n\\nShare mortality calibration summary, implementation dependency list, and target merge window before freeze date."
+>>>>>>> main
         }
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
@@ -629,7 +697,11 @@
       "properties": [
         {
           "key": "text",
+<<<<<<< codex/create-large-graph-test-data-set-w0x0ry
           "string_value": "## Reporting artifact\n\nQ3 Life Portfolio Assumption Review documents assumptions, sensitivities, and decision outcomes used for pricing and reserves."
+=======
+          "string_value": "## Reporting artifact\\n\\nQ3 Life Portfolio Assumption Review documents assumptions, sensitivities, and decision outcomes used for pricing and reserves."
+>>>>>>> main
         }
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
@@ -641,7 +713,11 @@
       "properties": [
         {
           "key": "text",
+<<<<<<< codex/create-large-graph-test-data-set-w0x0ry
           "string_value": "### Reserve adequacy concept notes\n\nReserve adequacy monitoring tracks expected cash outflows, claim incidence drift, and premium sufficiency under adverse scenarios."
+=======
+          "string_value": "### Reserve adequacy concept notes\\n\\nReserve adequacy monitoring tracks expected cash outflows, claim incidence drift, and premium sufficiency under adverse scenarios."
+>>>>>>> main
         }
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
@@ -653,7 +729,11 @@
       "properties": [
         {
           "key": "text",
+<<<<<<< codex/create-large-graph-test-data-set-w0x0ry
           "string_value": "### Governance concept notes\n\nMortality table governance requires peer review, versioned approval, and change board signoff before production use."
+=======
+          "string_value": "### Governance concept notes\\n\\nMortality table governance requires peer review, versioned approval, and change board signoff before production use."
+>>>>>>> main
         }
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
@@ -665,7 +745,11 @@
       "properties": [
         {
           "key": "text",
+<<<<<<< codex/create-large-graph-test-data-set-w0x0ry
           "string_value": "### Rule-to-product mapping\n\nIssue age and premium floor rules apply to both products, while smoker class thresholds differ by product line and channel."
+=======
+          "string_value": "### Rule-to-product mapping\\n\\nIssue age and premium floor rules apply to both products, while smoker class thresholds differ by product line and channel."
+>>>>>>> main
         }
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
@@ -677,7 +761,11 @@
       "properties": [
         {
           "key": "text",
+<<<<<<< codex/create-large-graph-test-data-set-w0x0ry
           "string_value": "### Office location note\n\nAurora Life HQ is in Frankfurt and hosts release war-room activities during high-risk cutovers."
+=======
+          "string_value": "### Office location note\\n\\nAurora Life HQ is in Frankfurt and hosts release war-room activities during high-risk cutovers."
+>>>>>>> main
         }
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
@@ -689,7 +777,11 @@
       "properties": [
         {
           "key": "text",
+<<<<<<< codex/create-large-graph-test-data-set-w0x0ry
           "string_value": "### Cross-functional collaboration\n\nActuary collaborates with product, platform engineering, and QA to align assumptions, code behavior, and release evidence."
+=======
+          "string_value": "### Cross-functional collaboration\\n\\nActuary collaborates with product, platform engineering, and QA to align assumptions, code behavior, and release evidence."
+>>>>>>> main
         }
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
@@ -701,7 +793,11 @@
       "properties": [
         {
           "key": "text",
+<<<<<<< codex/create-large-graph-test-data-set-w0x0ry
           "string_value": "### Knowledge continuity\n\nAssistant links help preserve context across actuarial analyses, sprint tasks, and release documentation."
+=======
+          "string_value": "### Knowledge continuity\\n\\nAssistant links help preserve context across actuarial analyses, sprint tasks, and release documentation."
+>>>>>>> main
         }
       ],
       "user_id": "11111111-1111-1111-1111-111111111111",
@@ -2852,4 +2948,8 @@
       ]
     }
   ]
+<<<<<<< codex/create-large-graph-test-data-set-w0x0ry
 }
+=======
+}
+>>>>>>> main

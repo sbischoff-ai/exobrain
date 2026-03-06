@@ -61,6 +61,7 @@ def _configure_worker_logging() -> None:
     settings = get_settings()
     configure_logging(settings.effective_log_level, stream=sys.stdout, force=True)
 _preflight_validate_graph_delta_entities = core._preflight_validate_graph_delta_entities
+_preflight_validate_graph_delta_edges = core._preflight_validate_graph_delta_edges
 
 
 async def run(job: JobEnvelope) -> None:
@@ -81,8 +82,9 @@ async def run(job: JobEnvelope) -> None:
                 f"{settings.knowledge_interface_connect_timeout_seconds}s"
             ) from exc
 
-        step_zero_graph_delta = await step01_graph_seed.run(channel, payload)
-        validate_upsert_graph_delta_payload("step zero", step_zero_graph_delta)
+        # Step 0 (chat-message graph seed) is intentionally disabled for sparse test runs.
+        # step_zero_graph_delta = await step01_graph_seed.run(channel, payload)
+        # validate_upsert_graph_delta_payload("step zero", step_zero_graph_delta)
         step_one_markdown_document = core._step_two_store_batch_document(payload)
         step_two_extraction = await step02_entity_extraction.run(channel, payload, step_one_markdown_document, settings)
         step_three_candidate_matching = await step03_candidate_matching.run(channel, payload, step_two_extraction)
@@ -116,22 +118,25 @@ async def run(job: JobEnvelope) -> None:
         )
         step_nine_merged_graph_delta = step09_merge_graph.run(
             payload,
-            step_zero_graph_delta,
+            {},  # Step 0 graph delta merge intentionally disabled for sparse test runs.
             step_two_extraction,
             step_seven_relationships,
             step_eight_final_entity_context_graphs,
         )
         validate_upsert_graph_delta_payload("step nine", step_nine_merged_graph_delta)
-        step_ten_final_graph_delta = await step10_mentions.run(
-            step_nine_merged_graph_delta,
-            settings,
-            payload.requested_by_user_id,
-        )
+        # Step 10 (mentions finalization) is intentionally disabled for sparse test runs.
+        # step_ten_final_graph_delta = await step10_mentions.run(
+        #     step_nine_merged_graph_delta,
+        #     settings,
+        #     payload.requested_by_user_id,
+        # )
+        step_ten_final_graph_delta = step_nine_merged_graph_delta
         await core._preflight_validate_graph_delta_entities(
             channel,
             step_ten_final_graph_delta,
             payload.requested_by_user_id,
         )
+        core._preflight_validate_graph_delta_edges(step_ten_final_graph_delta)
 
         upsert_graph_delta = channel.unary_unary(
             "/exobrain.knowledge.v1.KnowledgeInterface/UpsertGraphDelta",

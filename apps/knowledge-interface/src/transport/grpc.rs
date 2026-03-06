@@ -9,8 +9,7 @@ use crate::presentation::upsert_delta_json_schema::{
     try_upsert_graph_delta_json_schema_string, UPSERT_GRAPH_DELTA_SCHEMA_ID,
 };
 use crate::service::{
-    EntityTypePropertyContextOptions, ExtractionAllowedEdge as ServiceAllowedEdge,
-    ExtractionEdgeType as ServiceExtractionEdgeType,
+    EntityTypePropertyContextOptions, ExtractionEdgeType as ServiceExtractionEdgeType,
     ExtractionEntityType as ServiceExtractionEntityType, ExtractionPropertyContext,
     ExtractionSchemaOptions, ExtractionUniverseContext as ServiceExtractionUniverseContext,
     KnowledgeApplication,
@@ -27,13 +26,12 @@ use super::mappers::{
 };
 use super::proto::knowledge_interface_server::{KnowledgeInterface, KnowledgeInterfaceServer};
 use super::proto::{
-    AllowedEdge, ExtractionEdgeType, ExtractionEntityType, ExtractionEntityTypeWithEdges,
-    ExtractionUniverse, FindEntityCandidatesReply, FindEntityCandidatesRequest,
-    GetEdgeExtractionSchemaContextReply, GetEdgeExtractionSchemaContextRequest,
-    GetEntityContextReply, GetEntityContextRequest, GetEntityExtractionSchemaContextReply,
-    GetEntityExtractionSchemaContextRequest, GetEntityTypePropertyContextReply,
-    GetEntityTypePropertyContextRequest, GetSchemaReply, GetSchemaRequest,
-    GetUpsertGraphDeltaJsonSchemaReply, GetUpsertGraphDeltaJsonSchemaRequest,
+    ExtractionEdgeType, ExtractionEntityType, ExtractionUniverse, FindEntityCandidatesReply,
+    FindEntityCandidatesRequest, GetEdgeExtractionSchemaContextReply,
+    GetEdgeExtractionSchemaContextRequest, GetEntityContextReply, GetEntityContextRequest,
+    GetEntityExtractionSchemaContextReply, GetEntityExtractionSchemaContextRequest,
+    GetEntityTypePropertyContextReply, GetEntityTypePropertyContextRequest, GetSchemaReply,
+    GetSchemaRequest, GetUpsertGraphDeltaJsonSchemaReply, GetUpsertGraphDeltaJsonSchemaRequest,
     GetUserInitGraphReply, GetUserInitGraphRequest, HealthReply, HealthRequest,
     ListEntitiesByTypeReply, ListEntitiesByTypeRequest, UpsertGraphDeltaReply,
     UpsertGraphDeltaRequest, UpsertSchemaTypeReply, UpsertSchemaTypeRequest,
@@ -81,45 +79,12 @@ fn to_proto_property_context(prop: ExtractionPropertyContext) -> super::proto::P
     }
 }
 
-fn to_proto_allowed_edge(edge: ServiceAllowedEdge) -> AllowedEdge {
-    AllowedEdge {
-        edge_type_id: edge.edge_type_id,
-        edge_name: edge.edge_name,
-        edge_description: edge.edge_description,
-        other_entity_type_id: edge.other_entity_type_id,
-        other_entity_type_name: edge.other_entity_type_name,
-        min_cardinality: edge.min_cardinality,
-        max_cardinality: edge.max_cardinality,
-    }
-}
-
 fn to_proto_extraction_entity_type(entity: ServiceExtractionEntityType) -> ExtractionEntityType {
     ExtractionEntityType {
         type_id: entity.type_id,
         name: entity.name,
         description: entity.description,
         inheritance_chain: entity.inheritance_chain,
-    }
-}
-
-fn to_proto_extraction_entity_type_with_edges(
-    entity: ServiceExtractionEntityType,
-) -> ExtractionEntityTypeWithEdges {
-    ExtractionEntityTypeWithEdges {
-        type_id: entity.type_id,
-        name: entity.name,
-        description: entity.description,
-        inheritance_chain: entity.inheritance_chain,
-        outgoing_edges: entity
-            .outgoing_edges
-            .into_iter()
-            .map(to_proto_allowed_edge)
-            .collect(),
-        incoming_edges: entity
-            .incoming_edges
-            .into_iter()
-            .map(to_proto_allowed_edge)
-            .collect(),
     }
 }
 
@@ -492,8 +457,7 @@ mod tests {
     use super::{
         entity_type_property_context_options_from_request, extraction_options_from_entity_request,
         to_proto_extraction_edge_type, to_proto_extraction_entity_type,
-        to_proto_extraction_entity_type_with_edges, to_proto_extraction_universe,
-        to_proto_property_context, KnowledgeGrpcService,
+        to_proto_extraction_universe, to_proto_property_context, KnowledgeGrpcService,
     };
     use crate::domain::{
         EdgeEndpointRule, FullSchema, SchemaEdgeTypeHydrated, SchemaNodeTypeHydrated, SchemaType,
@@ -502,8 +466,8 @@ mod tests {
     use crate::presentation::upsert_delta_json_schema::UPSERT_GRAPH_DELTA_SCHEMA_ID;
     use crate::service::KnowledgeApplication;
     use crate::service::{
-        build_extraction_entity_types, ExtractionAllowedEdge, ExtractionEdgeType,
-        ExtractionEntityType, ExtractionPropertyContext, ExtractionSchemaOptions,
+        build_extraction_entity_types_from_input, ExtractionEdgeType, ExtractionEntityType,
+        ExtractionPropertyContext, ExtractionSchemaBuildInput, ExtractionSchemaOptions,
         ExtractionUniverseContext,
     };
     use crate::transport::proto::knowledge_interface_server::KnowledgeInterface;
@@ -516,6 +480,43 @@ mod tests {
     use serde_json::Value;
     use std::sync::Arc;
     use tonic::Request;
+
+    fn build_extraction_entity_types_from_schema(
+        schema: FullSchema,
+        options: ExtractionSchemaOptions,
+    ) -> Vec<ExtractionEntityType> {
+        let FullSchema {
+            node_types: hydrated_node_types,
+            edge_types: hydrated_edge_types,
+        } = schema;
+
+        let node_types = hydrated_node_types
+            .iter()
+            .map(|node| node.schema_type.clone())
+            .collect();
+        let edge_types = hydrated_edge_types
+            .iter()
+            .map(|edge| edge.schema_type.clone())
+            .collect();
+        let inheritance = hydrated_node_types
+            .into_iter()
+            .flat_map(|node| node.parents)
+            .collect();
+        let edge_rules = hydrated_edge_types
+            .into_iter()
+            .flat_map(|edge| edge.rules)
+            .collect();
+
+        build_extraction_entity_types_from_input(
+            ExtractionSchemaBuildInput {
+                node_types,
+                edge_types,
+                inheritance,
+                edge_rules,
+            },
+            options,
+        )
+    }
 
     struct NoopSchemaRepository;
 
@@ -730,7 +731,7 @@ mod tests {
             }],
         };
 
-        let entity_types = build_extraction_entity_types(
+        let entity_types = build_extraction_entity_types_from_schema(
             schema,
             ExtractionSchemaOptions {
                 include_inactive: false,
@@ -823,7 +824,7 @@ mod tests {
             }],
         };
 
-        let entity_types = build_extraction_entity_types(
+        let entity_types = build_extraction_entity_types_from_schema(
             schema,
             ExtractionSchemaOptions {
                 include_inactive: false,
@@ -959,30 +960,6 @@ mod tests {
 
         assert_eq!(proto.type_id, "node.person");
         assert_eq!(proto.inheritance_chain, vec!["node.entity", "node.person"]);
-    }
-
-    #[test]
-    fn proto_mapping_preserves_extraction_entity_with_edges_shape() {
-        let proto = to_proto_extraction_entity_type_with_edges(ExtractionEntityType {
-            type_id: "node.person".to_string(),
-            name: "Person".to_string(),
-            description: "A person".to_string(),
-            inheritance_chain: vec!["node.entity".to_string(), "node.person".to_string()],
-            outgoing_edges: vec![ExtractionAllowedEdge {
-                edge_type_id: "edge.related_to".to_string(),
-                edge_name: "RELATED_TO".to_string(),
-                edge_description: "rel".to_string(),
-                other_entity_type_id: "node.concept".to_string(),
-                other_entity_type_name: "Concept".to_string(),
-                min_cardinality: Some(1),
-                max_cardinality: Some(2),
-            }],
-            incoming_edges: vec![],
-        });
-
-        assert_eq!(proto.type_id, "node.person");
-        assert_eq!(proto.outgoing_edges.len(), 1);
-        assert_eq!(proto.outgoing_edges[0].edge_type_id, "edge.related_to");
     }
 
     #[test]

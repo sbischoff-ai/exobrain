@@ -1,37 +1,4 @@
-use crate::service::{ExtractionAllowedEdge, ExtractionEntityType, ExtractionUniverseContext};
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ExtractionContextStructured {
-    pub entity_types: Vec<ExtractionEntityType>,
-    pub universes: Vec<ExtractionUniverseContext>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum ExtractionContextView {
-    Structured(ExtractionContextStructured),
-    RenderedMarkdown(String),
-}
-
-impl ExtractionContextView {
-    pub(crate) fn structured(
-        entity_types: Vec<ExtractionEntityType>,
-        universes: Vec<ExtractionUniverseContext>,
-    ) -> Self {
-        Self::Structured(ExtractionContextStructured {
-            entity_types,
-            universes,
-        })
-    }
-
-    pub(crate) fn to_rendered_markdown(&self) -> Self {
-        match self {
-            Self::Structured(structured) => {
-                Self::RenderedMarkdown(render_prompt_context_markdown(&structured.entity_types))
-            }
-            Self::RenderedMarkdown(markdown) => Self::RenderedMarkdown(markdown.clone()),
-        }
-    }
-}
+use crate::service::ExtractionEntityType;
 
 pub(crate) fn render_prompt_context_markdown(entity_types: &[ExtractionEntityType]) -> String {
     let mut markdown = String::from("# Extraction schema context\n\n");
@@ -55,7 +22,7 @@ pub(crate) fn render_prompt_context_markdown(entity_types: &[ExtractionEntityTyp
     markdown.push_str("| Entity Type | Direction | Edge Type | Edge Name | Other Entity Type | Other Entity Name | Description |\n");
     markdown.push_str("| --- | --- | --- | --- | --- | --- | --- |\n");
 
-    let mut all_edges: Vec<(&str, &ExtractionAllowedEdge, &str)> = entity_types
+    let mut all_edges: Vec<_> = entity_types
         .iter()
         .flat_map(|entity| {
             entity
