@@ -854,44 +854,6 @@ async def _run_step_six_relationship_extraction(
 
 
 
-def _build_edge_extraction_schema_context_request(
-    first_entity_type: str,
-    second_entity_type: str,
-    user_id: str,
-) -> knowledge_pb2.GetEdgeExtractionSchemaContextRequest:
-    field_names = {
-        field.name for field in knowledge_pb2.GetEdgeExtractionSchemaContextRequest.DESCRIPTOR.fields
-    }
-    payload: dict[str, object] = {"user_id": user_id}
-    if {"source_entity_type_id", "target_entity_type_id"}.issubset(field_names):
-        payload["source_entity_type_id"] = first_entity_type
-        payload["target_entity_type_id"] = second_entity_type
-    else:
-        payload["first_entity_type"] = first_entity_type
-        payload["second_entity_type"] = second_entity_type
-    return knowledge_pb2.GetEdgeExtractionSchemaContextRequest(**payload)
-
-
-
-def _edge_extraction_schema_context_to_dict(
-    reply: object,
-    *,
-    first_entity_type: str,
-    second_entity_type: str,
-) -> dict[str, object]:
-    if reply is not None:
-        return _message_to_dict(reply, rpc_name="GetEdgeExtractionSchemaContext")
-
-    logger.warning(
-        "knowledge.update step seven received empty edge extraction schema context",
-        extra={"first_entity_type": first_entity_type, "second_entity_type": second_entity_type},
-    )
-    return {
-        "source_entity_type_id": first_entity_type,
-        "target_entity_type_id": second_entity_type,
-        "entity_types": [],
-    }
-
 def _build_step_seven_relationship_match_schema() -> dict[str, object]:
     return {
         "type": "object",
@@ -972,18 +934,14 @@ async def _run_step_seven_match_relationship_type_and_score(
             step_name="step seven",
             operation="GetEdgeExtractionSchemaContext",
             call=lambda: get_edge_extraction_schema_context_rpc(
-                _build_edge_extraction_schema_context_request(
+                knowledge_pb2.GetEdgeExtractionSchemaContextRequest(
                     first_entity_type=node_type_1,
                     second_entity_type=node_type_2,
                     user_id=payload.requested_by_user_id,
                 )
             ),
         )
-        edge_context = _edge_extraction_schema_context_to_dict(
-            edge_context_reply,
-            first_entity_type=node_type_1,
-            second_entity_type=node_type_2,
-        )
+        edge_context = _message_to_dict(edge_context_reply, rpc_name="GetEdgeExtractionSchemaContext")
         prompt = json.dumps(
             {
                 "entity_1": entity_1,
