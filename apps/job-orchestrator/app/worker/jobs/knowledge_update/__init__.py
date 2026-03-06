@@ -7,6 +7,7 @@ import sys
 import grpc
 
 from app.contracts import JobEnvelope, KnowledgeUpdatePayload
+from app.logging import configure_logging
 from app.settings import get_settings
 from app.worker.jobs.knowledge_update import core
 from app.worker.jobs.knowledge_update.schemas import validate_upsert_graph_delta_payload
@@ -54,6 +55,11 @@ _build_step_nine_merge_graph_delta = step09_merge_graph.run
 _build_step_ten_mentions_schema = step10_mentions.build_json_schema
 _run_step_ten_finalize_graph_delta = step10_mentions.run
 _validate_upsert_graph_delta_payload = validate_upsert_graph_delta_payload
+
+
+def _configure_worker_logging() -> None:
+    settings = get_settings()
+    configure_logging(settings.effective_log_level, stream=sys.stdout, force=True)
 _preflight_validate_graph_delta_entities = core._preflight_validate_graph_delta_entities
 
 
@@ -149,6 +155,8 @@ async def run(job: JobEnvelope) -> None:
 
 
 def main() -> None:
+    _configure_worker_logging()
+
     parser = argparse.ArgumentParser(description="Run knowledge.update worker job")
     parser.add_argument("--job-envelope", required=True, help="Serialized JobEnvelope JSON payload")
     args = parser.parse_args()
