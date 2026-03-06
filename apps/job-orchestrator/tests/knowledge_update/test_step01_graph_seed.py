@@ -35,3 +35,8 @@ async def test_step01_builds_upsert_graph_delta_request() -> None:
     assert len(request_body["entities"]) == 1
     assert len(request_body["blocks"]) == 1
     assert len(request_body["edges"]) == 3
+    for edge in request_body["edges"]:
+        props = {prop["key"]: prop for prop in edge["properties"]}
+        assert props["confidence"]["float_value"] == 1.0
+        assert props["status"]["string_value"] == "asserted"
+        assert props["provenance_hint"]["string_value"] == "placeholder"
