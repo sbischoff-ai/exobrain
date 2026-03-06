@@ -68,6 +68,14 @@ class Settings(BaseSettings):
             return normalized
         return f"{normalized}/v1"
 
+    @field_validator("knowledge_interface_grpc_target", mode="before")
+    @classmethod
+    def _normalize_knowledge_interface_grpc_target(cls, value: str) -> str:
+        target = str(value).strip()
+        if target.startswith("localhost:"):
+            return f"127.0.0.1:{target.split(':', maxsplit=1)[1]}"
+        return target
+
     @property
     def job_orchestrator_api_bind_target(self) -> str:
         if self.job_orchestrator_api_bind_address:

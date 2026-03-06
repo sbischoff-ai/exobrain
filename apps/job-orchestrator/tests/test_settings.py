@@ -48,3 +48,13 @@ def test_settings_defaults_knowledge_update_model_provider_timeout() -> None:
 def test_settings_defaults_consumer_ack_wait_seconds() -> None:
     settings = Settings()
     assert settings.job_consumer_ack_wait_seconds == 150.0
+
+
+def test_settings_normalizes_localhost_knowledge_interface_target() -> None:
+    settings = Settings(KNOWLEDGE_INTERFACE_GRPC_TARGET="localhost:50051")
+    assert settings.knowledge_interface_grpc_target == "127.0.0.1:50051"
+
+
+def test_settings_leaves_non_localhost_knowledge_interface_target_unchanged() -> None:
+    settings = Settings(KNOWLEDGE_INTERFACE_GRPC_TARGET="exobrain-knowledge-interface:50051")
+    assert settings.knowledge_interface_grpc_target == "exobrain-knowledge-interface:50051"
