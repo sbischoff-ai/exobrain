@@ -7,6 +7,7 @@ from app.contracts import KnowledgeUpdatePayload
 from app.worker.jobs.knowledge_update import (
     _build_step_nine_merge_graph_delta,
     _build_step_ten_mentions_schema,
+    _preflight_validate_graph_delta_edges,
     _preflight_validate_graph_delta_entities,
 )
 from app.worker.jobs.knowledge_update_types import EntityExtractionResult, FinalEntityContextGraph, MatchedRelationship
@@ -216,3 +217,91 @@ async def test_step10_preflight_rejects_wrong_property_value_type() -> None:
     assert "step ten preflight" in message
     assert "entity_id=entity-2" in message
     assert "expects value_type 'string' but received 'int_value'" in message
+
+
+def test_step10_preflight_edges_rejects_missing_provenance_hint() -> None:
+    with pytest.raises(RuntimeError) as exc_info:
+        _preflight_validate_graph_delta_edges(
+            {
+                "edges": [
+                    {
+                        "from_id": "a",
+                        "to_id": "b",
+                        "edge_type": "REL",
+                        "properties": [
+                            {"key": "confidence", "float_value": 0.9},
+                            {"key": "status", "string_value": "asserted"},
+                        ],
+                    }
+                ]
+            }
+        )
+
+    message = str(exc_info.value)
+    assert "step ten preflight" in message
+    assert "missing required edge property 'provenance_hint'" in message
+
+
+def test_step10_preflight_edges_rejects_missing_status() -> None:
+    with pytest.raises(RuntimeError) as exc_info:
+        _preflight_validate_graph_delta_edges(
+            {
+                "edges": [
+                    {
+                        "from_id": "a",
+                        "to_id": "b",
+                        "edge_type": "REL",
+                        "properties": [
+                            {"key": "confidence", "float_value": 0.9},
+                            {"key": "provenance_hint", "string_value": "placeholder"},
+                        ],
+                    }
+                ]
+            }
+        )
+
+    message = str(exc_info.value)
+    assert "step ten preflight" in message
+    assert "missing required edge property 'status'" in message
+
+
+def test_step10_preflight_edges_rejects_missing_confidence() -> None:
+    with pytest.raises(RuntimeError) as exc_info:
+        _preflight_validate_graph_delta_edges(
+            {
+                "edges": [
+                    {
+                        "from_id": "a",
+                        "to_id": "b",
+                        "edge_type": "REL",
+                        "properties": [
+                            {"key": "status", "string_value": "asserted"},
+                            {"key": "provenance_hint", "string_value": "placeholder"},
+                        ],
+                    }
+                ]
+            }
+        )
+
+    message = str(exc_info.value)
+    assert "step ten preflight" in message
+    assert "missing required edge property 'confidence'" in message
+
+
+def test_step10_preflight_edges_accepts_valid_metadata() -> None:
+    _preflight_validate_graph_delta_edges(
+        {
+            "edges": [
+                {
+                    "from_id": "a",
+                    "to_id": "b",
+                    "edge_type": "REL",
+                    "properties": [
+                        {"key": "confidence", "int_value": 1},
+                        {"key": "status", "string_value": "asserted"},
+                        {"key": "provenance_hint", "string_value": "placeholder"},
+                    ],
+                }
+            ]
+        }
+    )
