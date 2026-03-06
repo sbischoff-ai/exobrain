@@ -62,10 +62,7 @@ Invalid `response_format` payloads (for example malformed schema objects) return
 - Structured output intent as explicit JSON schema input (native requests without a `structured_output.name` are normalized to `"structured_output"` for OpenAI compatibility)
 - Streaming event frames (`text_delta`, `tool_call`, `completion`, `usage`)
 - Assistant tool-call history is forwarded with `content: null` (not empty string) for OpenAI chat-completions compatibility during multi-turn tool-use loops.
-<<<<<<< codex/fix-400-errors-in-chat-messages-api-bbugkf
 - Native assistant messages with multiple `tool_call` blocks are serialized into a single OpenAI assistant message with one `tool_calls` array (OpenAI rejects split assistant tool-call messages).
-=======
->>>>>>> main
 - Compatibility shim message history is validated for OpenAI tool-call ordering; unresolved or out-of-order `assistant.tool_calls` now return HTTP 400 before provider dispatch.
 - OpenAI streaming `tool_calls[].function.arguments` deltas are reassembled before emitting native `tool_call` frames, so downstream LangChain agents receive complete JSON arguments during tool-use turns.
 
@@ -90,6 +87,7 @@ OpenAI chat aliases should use `max_completion_tokens` defaults (not `max_tokens
 
 Config knobs (environment variables):
 
+- `MODEL_PROVIDER_TIMEOUT_SECONDS` (default `120.0`)
 - `MODEL_PROVIDER_OPENAI_MAX_RETRIES` (default `8`)
 - `MODEL_PROVIDER_OPENAI_MAX_CONCURRENT_REQUESTS` (default `2`)
 - `MODEL_PROVIDER_ANTHROPIC_MAX_RETRIES` (default `8`)

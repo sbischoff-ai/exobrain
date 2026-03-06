@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     job_max_attempts: int = Field(default=3, alias="JOB_MAX_ATTEMPTS", ge=1)
     job_dlq_raw_message_max_chars: int = Field(default=4096, alias="JOB_DLQ_RAW_MESSAGE_MAX_CHARS", ge=256)
     job_consumer_durable: str = Field(default="job-orchestrator-worker-v2", alias="JOB_CONSUMER_DURABLE")
+    job_consumer_ack_wait_seconds: float = Field(
+        default=150.0,
+        alias="JOB_CONSUMER_ACK_WAIT_SECONDS",
+        ge=120.0,
+    )
     worker_replica_count: int = Field(default=1, alias="WORKER_REPLICA_COUNT", ge=1)
     knowledge_interface_grpc_target: str = Field(
         default="localhost:50051",
@@ -40,9 +45,9 @@ class Settings(BaseSettings):
         alias="KNOWLEDGE_UPDATE_EXTRACTION_MODEL",
     )
     knowledge_update_model_provider_timeout_seconds: float = Field(
-        default=100.0,
+        default=120.0,
         alias="KNOWLEDGE_UPDATE_MODEL_PROVIDER_TIMEOUT_SECONDS",
-        ge=100.0,
+        ge=120.0,
     )
     job_orchestrator_api_bind_address: str | None = Field(
         default=None,

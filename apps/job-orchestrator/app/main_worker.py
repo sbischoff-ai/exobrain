@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import logging
 
+from nats.js.api import ConsumerConfig
+
 from app.database import Database
 from app.job_repository import JobRepository
 from app.jetstream import connect_jetstream, ensure_jobs_stream
@@ -54,6 +56,7 @@ async def main() -> None:
         durable=settings.job_consumer_durable,
         cb=handle,
         manual_ack=True,
+        config=ConsumerConfig(ack_wait=settings.job_consumer_ack_wait_seconds),
     )
     logger.info(
         "job orchestrator worker started",

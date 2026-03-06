@@ -33,7 +33,7 @@ class OpenAIProviderClient(ProviderClient):
     def __init__(
         self,
         api_key: str,
-        timeout_seconds: float = 60.0,
+        timeout_seconds: float = 120.0,
         max_retries: int = 8,
         max_concurrent_requests: int = 2,
         client: AsyncOpenAI | None = None,
