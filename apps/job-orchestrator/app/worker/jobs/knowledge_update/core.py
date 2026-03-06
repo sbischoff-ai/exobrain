@@ -471,7 +471,6 @@ async def _run_step_two_entity_extraction(
         model=ModelProviderChatModel(
             model=settings.knowledge_update_extraction_model,
             base_url=settings.model_provider_base_url,
-            temperature=0,
             timeout=settings.knowledge_update_model_provider_timeout_seconds,
         ),
         tools=[],
@@ -601,7 +600,6 @@ async def _run_step_four_create_entity_contexts(
         model=ModelProviderChatModel(
             model="reasoner",
             base_url=settings.model_provider_base_url,
-            temperature=0,
             timeout=settings.knowledge_update_model_provider_timeout_seconds,
         ),
         tools=[],
@@ -659,7 +657,7 @@ async def _run_step_five_detailed_comparison(
     settings: Settings,
 ) -> list[ResolvedEntity]:
     from langchain.agents import create_agent
-    from app.services.model_provider_chat_model import ModelProviderChatModel, build_strict_response_format
+    from app.services.model_provider_chat_model import ModelProviderChatModel
 
     get_entity_context_rpc = channel.unary_unary(
         "/exobrain.knowledge.v1.KnowledgeInterface/GetEntityContext",
@@ -671,7 +669,6 @@ async def _run_step_five_detailed_comparison(
         model=ModelProviderChatModel(
             model="worker",
             base_url=settings.model_provider_base_url,
-            temperature=0,
             timeout=settings.knowledge_update_model_provider_timeout_seconds,
         ),
         tools=[],
@@ -680,7 +677,7 @@ async def _run_step_five_detailed_comparison(
             "Compare extracted entity context markdown against candidate entity contexts. "
             "Return strict JSON only with decision as MATCH({entity_id}) or NEW_ENTITY."
         ),
-        response_format=build_strict_response_format(_StepFiveComparisonDecision),
+        response_format=_build_step_five_comparison_schema(),
     )
 
     resolved_entities: list[ResolvedEntity] = []
@@ -805,7 +802,7 @@ async def _run_step_six_relationship_extraction(
     settings: Settings,
 ) -> list[RelationshipPair]:
     from langchain.agents import create_agent
-    from app.services.model_provider_chat_model import ModelProviderChatModel, build_strict_response_format
+    from app.services.model_provider_chat_model import ModelProviderChatModel
 
     extracted_entities_with_ids = [
         {
@@ -825,7 +822,6 @@ async def _run_step_six_relationship_extraction(
         model=ModelProviderChatModel(
             model="worker",
             base_url=settings.model_provider_base_url,
-            temperature=0,
             timeout=settings.knowledge_update_model_provider_timeout_seconds,
         ),
         tools=[],
@@ -834,7 +830,7 @@ async def _run_step_six_relationship_extraction(
             "Identify entity pairs that are related in the markdown batch document. "
             "Return strict JSON only with entity_pairs."
         ),
-        response_format=build_strict_response_format(_StepSixRelationshipExtractionResult),
+        response_format=_build_step_six_relationship_extraction_schema(),
     )
 
     prompt = json.dumps(
@@ -855,6 +851,46 @@ async def _run_step_six_relationship_extraction(
     pairs_payload = _validate_model("step six", _StepSixRelationshipExtractionResult, structured)
     return _deduplicate_entity_pairs(pairs_payload.entity_pairs, valid_entity_ids)
 
+
+
+
+def _build_edge_extraction_schema_context_request(
+    first_entity_type: str,
+    second_entity_type: str,
+    user_id: str,
+) -> knowledge_pb2.GetEdgeExtractionSchemaContextRequest:
+    field_names = {
+        field.name for field in knowledge_pb2.GetEdgeExtractionSchemaContextRequest.DESCRIPTOR.fields
+    }
+    payload: dict[str, object] = {"user_id": user_id}
+    if {"source_entity_type_id", "target_entity_type_id"}.issubset(field_names):
+        payload["source_entity_type_id"] = first_entity_type
+        payload["target_entity_type_id"] = second_entity_type
+    else:
+        payload["first_entity_type"] = first_entity_type
+        payload["second_entity_type"] = second_entity_type
+    return knowledge_pb2.GetEdgeExtractionSchemaContextRequest(**payload)
+
+
+
+def _edge_extraction_schema_context_to_dict(
+    reply: object,
+    *,
+    first_entity_type: str,
+    second_entity_type: str,
+) -> dict[str, object]:
+    if reply is not None:
+        return _message_to_dict(reply, rpc_name="GetEdgeExtractionSchemaContext")
+
+    logger.warning(
+        "knowledge.update step seven received empty edge extraction schema context",
+        extra={"first_entity_type": first_entity_type, "second_entity_type": second_entity_type},
+    )
+    return {
+        "source_entity_type_id": first_entity_type,
+        "target_entity_type_id": second_entity_type,
+        "entity_types": [],
+    }
 
 def _build_step_seven_relationship_match_schema() -> dict[str, object]:
     return {
@@ -903,7 +939,6 @@ async def _run_step_seven_match_relationship_type_and_score(
         model=ModelProviderChatModel(
             model="worker",
             base_url=settings.model_provider_base_url,
-            temperature=0,
             timeout=settings.knowledge_update_model_provider_timeout_seconds,
         ),
         tools=[],
@@ -937,14 +972,18 @@ async def _run_step_seven_match_relationship_type_and_score(
             step_name="step seven",
             operation="GetEdgeExtractionSchemaContext",
             call=lambda: get_edge_extraction_schema_context_rpc(
-                knowledge_pb2.GetEdgeExtractionSchemaContextRequest(
+                _build_edge_extraction_schema_context_request(
                     first_entity_type=node_type_1,
                     second_entity_type=node_type_2,
                     user_id=payload.requested_by_user_id,
                 )
             ),
         )
-        edge_context = _message_to_dict(edge_context_reply, rpc_name="GetEdgeExtractionSchemaContext")
+        edge_context = _edge_extraction_schema_context_to_dict(
+            edge_context_reply,
+            first_entity_type=node_type_1,
+            second_entity_type=node_type_2,
+        )
         prompt = json.dumps(
             {
                 "entity_1": entity_1,
@@ -1086,7 +1125,6 @@ async def _run_step_eight_build_final_entity_context_graphs(
             model=ModelProviderChatModel(
                 model=model_name,
                 base_url=settings.model_provider_base_url,
-                temperature=0,
                 timeout=settings.knowledge_update_model_provider_timeout_seconds,
             ),
             tools=[],
@@ -1332,7 +1370,6 @@ async def _run_step_ten_finalize_graph_delta(
         model=ModelProviderChatModel(
             model="worker",
             base_url=settings.model_provider_base_url,
-            temperature=0,
             timeout=settings.knowledge_update_model_provider_timeout_seconds,
         ),
         tools=[],
