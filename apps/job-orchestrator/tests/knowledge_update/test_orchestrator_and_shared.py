@@ -87,13 +87,43 @@ async def test_call_with_retry_includes_http_response_body_in_error_detail() -> 
 @pytest.mark.asyncio
 async def test_run_fails_fast_with_step_specific_parse_dict_validation(monkeypatch: pytest.MonkeyPatch) -> None:
     import app.worker.jobs.knowledge_update as knowledge_update
+    from app.worker.jobs.knowledge_update.types import EntityExtractionResult
 
     job = SimpleNamespace(payload={"journal_reference": "journal-1", "requested_by_user_id": "user-1", "messages": [{"role": "user", "content": "hello", "created_at": "2026-03-02T12:00:00Z"}]})
     invalid_graph = {"entities": [{"id": "entity-1", "type_id": "node.person", "user_id": "user-1", "visibility": "PRIVATE", "properties": [{"key": "name", "string_value": "Alice", "invalid_field": "bad"}]}], "blocks": [], "edges": [], "universes": []}
-    async def fake_step01(*_args, **_kwargs):
+
+    async def fake_step02(*_args, **_kwargs):
+        return EntityExtractionResult.model_validate({"extracted_entities": [], "extracted_universes": []})
+
+    async def fake_step03(*_args, **_kwargs):
+        return []
+
+    async def fake_step04(*_args, **_kwargs):
+        return []
+
+    async def fake_step05(*_args, **_kwargs):
+        return []
+
+    async def fake_step06(*_args, **_kwargs):
+        return []
+
+    async def fake_step07(*_args, **_kwargs):
+        return []
+
+    async def fake_step08(*_args, **_kwargs):
+        return []
+
+    def fake_step09(*_args, **_kwargs):
         return invalid_graph
 
-    monkeypatch.setattr(knowledge_update.step01_graph_seed, "run", fake_step01)
+    monkeypatch.setattr(knowledge_update.step02_entity_extraction, "run", fake_step02)
+    monkeypatch.setattr(knowledge_update.step03_candidate_matching, "run", fake_step03)
+    monkeypatch.setattr(knowledge_update.step04_entity_context, "run", fake_step04)
+    monkeypatch.setattr(knowledge_update.step05_entity_resolution, "run", fake_step05)
+    monkeypatch.setattr(knowledge_update.step06_relationship_extraction, "run", fake_step06)
+    monkeypatch.setattr(knowledge_update.step07_relationship_match, "run", fake_step07)
+    monkeypatch.setattr(knowledge_update.step08_entity_graph, "run", fake_step08)
+    monkeypatch.setattr(knowledge_update.step09_merge_graph, "run", fake_step09)
     monkeypatch.setattr(knowledge_update, "get_settings", lambda: SimpleNamespace(knowledge_interface_grpc_target="localhost:50051", knowledge_interface_connect_timeout_seconds=0.1))
     monkeypatch.setattr(knowledge_update.grpc.aio, "insecure_channel", lambda _target: _FakeGrpcChannelContext())
 

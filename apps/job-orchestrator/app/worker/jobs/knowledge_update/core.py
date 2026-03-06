@@ -1531,11 +1531,19 @@ def _build_step_nine_merge_graph_delta(
     step_seven_relationships: list[MatchedRelationship],
     step_eight_final_entity_context_graphs: list[FinalEntityContextGraph],
 ) -> dict[str, object]:
+    # Step 0 chat-message graph delta merge intentionally disabled for sparse test runs.
+    # Keep `step_zero_graph_delta` in the signature for easy re-enable later.
+    # merged = {
+    #     "universes": list(step_zero_graph_delta.get("universes", []) or []),
+    #     "entities": list(step_zero_graph_delta.get("entities", []) or []),
+    #     "blocks": list(step_zero_graph_delta.get("blocks", []) or []),
+    #     "edges": list(step_zero_graph_delta.get("edges", []) or []),
+    # }
     merged = {
-        "universes": list(step_zero_graph_delta.get("universes", []) or []),
-        "entities": list(step_zero_graph_delta.get("entities", []) or []),
-        "blocks": list(step_zero_graph_delta.get("blocks", []) or []),
-        "edges": list(step_zero_graph_delta.get("edges", []) or []),
+        "universes": [],
+        "entities": [],
+        "blocks": [],
+        "edges": [],
     }
 
     universe_id_by_name: dict[str, str] = {}
