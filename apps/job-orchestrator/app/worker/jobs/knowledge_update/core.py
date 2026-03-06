@@ -113,6 +113,7 @@ def _is_transient_error(exc: BaseException) -> bool:
     transient_http_error_names = {
         "TimeoutException",
         "TransportError",
+        "ConnectError",
         "ReadTimeout",
         "ConnectTimeout",
         "RemoteProtocolError",

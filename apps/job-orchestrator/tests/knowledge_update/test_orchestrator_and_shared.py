@@ -85,6 +85,53 @@ async def test_call_with_retry_includes_http_response_body_in_error_detail() -> 
     assert 'response_body={"error":"invalid schema"}' in message
 
 @pytest.mark.asyncio
+async def test_call_with_retry_retries_transient_connect_error_to_max_attempts() -> None:
+    attempts = 0
+
+    class ConnectError(Exception):
+        pass
+
+    async def flaky_call() -> str:
+        nonlocal attempts
+        attempts += 1
+        raise ConnectError("connection failed")
+
+    with pytest.raises(KnowledgeUpdateStepError):
+        await _call_with_retry(
+            step_name="step connect",
+            operation="agent.ainvoke",
+            call=flaky_call,
+            max_attempts=3,
+            base_delay_seconds=0.0,
+            max_delay_seconds=0.0,
+        )
+
+    assert attempts == 3
+
+
+@pytest.mark.asyncio
+async def test_call_with_retry_fails_fast_for_non_transient_error() -> None:
+    attempts = 0
+
+    async def non_transient_call() -> None:
+        nonlocal attempts
+        attempts += 1
+        raise ValueError("bad input")
+
+    with pytest.raises(KnowledgeUpdateStepError):
+        await _call_with_retry(
+            step_name="step non transient",
+            operation="agent.ainvoke",
+            call=non_transient_call,
+            max_attempts=5,
+            base_delay_seconds=0.0,
+            max_delay_seconds=0.0,
+        )
+
+    assert attempts == 1
+
+
+@pytest.mark.asyncio
 async def test_run_fails_fast_with_step_specific_parse_dict_validation(monkeypatch: pytest.MonkeyPatch) -> None:
     import app.worker.jobs.knowledge_update as knowledge_update
     from app.worker.jobs.knowledge_update.types import EntityExtractionResult
