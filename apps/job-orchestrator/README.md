@@ -119,7 +119,7 @@ Implementation note: the worker is organized as a thin orchestrator in
 5. Detailed comparison (`worker` model): for entities requiring further comparison, call `GetEntityContext` (block level 1, with `requesting_user_id`) for each candidate and decide `MATCH({entity_id})` vs `NEW_ENTITY`; structured output is validated with Pydantic at the LLM boundary, and unresolved/new entities receive new UUIDs.
 6. Relationship extraction (`worker` model): derive related entity pairs from markdown using the resolved entity IDs from step 5; step output is validated with typed Pydantic models before deduplication/filtering.
 7. Relationship type + score (`worker` model): for each related pair, call `GetEdgeExtractionSchemaContext` (with `requesting_user_id`) and choose direction/edge type/confidence.
-8. Build final entity context graphs (`worker`/`reasoner`): for each resolved entity, call `GetEntityTypePropertyContext` (with `requesting_user_id`) and produce entity + block-tree payloads; matched entities also include `GetEntityContext` (block level 2) context for minimal updates.
+8. Build final entity context graphs (`worker`/`reasoner`): for each resolved entity, call `GetEntityTypePropertyContext` (with `requesting_user_id`) and produce entity + block-tree payloads; matched entities also include `GetEntityContext` (block level 2) context for minimal updates. Step-8 rejects malformed outputs that omit required entity keys (`entity_id`, `node_type`, `name`, `aliases`) and does not auto-repair those required keys.
 9. Merge graph delta (deterministic): merge step-0 chat-message graph delta with step-8 final entity context graphs (mapping entity/block payloads, replacing `NEW_BLOCK_N` placeholders with UUIDs), step-7 relationship edges (`status=asserted`), and step-2 fictional universes, then validate the merged payload via protobuf `ParseDict`.
 10. Finalize graph delta (`worker` model): detect block-to-entity mentions and append `MENTIONS` edges with confidence and `status=asserted`; validate the finalized payload via protobuf `ParseDict` before upsert.
 11. Upsert graph delta (deterministic): persist the final merged graph delta via `UpsertGraphDelta`.
@@ -129,6 +129,7 @@ Operational hardening notes for `knowledge.update`:
 - Every `channel.unary_unary(...)` gRPC call and every `agent.ainvoke(...)` model-provider call is wrapped with bounded retry logic using exponential backoff plus jitter.
 - Retries are limited to transient failures (timeouts, transport-level issues, and 5xx-style upstream failures).
 - Final failures are raised as step-scoped `KnowledgeUpdateStepError` instances carrying `step_name`, `operation`, and original exception class so logs are diagnosable without scraping full tracebacks.
+- Step 8 validates required entity payload keys after normalization and fails fast instead of silently synthesizing missing core identity fields from fallback context.
 
 ## Common commands
 

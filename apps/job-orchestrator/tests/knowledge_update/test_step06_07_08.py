@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.worker.jobs.knowledge_update import (
+    _assert_step_eight_required_entity_fields,
     _build_edge_extraction_schema_context_request,
     _build_step_eight_final_entity_context_graph_schema,
     _build_step_seven_relationship_match_schema,
@@ -23,6 +24,9 @@ def test_step07_and_step08_schema_requirements() -> None:
     assert _build_step_seven_relationship_match_schema()["required"] == ["from_entity_id", "to_entity_id", "edge_type", "confidence"]
     schema = _build_step_eight_final_entity_context_graph_schema()
     assert schema["required"] == ["entity", "blocks"]
+    assert schema["properties"]["entity"]["required"] == ["entity_id", "node_type", "name", "aliases"]
+    assert schema["properties"]["blocks"]["items"]["required"] == ["block_id", "text"]
+    assert schema["properties"]["blocks"]["items"]["properties"]["text"]["minLength"] == 1
 
 
 def test_step07_edge_context_request_uses_current_proto_fields() -> None:
@@ -33,7 +37,7 @@ def test_step07_edge_context_request_uses_current_proto_fields() -> None:
     assert request.second_entity_type == "company"
 
 
-def test_step08_normalizes_missing_entity_payload_from_resolved_entity() -> None:
+def test_step08_normalizes_only_optional_entity_fields_from_resolved_entity() -> None:
     resolved = ResolvedEntity(
         entity_index=0,
         extracted_entity=ExtractedEntity(
@@ -48,7 +52,15 @@ def test_step08_normalizes_missing_entity_payload_from_resolved_entity() -> None
     )
 
     normalized = _normalize_step_eight_structured_response(
-        {"blocks": [{"block_id": "NEW_BLOCK_1", "text": "root"}]},
+        {
+            "entity": {
+                "entity_id": "entity-1",
+                "node_type": "node.person",
+                "name": "Octavia Butler",
+                "aliases": ["OEB"],
+            },
+            "blocks": [{"block_id": "NEW_BLOCK_1", "text": "root"}],
+        },
         resolved,
     )
 
@@ -59,3 +71,31 @@ def test_step08_normalizes_missing_entity_payload_from_resolved_entity() -> None
         "aliases": ["OEB"],
         "short_description": "science fiction author",
     }
+
+
+def test_step08_rejects_missing_required_entity_keys_after_normalization() -> None:
+    malformed = {
+        "entity": {
+            "entity_id": "entity-1",
+            "aliases": ["OEB"],
+        },
+        "blocks": [{"block_id": "NEW_BLOCK_1", "text": "root"}],
+    }
+
+    try:
+        _assert_step_eight_required_entity_fields(malformed, "entity-1")
+        raise AssertionError("expected RuntimeError")
+    except RuntimeError as exc:
+        assert "missing required entity keys" in str(exc)
+        assert "node_type" in str(exc)
+        assert "name" in str(exc)
+
+
+def test_step08_rejects_missing_entity_payload_after_normalization() -> None:
+    malformed = {"blocks": [{"block_id": "NEW_BLOCK_1", "text": "root"}]}
+
+    try:
+        _assert_step_eight_required_entity_fields(malformed, "entity-1")
+        raise AssertionError("expected RuntimeError")
+    except RuntimeError as exc:
+        assert "missing required entity keys" in str(exc)
