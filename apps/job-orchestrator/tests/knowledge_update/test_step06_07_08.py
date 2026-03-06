@@ -23,9 +23,9 @@ def test_step07_and_step08_schema_requirements() -> None:
     assert schema["required"] == ["entity", "blocks"]
 
 
-def test_step07_edge_context_request_uses_available_proto_fields() -> None:
+def test_step07_edge_context_request_uses_current_proto_fields() -> None:
     request = _build_edge_extraction_schema_context_request("person", "company", "user-1")
 
     assert request.user_id == "user-1"
-    assert request.source_entity_type_id == "person"
-    assert request.target_entity_type_id == "company"
+    assert request.first_entity_type == "person"
+    assert request.second_entity_type == "company"
