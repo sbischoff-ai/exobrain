@@ -128,7 +128,7 @@ Implementation note: the worker is organized as a thin orchestrator in
 Operational hardening notes for `knowledge.update`:
 
 - Every `channel.unary_unary(...)` gRPC call and every `agent.ainvoke(...)` model-provider call is wrapped with bounded retry logic using exponential backoff plus jitter.
-- Retries are limited to transient failures (timeouts, transport-level issues, and 5xx-style upstream failures).
+- Retries are limited to transient failures (timeouts, connection-establishment/transport-level issues, and 5xx-style upstream failures).
 - Final failures are raised as step-scoped `KnowledgeUpdateStepError` instances carrying `step_name`, `operation`, and original exception class so logs are diagnosable without scraping full tracebacks.
 - Step 8 validates required entity payload keys after normalization and fails fast instead of silently synthesizing missing core identity fields from fallback context.
 
