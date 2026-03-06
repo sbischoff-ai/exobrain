@@ -1000,7 +1000,20 @@ def _build_step_eight_final_entity_context_graph_schema() -> dict[str, object]:
         "type": "object",
         "additionalProperties": False,
         "properties": {
-            "entity": {"type": "object", "additionalProperties": True},
+            "entity": {
+                "type": "object",
+                "additionalProperties": True,
+                "properties": {
+                    "entity_id": {"type": "string", "minLength": 1},
+                    "node_type": {"type": "string", "minLength": 1},
+                    "name": {"type": "string", "minLength": 1},
+                    "aliases": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                },
+                "required": ["entity_id", "node_type", "name", "aliases"],
+            },
             "blocks": {
                 "type": "array",
                 "items": {
@@ -1028,17 +1041,14 @@ def _normalize_step_eight_structured_response(
     entity = dict(raw_entity) if isinstance(raw_entity, dict) else {}
 
     extracted = resolved.extracted_entity
-    entity.setdefault("entity_id", resolved.resolved_entity_id)
-    entity.setdefault("node_type", extracted.node_type)
-    entity.setdefault("name", extracted.name)
-    entity.setdefault("aliases", extracted.aliases)
-    entity.setdefault("short_description", extracted.short_description)
-    if extracted.universe_id:
-        entity.setdefault("universe_id", extracted.universe_id)
+    if "short_description" not in entity and extracted.short_description:
+        entity["short_description"] = extracted.short_description
+    if "universe_id" not in entity and extracted.universe_id:
+        entity["universe_id"] = extracted.universe_id
 
     if entity != raw_entity:
         logger.warning(
-            "knowledge.update step eight repaired entity payload from fallback context",
+            "knowledge.update step eight applied optional defaults from fallback context",
             extra={
                 "entity_id": resolved.resolved_entity_id,
                 "resolution_status": resolved.resolution_status,
@@ -1048,6 +1058,25 @@ def _normalize_step_eight_structured_response(
 
     normalized["entity"] = entity
     return normalized
+
+
+def _assert_step_eight_required_entity_fields(payload: dict[str, object], entity_id: str) -> None:
+    raw_entity = payload.get("entity")
+    if not isinstance(raw_entity, dict):
+        raise RuntimeError(
+            f"knowledge.update step eight validation failed: missing required entity keys for entity {entity_id}: entity"
+        )
+
+    missing_keys = [
+        key
+        for key in ("entity_id", "node_type", "name", "aliases")
+        if key not in raw_entity
+    ]
+    if missing_keys:
+        raise RuntimeError(
+            "knowledge.update step eight validation failed: "
+            f"missing required entity keys for entity {entity_id}: {', '.join(missing_keys)}"
+        )
 
 
 async def _run_step_eight_build_final_entity_context_graphs(
@@ -1157,6 +1186,7 @@ async def _run_step_eight_build_final_entity_context_graphs(
         if not isinstance(structured, dict):
             raise RuntimeError("knowledge.update step eight validation failed: missing structured_response")
         normalized = _normalize_step_eight_structured_response(structured, resolved)
+        _assert_step_eight_required_entity_fields(normalized, entity_id)
         final_graphs.append(_validate_model("step eight", FinalEntityContextGraph, normalized))
 
     return final_graphs
