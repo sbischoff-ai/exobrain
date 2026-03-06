@@ -1019,6 +1019,37 @@ def _build_step_eight_final_entity_context_graph_schema() -> dict[str, object]:
     }
 
 
+def _normalize_step_eight_structured_response(
+    structured: dict[str, object],
+    resolved: ResolvedEntity,
+) -> dict[str, object]:
+    normalized = dict(structured)
+    raw_entity = normalized.get("entity")
+    entity = dict(raw_entity) if isinstance(raw_entity, dict) else {}
+
+    extracted = resolved.extracted_entity
+    entity.setdefault("entity_id", resolved.resolved_entity_id)
+    entity.setdefault("node_type", extracted.node_type)
+    entity.setdefault("name", extracted.name)
+    entity.setdefault("aliases", extracted.aliases)
+    entity.setdefault("short_description", extracted.short_description)
+    if extracted.universe_id:
+        entity.setdefault("universe_id", extracted.universe_id)
+
+    if entity != raw_entity:
+        logger.warning(
+            "knowledge.update step eight repaired entity payload from fallback context",
+            extra={
+                "entity_id": resolved.resolved_entity_id,
+                "resolution_status": resolved.resolution_status,
+                "had_entity": isinstance(raw_entity, dict),
+            },
+        )
+
+    normalized["entity"] = entity
+    return normalized
+
+
 async def _run_step_eight_build_final_entity_context_graphs(
     channel: grpc.aio.Channel,
     payload: KnowledgeUpdatePayload,
@@ -1125,7 +1156,8 @@ async def _run_step_eight_build_final_entity_context_graphs(
         structured = reply.get("structured_response") if isinstance(reply, dict) else None
         if not isinstance(structured, dict):
             raise RuntimeError("knowledge.update step eight validation failed: missing structured_response")
-        final_graphs.append(_validate_model("step eight", FinalEntityContextGraph, structured))
+        normalized = _normalize_step_eight_structured_response(structured, resolved)
+        final_graphs.append(_validate_model("step eight", FinalEntityContextGraph, normalized))
 
     return final_graphs
 
