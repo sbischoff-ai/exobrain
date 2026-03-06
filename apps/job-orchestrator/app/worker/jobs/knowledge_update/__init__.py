@@ -61,6 +61,7 @@ def _configure_worker_logging() -> None:
     settings = get_settings()
     configure_logging(settings.effective_log_level, stream=sys.stdout, force=True)
 _preflight_validate_graph_delta_entities = core._preflight_validate_graph_delta_entities
+_preflight_validate_graph_delta_edges = core._preflight_validate_graph_delta_edges
 
 
 async def run(job: JobEnvelope) -> None:
@@ -132,6 +133,7 @@ async def run(job: JobEnvelope) -> None:
             step_ten_final_graph_delta,
             payload.requested_by_user_id,
         )
+        core._preflight_validate_graph_delta_edges(step_ten_final_graph_delta)
 
         upsert_graph_delta = channel.unary_unary(
             "/exobrain.knowledge.v1.KnowledgeInterface/UpsertGraphDelta",

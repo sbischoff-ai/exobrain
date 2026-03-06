@@ -1471,6 +1471,59 @@ async def _preflight_validate_graph_delta_entities(
         )
 
 
+def _preflight_validate_graph_delta_edges(graph_delta: dict[str, object]) -> None:
+    edge_issues: list[str] = []
+
+    for index, edge in enumerate(graph_delta.get("edges", []) or []):
+        if not isinstance(edge, dict):
+            continue
+
+        properties = edge.get("properties")
+        if not isinstance(properties, list) or any(not isinstance(item, dict) for item in properties):
+            edge_issues.append(f"edge_index={index}: properties must be a list of objects")
+            continue
+
+        props_by_key = {
+            prop.get("key"): prop
+            for prop in properties
+            if isinstance(prop.get("key"), str) and prop.get("key")
+        }
+
+        confidence_prop = props_by_key.get("confidence")
+        if confidence_prop is None:
+            edge_issues.append(f"edge_index={index}: missing required edge property 'confidence'")
+        else:
+            confidence_field = _extract_property_value_field(confidence_prop)
+            if confidence_field not in {"float_value", "int_value"}:
+                edge_issues.append(
+                    f"edge_index={index}: property 'confidence' must use float_value or int_value"
+                )
+
+        status_prop = props_by_key.get("status")
+        if status_prop is None:
+            edge_issues.append(f"edge_index={index}: missing required edge property 'status'")
+        else:
+            status_field = _extract_property_value_field(status_prop)
+            if status_field != "string_value":
+                edge_issues.append(f"edge_index={index}: property 'status' must use string_value")
+
+        provenance_hint_prop = props_by_key.get("provenance_hint")
+        if provenance_hint_prop is None:
+            edge_issues.append(f"edge_index={index}: missing required edge property 'provenance_hint'")
+        else:
+            provenance_hint_field = _extract_property_value_field(provenance_hint_prop)
+            if provenance_hint_field != "string_value":
+                edge_issues.append(
+                    f"edge_index={index}: property 'provenance_hint' must use string_value"
+                )
+
+    if edge_issues:
+        raise RuntimeError(
+            "knowledge.update step ten preflight validation failed: "
+            f"{'; '.join(edge_issues)}"
+        )
+
+
 def _build_step_nine_merge_graph_delta(
     payload: KnowledgeUpdatePayload,
     step_zero_graph_delta: dict[str, object],
@@ -1865,6 +1918,12 @@ async def run(job: JobEnvelope) -> None:
             request_serializer=knowledge_pb2.UpsertGraphDeltaRequest.SerializeToString,
             response_deserializer=knowledge_pb2.UpsertGraphDeltaReply.FromString,
         )
+        await _preflight_validate_graph_delta_entities(
+            channel,
+            step_ten_final_graph_delta,
+            payload.requested_by_user_id,
+        )
+        _preflight_validate_graph_delta_edges(step_ten_final_graph_delta)
         upsert_request = _validate_upsert_graph_delta_payload("step ten", step_ten_final_graph_delta)
         upsert_reply = await _call_with_retry(
             step_name="step eleven",
