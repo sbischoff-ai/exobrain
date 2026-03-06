@@ -263,6 +263,50 @@ def test_internal_native_chat_endpoint_unwraps_json_schema_tool_parameters(monke
     assert response.status_code == 200
 
 
+def test_chat_completions_rejects_unresolved_tool_call_sequence(monkeypatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+
+    main = importlib.import_module("app.main")
+    from fastapi.testclient import TestClient
+
+    client = TestClient(main.app)
+    response = client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "agent",
+            "messages": [
+                {"role": "user", "content": "hello"},
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "call_1",
+                            "type": "function",
+                            "function": {"name": "web_search", "arguments": "{}"},
+                        }
+                    ],
+                },
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "call_2",
+                            "type": "function",
+                            "function": {"name": "web_fetch", "arguments": "{}"},
+                        }
+                    ],
+                },
+            ],
+        },
+    )
+
+    assert response.status_code == 400
+    assert "invalid messages payload" in response.json()["detail"]
+    assert "tool calls must be resolved" in response.json()["detail"]
+
 def test_chat_completions_rejects_invalid_tool_parameter_schema_payload(monkeypatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test")

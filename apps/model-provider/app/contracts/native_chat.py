@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class TextBlock(BaseModel):
@@ -87,6 +87,40 @@ class NativeChatRequest(BaseModel):
     stream: bool = False
     temperature: float | None = None
     max_tokens: int | None = None
+
+    @model_validator(mode="after")
+    def validate_tool_call_sequence(self) -> "NativeChatRequest":
+        pending_tool_calls: set[str] = set()
+
+        for message in self.messages:
+            if message.role == "assistant":
+                tool_calls = [block for block in message.content if block.type == "tool_call"]
+                if pending_tool_calls and tool_calls:
+                    raise ValueError("assistant tool calls must be resolved by tool_result blocks before new tool calls")
+                for block in tool_calls:
+                    pending_tool_calls.add(block.id)
+                continue
+
+            tool_results = [block for block in message.content if block.type == "tool_result"]
+            if not pending_tool_calls:
+                if tool_results:
+                    raise ValueError("tool_result block provided without a preceding assistant tool call")
+                continue
+
+            if message.role != "user":
+                raise ValueError("assistant tool calls must be followed by user tool_result blocks")
+            if len(tool_results) != len(message.content):
+                raise ValueError("messages that resolve tool calls must only include tool_result blocks")
+
+            for block in tool_results:
+                if block.tool_call_id not in pending_tool_calls:
+                    raise ValueError(f"unknown tool_call_id '{block.tool_call_id}' in tool_result block")
+                pending_tool_calls.remove(block.tool_call_id)
+
+        if pending_tool_calls:
+            raise ValueError("assistant tool calls are missing matching tool_result blocks")
+
+        return self
 
 
 class Usage(BaseModel):

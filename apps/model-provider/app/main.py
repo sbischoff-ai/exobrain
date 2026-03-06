@@ -11,6 +11,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 from fastapi import FastAPI, Header, HTTPException, Request, Response
+from pydantic import ValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.config import AliasConfig, ModelsConfig, load_models_config
@@ -224,16 +225,20 @@ def _to_native_request(payload: dict[str, Any], alias_config: AliasConfig) -> Na
             strict=bool(json_schema.get("strict", False)),
         )
 
-    return NativeChatRequest(
-        model=alias_config.upstream_model,
-        messages=messages,
-        tools=tools,
-        tool_choice=tool_choice,
-        structured_output=structured_output,
-        stream=bool(payload.get("stream", False)),
-        temperature=payload.get("temperature"),
-        max_tokens=payload.get("max_tokens") or alias_config.defaults.get("max_tokens"),
-    )
+    try:
+        return NativeChatRequest(
+            model=alias_config.upstream_model,
+            messages=messages,
+            tools=tools,
+            tool_choice=tool_choice,
+            structured_output=structured_output,
+            stream=bool(payload.get("stream", False)),
+            temperature=payload.get("temperature"),
+            max_tokens=payload.get("max_tokens") or alias_config.defaults.get("max_tokens"),
+        )
+    except ValidationError as exc:
+        details = "; ".join(error.get("msg", "invalid request") for error in exc.errors())
+        raise HTTPException(status_code=400, detail=f"invalid messages payload: {details}") from exc
 
 
 def _native_to_openai_response(response: NativeChatResponse, alias: str) -> dict[str, Any]:
