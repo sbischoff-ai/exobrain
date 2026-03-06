@@ -18,6 +18,30 @@ def test_step10_mentions_schema_requires_mentions() -> None:
     assert schema["required"] == ["mentions"]
 
 
+
+
+def test_step09_merge_graph_delta_ignores_step0_chat_message_seed() -> None:
+    payload = KnowledgeUpdatePayload(
+        journal_reference="journal-1",
+        requested_by_user_id="user-1",
+        messages=[{"role": "user", "content": "hello", "created_at": "2026-03-02T12:00:00Z"}],
+    )
+
+    merged = _build_step_nine_merge_graph_delta(
+        payload=payload,
+        step_zero_graph_delta={
+            "entities": [{"id": "chat-entity", "type_id": "node.chat_message"}],
+            "blocks": [{"id": "chat-block", "type_id": "node.block"}],
+            "edges": [{"from_id": "chat-entity", "to_id": "chat-block", "edge_type": "DESCRIBED_BY"}],
+            "universes": [{"id": "u1", "name": "ignored-universe"}],
+        },
+        step_two_extraction=EntityExtractionResult.model_validate({"extracted_entities": [], "extracted_universes": []}),
+        step_seven_relationships=[],
+        step_eight_final_entity_context_graphs=[],
+    )
+
+    assert merged == {"universes": [], "entities": [], "blocks": [], "edges": []}
+
 def test_step09_merge_graph_delta_maps_blocks_edges_and_universes() -> None:
     payload = KnowledgeUpdatePayload(journal_reference="journal-1", requested_by_user_id="user-1", messages=[{"role": "user", "content": "hello", "created_at": "2026-03-02T12:00:00Z"}])
     merged = _build_step_nine_merge_graph_delta(
