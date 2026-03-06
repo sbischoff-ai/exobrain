@@ -75,6 +75,35 @@ class OpenAIProviderClient(ProviderClient):
         messages: list[dict[str, Any]] = []
         for message in request.messages:
             role = message.role
+            if role == "assistant":
+                text_parts: list[str] = []
+                tool_calls: list[dict[str, Any]] = []
+                for block in message.content:
+                    if block.type == "text":
+                        text_parts.append(block.text)
+                    elif block.type == "tool_call":
+                        tool_calls.append(
+                            {
+                                "id": block.id,
+                                "type": "function",
+                                "function": {
+                                    "name": block.name,
+                                    "arguments": json.dumps(block.arguments),
+                                },
+                            }
+                        )
+
+                if text_parts or tool_calls:
+                    content = "".join(text_parts)
+                    assistant_message: dict[str, Any] = {
+                        "role": "assistant",
+                        "content": content if content else None,
+                    }
+                    if tool_calls:
+                        assistant_message["tool_calls"] = tool_calls
+                    messages.append(assistant_message)
+                continue
+
             for block in message.content:
                 if role == "system" and block.type == "text":
                     messages.append({"role": "system", "content": block.text})
@@ -86,25 +115,6 @@ class OpenAIProviderClient(ProviderClient):
                             "role": "tool",
                             "tool_call_id": block.tool_call_id,
                             "content": block.content if isinstance(block.content, str) else json.dumps(block.content),
-                        }
-                    )
-                elif role == "assistant" and block.type == "text":
-                    messages.append({"role": "assistant", "content": block.text})
-                elif role == "assistant" and block.type == "tool_call":
-                    messages.append(
-                        {
-                            "role": "assistant",
-                            "content": None,
-                            "tool_calls": [
-                                {
-                                    "id": block.id,
-                                    "type": "function",
-                                    "function": {
-                                        "name": block.name,
-                                        "arguments": json.dumps(block.arguments),
-                                    },
-                                }
-                            ],
                         }
                     )
         return messages

@@ -62,6 +62,8 @@ Invalid `response_format` payloads (for example malformed schema objects) return
 - Structured output intent as explicit JSON schema input (native requests without a `structured_output.name` are normalized to `"structured_output"` for OpenAI compatibility)
 - Streaming event frames (`text_delta`, `tool_call`, `completion`, `usage`)
 - Assistant tool-call history is forwarded with `content: null` (not empty string) for OpenAI chat-completions compatibility during multi-turn tool-use loops.
+- Native assistant messages with multiple `tool_call` blocks are serialized into a single OpenAI assistant message with one `tool_calls` array (OpenAI rejects split assistant tool-call messages).
+- Compatibility shim message history is validated for OpenAI tool-call ordering; unresolved or out-of-order `assistant.tool_calls` now return HTTP 400 before provider dispatch.
 - OpenAI streaming `tool_calls[].function.arguments` deltas are reassembled before emitting native `tool_call` frames, so downstream LangChain agents receive complete JSON arguments during tool-use turns.
 
 `/v1/chat/completions` is retained as a compatibility shim that projects between OpenAI payloads and the internal native contract.

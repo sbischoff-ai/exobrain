@@ -143,6 +143,43 @@ async def test_openai_provider_native_and_compat_chat_round_trip() -> None:
     assert fake.called_with["response_format"]["json_schema"]["name"] == "answer"
 
 
+
+
+@pytest.mark.asyncio
+async def test_openai_provider_groups_assistant_tool_calls_into_single_message() -> None:
+    fake = FakeOpenAIClient()
+    client = OpenAIProviderClient(api_key="x", client=fake)
+
+    request = NativeChatRequest(
+        model="gpt-5-mini",
+        messages=[
+            {"role": "user", "content": [{"type": "text", "text": "hi"}]},
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "tool_call", "id": "call_1", "name": "web_search", "arguments": {"query": "q1"}},
+                    {"type": "tool_call", "id": "call_2", "name": "web_search", "arguments": {"query": "q2"}},
+                ],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "tool_result", "tool_call_id": "call_1", "content": "result 1"},
+                    {"type": "tool_result", "tool_call_id": "call_2", "content": "result 2"},
+                ],
+            },
+        ],
+    )
+
+    await client.native_chat(request)
+
+    assert fake.called_with is not None
+    messages = fake.called_with["messages"]
+    assistant_messages = [message for message in messages if message["role"] == "assistant"]
+    assert len(assistant_messages) == 1
+    assert assistant_messages[0]["content"] is None
+    assert len(assistant_messages[0]["tool_calls"]) == 2
+
 @pytest.mark.asyncio
 async def test_openai_provider_sets_default_structured_output_name() -> None:
     fake = FakeOpenAIClient()
