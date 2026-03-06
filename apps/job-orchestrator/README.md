@@ -174,7 +174,7 @@ Keep request subject patterns narrow enough that they do not also match events/D
 
 ## Troubleshooting
 
-- If `knowledge.update` retries with timeout errors, verify `KNOWLEDGE_INTERFACE_GRPC_TARGET` points to a reachable knowledge-interface gRPC endpoint.
+- If `knowledge.update` retries with timeout errors, verify `KNOWLEDGE_INTERFACE_GRPC_TARGET` points to a reachable knowledge-interface gRPC endpoint. On local setups, prefer `127.0.0.1:50051` over `localhost:50051` to avoid IPv6 loopback resolution mismatches when knowledge-interface binds only on IPv4.
 - If `knowledge.update` fails with `unhandled errors in a TaskGroup`, inspect the forwarded worker `stderr` traceback in orchestrator logs; worker entrypoint now emits full Python tracebacks (not just the top-level message) to pinpoint which step failed.
 - If `knowledge.update` fails around entity extraction context loading, verify knowledge-interface is reachable and `GetEntityExtractionSchemaContext` can be called with the requesting user id.
 - If `knowledge.update` fails with OpenAI `400 Bad Request` and `invalid_function_parameters`, verify tool/function schemas are plain JSON Schema objects (no nested OpenAI `json_schema` envelope inside `tools[].function.parameters`).
