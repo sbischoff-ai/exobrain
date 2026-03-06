@@ -7,7 +7,9 @@ from app.worker.jobs.knowledge_update import (
     _build_step_six_relationship_extraction_schema,
     _deduplicate_entity_pairs,
 )
+from app.worker.jobs.knowledge_update.core import _normalize_step_eight_structured_response
 from app.worker.jobs.knowledge_update_types import RelationshipPair
+from app.worker.jobs.knowledge_update_types import ExtractedEntity, ResolvedEntity
 
 
 def test_step06_schema_and_dedupe() -> None:
@@ -29,3 +31,31 @@ def test_step07_edge_context_request_uses_current_proto_fields() -> None:
     assert request.user_id == "user-1"
     assert request.first_entity_type == "person"
     assert request.second_entity_type == "company"
+
+
+def test_step08_normalizes_missing_entity_payload_from_resolved_entity() -> None:
+    resolved = ResolvedEntity(
+        entity_index=0,
+        extracted_entity=ExtractedEntity(
+            name="Octavia Butler",
+            node_type="node.person",
+            aliases=["OEB"],
+            short_description="science fiction author",
+            universe_id=None,
+        ),
+        resolved_entity_id="entity-1",
+        resolution_status="matched",
+    )
+
+    normalized = _normalize_step_eight_structured_response(
+        {"blocks": [{"block_id": "NEW_BLOCK_1", "text": "root"}]},
+        resolved,
+    )
+
+    assert normalized["entity"] == {
+        "entity_id": "entity-1",
+        "node_type": "node.person",
+        "name": "Octavia Butler",
+        "aliases": ["OEB"],
+        "short_description": "science fiction author",
+    }
