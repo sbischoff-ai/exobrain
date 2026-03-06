@@ -649,6 +649,26 @@ def _extract_matched_entity_id(decision: str) -> str | None:
     return match.group("entity_id")
 
 
+def _resolve_step_five_decision(decision: str, candidate_entity_ids: list[str]) -> str | None:
+    if decision == "NEW_ENTITY":
+        return None
+
+    matched_entity_id = _extract_matched_entity_id(decision)
+    if matched_entity_id is None:
+        raise RuntimeError(
+            "knowledge.update step five validation failed: "
+            f"invalid decision '{decision}'; expected NEW_ENTITY or MATCH(<entity_id>)"
+        )
+
+    if matched_entity_id not in candidate_entity_ids:
+        raise RuntimeError(
+            "knowledge.update step five validation failed: "
+            f"decision references unknown candidate entity id '{matched_entity_id}'"
+        )
+
+    return matched_entity_id
+
+
 async def _run_step_five_detailed_comparison(
     channel: grpc.aio.Channel,
     payload: KnowledgeUpdatePayload,
@@ -717,18 +737,46 @@ async def _run_step_five_detailed_comparison(
                 },
                 ensure_ascii=False,
             )
-            reply = await _call_with_retry(
-                step_name="step five",
-                operation="detailed_comparison_agent.ainvoke",
-                call=lambda: comparison_agent.ainvoke({"messages": [{"role": "user", "content": prompt}]}),
-            )
-            structured = reply.get("structured_response") if isinstance(reply, dict) else None
-            if not isinstance(structured, dict):
-                raise RuntimeError("knowledge.update step five validation failed: missing structured_response")
-            decision_payload = _validate_model("step five", _StepFiveComparisonDecision, structured)
-            decision = decision_payload.decision
-            matched_entity_id = _extract_matched_entity_id(decision) if isinstance(decision, str) else None
-            if matched_entity_id and matched_entity_id in candidate_ids:
+            prompt_message = {"role": "user", "content": prompt}
+            validation_error: RuntimeError | None = None
+            matched_entity_id: str | None = None
+
+            for attempt in range(2):
+                reply = await _call_with_retry(
+                    step_name="step five",
+                    operation="detailed_comparison_agent.ainvoke",
+                    call=lambda: comparison_agent.ainvoke({"messages": [prompt_message]}),
+                )
+                structured = reply.get("structured_response") if isinstance(reply, dict) else None
+                if not isinstance(structured, dict):
+                    raise RuntimeError("knowledge.update step five validation failed: missing structured_response")
+                decision_payload = _validate_model("step five", _StepFiveComparisonDecision, structured)
+                decision = decision_payload.decision
+
+                try:
+                    matched_entity_id = _resolve_step_five_decision(decision, candidate_ids)
+                    validation_error = None
+                    break
+                except RuntimeError as exc:
+                    validation_error = exc
+                    is_format_error = "invalid decision" in str(exc)
+                    if attempt == 0 and is_format_error:
+                        prompt_message = {
+                            "role": "user",
+                            "content": (
+                                f"{prompt}\n\n"
+                                "The previous decision was invalid. "
+                                "Return strict JSON only, with decision exactly NEW_ENTITY "
+                                "or MATCH(<entity_id>) using one candidate entity id."
+                            ),
+                        }
+                        continue
+                    raise
+
+            if validation_error is not None:
+                raise validation_error
+
+            if matched_entity_id is not None:
                 resolved_entity_id = matched_entity_id
                 resolution_status = "matched"
             else:
