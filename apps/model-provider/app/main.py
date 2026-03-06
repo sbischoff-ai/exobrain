@@ -136,6 +136,29 @@ def _normalize_structured_output_payload(payload: dict[str, Any]) -> dict[str, A
     return {"type": "json_schema", "json_schema": json_schema}
 
 
+
+
+def _normalize_tool_parameters(parameters: Any) -> dict[str, Any]:
+    if not isinstance(parameters, dict):
+        raise HTTPException(status_code=400, detail="tools[].function.parameters must be an object")
+
+    if parameters.get("type") == "json_schema":
+        json_schema = parameters.get("json_schema")
+        if not isinstance(json_schema, dict):
+            raise HTTPException(
+                status_code=400,
+                detail="tools[].function.parameters.json_schema must be an object",
+            )
+        schema = json_schema.get("schema")
+        if not isinstance(schema, dict):
+            raise HTTPException(
+                status_code=400,
+                detail="tools[].function.parameters.json_schema.schema must be an object",
+            )
+        return schema
+
+    return parameters
+
 def _to_native_request(payload: dict[str, Any], alias_config: AliasConfig) -> NativeChatRequest:
     messages = []
     for message in payload.get("messages", []):
@@ -173,7 +196,7 @@ def _to_native_request(payload: dict[str, Any], alias_config: AliasConfig) -> Na
                     "type": "function",
                     "name": function.get("name", "tool"),
                     "description": function.get("description"),
-                    "parameters": function.get("parameters") or {},
+                    "parameters": _normalize_tool_parameters(function.get("parameters") or {}),
                 }
             )
 

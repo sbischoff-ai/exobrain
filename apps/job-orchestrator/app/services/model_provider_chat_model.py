@@ -149,12 +149,24 @@ class ModelProviderChatModel(BaseChatModel):
     def _serialize_tool(self, tool: dict[str, Any] | type | Any) -> dict[str, Any]:
         converted = convert_to_openai_tool(tool)
         function = converted.get("function", {})
+        parameters = self._normalize_tool_parameters(function.get("parameters") or {})
         return {
             "type": "function",
             "name": function.get("name", "tool"),
             "description": function.get("description"),
-            "parameters": function.get("parameters") or {},
+            "parameters": parameters,
         }
+
+    def _normalize_tool_parameters(self, parameters: Any) -> dict[str, Any]:
+        if not isinstance(parameters, dict):
+            return {}
+        if (
+            parameters.get("type") == "json_schema"
+            and isinstance(parameters.get("json_schema"), dict)
+            and isinstance(parameters["json_schema"].get("schema"), dict)
+        ):
+            return parameters["json_schema"]["schema"]
+        return parameters
 
     def _serialize_tool_choice(self, tool_choice: str | dict[str, Any]) -> dict[str, Any]:
         if isinstance(tool_choice, str):

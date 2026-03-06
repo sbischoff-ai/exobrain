@@ -95,3 +95,37 @@ async def test_process_runner_logs_failed_worker_stderr_at_error(
 
     error_records = [record for record in caplog.records if record.levelno == logging.ERROR]
     assert any(record.getMessage() == "worker subprocess stderr: fatal-worker-error" for record in error_records)
+
+
+@pytest.mark.asyncio
+async def test_process_runner_writes_worker_output_to_job_log_file(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    async def fake_create_subprocess_exec(*args, **kwargs):
+        return _FakeProcess(stdout=b"job-output\n", stderr=b"job-warning\n")
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+    monkeypatch.chdir(tmp_path)
+
+    runner = LocalProcessWorkerRunner()
+    job = JobEnvelope(
+        job_type="knowledge.update",
+        correlation_id="user-1",
+        payload={
+            "journal_reference": "2026/02/24",
+            "messages": [{"role": "user", "content": "hello"}],
+            "requested_by_user_id": "user-1",
+        },
+    )
+
+    await runner.run_job(job)
+
+    job_logs = list((tmp_path / "logs" / "jobs").glob("*.log"))
+    assert len(job_logs) == 1
+    content = job_logs[0].read_text(encoding="utf-8")
+    assert "job_type=knowledge.update" in content
+    assert "--- stdout ---" in content
+    assert "job-output" in content
+    assert "--- stderr ---" in content
+    assert "job-warning" in content

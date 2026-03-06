@@ -197,3 +197,33 @@ async def test_model_provider_chat_model_never_sends_temperature_field() -> None
 
     assert response.content == "ok"
     assert "temperature" not in captured
+
+
+def test_model_provider_chat_model_unwraps_json_schema_tool_parameters() -> None:
+    model = ModelProviderChatModel(model="worker", base_url="http://test/v1")
+
+    serialized = model._serialize_tool(
+        {
+            "type": "function",
+            "function": {
+                "name": "lookup",
+                "parameters": {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "LookupInput",
+                        "schema": {
+                            "type": "object",
+                            "properties": {"id": {"type": "string"}},
+                            "required": ["id"],
+                        },
+                    },
+                },
+            },
+        }
+    )
+
+    assert serialized["parameters"] == {
+        "type": "object",
+        "properties": {"id": {"type": "string"}},
+        "required": ["id"],
+    }

@@ -197,3 +197,99 @@ async def test_architect_rate_limiter_ignores_non_architect_alias(monkeypatch) -
     await limiter.throttle_for_payload("agent", {"text": "x" * 10000})
 
     assert slept == []
+
+
+def test_internal_native_chat_endpoint_unwraps_json_schema_tool_parameters(monkeypatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+
+    main = importlib.import_module("app.main")
+
+    class StubClient:
+        async def native_chat(self, request):
+            parameters = request.tools[0].parameters
+            assert parameters == {
+                "type": "object",
+                "properties": {"id": {"type": "string"}},
+                "required": ["id"],
+            }
+            return main.NativeChatResponse(
+                id="chat_123",
+                model=request.model,
+                message=main.AssistantMessage(content=[main.TextBlock(text="done")]),
+                finish_reason="stop",
+                usage=main.Usage(input_tokens=3, output_tokens=7, total_tokens=10),
+            )
+
+    alias_config = main.AliasConfig(
+        alias="agent",
+        provider="openai",
+        upstream_model="gpt-5-mini",
+        mode="chat",
+        defaults={},
+    )
+    monkeypatch.setattr(main.registry, "resolve", lambda alias: (alias_config, StubClient()))
+
+    from fastapi.testclient import TestClient
+
+    client = TestClient(main.app)
+    response = client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "agent",
+            "messages": [{"role": "user", "content": "hello"}],
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "lookup",
+                        "parameters": {
+                            "type": "json_schema",
+                            "json_schema": {
+                                "name": "LookupInput",
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {"id": {"type": "string"}},
+                                    "required": ["id"],
+                                },
+                            },
+                        },
+                    },
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+
+
+def test_chat_completions_rejects_invalid_tool_parameter_schema_payload(monkeypatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+
+    main = importlib.import_module("app.main")
+    from fastapi.testclient import TestClient
+
+    client = TestClient(main.app)
+    response = client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "agent",
+            "messages": [{"role": "user", "content": "hello"}],
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "lookup",
+                        "parameters": {
+                            "type": "json_schema",
+                            "json_schema": {"name": "LookupInput"},
+                        },
+                    },
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "tools[].function.parameters.json_schema.schema must be an object"
