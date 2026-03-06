@@ -37,7 +37,7 @@ def test_step07_edge_context_request_uses_current_proto_fields() -> None:
     assert request.second_entity_type == "company"
 
 
-def test_step08_normalizes_only_optional_entity_fields_from_resolved_entity() -> None:
+def test_step08_normalizes_only_allowed_entity_fields() -> None:
     resolved = ResolvedEntity(
         entity_index=0,
         extracted_entity=ExtractedEntity(
@@ -58,10 +58,12 @@ def test_step08_normalizes_only_optional_entity_fields_from_resolved_entity() ->
                 "node_type": "node.person",
                 "name": "Octavia Butler",
                 "aliases": ["OEB"],
+                "short_description": "science fiction author",
             },
             "blocks": [{"block_id": "NEW_BLOCK_1", "text": "root"}],
         },
         resolved,
+        writable_property_keys={"name", "aliases"},
     )
 
     assert normalized["entity"] == {
@@ -69,7 +71,44 @@ def test_step08_normalizes_only_optional_entity_fields_from_resolved_entity() ->
         "node_type": "node.person",
         "name": "Octavia Butler",
         "aliases": ["OEB"],
-        "short_description": "science fiction author",
+    }
+
+
+def test_step08_removes_non_writable_entity_keys() -> None:
+    resolved = ResolvedEntity(
+        entity_index=0,
+        extracted_entity=ExtractedEntity(
+            name="Octavia Butler",
+            node_type="node.person",
+            aliases=["OEB"],
+            short_description="science fiction author",
+            universe_id="univ-1",
+        ),
+        resolved_entity_id="entity-1",
+        resolution_status="matched",
+    )
+
+    normalized = _normalize_step_eight_structured_response(
+        {
+            "entity": {
+                "entity_id": "entity-1",
+                "node_type": "node.person",
+                "name": "Octavia Butler",
+                "aliases": ["OEB"],
+                "favorite_color": "purple",
+            },
+            "blocks": [{"block_id": "NEW_BLOCK_1", "text": "root"}],
+        },
+        resolved,
+        writable_property_keys={"name", "aliases"},
+    )
+
+    assert normalized["entity"] == {
+        "entity_id": "entity-1",
+        "node_type": "node.person",
+        "name": "Octavia Butler",
+        "aliases": ["OEB"],
+        "universe_id": "univ-1",
     }
 
 

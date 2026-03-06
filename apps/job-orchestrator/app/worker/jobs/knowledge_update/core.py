@@ -1106,20 +1106,24 @@ def _build_step_eight_final_entity_context_graph_schema() -> dict[str, object]:
 def _normalize_step_eight_structured_response(
     structured: dict[str, object],
     resolved: ResolvedEntity,
+    *,
+    writable_property_keys: set[str],
 ) -> dict[str, object]:
     normalized = dict(structured)
     raw_entity = normalized.get("entity")
     entity = dict(raw_entity) if isinstance(raw_entity, dict) else {}
 
     extracted = resolved.extracted_entity
-    if "short_description" not in entity and extracted.short_description:
-        entity["short_description"] = extracted.short_description
     if "universe_id" not in entity and extracted.universe_id:
         entity["universe_id"] = extracted.universe_id
 
-    if entity != raw_entity:
+    structural_keys = {"entity_id", "node_type", "universe_id", "universe_name"}
+    allowed_keys = structural_keys | writable_property_keys
+    filtered_entity = {key: value for key, value in entity.items() if key in allowed_keys}
+
+    if filtered_entity != raw_entity:
         logger.warning(
-            "knowledge.update step eight applied optional defaults from fallback context",
+            "knowledge.update step eight normalized entity payload from model response",
             extra={
                 "entity_id": resolved.resolved_entity_id,
                 "resolution_status": resolved.resolution_status,
@@ -1127,8 +1131,24 @@ def _normalize_step_eight_structured_response(
             },
         )
 
-    normalized["entity"] = entity
+    normalized["entity"] = filtered_entity
     return normalized
+
+
+def _extract_writable_property_keys(type_context: dict[str, object]) -> set[str]:
+    context_properties = type_context.get("properties")
+    if not isinstance(context_properties, list):
+        return set()
+
+    writable_keys: set[str] = set()
+    for context_property in context_properties:
+        if not isinstance(context_property, dict):
+            continue
+        key = context_property.get("prop_name")
+        writable = context_property.get("writable")
+        if isinstance(key, str) and key and writable is True:
+            writable_keys.add(key)
+    return writable_keys
 
 
 def _assert_step_eight_required_entity_fields(payload: dict[str, object], entity_id: str) -> None:
@@ -1193,6 +1213,7 @@ async def _run_step_eight_build_final_entity_context_graphs(
             ),
         )
         type_context = _message_to_dict(type_context_reply, rpc_name="GetEntityTypePropertyContext")
+        writable_property_keys = _extract_writable_property_keys(type_context)
 
         resolution_status = resolved.resolution_status
         entity_index = resolved.entity_index
@@ -1262,7 +1283,11 @@ async def _run_step_eight_build_final_entity_context_graphs(
         structured = reply.get("structured_response") if isinstance(reply, dict) else None
         if not isinstance(structured, dict):
             raise RuntimeError("knowledge.update step eight validation failed: missing structured_response")
-        normalized = _normalize_step_eight_structured_response(structured, resolved)
+        normalized = _normalize_step_eight_structured_response(
+            structured,
+            resolved,
+            writable_property_keys=writable_property_keys,
+        )
         _assert_step_eight_required_entity_fields(normalized, entity_id)
         final_graphs.append(_validate_model("step eight", FinalEntityContextGraph, normalized))
 
