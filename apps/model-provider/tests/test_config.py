@@ -12,4 +12,4 @@ def test_load_models_config_reads_aliases() -> None:
 
 def test_settings_defaults_provider_timeout() -> None:
     settings = Settings()
-    assert settings.provider_timeout_seconds == 120.0
+    assert settings.provider_timeout_seconds == 7200.0
