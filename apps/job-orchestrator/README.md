@@ -174,9 +174,6 @@ Keep request subject patterns narrow enough that they do not also match events/D
 - If `knowledge.update` fails with `unhandled errors in a TaskGroup`, inspect the forwarded worker `stderr` traceback in orchestrator logs; worker entrypoint now emits full Python tracebacks (not just the top-level message) to pinpoint which step failed.
 - If `knowledge.update` fails around entity extraction context loading, verify knowledge-interface is reachable and `GetEntityExtractionSchemaContext` can be called with the requesting user id.
 - If `knowledge.update` step 5 or 6 fails with OpenAI `400 Bad Request` due to schema validation, verify the agent `response_format` uses a plain JSON Schema object (no OpenAI `response_format` envelope) on the native `/internal/chat/messages` contract.
-<<<<<<< codex/fix-knowledge-update-job-errors-vqxkp2
-- If `knowledge.update` step 7 fails with `GetEdgeExtractionSchemaContextRequest has no "first_entity_type" field`, ensure worker and knowledge-interface protobuf contracts are in sync; worker now builds requests using whichever edge-type field names exist in the generated client (`source_entity_type_id`/`target_entity_type_id` or legacy `first_entity_type`/`second_entity_type`).
-=======
->>>>>>> main
+- If `knowledge.update` step 7 fails around `GetEdgeExtractionSchemaContext`, ensure the generated worker protobuf is synced with `apps/knowledge-interface/proto/knowledge.proto` (request fields must be `first_entity_type`/`second_entity_type`; response field is `edge_types`).
 - Model-provider client requests intentionally omit `temperature`; alias-specific temperature behavior must be configured server-side in model-provider.
 - If producers fail with `UNAVAILABLE` on `EnqueueJob`, confirm the orchestrator API process is running and reachable at `JOB_ORCHESTRATOR_API_BIND_ADDRESS` / `JOB_ORCHESTRATOR_API_PORT`.
