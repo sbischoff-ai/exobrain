@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from uuid import UUID
 
 from app.contracts import KnowledgeUpdatePayload
 from app.worker.jobs.knowledge_update import (
@@ -23,11 +24,30 @@ def test_step09_merge_graph_delta_maps_blocks_edges_and_universes() -> None:
         step_zero_graph_delta={"entities": [], "blocks": [], "edges": [], "universes": []},
         step_two_extraction=EntityExtractionResult.model_validate({"extracted_entities": [], "extracted_universes": [{"name": "Wonderland", "description": "fictional"}]}),
         step_seven_relationships=[MatchedRelationship(from_entity_id="e1", to_entity_id="e2", edge_type="edge.related_to", confidence=0.8)],
-        step_eight_final_entity_context_graphs=[FinalEntityContextGraph.model_validate({"entity": {"entity_id": "e1", "node_type": "node.person", "name": "Alice", "aliases": ["A"], "universe_name": "Wonderland"}, "blocks": [{"block_id": "NEW_BLOCK_1", "parent_block_id": "", "text": "root"}]})],
+        step_eight_final_entity_context_graphs=[FinalEntityContextGraph.model_validate({"entity": {"entity_id": "e1", "node_type": "node.person", "name": "Alice", "aliases": ["A"], "universe_name": "Wonderland"}, "blocks": [{"block_id": "arch-layers-001", "parent_block_id": "", "text": "root"}, {"block_id": "child-raw-id", "parent_block_id": "arch-layers-001", "text": "child"}]})],
     )
     assert len(merged["universes"]) == 1
     assert len(merged["entities"]) == 1
 
+    blocks = [block for block in merged["blocks"] if isinstance(block, dict)]
+    assert len(blocks) == 2
+    for block in blocks:
+        UUID(str(block["id"]))
+
+    described_by_edges = [
+        edge for edge in merged["edges"]
+        if isinstance(edge, dict) and edge.get("edge_type") == "DESCRIBED_BY"
+    ]
+    assert len(described_by_edges) == 1
+    UUID(str(described_by_edges[0]["to_id"]))
+
+    summarizes_edges = [
+        edge for edge in merged["edges"]
+        if isinstance(edge, dict) and edge.get("edge_type") == "SUMMARIZES"
+    ]
+    assert len(summarizes_edges) == 1
+    UUID(str(summarizes_edges[0]["from_id"]))
+    UUID(str(summarizes_edges[0]["to_id"]))
     edges = merged["edges"]
     assert len(edges) == 3
     for edge in edges:

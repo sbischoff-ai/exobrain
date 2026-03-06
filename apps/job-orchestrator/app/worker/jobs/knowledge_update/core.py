@@ -9,7 +9,7 @@ import re
 import sys
 import traceback
 from typing import Awaitable, Callable, TypeVar
-from uuid import NAMESPACE_URL, uuid4, uuid5
+from uuid import UUID, NAMESPACE_URL, uuid4, uuid5
 
 import grpc
 from google.protobuf.json_format import ParseError
@@ -1203,6 +1203,9 @@ async def _run_step_eight_build_final_entity_context_graphs(
         system_prompt = (
             "You are the knowledge.update final entity context graph worker. "
             "Given focused markdown and writable property context, build an entity payload and block tree. "
+            "For blocks: preserve existing block IDs from provided context exactly as-is; "
+            "for newly created blocks, use a temporary placeholder ID you invent (for example NEW_BLOCK_1). "
+            "Set parent_block_id to those same block IDs/placeholders when linking children. "
             "Return strict JSON only with entity and blocks."
         )
 
@@ -1224,6 +1227,9 @@ async def _run_step_eight_build_final_entity_context_graphs(
                 "You are the knowledge.update final entity context graph reasoner. "
                 "Given existing entity context and focused markdown, propose minimal updates/additions to entity "
                 "properties and block tree. Amending existing blocks should be rare. "
+                "For blocks: preserve existing block IDs from provided context exactly as-is; "
+                "for newly created blocks, use a temporary placeholder ID you invent (for example NEW_BLOCK_1). "
+                "Set parent_block_id to those same block IDs/placeholders when linking children. "
                 "Return strict JSON only with entity and blocks."
             )
 
@@ -1509,10 +1515,11 @@ def _build_step_nine_merge_graph_delta(
             raw_id = block.block_id
             if not raw_id:
                 raise RuntimeError(f"knowledge.update step nine validation failed: entity {entity_id} has block without block_id")
-            if raw_id.startswith("NEW_BLOCK_"):
-                id_map[raw_id] = str(uuid4())
-            else:
+            try:
+                UUID(raw_id)
                 id_map[raw_id] = raw_id
+            except ValueError:
+                id_map[raw_id] = str(uuid4())
 
         has_root = False
         for block in blocks:
