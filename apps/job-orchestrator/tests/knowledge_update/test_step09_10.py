@@ -60,6 +60,81 @@ def test_step09_merge_graph_delta_maps_blocks_edges_and_universes() -> None:
     assert relationship_edge["properties"][0]["float_value"] == pytest.approx(0.8)
 
 
+def test_step09_merge_graph_delta_rejects_multiple_roots() -> None:
+    payload = KnowledgeUpdatePayload(journal_reference="journal-1", requested_by_user_id="user-1", messages=[{"role": "user", "content": "hello", "created_at": "2026-03-02T12:00:00Z"}])
+
+    with pytest.raises(RuntimeError, match=r"entity_id=e1.*exactly one root block"):
+        _build_step_nine_merge_graph_delta(
+            payload=payload,
+            step_zero_graph_delta={"entities": [], "blocks": [], "edges": [], "universes": []},
+            step_two_extraction=EntityExtractionResult.model_validate({"extracted_entities": [], "extracted_universes": []}),
+            step_seven_relationships=[],
+            step_eight_final_entity_context_graphs=[
+                FinalEntityContextGraph.model_validate(
+                    {
+                        "entity": {"entity_id": "e1", "node_type": "node.person", "name": "Alice"},
+                        "blocks": [
+                            {"block_id": "root-1", "parent_block_id": "", "text": "root-1"},
+                            {"block_id": "root-2", "parent_block_id": "", "text": "root-2"},
+                        ],
+                    }
+                )
+            ],
+        )
+
+
+def test_step09_merge_graph_delta_rejects_dangling_parent_reference() -> None:
+    payload = KnowledgeUpdatePayload(journal_reference="journal-1", requested_by_user_id="user-1", messages=[{"role": "user", "content": "hello", "created_at": "2026-03-02T12:00:00Z"}])
+
+    with pytest.raises(RuntimeError, match=r"entity_id=e1.*dangling parent_block_id=missing-parent"):
+        _build_step_nine_merge_graph_delta(
+            payload=payload,
+            step_zero_graph_delta={"entities": [], "blocks": [], "edges": [], "universes": []},
+            step_two_extraction=EntityExtractionResult.model_validate({"extracted_entities": [], "extracted_universes": []}),
+            step_seven_relationships=[],
+            step_eight_final_entity_context_graphs=[
+                FinalEntityContextGraph.model_validate(
+                    {
+                        "entity": {"entity_id": "e1", "node_type": "node.person", "name": "Alice"},
+                        "blocks": [
+                            {"block_id": "root-1", "parent_block_id": "", "text": "root"},
+                            {"block_id": "child-1", "parent_block_id": "missing-parent", "text": "child"},
+                        ],
+                    }
+                )
+            ],
+        )
+
+
+def test_step09_merge_graph_delta_valid_single_root_tree_emits_expected_edges() -> None:
+    payload = KnowledgeUpdatePayload(journal_reference="journal-1", requested_by_user_id="user-1", messages=[{"role": "user", "content": "hello", "created_at": "2026-03-02T12:00:00Z"}])
+    merged = _build_step_nine_merge_graph_delta(
+        payload=payload,
+        step_zero_graph_delta={"entities": [], "blocks": [], "edges": [], "universes": []},
+        step_two_extraction=EntityExtractionResult.model_validate({"extracted_entities": [], "extracted_universes": []}),
+        step_seven_relationships=[],
+        step_eight_final_entity_context_graphs=[
+            FinalEntityContextGraph.model_validate(
+                {
+                    "entity": {"entity_id": "e1", "node_type": "node.person", "name": "Alice"},
+                    "blocks": [
+                        {"block_id": "root-1", "parent_block_id": "", "text": "root"},
+                        {"block_id": "child-1", "parent_block_id": "root-1", "text": "child-1"},
+                        {"block_id": "child-2", "parent_block_id": "root-1", "text": "child-2"},
+                    ],
+                }
+            )
+        ],
+    )
+
+    described_by_edges = [edge for edge in merged["edges"] if edge["edge_type"] == "DESCRIBED_BY"]
+    assert len(described_by_edges) == 1
+    assert described_by_edges[0]["from_id"] == "e1"
+
+    summarizes_edges = [edge for edge in merged["edges"] if edge["edge_type"] == "SUMMARIZES"]
+    assert len(summarizes_edges) == 2
+
+
 class _FakeGrpcChannel:
     def __init__(self, context_by_type_id: dict[str, object]) -> None:
         self._context_by_type_id = context_by_type_id
