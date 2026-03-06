@@ -1509,40 +1509,89 @@ def _build_step_nine_merge_graph_delta(
         merged["entities"].append(entity_node)
 
         blocks = item.blocks
-
-        id_map: dict[str, str] = {}
+        parent_by_block_id: dict[str, str | None] = {}
         for block in blocks:
             raw_id = block.block_id
             if not raw_id:
-                raise RuntimeError(f"knowledge.update step nine validation failed: entity {entity_id} has block without block_id")
+                raise RuntimeError(
+                    f"knowledge.update step nine validation failed: entity_id={entity_id} reason=block without block_id"
+                )
+            if raw_id in parent_by_block_id:
+                raise RuntimeError(
+                    f"knowledge.update step nine validation failed: entity_id={entity_id} reason=duplicate block_id={raw_id}"
+                )
+
+            parent_raw = block.parent_block_id
+            normalized_parent = parent_raw.strip() if isinstance(parent_raw, str) else ""
+            parent_by_block_id[raw_id] = normalized_parent or None
+
+        roots = [block_id for block_id, parent_id in parent_by_block_id.items() if parent_id is None]
+        if len(roots) != 1:
+            raise RuntimeError(
+                "knowledge.update step nine validation failed: "
+                f"entity_id={entity_id} reason=expected exactly one root block but found {len(roots)}"
+            )
+
+        for block_id, parent_id in parent_by_block_id.items():
+            if parent_id is not None and parent_id not in parent_by_block_id:
+                raise RuntimeError(
+                    "knowledge.update step nine validation failed: "
+                    f"entity_id={entity_id} reason=dangling parent_block_id={parent_id} for block_id={block_id}"
+                )
+
+        visit_state: dict[str, int] = {}
+
+        def _visit(node_id: str) -> None:
+            state = visit_state.get(node_id, 0)
+            if state == 1:
+                raise RuntimeError(
+                    "knowledge.update step nine validation failed: "
+                    f"entity_id={entity_id} reason=cycle detected in block tree"
+                )
+            if state == 2:
+                return
+
+            visit_state[node_id] = 1
+            parent_id = parent_by_block_id[node_id]
+            if parent_id is not None:
+                _visit(parent_id)
+            visit_state[node_id] = 2
+
+        for block_id in parent_by_block_id:
+            _visit(block_id)
+
+        id_map: dict[str, str] = {}
+        for raw_id in parent_by_block_id:
             try:
                 UUID(raw_id)
                 id_map[raw_id] = raw_id
             except ValueError:
                 id_map[raw_id] = str(uuid4())
 
-        has_root = False
+        root_block_id = roots[0]
+        entity_block_nodes: list[dict[str, object]] = []
+        entity_block_edges: list[dict[str, object]] = []
         for block in blocks:
             raw_id = block.block_id
             if raw_id not in id_map:
                 raise RuntimeError(f"knowledge.update step nine validation failed: entity {entity_id} references unknown block_id")
+
             block_id = id_map[raw_id]
-            text = block.text
-            merged["blocks"].append(
+            entity_block_nodes.append(
                 {
                     "id": block_id,
                     "type_id": "node.block",
                     "user_id": payload.requested_by_user_id,
                     "visibility": "PRIVATE",
-                    "properties": [{"key": "text", "string_value": text}],
+                    "properties": [{"key": "text", "string_value": block.text}],
                 }
             )
-            parent_raw = block.parent_block_id
-            parent_id = id_map.get(parent_raw) if isinstance(parent_raw, str) else None
-            if parent_id:
-                merged["edges"].append(
+
+            parent_id = parent_by_block_id[raw_id]
+            if parent_id is not None:
+                entity_block_edges.append(
                     {
-                        "from_id": parent_id,
+                        "from_id": id_map[parent_id],
                         "to_id": block_id,
                         "edge_type": "SUMMARIZES",
                         "user_id": payload.requested_by_user_id,
@@ -1550,20 +1599,19 @@ def _build_step_nine_merge_graph_delta(
                         "properties": _default_edge_properties(1.0),
                     }
                 )
-            else:
-                has_root = True
-                merged["edges"].append(
-                    {
-                        "from_id": entity_id,
-                        "to_id": block_id,
-                        "edge_type": "DESCRIBED_BY",
-                        "user_id": payload.requested_by_user_id,
-                        "visibility": "PRIVATE",
-                        "properties": _default_edge_properties(1.0),
-                    }
-                )
-        if not has_root:
-            logger.warning("knowledge.update step nine entity has no root block", extra={"entity_id": entity_id})
+
+        entity_block_edges.append(
+            {
+                "from_id": entity_id,
+                "to_id": id_map[root_block_id],
+                "edge_type": "DESCRIBED_BY",
+                "user_id": payload.requested_by_user_id,
+                "visibility": "PRIVATE",
+                "properties": _default_edge_properties(1.0),
+            }
+        )
+        merged["blocks"].extend(entity_block_nodes)
+        merged["edges"].extend(entity_block_edges)
 
     for relationship in step_seven_relationships:
         from_id = relationship.from_entity_id
