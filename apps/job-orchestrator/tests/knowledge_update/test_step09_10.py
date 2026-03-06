@@ -28,6 +28,17 @@ def test_step09_merge_graph_delta_maps_blocks_edges_and_universes() -> None:
     assert len(merged["universes"]) == 1
     assert len(merged["entities"]) == 1
 
+    edges = merged["edges"]
+    assert len(edges) == 3
+    for edge in edges:
+        props = {prop["key"]: prop for prop in edge["properties"]}
+        assert "confidence" in props
+        assert props["status"]["string_value"] == "asserted"
+        assert props["provenance_hint"]["string_value"] == "placeholder"
+
+    relationship_edge = next(edge for edge in edges if edge["edge_type"] == "edge.related_to")
+    assert relationship_edge["properties"][0]["float_value"] == pytest.approx(0.8)
+
 
 class _FakeGrpcChannel:
     def __init__(self, context_by_type_id: dict[str, object]) -> None:
