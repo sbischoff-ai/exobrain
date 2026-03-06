@@ -9,6 +9,7 @@ Python service responsible for asynchronous job orchestration.
 - Persists job lifecycle state in `job_orchestrator_db`.
 - Executes worker job scripts idempotently, retries failures, and publishes completion/failure events.
 - Worker subprocess stdout/stderr is forwarded into job-orchestrator logs so `mprocs` shows per-job console output during local debugging.
+- Each worker run also writes a per-job log file under `logs/jobs/` (repo root) including captured stdout/stderr for post-run inspection.
 - The `knowledge.update` skeleton uses `grpcio`; ensure `libstdc++` is available in runtime/dev environments.
 - Uses an orchestration/runner abstraction so local process execution can later switch to pod orchestration.
 
@@ -173,7 +174,7 @@ Keep request subject patterns narrow enough that they do not also match events/D
 - If `knowledge.update` retries with timeout errors, verify `KNOWLEDGE_INTERFACE_GRPC_TARGET` points to a reachable knowledge-interface gRPC endpoint.
 - If `knowledge.update` fails with `unhandled errors in a TaskGroup`, inspect the forwarded worker `stderr` traceback in orchestrator logs; worker entrypoint now emits full Python tracebacks (not just the top-level message) to pinpoint which step failed.
 - If `knowledge.update` fails around entity extraction context loading, verify knowledge-interface is reachable and `GetEntityExtractionSchemaContext` can be called with the requesting user id.
-- If `knowledge.update` step 5 or 6 fails with OpenAI `400 Bad Request` due to schema validation, verify the agent `response_format` uses a plain JSON Schema object (no OpenAI `response_format` envelope) on the native `/internal/chat/messages` contract.
+- If `knowledge.update` fails with OpenAI `400 Bad Request` and `invalid_function_parameters`, verify tool/function schemas are plain JSON Schema objects (no nested OpenAI `json_schema` envelope inside `tools[].function.parameters`).
 - If `knowledge.update` step 7 fails around `GetEdgeExtractionSchemaContext`, ensure the generated worker protobuf is synced with `apps/knowledge-interface/proto/knowledge.proto` (request fields must be `first_entity_type`/`second_entity_type`; response field is `edge_types`).
 - Model-provider client requests intentionally omit `temperature`; alias-specific temperature behavior must be configured server-side in model-provider.
 - If producers fail with `UNAVAILABLE` on `EnqueueJob`, confirm the orchestrator API process is running and reachable at `JOB_ORCHESTRATOR_API_BIND_ADDRESS` / `JOB_ORCHESTRATOR_API_PORT`.
