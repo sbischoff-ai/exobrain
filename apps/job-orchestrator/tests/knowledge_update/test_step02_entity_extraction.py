@@ -50,11 +50,20 @@ async def test_run_step02_entity_extraction_uses_worker_agent(monkeypatch: pytes
     from app.settings import Settings
     import langchain.agents
 
+    captured: dict[str, object] = {}
+
     class FakeCompiledAgent:
         async def ainvoke(self, payload: dict[str, object]) -> dict[str, object]:
             return {"structured_response": {"extracted_entities": [{"name": "Alice", "node_type": "node.person", "aliases": [], "short_description": "A person"}], "extracted_universes": []}}
 
-    monkeypatch.setattr(langchain.agents, "create_agent", lambda **kwargs: FakeCompiledAgent())
+    def _create_agent(**kwargs):
+        captured.update(kwargs)
+        return FakeCompiledAgent()
+
+    monkeypatch.setattr(langchain.agents, "create_agent", _create_agent)
     payload = KnowledgeUpdatePayload(journal_reference="journal-1", requested_by_user_id="user-1", messages=[{"role": "user", "content": "hello", "created_at": "2026-03-02T12:00:00Z"}])
     result = await _run_step_two_entity_extraction(FakeEntityExtractionChannel(), payload, "--- TURN 1 ---", Settings(model_provider_base_url="http://provider", knowledge_update_extraction_model="worker"))
     assert result.extracted_entities[0].name == "Alice"
+    response_format = captured["response_format"]
+    assert response_format["type"] == "json_schema"
+    assert response_format["json_schema"]["strict"] is True

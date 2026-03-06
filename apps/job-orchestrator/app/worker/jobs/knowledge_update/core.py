@@ -449,7 +449,7 @@ async def _run_step_two_entity_extraction(
     settings: Settings,
 ) -> EntityExtractionResult:
     from langchain.agents import create_agent
-    from app.services.model_provider_chat_model import ModelProviderChatModel
+    from app.services.model_provider_chat_model import ModelProviderChatModel, build_strict_response_format
 
     get_entity_extraction_schema_context_rpc = channel.unary_unary(
         "/exobrain.knowledge.v1.KnowledgeInterface/GetEntityExtractionSchemaContext",
@@ -475,7 +475,7 @@ async def _run_step_two_entity_extraction(
         ),
         tools=[],
         system_prompt=_build_step_two_entity_extraction_system_prompt(context_dict),
-        response_format=_build_step_two_entity_extraction_json_schema(),
+        response_format=build_strict_response_format(_build_step_two_entity_extraction_json_schema()),
     )
     reply = await _call_with_retry(
         step_name="step two",
@@ -579,7 +579,7 @@ async def _run_step_four_create_entity_contexts(
     settings: Settings,
 ) -> list[str]:
     from langchain.agents import create_agent
-    from app.services.model_provider_chat_model import ModelProviderChatModel
+    from app.services.model_provider_chat_model import ModelProviderChatModel, build_strict_response_format
 
     system_prompt = "\n\n".join(
         [
@@ -604,7 +604,7 @@ async def _run_step_four_create_entity_contexts(
         ),
         tools=[],
         system_prompt=system_prompt,
-        response_format=_build_step_four_entity_context_schema(),
+        response_format=build_strict_response_format(_build_step_four_entity_context_schema()),
     )
 
     documents: list[str] = []
@@ -657,7 +657,7 @@ async def _run_step_five_detailed_comparison(
     settings: Settings,
 ) -> list[ResolvedEntity]:
     from langchain.agents import create_agent
-    from app.services.model_provider_chat_model import ModelProviderChatModel
+    from app.services.model_provider_chat_model import ModelProviderChatModel, build_strict_response_format
 
     get_entity_context_rpc = channel.unary_unary(
         "/exobrain.knowledge.v1.KnowledgeInterface/GetEntityContext",
@@ -677,7 +677,7 @@ async def _run_step_five_detailed_comparison(
             "Compare extracted entity context markdown against candidate entity contexts. "
             "Return strict JSON only with decision as MATCH({entity_id}) or NEW_ENTITY."
         ),
-        response_format=_build_step_five_comparison_schema(),
+        response_format=build_strict_response_format(_build_step_five_comparison_schema()),
     )
 
     resolved_entities: list[ResolvedEntity] = []
@@ -802,7 +802,7 @@ async def _run_step_six_relationship_extraction(
     settings: Settings,
 ) -> list[RelationshipPair]:
     from langchain.agents import create_agent
-    from app.services.model_provider_chat_model import ModelProviderChatModel
+    from app.services.model_provider_chat_model import ModelProviderChatModel, build_strict_response_format
 
     extracted_entities_with_ids = [
         {
@@ -830,7 +830,7 @@ async def _run_step_six_relationship_extraction(
             "Identify entity pairs that are related in the markdown batch document. "
             "Return strict JSON only with entity_pairs."
         ),
-        response_format=_build_step_six_relationship_extraction_schema(),
+        response_format=build_strict_response_format(_build_step_six_relationship_extraction_schema()),
     )
 
     prompt = json.dumps(
@@ -894,7 +894,7 @@ async def _run_step_seven_match_relationship_type_and_score(
     settings: Settings,
 ) -> list[MatchedRelationship]:
     from langchain.agents import create_agent
-    from app.services.model_provider_chat_model import ModelProviderChatModel
+    from app.services.model_provider_chat_model import ModelProviderChatModel, build_strict_response_format
 
     get_edge_extraction_schema_context_rpc = channel.unary_unary(
         "/exobrain.knowledge.v1.KnowledgeInterface/GetEdgeExtractionSchemaContext",
@@ -927,7 +927,7 @@ async def _run_step_seven_match_relationship_type_and_score(
             "relationship direction, edge type, and confidence between 0 and 1. "
             "Return strict JSON only."
         ),
-        response_format=_build_step_seven_relationship_match_schema(),
+        response_format=build_strict_response_format(_build_step_seven_relationship_match_schema()),
     )
 
     matched_relationships: list[MatchedRelationship] = []
@@ -1058,7 +1058,7 @@ async def _run_step_eight_build_final_entity_context_graphs(
     settings: Settings,
 ) -> list[FinalEntityContextGraph]:
     from langchain.agents import create_agent
-    from app.services.model_provider_chat_model import ModelProviderChatModel
+    from app.services.model_provider_chat_model import ModelProviderChatModel, build_strict_response_format
 
     get_entity_type_property_context_rpc = channel.unary_unary(
         "/exobrain.knowledge.v1.KnowledgeInterface/GetEntityTypePropertyContext",
@@ -1135,7 +1135,7 @@ async def _run_step_eight_build_final_entity_context_graphs(
             ),
             tools=[],
             system_prompt=system_prompt,
-            response_format=schema,
+            response_format=build_strict_response_format(schema),
         )
         prompt = json.dumps(
             {
@@ -1352,7 +1352,7 @@ async def _run_step_ten_finalize_graph_delta(
     requesting_user_id: str,
 ) -> dict[str, object]:
     from langchain.agents import create_agent
-    from app.services.model_provider_chat_model import ModelProviderChatModel
+    from app.services.model_provider_chat_model import ModelProviderChatModel, build_strict_response_format
 
     blocks = [
         {
@@ -1384,7 +1384,7 @@ async def _run_step_ten_finalize_graph_delta(
             "You are the knowledge.update graph finalizer worker. "
             "Identify which blocks mention which entities. Return strict JSON only."
         ),
-        response_format=_StepTenMentionsResult,
+        response_format=build_strict_response_format(_StepTenMentionsResult),
     )
     prompt = json.dumps({"blocks": blocks, "entities": entities}, ensure_ascii=False)
     reply = await _call_with_retry(
