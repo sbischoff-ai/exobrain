@@ -86,6 +86,7 @@ Then in a second terminal:
 ```sh
 grpcurl -plaintext -d '{}' 127.0.0.1:50051 exobrain.knowledge.v1.KnowledgeInterface/Health
 ./scripts/local/add-assistant-backend-memgraph-test-data.sh
+./scripts/local/add-assistant-backend-memgraph-test-data-actuary.sh
 ```
 
 If Memgraph is unavailable, `run-knowledge-interface-native.sh` fails fast with a targeted hint.
