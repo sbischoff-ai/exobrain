@@ -588,7 +588,6 @@ mod tests {
                     description: None,
                 },
             ],
-            page_size: 25,
             offset: 10,
             next_page_token: Some("next-25".to_string()),
         });

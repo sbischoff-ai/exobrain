@@ -25,10 +25,10 @@ mod ingestion;
 
 pub(crate) use extraction_schema::{
     build_entity_type_property_context, build_extraction_edge_types_from_input,
-    build_extraction_entity_types, build_extraction_entity_types_from_input,
-    EntityTypePropertyContext, EntityTypePropertyContextOptions, ExtractionAllowedEdge,
-    ExtractionEdgeType, ExtractionEntityType, ExtractionPropertyContext,
-    ExtractionSchemaBuildInput, ExtractionSchemaOptions, ExtractionUniverseContext,
+    build_extraction_entity_types_from_input, EntityTypePropertyContext,
+    EntityTypePropertyContextOptions, ExtractionEdgeType, ExtractionEntityType,
+    ExtractionPropertyContext, ExtractionSchemaBuildInput, ExtractionSchemaOptions,
+    ExtractionUniverseContext,
 };
 
 const EXOBRAIN_USER_ID: &str = "exobrain";
@@ -978,6 +978,43 @@ mod tests {
         ports::{Embedder, GraphRepository, SchemaRepository},
     };
 
+    fn build_extraction_entity_types_from_schema(
+        schema: FullSchema,
+        options: ExtractionSchemaOptions,
+    ) -> Vec<ExtractionEntityType> {
+        let FullSchema {
+            node_types: hydrated_node_types,
+            edge_types: hydrated_edge_types,
+        } = schema;
+
+        let node_types = hydrated_node_types
+            .iter()
+            .map(|node| node.schema_type.clone())
+            .collect();
+        let edge_types = hydrated_edge_types
+            .iter()
+            .map(|edge| edge.schema_type.clone())
+            .collect();
+        let inheritance = hydrated_node_types
+            .into_iter()
+            .flat_map(|node| node.parents)
+            .collect();
+        let edge_rules = hydrated_edge_types
+            .into_iter()
+            .flat_map(|edge| edge.rules)
+            .collect();
+
+        build_extraction_entity_types_from_input(
+            ExtractionSchemaBuildInput {
+                node_types,
+                edge_types,
+                inheritance,
+                edge_rules,
+            },
+            options,
+        )
+    }
+
     struct FakeSchemaRepo {
         types: Mutex<HashMap<String, SchemaType>>,
         parents: Mutex<HashMap<String, String>>,
@@ -1826,7 +1863,6 @@ mod tests {
             block_id.clone(),
             ExistingBlockContext {
                 root_entity_id: "550e8400-e29b-41d4-a716-4466554400aa".to_string(),
-                universe_id: COMMON_UNIVERSE_ID.to_string(),
                 block_level: 0,
             },
         );
@@ -2341,7 +2377,6 @@ mod tests {
                 existing_parent_block_id.to_string(),
                 ExistingBlockContext {
                     root_entity_id: "8c75cc89-6204-4fed-aec1-34d032ff95ee".to_string(),
-                    universe_id: COMMON_UNIVERSE_ID.to_string(),
                     block_level: 0,
                 },
             )]),
@@ -3424,7 +3459,6 @@ mod tests {
                 updated_at: Some("2025-01-01T00:00:00Z".to_string()),
                 description: Some("Example entity".to_string()),
             }],
-            page_size: 25,
             offset: 10,
             next_page_token: Some("next-token".to_string()),
         }
@@ -3505,7 +3539,6 @@ mod tests {
             .expect("query should succeed");
 
         assert_eq!(result.entities.len(), expected.entities.len());
-        assert_eq!(result.page_size, expected.page_size);
         assert_eq!(result.offset, expected.offset);
         assert_eq!(result.next_page_token, expected.next_page_token);
 
@@ -3639,7 +3672,7 @@ mod tests {
             edge_types: vec![],
         };
 
-        let entity_types = build_extraction_entity_types(
+        let entity_types = build_extraction_entity_types_from_schema(
             schema,
             ExtractionSchemaOptions {
                 include_inactive: false,
@@ -3700,7 +3733,7 @@ mod tests {
             edge_types: vec![],
         };
 
-        let entity_types = build_extraction_entity_types(
+        let entity_types = build_extraction_entity_types_from_schema(
             schema,
             ExtractionSchemaOptions {
                 include_inactive: false,
@@ -3779,7 +3812,7 @@ mod tests {
             }],
         };
 
-        let entity_types = build_extraction_entity_types(
+        let entity_types = build_extraction_entity_types_from_schema(
             schema,
             ExtractionSchemaOptions {
                 include_inactive: false,
@@ -3843,7 +3876,7 @@ mod tests {
             }],
         };
 
-        let entity_types = build_extraction_entity_types(
+        let entity_types = build_extraction_entity_types_from_schema(
             schema,
             ExtractionSchemaOptions {
                 include_inactive: false,
@@ -3920,7 +3953,7 @@ mod tests {
             }],
         };
 
-        let entity_types = build_extraction_entity_types(
+        let entity_types = build_extraction_entity_types_from_schema(
             schema,
             ExtractionSchemaOptions {
                 include_inactive: false,
