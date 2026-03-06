@@ -160,6 +160,69 @@ def test_step09_merge_graph_delta_valid_single_root_tree_emits_expected_edges() 
     assert len(summarizes_edges) == 2
 
 
+@pytest.mark.parametrize("root_parent", ["(none)", "null", "none", "nil", "  "])
+def test_step09_merge_graph_delta_normalizes_root_parent_sentinels(root_parent: str) -> None:
+    payload = KnowledgeUpdatePayload(
+        journal_reference="journal-1",
+        requested_by_user_id="user-1",
+        messages=[{"role": "user", "content": "hello", "created_at": "2026-03-02T12:00:00Z"}],
+    )
+
+    merged = _build_step_nine_merge_graph_delta(
+        payload=payload,
+        step_zero_graph_delta={"entities": [], "blocks": [], "edges": [], "universes": []},
+        step_two_extraction=EntityExtractionResult.model_validate({"extracted_entities": [], "extracted_universes": []}),
+        step_seven_relationships=[],
+        step_eight_final_entity_context_graphs=[
+            FinalEntityContextGraph.model_validate(
+                {
+                    "entity": {"entity_id": "e1", "node_type": "node.person", "name": "Alice"},
+                    "blocks": [
+                        {"block_id": "root-1", "parent_block_id": root_parent, "text": "root"},
+                        {"block_id": "child-1", "parent_block_id": "root-1", "text": "child-1"},
+                    ],
+                }
+            )
+        ],
+    )
+
+    described_by_edges = [edge for edge in merged["edges"] if edge["edge_type"] == "DESCRIBED_BY"]
+    assert len(described_by_edges) == 1
+
+
+def test_step09_merge_graph_delta_zero_root_failure_has_debug_sample() -> None:
+    payload = KnowledgeUpdatePayload(
+        journal_reference="journal-1",
+        requested_by_user_id="user-1",
+        messages=[{"role": "user", "content": "hello", "created_at": "2026-03-02T12:00:00Z"}],
+    )
+
+    with pytest.raises(RuntimeError) as exc_info:
+        _build_step_nine_merge_graph_delta(
+            payload=payload,
+            step_zero_graph_delta={"entities": [], "blocks": [], "edges": [], "universes": []},
+            step_two_extraction=EntityExtractionResult.model_validate({"extracted_entities": [], "extracted_universes": []}),
+            step_seven_relationships=[],
+            step_eight_final_entity_context_graphs=[
+                FinalEntityContextGraph.model_validate(
+                    {
+                        "entity": {"entity_id": "e1", "node_type": "node.person", "name": "Alice"},
+                        "blocks": [
+                            {"block_id": "root-1", "parent_block_id": "missing-parent", "text": "root-1"},
+                            {"block_id": "child-1", "parent_block_id": "root-1", "text": "child-1"},
+                        ],
+                    }
+                )
+            ],
+        )
+
+    message = str(exc_info.value)
+    assert "entity_id=e1" in message
+    assert "expected exactly one root block but found 0" in message
+    assert "parent_samples=[" in message
+    assert "raw_parent='missing-parent'" in message
+
+
 class _FakeGrpcChannel:
     def __init__(self, context_by_type_id: dict[str, object]) -> None:
         self._context_by_type_id = context_by_type_id

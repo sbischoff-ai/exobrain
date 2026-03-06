@@ -22,6 +22,7 @@ from app.settings import Settings, get_settings
 from app.worker.jobs.knowledge_update_types import (
     CandidateMatchResult,
     EntityExtractionResult,
+    FinalEntityContextBlock,
     FinalEntityContextGraph,
     MatchedRelationship,
     RelationshipPair,
@@ -1228,6 +1229,8 @@ async def _run_step_eight_build_final_entity_context_graphs(
             "For blocks: preserve existing block IDs from provided context exactly as-is; "
             "for newly created blocks, use a temporary placeholder ID you invent (for example NEW_BLOCK_1). "
             "Set parent_block_id to those same block IDs/placeholders when linking children. "
+            "Exactly one block must be the root and MUST omit parent_block_id (or set it to empty string). "
+            "Never use sentinel text values such as '(none)', 'none', 'null', or 'nil' for parent_block_id. "
             "Return strict JSON only with entity and blocks."
         )
 
@@ -1252,6 +1255,8 @@ async def _run_step_eight_build_final_entity_context_graphs(
                 "For blocks: preserve existing block IDs from provided context exactly as-is; "
                 "for newly created blocks, use a temporary placeholder ID you invent (for example NEW_BLOCK_1). "
                 "Set parent_block_id to those same block IDs/placeholders when linking children. "
+                "Exactly one block must be the root and MUST omit parent_block_id (or set it to empty string). "
+                "Never use sentinel text values such as '(none)', 'none', 'null', or 'nil' for parent_block_id. "
                 "Return strict JSON only with entity and blocks."
             )
 
@@ -1307,6 +1312,45 @@ def _to_property_value_dict(key: str, value: object) -> dict[str, object] | None
     if isinstance(value, (list, dict)):
         return {"key": key, "json_value": json.dumps(value, ensure_ascii=False)}
     return None
+
+
+_ROOT_PARENT_SENTINELS = frozenset({"none", "(none)", "null", "nil"})
+
+
+def _normalize_block_parent_id(parent_block_id: object) -> str | None:
+    if parent_block_id is None:
+        return None
+    if not isinstance(parent_block_id, str):
+        return None
+
+    normalized = parent_block_id.strip()
+    if not normalized:
+        return None
+
+    if normalized.casefold() in _ROOT_PARENT_SENTINELS:
+        return None
+
+    return normalized
+
+
+def _build_block_parent_debug_sample(
+    blocks: list[FinalEntityContextBlock],
+    normalized_parents: dict[str, str | None],
+    *,
+    limit: int = 5,
+) -> str:
+    sample: list[str] = []
+    for block in blocks[:limit]:
+        sample.append(
+            "(" + ", ".join(
+                [
+                    f"block_id={block.block_id}",
+                    f"raw_parent={block.parent_block_id!r}",
+                    f"normalized_parent={normalized_parents.get(block.block_id)!r}",
+                ]
+            ) + ")"
+        )
+    return "[" + ", ".join(sample) + "]"
 
 
 _PROPERTY_VALUE_FIELDS = (
@@ -1607,16 +1651,15 @@ def _build_step_nine_merge_graph_delta(
                 raise RuntimeError(
                     f"knowledge.update step nine validation failed: entity_id={entity_id} reason=duplicate block_id={raw_id}"
                 )
-
-            parent_raw = block.parent_block_id
-            normalized_parent = parent_raw.strip() if isinstance(parent_raw, str) else ""
-            parent_by_block_id[raw_id] = normalized_parent or None
+            parent_by_block_id[raw_id] = _normalize_block_parent_id(block.parent_block_id)
 
         roots = [block_id for block_id, parent_id in parent_by_block_id.items() if parent_id is None]
         if len(roots) != 1:
+            parent_debug_sample = _build_block_parent_debug_sample(blocks, parent_by_block_id)
             raise RuntimeError(
                 "knowledge.update step nine validation failed: "
-                f"entity_id={entity_id} reason=expected exactly one root block but found {len(roots)}"
+                f"entity_id={entity_id} reason=expected exactly one root block but found {len(roots)} "
+                f"total_blocks={len(blocks)} parent_samples={parent_debug_sample}"
             )
 
         for block_id, parent_id in parent_by_block_id.items():
