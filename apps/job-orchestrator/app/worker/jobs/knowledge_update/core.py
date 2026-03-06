@@ -257,6 +257,14 @@ def _message_entity_name(journal_reference: str, sequence_number: int) -> str:
     return f"{journal_reference} message {sequence_number}"
 
 
+def _default_edge_properties(confidence: float, provenance_hint: str = "placeholder") -> list[dict[str, object]]:
+    return [
+        {"key": "confidence", "float_value": float(confidence)},
+        {"key": "status", "string_value": "asserted"},
+        {"key": "provenance_hint", "string_value": provenance_hint},
+    ]
+
+
 def _require_created_at(created_at: str | None, sequence_number: int) -> str:
     if created_at:
         return created_at
@@ -330,6 +338,11 @@ async def _build_upsert_graph_delta_step_one(
                     edge_type="SENT_TO",
                     user_id=payload.requested_by_user_id,
                     visibility=knowledge_pb2.PRIVATE,
+                    properties=[
+                        knowledge_pb2.PropertyValue(key="confidence", float_value=1.0),
+                        knowledge_pb2.PropertyValue(key="status", string_value="asserted"),
+                        knowledge_pb2.PropertyValue(key="provenance_hint", string_value="placeholder"),
+                    ],
                 ),
                 knowledge_pb2.GraphEdge(
                     from_id=message_entity_id,
@@ -337,6 +350,11 @@ async def _build_upsert_graph_delta_step_one(
                     edge_type="SENT_BY",
                     user_id=payload.requested_by_user_id,
                     visibility=knowledge_pb2.PRIVATE,
+                    properties=[
+                        knowledge_pb2.PropertyValue(key="confidence", float_value=1.0),
+                        knowledge_pb2.PropertyValue(key="status", string_value="asserted"),
+                        knowledge_pb2.PropertyValue(key="provenance_hint", string_value="placeholder"),
+                    ],
                 ),
                 knowledge_pb2.GraphEdge(
                     from_id=message_entity_id,
@@ -344,6 +362,11 @@ async def _build_upsert_graph_delta_step_one(
                     edge_type="DESCRIBED_BY",
                     user_id=payload.requested_by_user_id,
                     visibility=knowledge_pb2.PRIVATE,
+                    properties=[
+                        knowledge_pb2.PropertyValue(key="confidence", float_value=1.0),
+                        knowledge_pb2.PropertyValue(key="status", string_value="asserted"),
+                        knowledge_pb2.PropertyValue(key="provenance_hint", string_value="placeholder"),
+                    ],
                 ),
             ]
         )
@@ -1524,6 +1547,7 @@ def _build_step_nine_merge_graph_delta(
                         "edge_type": "SUMMARIZES",
                         "user_id": payload.requested_by_user_id,
                         "visibility": "PRIVATE",
+                        "properties": _default_edge_properties(1.0),
                     }
                 )
             else:
@@ -1535,6 +1559,7 @@ def _build_step_nine_merge_graph_delta(
                         "edge_type": "DESCRIBED_BY",
                         "user_id": payload.requested_by_user_id,
                         "visibility": "PRIVATE",
+                        "properties": _default_edge_properties(1.0),
                     }
                 )
         if not has_root:
@@ -1552,10 +1577,7 @@ def _build_step_nine_merge_graph_delta(
                 "edge_type": edge_type,
                 "user_id": payload.requested_by_user_id,
                 "visibility": "PRIVATE",
-                "properties": [
-                    {"key": "confidence", "float_value": float(confidence)},
-                    {"key": "status", "string_value": "asserted"},
-                ],
+                "properties": _default_edge_properties(confidence),
             }
         )
 
@@ -1670,10 +1692,7 @@ async def _run_step_ten_finalize_graph_delta(
                 "edge_type": "MENTIONS",
                 "user_id": requesting_user_id,
                 "visibility": "PRIVATE",
-                "properties": [
-                    {"key": "confidence", "float_value": float(confidence)},
-                    {"key": "status", "string_value": "asserted"},
-                ],
+                "properties": _default_edge_properties(confidence),
             }
         )
 
