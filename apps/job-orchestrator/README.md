@@ -147,6 +147,7 @@ Apply local migrations:
 - `JOB_EVENTS_SUBJECT_PREFIX` (default: `jobs.events`)
 - `JOB_DLQ_SUBJECT` (default: `jobs.dlq`, dead-letter queue subject)
 - `JOB_MAX_ATTEMPTS` (default: `3`, max delivery attempts before DLQ)
+- `JOB_CONSUMER_ACK_WAIT_SECONDS` (default: `150.0`, JetStream job lease/ack-wait timeout; keep above per-request model-provider timeout)
 
 Keep request subject patterns narrow enough that they do not also match events/DLQ subjects.
 
@@ -160,7 +161,7 @@ Keep request subject patterns narrow enough that they do not also match events/D
 - `KNOWLEDGE_INTERFACE_CONNECT_TIMEOUT_SECONDS` (default: `5.0`)
 - `MODEL_PROVIDER_BASE_URL` (default: `http://localhost:8010/v1`, model-provider base API URL; clients append `/internal/chat/messages` for the native chat contract used by step-two entity extraction, step-four context extraction, and step-five detailed comparison)
 - `KNOWLEDGE_UPDATE_EXTRACTION_MODEL` (default: `worker`, model alias used for step-two entity extraction)
-- `KNOWLEDGE_UPDATE_MODEL_PROVIDER_TIMEOUT_SECONDS` (default: `100.0`, HTTP timeout for knowledge-update model-provider calls used by entity extraction)
+- `KNOWLEDGE_UPDATE_MODEL_PROVIDER_TIMEOUT_SECONDS` (default: `120.0`, HTTP timeout for knowledge-update model-provider calls used by entity extraction)
 - `APP_ENV` (default: `local`, influences default logging level)
 - `LOG_LEVEL` (optional override; defaults to `DEBUG` in local, `INFO` otherwise)
 - `RESHAPE_SCHEMA_QUERY` (optional)

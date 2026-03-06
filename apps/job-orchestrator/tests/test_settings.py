@@ -42,4 +42,9 @@ def test_settings_normalizes_model_provider_base_url() -> None:
 
 def test_settings_defaults_knowledge_update_model_provider_timeout() -> None:
     settings = Settings()
-    assert settings.knowledge_update_model_provider_timeout_seconds == 100.0
+    assert settings.knowledge_update_model_provider_timeout_seconds == 120.0
+
+
+def test_settings_defaults_consumer_ack_wait_seconds() -> None:
+    settings = Settings()
+    assert settings.job_consumer_ack_wait_seconds == 150.0
