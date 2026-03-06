@@ -87,7 +87,7 @@ OpenAI chat aliases should use `max_completion_tokens` defaults (not `max_tokens
 
 Config knobs (environment variables):
 
-- `MODEL_PROVIDER_TIMEOUT_SECONDS` (default `120.0`)
+- `MODEL_PROVIDER_TIMEOUT_SECONDS` (default `7200.0`, i.e. 120 minutes)
 - `MODEL_PROVIDER_OPENAI_MAX_RETRIES` (default `8`)
 - `MODEL_PROVIDER_OPENAI_MAX_CONCURRENT_REQUESTS` (default `2`)
 - `MODEL_PROVIDER_ANTHROPIC_MAX_RETRIES` (default `8`)
