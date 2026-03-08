@@ -103,6 +103,7 @@ class FakeKnowledgeService:
             raise self.page_detail_error
         return {
             "id": page_id,
+            "category_id": "node.note",
             "title": "Entity One",
             "summary": "Root",
             "metadata": {

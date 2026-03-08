@@ -16,13 +16,6 @@ interface EnqueueUpdateRequest {
   journal_reference?: string;
 }
 
-interface BackendKnowledgeCategoryNode {
-  category_id?: unknown;
-  display_name?: unknown;
-  page_count?: unknown;
-  sub_categories?: unknown;
-}
-
 interface BackendKnowledgeCategoryTreeResponse {
   categories?: unknown;
 }

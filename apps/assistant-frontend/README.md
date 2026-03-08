@@ -39,6 +39,12 @@ cd apps/assistant-frontend && npm test
 ./scripts/agent/run-assistant-frontend-e2e.sh
 ```
 
+Run static checks + tests together:
+
+```bash
+cd apps/assistant-frontend && ./scripts/verify.sh
+```
+
 ## Configuration
 
 - App endpoint: `http://localhost:5173`

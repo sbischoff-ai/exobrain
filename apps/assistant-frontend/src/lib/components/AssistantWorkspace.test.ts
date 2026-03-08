@@ -5,7 +5,10 @@ import AssistantWorkspace from './AssistantWorkspace.svelte';
 
 const baseProps = {
   user: { name: 'Test User', email: 'test.user@exobrain.local' },
-  journalEntries: [{ reference: '2026/02/19' }, { reference: '2026/01/01' }],
+  journalEntries: [
+    { id: 'journal-1', reference: '2026/02/19', message_count: 1 },
+    { id: 'journal-2', reference: '2026/01/01', message_count: 1 }
+  ],
   currentReference: '2026/02/19',
   todayReference: '2026/02/19',
   messages: [{ role: 'assistant', content: 'hello', clientMessageId: 'a-1' }],

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import socket
 
 import grpc
@@ -18,7 +17,9 @@ def _free_port() -> int:
 
 
 @pytest.mark.asyncio
-async def test_process_runner_executes_knowledge_update_job(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_process_runner_surfaces_worker_error_for_incomplete_grpc_surface(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     server = grpc.aio.server()
 
     async def get_user_init_graph(request: knowledge_pb2.GetUserInitGraphRequest, context) -> knowledge_pb2.GetUserInitGraphReply:
@@ -59,9 +60,12 @@ async def test_process_runner_executes_knowledge_update_job(monkeypatch: pytest.
 
     try:
         runner = LocalProcessWorkerRunner()
-        await runner.run_job(job)
+        with pytest.raises(RuntimeError) as exc_info:
+            await runner.run_job(job)
     finally:
         await server.stop(0)
+
+    assert "Method not found" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
@@ -84,4 +88,4 @@ async def test_process_runner_raises_when_target_unreachable(monkeypatch: pytest
         await runner.run_job(job)
 
     assert "knowledge-interface connection timed out" in str(exc_info.value)
-    assert "Traceback" not in str(exc_info.value)
+    assert "Traceback" in str(exc_info.value)

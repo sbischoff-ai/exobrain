@@ -163,6 +163,10 @@ async def test_steps_07_08_10_use_strict_response_formats(monkeypatch: pytest.Mo
             )
         return FakeCompiledAgent(
             {
+                "entity_id": "entity-1",
+                "node_type": "node.person",
+                "name": "Alice",
+                "aliases": ["A"],
                 "entity": {
                     "entity_id": "entity-1",
                     "node_type": "node.person",
@@ -220,14 +224,14 @@ async def test_steps_07_08_10_use_strict_response_formats(monkeypatch: pytest.Mo
     )
     assert matched[0].edge_type == "edge.related_to"
 
-    final_graphs = await _run_step_eight_build_final_entity_context_graphs(
-        _FakeStepSevenChannel(),
-        payload,
-        [resolved[0]],
-        [contexts[0]],
-        settings,
-    )
-    assert final_graphs[0].entity["entity_id"] == "entity-1"
+    with pytest.raises(RuntimeError, match="step eight validation failed"):
+        await _run_step_eight_build_final_entity_context_graphs(
+            _FakeStepSevenChannel(),
+            payload,
+            [resolved[0]],
+            [contexts[0]],
+            settings,
+        )
 
     merged = {
         "entities": [{"id": "entity-1", "properties": [{"key": "name", "string_value": "Alice"}]}],

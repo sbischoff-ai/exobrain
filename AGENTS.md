@@ -76,6 +76,10 @@ Use Conventional Commits.
 - Do not commit secrets
 - Keep diffs focused
 
+## Required quality gate before finishing a task
+
+When a task changes code in `/apps/**`, agents must run that app's check/test helper (`./scripts/verify.sh`) before finishing, and fix all reported issues. Suppressions/ignores should be used only in exceptional cases with explicit justification in the task summary.
+
 ## Scoped AGENTS files (domain guardrails)
 
 Use these for local rules and retrospective notes:

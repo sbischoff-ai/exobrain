@@ -16,7 +16,6 @@ from jsonschema.exceptions import SchemaError
 from app.contracts.native_chat import (
     AssistantMessage,
     CompletionFrame,
-    FunctionToolDefinition,
     NativeChatRequest,
     NativeChatResponse,
     StreamFrame,
@@ -24,7 +23,6 @@ from app.contracts.native_chat import (
     TextDeltaFrame,
     ToolCallBlock,
     ToolCallFrame,
-    ToolResultBlock,
     Usage,
     UsageFrame,
 )

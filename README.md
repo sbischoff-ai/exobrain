@@ -8,6 +8,7 @@ Exobrain is a cloud-native AI assistant platform with a GraphRAG-oriented knowle
 - **Assistant backend** (`apps/assistant-backend`): FastAPI service for auth, chat orchestration, and journal/message APIs.
 - **Knowledge interface** (`apps/knowledge-interface`): Rust tonic gRPC service for retrieval and knowledge updates.
 - **Job orchestrator** (`apps/job-orchestrator`): Python worker service for NATS-backed asynchronous jobs.
+- **Model provider** (`apps/model-provider`): OpenAI-compatible gateway for model alias routing.
 - **Infrastructure** (`infra/`): Docker images, Helm chart, and metastore migration/seed assets.
 - **Operational scripts** (`scripts/`): local app-native, k3d, and agent-native workflow helpers.
 
@@ -29,6 +30,7 @@ apps/
   assistant-backend/
   knowledge-interface/
   job-orchestrator/
+  model-provider/
 
 docs/
   README.md
@@ -52,8 +54,7 @@ scripts/
 ## Common validation commands
 
 ```bash
-cd apps/assistant-backend && uv run --with pytest --with pytest-asyncio pytest
-cd apps/assistant-frontend && npm test
+./scripts/local/run-app-checks.sh
 ```
 
 ## Documentation index
@@ -77,3 +78,4 @@ cd apps/assistant-frontend && npm test
 - Frontend: [`apps/assistant-frontend/README.md`](apps/assistant-frontend/README.md)
 - Knowledge interface: [`apps/knowledge-interface/README.md`](apps/knowledge-interface/README.md)
 - Job orchestrator: [`apps/job-orchestrator/README.md`](apps/job-orchestrator/README.md)
+- Model provider: [`apps/model-provider/README.md`](apps/model-provider/README.md)

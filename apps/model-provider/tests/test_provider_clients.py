@@ -7,7 +7,6 @@ import pytest
 from app.contracts.native_chat import (
     NativeChatRequest,
     StructuredOutputIntent,
-    TextBlock,
     ToolChoiceAny,
 )
 from app.providers.anthropic_client import AnthropicProviderClient
