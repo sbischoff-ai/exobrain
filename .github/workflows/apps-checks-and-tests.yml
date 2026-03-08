@@ -53,25 +53,67 @@ jobs:
               - '!apps/knowledge-interface/**/*.md'
               - '!apps/knowledge-interface/docs/**'
 
-  python-apps:
+  assistant-backend:
     needs: detect-changes
-    if: ${{ needs.detect-changes.outputs[matrix.change-key] == 'true' }}
+    if: ${{ needs.detect-changes.outputs.assistant-backend == 'true' }}
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - app: assistant-backend
-            change-key: assistant-backend
-          - app: model-provider
-            change-key: model-provider
-          - app: job-orchestrator
-            change-key: job-orchestrator
-          - app: mcp-server
-            change-key: mcp-server
     defaults:
       run:
-        working-directory: apps/${{ matrix.app }}
+        working-directory: apps/assistant-backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Sync dependencies
+        run: uv sync --extra dev
+      - name: Run checks and tests
+        run: ./scripts/verify.sh
+
+  model-provider:
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.model-provider == 'true' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/model-provider
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Sync dependencies
+        run: uv sync --extra dev
+      - name: Run checks and tests
+        run: ./scripts/verify.sh
+
+  job-orchestrator:
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.job-orchestrator == 'true' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/job-orchestrator
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Sync dependencies
+        run: uv sync --extra dev
+      - name: Run checks and tests
+        run: ./scripts/verify.sh
+
+  mcp-server:
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.mcp-server == 'true' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mcp-server
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
