@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 from app.adapters.tool_adapters import ToolAdapterRegistry
+from app.adapters.web_tools import WebToolError
 from app.contracts import (
     AddToolInvocation,
-    AddToolResult,
+    AddToolSuccess,
     EchoToolInvocation,
-    EchoToolResult,
+    EchoToolSuccess,
     ListToolsResponse,
+    ToolError,
+    ToolErrorEnvelope,
     ToolResult,
+    WebSearchToolInvocation,
+    WebSearchToolSuccess,
 )
 
 
@@ -18,8 +23,30 @@ class ToolService:
     def list_tools(self) -> ListToolsResponse:
         return ListToolsResponse(tools=self._registry.list_tools())
 
-    def invoke_tool(self, invocation: EchoToolInvocation | AddToolInvocation) -> ToolResult:
+    def invoke_tool(self, invocation: EchoToolInvocation | AddToolInvocation | WebSearchToolInvocation) -> ToolResult:
         if invocation.name == "echo":
-            return EchoToolResult(name="echo", result=self._registry.invoke_echo(invocation.arguments))
+            return EchoToolSuccess(
+                name="echo",
+                result=self._registry.invoke_echo(invocation.arguments),
+                metadata=invocation.metadata,
+            )
 
-        return AddToolResult(name="add", result=self._registry.invoke_add(invocation.arguments))
+        if invocation.name == "add":
+            return AddToolSuccess(
+                name="add",
+                result=self._registry.invoke_add(invocation.arguments),
+                metadata=invocation.metadata,
+            )
+
+        try:
+            return WebSearchToolSuccess(
+                name="web_search",
+                result=self._registry.invoke_web_search(invocation.arguments),
+                metadata=invocation.metadata,
+            )
+        except WebToolError as exc:
+            return ToolErrorEnvelope(
+                name="web_search",
+                error=ToolError(code="WEB_SEARCH_FAILED", message=str(exc)),
+                metadata=invocation.metadata,
+            )
