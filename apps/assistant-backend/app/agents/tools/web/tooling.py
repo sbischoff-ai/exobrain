@@ -2,12 +2,15 @@ from __future__ import annotations
 
 from langchain_core.tools import StructuredTool
 
+from app.adapters.tools.web import web_tool_metadata
 from app.agents.tools.web.constants import _DEFAULT_FETCH_CHARS, _DEFAULT_MAX_RESULTS
 from app.agents.tools.web.provider import WebTools
 
 
 def build_web_tools(*, web_tools: WebTools) -> list[StructuredTool]:
     """Build wrapped web tools with stable contracts."""
+
+    search_metadata, fetch_metadata = web_tool_metadata()
 
     def _web_search_tool(
         query: str,
@@ -30,18 +33,12 @@ def build_web_tools(*, web_tools: WebTools) -> list[StructuredTool]:
     return [
         StructuredTool.from_function(
             func=_web_search_tool,
-            name="web_search",
-            description=(
-                "Search the web for candidate sources. Use for citations, current events, or "
-                "specialized facts. Returns title, normalized url, snippet, score, and published_at."
-            ),
+            name=search_metadata.name,
+            description=search_metadata.description,
         ),
         StructuredTool.from_function(
             func=_web_fetch_tool,
-            name="web_fetch",
-            description=(
-                "Fetch readable plaintext from a single URL. Use after web_search or on a URL the user "
-                "explicitly provided. Returns url, title, content_text, extracted_at, and content_truncated."
-            ),
+            name=fetch_metadata.name,
+            description=fetch_metadata.description,
         ),
     ]

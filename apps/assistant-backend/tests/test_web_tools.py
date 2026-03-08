@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.adapters.tools.web import web_tool_metadata
 from app.agents.tools.web import TavilyWebTools, WebSearchStreamMapper, build_web_tools, parse_extract_result, parse_search_results
 
 
@@ -124,3 +125,26 @@ def test_web_search_stream_mapper_counts_json_string_results() -> None:
 
     assert event["data"]["tool_call_id"] == "tc-2"
     assert event["data"]["message"] == "Found 2 candidate sources"
+
+
+def test_web_tool_metadata_contract_is_stable() -> None:
+    search_metadata, fetch_metadata = web_tool_metadata()
+
+    assert search_metadata.name == "web_search"
+    assert search_metadata.json_schema["required"] == ["query"]
+    assert fetch_metadata.name == "web_fetch"
+    assert fetch_metadata.json_schema["required"] == ["url"]
+
+
+def test_tavily_web_tools_search_parity_with_previous_shape() -> None:
+    tools = _StubWebTools()
+
+    assert tools.web_search(query="test") == [
+        {
+            "title": "Mock",
+            "url": "https://example.com/path",
+            "snippet": "hello",
+            "score": None,
+            "published_at": None,
+        }
+    ]

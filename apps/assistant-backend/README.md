@@ -15,6 +15,9 @@ The backend follows layered boundaries:
 - Agent layer (`app/agents`) for model + tool integrations.
 - DI container (`app/dependency_injection`) resolves app services from `app.state.container`.
 
+- Tool contracts are centralized in `app/contracts/tools.py` (metadata, invocation envelope, typed result/error envelope).
+- Web tool provider adapters live in `app/adapters/tools/web.py`; agent-layer wiring (`app/agents/tools/web`) consumes these adapters to keep provider clients isolated.
+
 Cross-service standards are documented in [`../../docs/standards/engineering-standards.md`](../../docs/standards/engineering-standards.md).
 
 ## Quick start
