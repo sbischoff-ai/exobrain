@@ -9,6 +9,7 @@ Exobrain is a cloud-native AI assistant platform with a GraphRAG-oriented knowle
 - **Knowledge interface** (`apps/knowledge-interface`): Rust tonic gRPC service for retrieval and knowledge updates.
 - **Job orchestrator** (`apps/job-orchestrator`): Python worker service for NATS-backed asynchronous jobs.
 - **Model provider** (`apps/model-provider`): OpenAI-compatible gateway for model alias routing.
+- **MCP server** (`apps/mcp-server`): Python MCP runtime exposing tool discovery and invocation endpoints.
 - **Infrastructure** (`infra/`): Docker images, Helm chart, and metastore migration/seed assets.
 - **Operational scripts** (`scripts/`): local app-native, k3d, and agent-native workflow helpers.
 
@@ -31,6 +32,7 @@ apps/
   knowledge-interface/
   job-orchestrator/
   model-provider/
+  mcp-server/
 
 docs/
   README.md
@@ -79,3 +81,4 @@ scripts/
 - Knowledge interface: [`apps/knowledge-interface/README.md`](apps/knowledge-interface/README.md)
 - Job orchestrator: [`apps/job-orchestrator/README.md`](apps/job-orchestrator/README.md)
 - Model provider: [`apps/model-provider/README.md`](apps/model-provider/README.md)
+- MCP server: [`apps/mcp-server/README.md`](apps/mcp-server/README.md)

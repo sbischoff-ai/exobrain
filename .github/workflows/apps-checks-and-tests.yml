@@ -4,26 +4,71 @@ on:
   pull_request:
     paths:
       - 'apps/**'
-      - 'scripts/local/run-app-checks.sh'
       - '.github/workflows/apps-checks-and-tests.yml'
   push:
     branches:
       - main
     paths:
       - 'apps/**'
-      - 'scripts/local/run-app-checks.sh'
       - '.github/workflows/apps-checks-and-tests.yml'
 
 jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      assistant-backend: ${{ steps.filter.outputs.assistant-backend }}
+      model-provider: ${{ steps.filter.outputs.model-provider }}
+      job-orchestrator: ${{ steps.filter.outputs.job-orchestrator }}
+      mcp-server: ${{ steps.filter.outputs.mcp-server }}
+      assistant-frontend: ${{ steps.filter.outputs.assistant-frontend }}
+      knowledge-interface: ${{ steps.filter.outputs.knowledge-interface }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            assistant-backend:
+              - 'apps/assistant-backend/**'
+              - '!apps/assistant-backend/**/*.md'
+              - '!apps/assistant-backend/docs/**'
+            model-provider:
+              - 'apps/model-provider/**'
+              - '!apps/model-provider/**/*.md'
+              - '!apps/model-provider/docs/**'
+            job-orchestrator:
+              - 'apps/job-orchestrator/**'
+              - '!apps/job-orchestrator/**/*.md'
+              - '!apps/job-orchestrator/docs/**'
+            mcp-server:
+              - 'apps/mcp-server/**'
+              - '!apps/mcp-server/**/*.md'
+              - '!apps/mcp-server/docs/**'
+            assistant-frontend:
+              - 'apps/assistant-frontend/**'
+              - '!apps/assistant-frontend/**/*.md'
+              - '!apps/assistant-frontend/docs/**'
+            knowledge-interface:
+              - 'apps/knowledge-interface/**'
+              - '!apps/knowledge-interface/**/*.md'
+              - '!apps/knowledge-interface/docs/**'
+
   python-apps:
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs[matrix.change-key] == 'true' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        app:
-          - assistant-backend
-          - model-provider
-          - job-orchestrator
+        include:
+          - app: assistant-backend
+            change-key: assistant-backend
+          - app: model-provider
+            change-key: model-provider
+          - app: job-orchestrator
+            change-key: job-orchestrator
+          - app: mcp-server
+            change-key: mcp-server
     defaults:
       run:
         working-directory: apps/${{ matrix.app }}
@@ -39,6 +84,8 @@ jobs:
         run: ./scripts/verify.sh
 
   assistant-frontend:
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.assistant-frontend == 'true' }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -56,6 +103,8 @@ jobs:
         run: ./scripts/verify.sh
 
   knowledge-interface:
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.knowledge-interface == 'true' }}
     runs-on: ubuntu-latest
     defaults:
       run:
