@@ -140,6 +140,12 @@ Apply local migrations:
 ./scripts/local/job-orchestrator-db-migrate.sh
 ```
 
+Run static checks + tests together:
+
+```bash
+cd apps/job-orchestrator && ./scripts/verify.sh
+```
+
 ## Configuration
 
 - `JOB_ORCHESTRATOR_DB_DSN` (default: `postgresql://job_orchestrator:job_orchestrator@localhost:15432/job_orchestrator_db`)

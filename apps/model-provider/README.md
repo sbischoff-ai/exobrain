@@ -75,6 +75,14 @@ Invalid `response_format` payloads (for example malformed schema objects) return
 ./scripts/local/run-model-provider.sh
 ```
 
+## Quality checks
+
+Run static checks + tests together:
+
+```bash
+cd apps/model-provider && ./scripts/verify.sh
+```
+
 Set env vars from `.env.example`.
 
 

@@ -53,6 +53,12 @@ ASSISTANT_BACKEND_INTEGRATION_ENV_FILE=tests/integration/.env.integration \
   uv run --with pytest --with pytest-asyncio --with httpx pytest -m integration
 ```
 
+Run static checks + tests together:
+
+```bash
+cd apps/assistant-backend && ./scripts/verify.sh
+```
+
 ## Seed Memgraph test data for assistant-backend
 
 Use the canned knowledge-interface gRPC payloads to initialize graph state for the seeded assistant-backend test user (`test.user@exobrain.local`) and upsert a realistic task + block tree for GraphRAG testing.

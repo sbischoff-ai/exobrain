@@ -51,6 +51,7 @@ def test_page_detail_response_maps_aliases_and_context_markdown() -> None:
     response = KnowledgePageDetailResponse.model_validate(
         {
             "id": "page-42",
+            "category_id": "node.note",
             "title": "Meaning",
             "summary": "All about meaning",
             "metadata": {
@@ -63,6 +64,7 @@ def test_page_detail_response_maps_aliases_and_context_markdown() -> None:
     )
 
     assert response.id == "page-42"
+    assert response.category_id == "node.note"
     assert response.title == "Meaning"
     assert response.summary == "All about meaning"
     assert response.metadata.created_at == "2026-01-01T00:00:00Z"

@@ -1,0 +1,73 @@
+name: Apps checks and tests
+
+on:
+  pull_request:
+    paths:
+      - 'apps/**'
+      - 'scripts/local/run-app-checks.sh'
+      - '.github/workflows/apps-checks-and-tests.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'apps/**'
+      - 'scripts/local/run-app-checks.sh'
+      - '.github/workflows/apps-checks-and-tests.yml'
+
+jobs:
+  python-apps:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app:
+          - assistant-backend
+          - model-provider
+          - job-orchestrator
+    defaults:
+      run:
+        working-directory: apps/${{ matrix.app }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Sync dependencies
+        run: uv sync --extra dev
+      - name: Run checks and tests
+        run: ./scripts/verify.sh
+
+  assistant-frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/assistant-frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: apps/assistant-frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Run checks and tests
+        run: ./scripts/verify.sh
+
+  knowledge-interface:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/knowledge-interface
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/knowledge-interface
+      - name: Run checks and tests
+        run: ./scripts/verify.sh

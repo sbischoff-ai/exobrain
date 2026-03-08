@@ -43,6 +43,12 @@ Inspect gRPC APIs locally:
 grpcui -plaintext localhost:50051
 ```
 
+Run static checks + tests together:
+
+```bash
+cd apps/knowledge-interface && ./scripts/verify.sh
+```
+
 ## Service module layout
 
 `src/service/mod.rs` is the public application facade (`KnowledgeApplication`) and delegates feature logic to focused modules under `src/service/`:
