@@ -8,6 +8,7 @@ Python service providing a minimal MCP runtime with strict tool contracts.
 - Exposes MCP-style tool discovery and invocation endpoints.
 - Enforces strict Pydantic request/response schemas for tool inputs/outputs.
 - Keeps architecture layered: HTTP transport -> service -> adapters.
+- Hosts migrated web-search adapter logic with provider clients hidden behind interfaces.
 
 ## Endpoints and contracts
 
@@ -15,15 +16,19 @@ Python service providing a minimal MCP runtime with strict tool contracts.
   - Readiness check endpoint.
   - Response: `{ "status": "ok" }`
 - `GET /mcp/tools`
-  - Lists available tools and their input/output JSON schemas.
+  - Lists available tools and their input JSON schemas.
 - `POST /mcp/tools/invoke`
-  - Invokes a single tool.
-  - Request contract is strict and discriminated by `name`:
+  - Invokes a single tool with a typed invocation envelope:
+    - `name`: tool identifier
+    - `arguments`: tool-specific payload
+    - `metadata` (optional): correlation/request IDs
+  - Supported tools:
     - `echo`: `{ "name": "echo", "arguments": { "text": "..." } }`
     - `add`: `{ "name": "add", "arguments": { "a": 1, "b": 2 } }`
-  - Response contract mirrors tool name with typed output:
-    - `echo`: `{ "name": "echo", "result": { "text": "..." } }`
-    - `add`: `{ "name": "add", "result": { "sum": 3 } }`
+    - `web_search`: `{ "name": "web_search", "arguments": { "query": "..." } }`
+  - Typed result envelope:
+    - success: `{ "ok": true, "name": "...", "result": {...}, "metadata": {...} }`
+    - error: `{ "ok": false, "name": "...", "error": {"code": "...", "message": "..."}, "metadata": {...} }`
 
 ## Local run
 
