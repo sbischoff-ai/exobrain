@@ -287,6 +287,19 @@ class KnowledgeInterfaceClientProtocol(Protocol):
         """Fetch context graph details for one entity id."""
 
 
+class MCPClientProtocol(Protocol):
+    """MCP tool client contract for assistant agent tool discovery/invocation."""
+
+    async def close(self) -> None:
+        """Release open transport resources during shutdown."""
+
+    async def list_tools(self) -> list[dict[str, Any]]:
+        """List MCP-exposed tools with names/descriptions/input schemas."""
+
+    async def invoke_tool(self, *, tool_name: str, arguments: dict[str, Any] | None = None) -> Any:
+        """Invoke one MCP tool by name and return structured result payload."""
+
+
 class KnowledgeServiceProtocol(Protocol):
     """Service contract for knowledge-graph related asynchronous workflows."""
 

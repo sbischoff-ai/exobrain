@@ -18,6 +18,7 @@ from app.services.contracts import (
     JobPublisherProtocol,
     KnowledgeInterfaceClientProtocol,
     KnowledgeServiceProtocol,
+    MCPClientProtocol,
     SessionStoreProtocol,
     UserServiceProtocol,
 )
@@ -27,6 +28,7 @@ from app.services.journal_service import JournalService
 from app.services.job_orchestrator_client import JobOrchestratorClient
 from app.services.knowledge_interface_client import KnowledgeInterfaceClient
 from app.services.knowledge_service import KnowledgeService
+from app.services.mcp_client import MCPClient
 from app.services.session_store import RedisSessionStore
 from app.services.user_service import UserService
 
@@ -73,6 +75,15 @@ def build_container(settings: Settings) -> punq.Container:
         factory=lambda: KnowledgeInterfaceClient(
             grpc_target=settings.knowledge_interface_grpc_target,
             connect_timeout_seconds=settings.knowledge_interface_connect_timeout_seconds,
+        ),
+        scope=punq.Scope.singleton,
+    )
+    container.register(
+        MCPClientProtocol,
+        factory=lambda: MCPClient(
+            base_url=settings.mcp_server_url,
+            request_timeout_seconds=settings.mcp_request_timeout_seconds,
+            max_retries=settings.mcp_max_retries,
         ),
         scope=punq.Scope.singleton,
     )

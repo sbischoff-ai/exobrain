@@ -14,6 +14,7 @@ from app.services.contracts import (
     JobPublisherProtocol,
     JournalCacheProtocol,
     KnowledgeInterfaceClientProtocol,
+    MCPClientProtocol,
     SessionStoreProtocol,
 )
 
@@ -41,8 +42,9 @@ async def lifespan(app: FastAPI):
 
     job_publisher = container.resolve(JobPublisherProtocol)
     knowledge_interface_client = container.resolve(KnowledgeInterfaceClientProtocol)
+    mcp_client = container.resolve(MCPClientProtocol)
 
-    main_agent = await build_main_agent(settings)
+    main_agent = await build_main_agent(settings, mcp_client=mcp_client)
     register_chat_agent(container, main_agent)
 
     app.state.container = container
@@ -54,6 +56,7 @@ async def lifespan(app: FastAPI):
             await main_agent.aclose()
         await job_publisher.close()
         await knowledge_interface_client.close()
+        await mcp_client.close()
         await journal_cache.close()
         await session_store.close()
         await database_service.disconnect()

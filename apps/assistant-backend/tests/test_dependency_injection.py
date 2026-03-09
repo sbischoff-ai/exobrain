@@ -4,6 +4,7 @@ from app.core.settings import Settings
 from app.dependency_injection import build_container
 from app.services.job_orchestrator_client import JobOrchestratorClient
 from app.services.knowledge_interface_client import KnowledgeInterfaceClient
+from app.services.mcp_client import MCPClient
 from app.services.contracts import (
     AuthServiceProtocol,
     ConversationServiceProtocol,
@@ -13,6 +14,7 @@ from app.services.contracts import (
     JobPublisherProtocol,
     KnowledgeInterfaceClientProtocol,
     KnowledgeServiceProtocol,
+    MCPClientProtocol,
     SessionStoreProtocol,
     UserServiceProtocol,
 )
@@ -31,6 +33,7 @@ def test_container_resolves_singleton_services() -> None:
     assert container.resolve(JobPublisherProtocol) is container.resolve(JobPublisherProtocol)
     assert container.resolve(KnowledgeInterfaceClientProtocol) is container.resolve(KnowledgeInterfaceClientProtocol)
     assert container.resolve(KnowledgeServiceProtocol) is container.resolve(KnowledgeServiceProtocol)
+    assert container.resolve(MCPClientProtocol) is container.resolve(MCPClientProtocol)
 
 
 def test_container_wires_job_publisher_to_job_orchestrator_client() -> None:
@@ -43,3 +46,9 @@ def test_container_wires_knowledge_interface_client() -> None:
     container = build_container(Settings())
 
     assert isinstance(container.resolve(KnowledgeInterfaceClientProtocol), KnowledgeInterfaceClient)
+
+
+def test_container_wires_mcp_client() -> None:
+    container = build_container(Settings())
+
+    assert isinstance(container.resolve(MCPClientProtocol), MCPClient)
