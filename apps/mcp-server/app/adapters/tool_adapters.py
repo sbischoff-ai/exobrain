@@ -1,20 +1,23 @@
 from __future__ import annotations
 
-from app.adapters.web_tools import WebSearchAdapter
+from app.adapters.web_tools import WebFetchAdapter, WebSearchAdapter
 from app.contracts import (
     AddToolInput,
     AddToolOutput,
     EchoToolInput,
     EchoToolOutput,
     ToolMetadata,
+    WebFetchToolInput,
+    WebFetchToolOutput,
     WebSearchToolInput,
     WebSearchToolOutput,
 )
 
 
 class ToolAdapterRegistry:
-    def __init__(self, web_search_adapter: WebSearchAdapter):
+    def __init__(self, web_search_adapter: WebSearchAdapter, web_fetch_adapter: WebFetchAdapter):
         self._web_search_adapter = web_search_adapter
+        self._web_fetch_adapter = web_fetch_adapter
 
     def list_tools(self) -> list[ToolMetadata]:
         return [
@@ -35,6 +38,13 @@ class ToolAdapterRegistry:
                 ),
                 input_schema=WebSearchToolInput.model_json_schema(),
             ),
+            ToolMetadata(
+                name="web_fetch",
+                description=(
+                    "Fetch readable plaintext from a URL and return normalized content metadata."
+                ),
+                input_schema=WebFetchToolInput.model_json_schema(),
+            ),
         ]
 
     def invoke_echo(self, args: EchoToolInput) -> EchoToolOutput:
@@ -51,5 +61,14 @@ class ToolAdapterRegistry:
                 recency_days=args.recency_days,
                 include_domains=args.include_domains,
                 exclude_domains=args.exclude_domains,
+            )
+        )
+
+
+    def invoke_web_fetch(self, args: WebFetchToolInput) -> WebFetchToolOutput:
+        return WebFetchToolOutput.model_validate(
+            self._web_fetch_adapter.web_fetch(
+                url=args.url,
+                max_chars=args.max_chars,
             )
         )

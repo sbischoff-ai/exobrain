@@ -24,6 +24,12 @@ class WebSearchClient(Protocol):
         exclude_domains: list[str] | None,
     ) -> Any: ...
 
+    def extract(
+        self,
+        *,
+        url: str,
+    ) -> Any: ...
+
 
 class WebSearchAdapter:
     def __init__(self, client: WebSearchClient):
@@ -50,6 +56,24 @@ class WebSearchAdapter:
             raise WebToolError(f"web_search failed: {exc}") from exc
 
         return _parse_search_results(raw)
+
+
+class WebFetchAdapter:
+    def __init__(self, client: WebSearchClient):
+        self._client = client
+
+    def web_fetch(
+        self,
+        *,
+        url: str,
+        max_chars: int,
+    ) -> dict[str, Any]:
+        try:
+            raw = self._client.extract(url=url)
+        except Exception as exc:  # pragma: no cover
+            raise WebToolError(f"web_fetch failed: {exc}") from exc
+
+        return _parse_extract_result(raw, source_url=url, max_chars=max_chars)
 
 
 def _normalize_url(url: str) -> str:
@@ -90,6 +114,26 @@ def _parse_search_results(raw: Any) -> list[WebSearchResultItem]:
     return normalized_results
 
 
+def _parse_extract_result(raw: Any, *, source_url: str, max_chars: int) -> dict[str, Any]:
+    candidates = raw.get("results", []) if isinstance(raw, dict) else raw if isinstance(raw, list) else []
+
+    result = candidates[0] if candidates and isinstance(candidates[0], dict) else {}
+    source = result if isinstance(result, dict) else {}
+
+    url = source.get("url") if isinstance(source.get("url"), str) and source.get("url").strip() else source_url
+    content = _bound_text(source.get("raw_content") or source.get("content") or source.get("snippet"), max_chars=max_chars)
+    title = source.get("title") if isinstance(source.get("title"), str) else None
+    published = source.get("published_date") or source.get("published_at")
+
+    return {
+        "url": _normalize_url(url),
+        "title": _bound_text(title, max_chars=180) if title else None,
+        "content_text": content,
+        "extracted_at": published if isinstance(published, str) else None,
+        "content_truncated": len(content) >= max_chars and bool(content),
+    }
+
+
 class StaticWebSearchClient:
     """Default local client to keep the service deterministic in tests/dev."""
 
@@ -113,3 +157,14 @@ class StaticWebSearchClient:
                 "published_at": now_iso,
             }
         ][:max_results]
+
+    def extract(self, *, url: str) -> list[dict[str, Any]]:
+        now_iso = datetime.now(tz=UTC).isoformat()
+        return [
+            {
+                "url": url,
+                "title": "Example fetched page",
+                "raw_content": f"Readable content for {url}",
+                "published_at": now_iso,
+            }
+        ]

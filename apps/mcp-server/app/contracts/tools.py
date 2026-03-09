@@ -59,6 +59,19 @@ class WebSearchToolOutput(StrictModel):
     results: list[WebSearchResultItem]
 
 
+class WebFetchToolInput(StrictModel):
+    url: str = Field(min_length=1)
+    max_chars: int = Field(default=4000, ge=100, le=20000)
+
+
+class WebFetchToolOutput(StrictModel):
+    url: str
+    title: str | None = None
+    content_text: str
+    extracted_at: str | None = None
+    content_truncated: bool
+
+
 class EchoToolInvocation(StrictModel):
     name: Literal["echo"]
     arguments: EchoToolInput
@@ -77,8 +90,14 @@ class WebSearchToolInvocation(StrictModel):
     metadata: CorrelationMetadata | None = None
 
 
+class WebFetchToolInvocation(StrictModel):
+    name: Literal["web_fetch"]
+    arguments: WebFetchToolInput
+    metadata: CorrelationMetadata | None = None
+
+
 ToolInvocation = Annotated[
-    EchoToolInvocation | AddToolInvocation | WebSearchToolInvocation,
+    EchoToolInvocation | AddToolInvocation | WebSearchToolInvocation | WebFetchToolInvocation,
     Field(discriminator="name"),
 ]
 
@@ -109,6 +128,13 @@ class WebSearchToolSuccess(StrictModel):
     metadata: CorrelationMetadata | None = None
 
 
+class WebFetchToolSuccess(StrictModel):
+    ok: Literal[True] = True
+    name: Literal["web_fetch"]
+    result: WebFetchToolOutput
+    metadata: CorrelationMetadata | None = None
+
+
 class ToolErrorEnvelope(StrictModel):
     ok: Literal[False] = False
     name: str
@@ -116,4 +142,4 @@ class ToolErrorEnvelope(StrictModel):
     metadata: CorrelationMetadata | None = None
 
 
-ToolResult = EchoToolSuccess | AddToolSuccess | WebSearchToolSuccess | ToolErrorEnvelope
+ToolResult = EchoToolSuccess | AddToolSuccess | WebSearchToolSuccess | WebFetchToolSuccess | ToolErrorEnvelope
