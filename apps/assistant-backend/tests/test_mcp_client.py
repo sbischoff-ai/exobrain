@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import importlib
+import sys
 import urllib.error
+from pathlib import Path
 from typing import Any
 
 import pytest
+from fastapi.testclient import TestClient
 
 from app.services.mcp_client import MCPClient, MCPClientUnavailableError
 
@@ -12,17 +16,18 @@ from app.services.mcp_client import MCPClient, MCPClientUnavailableError
 async def test_mcp_client_invokes_tool_successfully(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, Any] = {}
 
-    def _fake_post_json(self: MCPClient, payload: dict[str, Any]) -> dict[str, Any]:
-        captured.update(payload)
-        return {"jsonrpc": "2.0", "id": payload["id"], "result": {"content": "ok"}}
+    def _fake_request_json(self: MCPClient, path: str, method: str, payload: dict[str, Any] | None) -> dict[str, Any]:
+        captured.update({"path": path, "method": method, "payload": payload})
+        return {"ok": True, "name": "web_search", "result": {"content": "ok"}, "metadata": None}
 
-    monkeypatch.setattr(MCPClient, "_post_json", _fake_post_json)
+    monkeypatch.setattr(MCPClient, "_request_json", _fake_request_json)
 
-    client = MCPClient(base_url="http://localhost:8001/mcp", request_timeout_seconds=0.1)
+    client = MCPClient(base_url="http://localhost:8001", request_timeout_seconds=0.1)
     result = await client.invoke_tool(tool_name="web_search", arguments={"query": "hello"})
 
-    assert captured["method"] == "tools/call"
-    assert captured["params"] == {"name": "web_search", "arguments": {"query": "hello"}}
+    assert captured["path"] == "/mcp/tools/invoke"
+    assert captured["method"] == "POST"
+    assert captured["payload"] == {"name": "web_search", "arguments": {"query": "hello"}}
     assert result == {"content": "ok"}
 
 
@@ -30,14 +35,19 @@ async def test_mcp_client_invokes_tool_successfully(monkeypatch: pytest.MonkeyPa
 async def test_mcp_client_retries_timeout_and_raises_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
     attempts = 0
 
-    def _timeout_post_json(self: MCPClient, payload: dict[str, Any]) -> dict[str, Any]:  # noqa: ARG001
+    def _timeout_request_json(
+        self: MCPClient,
+        path: str,
+        method: str,
+        payload: dict[str, Any] | None,
+    ) -> dict[str, Any]:  # noqa: ARG001
         nonlocal attempts
         attempts += 1
         raise urllib.error.URLError("timeout")
 
-    monkeypatch.setattr(MCPClient, "_post_json", _timeout_post_json)
+    monkeypatch.setattr(MCPClient, "_request_json", _timeout_request_json)
 
-    client = MCPClient(base_url="http://localhost:8001/mcp", request_timeout_seconds=0.1, max_retries=2)
+    client = MCPClient(base_url="http://localhost:8001", request_timeout_seconds=0.1, max_retries=2)
 
     with pytest.raises(MCPClientUnavailableError):
         await client.list_tools()
@@ -47,15 +57,65 @@ async def test_mcp_client_retries_timeout_and_raises_unavailable(monkeypatch: py
 
 @pytest.mark.asyncio
 async def test_mcp_client_handles_async_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
-    def _slow_post_json(self: MCPClient, payload: dict[str, Any]) -> dict[str, Any]:  # noqa: ARG001
+    def _slow_request_json(
+        self: MCPClient,
+        path: str,
+        method: str,
+        payload: dict[str, Any] | None,
+    ) -> dict[str, Any]:  # noqa: ARG001
         import time
 
         time.sleep(0.1)
-        return {"jsonrpc": "2.0", "id": payload["id"], "result": {"tools": []}}
+        return {"tools": []}
 
-    monkeypatch.setattr(MCPClient, "_post_json", _slow_post_json)
+    monkeypatch.setattr(MCPClient, "_request_json", _slow_request_json)
 
-    client = MCPClient(base_url="http://localhost:8001/mcp", request_timeout_seconds=0.01, max_retries=0)
+    client = MCPClient(base_url="http://localhost:8001", request_timeout_seconds=0.01, max_retries=0)
 
     with pytest.raises(MCPClientUnavailableError):
         await client.list_tools()
+
+
+@pytest.mark.asyncio
+async def test_mcp_client_works_against_real_mcp_server_testclient() -> None:
+    mcp_server_root = Path(__file__).resolve().parents[2] / "mcp-server"
+    saved_modules = {name: module for name, module in sys.modules.items() if name == "app" or name.startswith("app.")}
+    for name in list(saved_modules):
+        sys.modules.pop(name, None)
+
+    sys.path.insert(0, str(mcp_server_root))
+    try:
+        mcp_main = importlib.import_module("app.main")
+        mcp_app = mcp_main.create_app()
+    finally:
+        sys.path.pop(0)
+        for name in list(sys.modules):
+            if name == "app" or name.startswith("app."):
+                sys.modules.pop(name, None)
+        sys.modules.update(saved_modules)
+    client = TestClient(mcp_app)
+
+    mcp_client = MCPClient(base_url="http://testserver", request_timeout_seconds=0.2, max_retries=0)
+
+    def _testclient_request_json(
+        self: MCPClient,
+        path: str,
+        method: str,
+        payload: dict[str, Any] | None,
+    ) -> dict[str, Any]:  # noqa: ARG001
+        response = client.request(method, path, json=payload)
+        response.raise_for_status()
+        data = response.json()
+        assert isinstance(data, dict)
+        return data
+
+    mcp_client._request_json = _testclient_request_json.__get__(mcp_client, MCPClient)
+
+    tools = await mcp_client.list_tools()
+    tool_names = [tool.get("name") for tool in tools]
+    assert "echo" in tool_names
+    assert "add" in tool_names
+    assert "web_search" in tool_names
+
+    result = await mcp_client.invoke_tool(tool_name="add", arguments={"a": 2, "b": 3})
+    assert result == {"sum": 5}
