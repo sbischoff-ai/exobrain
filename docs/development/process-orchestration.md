@@ -20,11 +20,13 @@ This guide defines the canonical way to start Exobrain processes for local devel
 
 ### mprocs config files
 
-- `.mprocs/backend.yml`: model-provider + assistant-backend + job-orchestrator
-- `.mprocs/backend-knowledge.yml`: model-provider + assistant-backend + knowledge-interface + job-orchestrator (knowledge-interface waits for model-provider `/healthz` before launching)
-- `.mprocs/fullstack.yml`: model-provider + assistant-backend + knowledge-interface + job-orchestrator + assistant-frontend (knowledge-interface waits for model-provider `/healthz` before launching)
+- `.mprocs/backend.yml`: model-provider + mcp-server + assistant-backend + job-orchestrator
+- `.mprocs/backend-knowledge.yml`: model-provider + mcp-server + assistant-backend + knowledge-interface + job-orchestrator (knowledge-interface waits for model-provider `/healthz` before launching)
+- `.mprocs/fullstack.yml`: model-provider + mcp-server + assistant-backend + knowledge-interface + job-orchestrator + assistant-frontend (knowledge-interface waits for model-provider `/healthz` before launching)
 
 `job-orchestrator` is launched via `scripts/local/run-job-orchestrator.sh`, which starts both the gRPC API (`app.main_api`) and worker (`app.main_worker`) unless disabled via `JOB_ORCHESTRATOR_API_ENABLED=false` or `JOB_ORCHESTRATOR_WORKER_ENABLED=false`.
+
+`mcp-server` is launched via `scripts/local/run-mcp-server.sh` and should remain running whenever backend tool execution flows are under test.
 
 ## Script ownership matrix
 
@@ -38,7 +40,7 @@ This guide defines the canonical way to start Exobrain processes for local devel
 
 1. Start infra (`./scripts/local/infra-up.sh`).
 2. Run per-database setup scripts needed for your profile (`assistant-db-setup.sh`, `job-orchestrator-db-setup.sh`, `knowledge-schema-setup.sh`).
-3. Start app processes via mprocs wrapper script (ensure `job-orchestrator` is up before testing assistant knowledge updates).
+3. Start app processes via mprocs wrapper script (ensure `mcp-server` is up before testing backend agent tools; ensure `job-orchestrator` is up before testing assistant knowledge updates).
 4. Use `Ctrl+C` in mprocs to stop app processes.
 5. Stop infra (`./scripts/local/infra-down.sh`).
 
@@ -53,7 +55,13 @@ assistant-backend -> job-orchestrator (gRPC EnqueueJob) -> JetStream jobs.<job_t
 - **`mprocs: command not found`**: run via `nix-shell` so `shell.nix` tooling is loaded.
 - **Port in use**: stop previous local processes on `8000`, `50051`, `5173`, or update script env vars.
 - **Backend integration errors about missing tables**: rerun `./scripts/local/assistant-db-setup.sh`.
+- **Agent tool invocation failures**: ensure `mcp-server` is running and `MCP_SERVER_URL` in assistant-backend points at the expected endpoint.
 - **Knowledge interface embedding errors**: ensure `model-provider` is running and `MODEL_PROVIDER_BASE_URL` points to it.
+
+## Out-of-scope deployment artifacts
+
+This change only adds local process helpers and mprocs wiring for `mcp-server`.
+Helm/Docker deployment artifact changes are intentionally deferred as a follow-up to keep scope minimal (smallest-change-first).
 
 ## References
 

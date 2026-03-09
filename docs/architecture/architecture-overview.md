@@ -22,6 +22,8 @@ This document gives a stable, high-level map of Exobrain runtime components and 
   - gRPC boundary for retrieval and knowledge update workflows.
 - **job-orchestrator** (`apps/job-orchestrator`)
   - Asynchronous job orchestrator/worker consuming NATS subjects and persisting job state.
+- **mcp-server** (`apps/mcp-server`)
+  - Dedicated MCP tool runtime exposing typed tool discovery and invocation endpoints.
 - **PostgreSQL metastore**
   - Assistant state and relational metadata.
 - **Memgraph**
@@ -35,6 +37,7 @@ This document gives a stable, high-level map of Exobrain runtime components and 
 
 - Frontend uses backend HTTP APIs (`/api/*`).
 - Backend may call knowledge-interface over gRPC for retrieval/update use cases.
+- Backend calls mcp-server over HTTP for tool discovery/invocation during agent execution.
 - Backend publishes asynchronous job requests to NATS; job-orchestrator workers execute them out-of-band.
 - Backend persists assistant domain state in PostgreSQL.
 - Knowledge workflows may rely on Memgraph and Qdrant.

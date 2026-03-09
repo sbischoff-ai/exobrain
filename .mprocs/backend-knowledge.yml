@@ -1,6 +1,8 @@
 procs:
   model-provider:
     shell: ./scripts/local/run-model-provider.sh
+  mcp-server:
+    shell: ./scripts/local/run-mcp-server.sh
   assistant-backend:
     shell: ./scripts/local/run-assistant-backend.sh
   knowledge-interface:
