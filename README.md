@@ -59,6 +59,13 @@ scripts/
 ./scripts/local/run-app-checks.sh
 ```
 
+## Local build/run helper highlights
+
+- Build helpers (dependency sync + bytecode compile): `scripts/local/build-*.sh`
+  - Includes `scripts/local/build-mcp-server.sh` for the MCP runtime.
+- Run helpers (local uvicorn/service startup): `scripts/local/run-*.sh`
+  - Includes `scripts/local/run-mcp-server.sh` for the MCP runtime.
+
 ## Documentation index
 
 - Documentation hub: [`docs/README.md`](docs/README.md)

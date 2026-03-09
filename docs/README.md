@@ -26,6 +26,15 @@ Use this page as the index for Exobrain documentation.
 
 - [Major changes log](operations/major-changes.md)
 
+## Service-level READMEs
+
+- [Assistant backend](../apps/assistant-backend/README.md)
+- [Assistant frontend](../apps/assistant-frontend/README.md)
+- [Knowledge interface](../apps/knowledge-interface/README.md)
+- [Job orchestrator](../apps/job-orchestrator/README.md)
+- [Model provider](../apps/model-provider/README.md)
+- [MCP server](../apps/mcp-server/README.md)
+
 ## Metastore assets
 
 - [Assistant backend metastore](../infra/metastore/assistant-backend/README.md)
