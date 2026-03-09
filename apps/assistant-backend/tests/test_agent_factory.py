@@ -1,19 +1,28 @@
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
-from app.agents.factory import (
-    MockTavilyWebTools,
-    _build_agent_model,
-    _build_web_tools_dependency,
-    _load_mock_messages,
-    build_main_agent,
-)
+from app.agents.factory import _build_agent_model, _load_mock_messages, build_main_agent
 from app.agents.model_provider_chat_model import ModelProviderChatModel
-from app.agents.tools.web import TavilyWebTools
 from app.core.settings import Settings
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from langchain_openai import ChatOpenAI
+
+
+class _FakeMCPClient:
+    def __init__(self, tools: list[dict[str, Any]] | None = None) -> None:
+        self._tools = tools or []
+
+    async def list_tools(self) -> list[dict[str, Any]]:
+        return self._tools
+
+    async def invoke_tool(self, *, tool_name: str, arguments: dict[str, Any] | None = None) -> Any:  # noqa: ARG002
+        return {"tool": tool_name, "arguments": arguments or {}}
+
+    async def close(self) -> None:
+        return None
 
 
 def test_load_mock_messages_uses_new_delimiter(tmp_path) -> None:
@@ -62,7 +71,6 @@ def test_build_agent_model_uses_model_provider_chat_model_when_mock_disabled() -
     assert model.base_url == "http://localhost:8010/v1"
 
 
-
 def test_build_agent_model_uses_openai_fallback_when_enabled() -> None:
     settings = Settings(
         MAIN_AGENT_USE_MOCK=False,
@@ -108,29 +116,8 @@ def test_build_agent_model_uses_openai_compat_when_rollout_fallback_enabled() ->
     assert isinstance(model, ChatOpenAI)
 
 
-def test_build_web_tools_dependency_uses_tavily_by_default() -> None:
-    dependency = _build_web_tools_dependency(Settings(WEB_TOOLS_USE_MOCK=False))
-
-    assert isinstance(dependency, TavilyWebTools)
-    assert not isinstance(dependency, MockTavilyWebTools)
-
-
-def test_build_web_tools_dependency_uses_mock_variant_when_enabled(tmp_path) -> None:
-    payload = tmp_path / "web-tools.json"
-    payload.write_text('{"search":{"results":[]},"extract":{"results":[]}}', encoding="utf-8")
-
-    dependency = _build_web_tools_dependency(
-        Settings(
-            WEB_TOOLS_USE_MOCK=True,
-            WEB_TOOLS_MOCK_DATA_FILE=str(payload),
-        )
-    )
-
-    assert isinstance(dependency, MockTavilyWebTools)
-
-
 @pytest.mark.asyncio
-async def test_build_main_agent_passes_tools_and_web_instructions(monkeypatch, tmp_path) -> None:
+async def test_build_main_agent_passes_mcp_tools_and_web_instructions(monkeypatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 
     captured: dict[str, object] = {}
@@ -146,23 +133,32 @@ async def test_build_main_agent_passes_tools_and_web_instructions(monkeypatch, t
         MAIN_AGENT_MODEL="gpt-5.2",
         ASSISTANT_DB_DSN="postgresql://unit-test",
         MAIN_AGENT_SYSTEM_PROMPT="Base prompt",
-        TAVILY_API_KEY="tavily-test",
     )
 
-    await build_main_agent(settings)
+    await build_main_agent(
+        settings,
+        mcp_client=_FakeMCPClient(
+            tools=[
+                {
+                    "name": "web_search",
+                    "description": "Search the web",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {"query": {"type": "string"}},
+                        "required": ["query"],
+                    },
+                }
+            ]
+        ),
+    )
 
     assert "web_search" in str(captured["system_prompt"])
     assert "Never fabricate quotes" in str(captured["system_prompt"])
-    assert "KaTeX delimiters: $...$" in str(captured["system_prompt"])
-    assert "KaTeX delimiters: $$...$$" in str(captured["system_prompt"])
-    assert "Never place $$...$$ inside a sentence" in str(captured["system_prompt"])
-    assert "blank line before and after" in str(captured["system_prompt"])
-    assert "`mermaid` language tag" in str(captured["system_prompt"])
-    assert len(captured["tools"]) == 2
+    assert len(captured["tools"]) == 1
 
 
 @pytest.mark.asyncio
-async def test_build_main_agent_uses_mock_web_tools_dependency(monkeypatch) -> None:
+async def test_build_main_agent_skips_tools_for_mock_mode(monkeypatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 
     captured: dict[str, object] = {}
@@ -174,11 +170,10 @@ async def test_build_main_agent_uses_mock_web_tools_dependency(monkeypatch) -> N
     monkeypatch.setattr("app.agents.factory.MainAssistantAgent.create", fake_create)
 
     settings = Settings(
-        MAIN_AGENT_USE_MOCK=False,
+        MAIN_AGENT_USE_MOCK=True,
         ASSISTANT_DB_DSN="postgresql://unit-test",
-        WEB_TOOLS_USE_MOCK=True,
     )
 
-    await build_main_agent(settings)
+    await build_main_agent(settings, mcp_client=_FakeMCPClient())
 
-    assert len(captured["tools"]) == 2
+    assert captured["tools"] is None

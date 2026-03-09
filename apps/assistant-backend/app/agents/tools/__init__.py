@@ -1,11 +1,6 @@
 from app.agents.tools.contracts import StreamEventMapper
-from app.agents.tools.web import (
-    TavilyWebTools,
-    WebFetchStreamMapper,
-    WebSearchStreamMapper,
-    WebTools,
-    build_web_tools,
-)
+from app.agents.tools.mcp_tooling import build_mcp_tools
+from app.agents.tools.web import WebFetchStreamMapper, WebSearchStreamMapper
 
 
 def default_stream_event_mappers() -> dict[str, StreamEventMapper]:
@@ -14,9 +9,7 @@ def default_stream_event_mappers() -> dict[str, StreamEventMapper]:
 
 
 __all__ = [
-    "WebTools",
-    "TavilyWebTools",
-    "build_web_tools",
     "StreamEventMapper",
+    "build_mcp_tools",
     "default_stream_event_mappers",
 ]

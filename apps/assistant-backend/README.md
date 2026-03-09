@@ -165,6 +165,9 @@ Core runtime vars:
 - `JOB_ORCHESTRATOR_CONNECT_TIMEOUT_SECONDS` (gRPC request timeout in seconds, default `5.0`)
 - `KNOWLEDGE_INTERFACE_GRPC_TARGET` (knowledge-interface gRPC endpoint for read APIs, default `localhost:50051`)
 - `KNOWLEDGE_INTERFACE_CONNECT_TIMEOUT_SECONDS` (knowledge-interface gRPC request timeout in seconds, default `5.0`)
+- `MCP_SERVER_URL` (MCP JSON-RPC HTTP endpoint used by assistant tool calls, default `http://localhost:8001/mcp`)
+- `MCP_REQUEST_TIMEOUT_SECONDS` (MCP tool list/invoke timeout in seconds, default `5.0`)
+- `MCP_MAX_RETRIES` (MCP retry attempts for timeout/transient transport failures, default `2`)
 - Knowledge wiki category trees are derived from active `GetSchema` node types (`kind=node`, ids prefixed `node.`), rooted at direct children of `node.entity` (excluding `node.block` and `node.universe`), and sorted by `display_name` then `id`.
 - `GET /api/knowledge/category` maps upstream `INVALID_ARGUMENT` to `400`, `UNAVAILABLE/DEADLINE_EXCEEDED` to `503`, and other upstream failures to `502`.
 - Multiple inheritance in wiki categories duplicates a child category under each active parent category.
@@ -184,8 +187,7 @@ Model/tool vars:
 - `MAIN_AGENT_MODEL_CONTRACT_MODE=native|legacy_openai_compatible` (default `native`; `native` uses `ModelProviderChatModel` with the internal `/v1/internal/chat/messages` contract, `legacy_openai_compatible` uses `ChatOpenAI` against the OpenAI-compatible endpoint shape)
 - `MAIN_AGENT_USE_OPENAI_FALLBACK=true|false` (rollout safety flag; when `true`, force `ChatOpenAI` compatibility mode even if contract mode is `native`)
 - `MAIN_AGENT_MODEL` (alias, default `agent`)
-- `TAVILY_API_KEY` (required for real web tools)
-- `WEB_TOOLS_USE_MOCK=true|false`
+- Agent tools are discovered from MCP `tools/list` and executed via MCP `tools/call`; tool lifecycle SSE events still map known tool names (`web_search`, `web_fetch`) to user-facing progress updates.
 
 OpenAPI and logging:
 

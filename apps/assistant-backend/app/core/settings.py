@@ -96,6 +96,14 @@ class Settings(BaseSettings):
     web_tools_mock_data_file: str | None = Field(default=None, alias="WEB_TOOLS_MOCK_DATA_FILE")
     knowledge_update_max_tokens: int = Field(default=8000, alias="KNOWLEDGE_UPDATE_MAX_TOKENS")
 
+    mcp_server_url: str = Field(default="http://localhost:8001/mcp", alias="MCP_SERVER_URL")
+    mcp_request_timeout_seconds: float = Field(
+        default=5.0,
+        alias="MCP_REQUEST_TIMEOUT_SECONDS",
+        gt=0,
+    )
+    mcp_max_retries: int = Field(default=2, alias="MCP_MAX_RETRIES", ge=0)
+
     @property
     def enable_swagger(self) -> bool:
         return self.app_env.lower() == "local"
