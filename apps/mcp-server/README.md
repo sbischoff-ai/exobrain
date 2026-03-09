@@ -26,6 +26,7 @@ Python service providing a minimal MCP runtime with strict tool contracts.
     - `echo`: `{ "name": "echo", "arguments": { "text": "..." } }`
     - `add`: `{ "name": "add", "arguments": { "a": 1, "b": 2 } }`
     - `web_search`: `{ "name": "web_search", "arguments": { "query": "..." } }`
+    - `web_fetch`: `{ "name": "web_fetch", "arguments": { "url": "...", "max_chars": 4000 } }`
   - Typed result envelope:
     - success: `{ "ok": true, "name": "...", "result": {...}, "metadata": {...} }`
     - error: `{ "ok": false, "name": "...", "error": {"code": "...", "message": "..."}, "metadata": {...} }`

@@ -38,7 +38,10 @@ def load_tavily_clients() -> tuple[Any, Any]:
 
 
 class TavilyWebTools(WebTools):
-    """Tavily-backed web tools implementation."""
+    """Tavily-backed direct web tools implementation.
+
+    Deprecated: MCP server now owns web tool execution in production flows.
+    """
 
     def __init__(self, *, tavily_api_key: str | None = None) -> None:
         self._tavily_api_key = tavily_api_key

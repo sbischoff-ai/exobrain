@@ -11,6 +11,8 @@ from app.contracts import (
     ToolError,
     ToolErrorEnvelope,
     ToolResult,
+    WebFetchToolInvocation,
+    WebFetchToolSuccess,
     WebSearchToolInvocation,
     WebSearchToolSuccess,
 )
@@ -23,7 +25,9 @@ class ToolService:
     def list_tools(self) -> ListToolsResponse:
         return ListToolsResponse(tools=self._registry.list_tools())
 
-    def invoke_tool(self, invocation: EchoToolInvocation | AddToolInvocation | WebSearchToolInvocation) -> ToolResult:
+    def invoke_tool(
+        self, invocation: EchoToolInvocation | AddToolInvocation | WebSearchToolInvocation | WebFetchToolInvocation
+    ) -> ToolResult:
         if invocation.name == "echo":
             return EchoToolSuccess(
                 name="echo",
@@ -38,15 +42,29 @@ class ToolService:
                 metadata=invocation.metadata,
             )
 
+        if invocation.name == "web_search":
+            try:
+                return WebSearchToolSuccess(
+                    name="web_search",
+                    result=self._registry.invoke_web_search(invocation.arguments),
+                    metadata=invocation.metadata,
+                )
+            except WebToolError as exc:
+                return ToolErrorEnvelope(
+                    name="web_search",
+                    error=ToolError(code="WEB_SEARCH_FAILED", message=str(exc)),
+                    metadata=invocation.metadata,
+                )
+
         try:
-            return WebSearchToolSuccess(
-                name="web_search",
-                result=self._registry.invoke_web_search(invocation.arguments),
+            return WebFetchToolSuccess(
+                name="web_fetch",
+                result=self._registry.invoke_web_fetch(invocation.arguments),
                 metadata=invocation.metadata,
             )
         except WebToolError as exc:
             return ToolErrorEnvelope(
-                name="web_search",
-                error=ToolError(code="WEB_SEARCH_FAILED", message=str(exc)),
+                name="web_fetch",
+                error=ToolError(code="WEB_FETCH_FAILED", message=str(exc)),
                 metadata=invocation.metadata,
             )

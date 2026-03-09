@@ -7,7 +7,11 @@ from app.agents.tools.web.provider import WebTools
 
 
 def build_web_tools(*, web_tools: WebTools) -> list[StructuredTool]:
-    """Build wrapped web tools with stable contracts."""
+    """Build wrapped web tools with stable contracts.
+
+    Deprecated: production agent execution uses MCP-discovered tools.
+    Kept for compatibility tests and local fallback experiments only.
+    """
 
     def _web_search_tool(
         query: str,
