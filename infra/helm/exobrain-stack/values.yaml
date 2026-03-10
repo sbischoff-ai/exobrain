@@ -157,6 +157,11 @@ mcpServer:
   env:
     APP_ENV: cluster
     LOG_LEVEL: INFO
+    WEB_SEARCH_PROVIDER: tavily
+  secrets:
+    tavilyApiKey:
+      name: exobrain-secrets
+      key: TAVILY_API_KEY
   resources:
     requests:
       cpu: 50m

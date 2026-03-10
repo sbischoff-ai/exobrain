@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -13,6 +14,9 @@ class Settings(BaseSettings):
     log_level: str | None = Field(default=None, alias="LOG_LEVEL")
     mcp_server_host: str = Field(default="0.0.0.0", alias="MCP_SERVER_HOST")
     mcp_server_port: int = Field(default=8090, alias="MCP_SERVER_PORT", ge=1, le=65535)
+    web_search_provider: Literal["auto", "static", "tavily"] = Field(default="auto", alias="WEB_SEARCH_PROVIDER")
+    tavily_api_key: str | None = Field(default=None, alias="TAVILY_API_KEY")
+    tavily_base_url: str = Field(default="https://api.tavily.com", alias="TAVILY_BASE_URL")
 
     @property
     def effective_log_level(self) -> str:
