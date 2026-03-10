@@ -43,3 +43,25 @@ async def test_build_mcp_tools_maps_to_langchain_tool_flow() -> None:
 
     assert result == [{"url": "https://example.com"}]
     assert client.calls == [("web_search", {"query": "langgraph", "max_results": 2})]
+
+
+@pytest.mark.asyncio
+async def test_build_mcp_tools_requires_canonical_input_schema_field() -> None:
+    class _LegacySchemaMCPClient(_StubMCPClient):
+        async def list_tools(self) -> list[dict[str, Any]]:
+            return [
+                {
+                    "name": "web_search",
+                    "description": "Search web via MCP",
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {"query": {"type": "string"}},
+                        "required": ["query"],
+                    },
+                }
+            ]
+
+    tools = await build_mcp_tools(mcp_client=_LegacySchemaMCPClient())
+
+    schema = tools[0].args_schema.model_json_schema()
+    assert schema.get("properties") == {}

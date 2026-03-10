@@ -24,9 +24,9 @@ def _json_schema_type_to_python(type_name: str | None) -> type[Any]:
     return Any
 
 
-def _build_args_schema(tool_name: str, input_schema: dict[str, Any]) -> type[BaseModel]:
-    properties = input_schema.get("properties") if isinstance(input_schema, dict) else None
-    required = input_schema.get("required") if isinstance(input_schema, dict) else None
+def _build_args_schema(tool_name: str, inputSchema: dict[str, Any]) -> type[BaseModel]:
+    properties = inputSchema.get("properties") if isinstance(inputSchema, dict) else None
+    required = inputSchema.get("required") if isinstance(inputSchema, dict) else None
 
     fields: dict[str, tuple[type[Any], Any]] = {}
     if isinstance(properties, dict):

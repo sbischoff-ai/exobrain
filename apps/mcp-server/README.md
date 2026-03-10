@@ -19,7 +19,7 @@ The runtime exposes an HTTP REST transport for MCP tool operations. It does **no
   - Readiness check endpoint.
   - Response: `{ "status": "ok" }`
 - `GET /mcp/tools`
-  - Lists available tools and their input JSON schemas.
+  - Lists available tools and their input JSON schemas in `inputSchema` (camelCase).
 - `POST /mcp/tools/invoke`
   - Invokes a single tool with a typed invocation envelope:
     - `name`: tool identifier
@@ -39,7 +39,7 @@ The runtime exposes an HTTP REST transport for MCP tool operations. It does **no
     {
       "name": "web_search",
       "description": "Search the web for relevant results",
-      "input_schema": {
+      "inputSchema": {
         "type": "object",
         "properties": {
           "query": {"type": "string"},

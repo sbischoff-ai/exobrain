@@ -44,7 +44,7 @@ class ToolRegistry:
 
 def _schema_metadata(name: str, description: str, parser: type) -> Callable[[], ToolMetadata]:
     def _provide() -> ToolMetadata:
-        return ToolMetadata(name=name, description=description, input_schema=parser.model_json_schema())
+        return ToolMetadata(name=name, description=description, inputSchema=parser.model_json_schema())
 
     return _provide
 

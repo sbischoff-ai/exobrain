@@ -10,7 +10,7 @@ from app.contracts.base import StrictModel
 class ToolMetadata(StrictModel):
     name: str
     description: str
-    input_schema: dict[str, Any]
+    inputSchema: dict[str, Any]
 
 
 class ListToolsResponse(StrictModel):

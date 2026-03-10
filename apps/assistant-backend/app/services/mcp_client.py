@@ -48,16 +48,7 @@ class MCPClient(MCPClientProtocol):
         tools = response.get("tools") if isinstance(response, dict) else None
         if not isinstance(tools, list):
             return []
-
-        normalized_tools: list[dict[str, Any]] = []
-        for tool in tools:
-            if not isinstance(tool, dict):
-                continue
-            normalized = dict(tool)
-            if "inputSchema" not in normalized and isinstance(normalized.get("input_schema"), dict):
-                normalized["inputSchema"] = normalized["input_schema"]
-            normalized_tools.append(normalized)
-        return normalized_tools
+        return [tool for tool in tools if isinstance(tool, dict)]
 
     async def invoke_tool(self, *, tool_name: str, arguments: dict[str, Any] | None = None) -> Any:
         response = await self._call(

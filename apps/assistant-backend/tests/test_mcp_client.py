@@ -77,6 +77,34 @@ async def test_mcp_client_handles_async_timeout(monkeypatch: pytest.MonkeyPatch)
 
 
 @pytest.mark.asyncio
+async def test_mcp_client_list_tools_uses_canonical_input_schema_field(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _fake_request_json(
+        self: MCPClient,
+        path: str,
+        method: str,
+        payload: dict[str, Any] | None,
+    ) -> dict[str, Any]:  # noqa: ARG001
+        return {
+            "tools": [
+                {"name": "good", "description": "ok", "inputSchema": {"type": "object"}},
+                {"name": "legacy", "description": "old", "input_schema": {"type": "object"}},
+            ]
+        }
+
+    monkeypatch.setattr(MCPClient, "_request_json", _fake_request_json)
+
+    client = MCPClient(base_url="http://localhost:8001", request_timeout_seconds=0.1)
+    tools = await client.list_tools()
+
+    canonical = next(tool for tool in tools if tool.get("name") == "good")
+    legacy = next(tool for tool in tools if tool.get("name") == "legacy")
+
+    assert isinstance(canonical.get("inputSchema"), dict)
+    assert "input_schema" not in canonical
+    assert "inputSchema" not in legacy
+    assert isinstance(legacy.get("input_schema"), dict)
+
+@pytest.mark.asyncio
 async def test_mcp_client_works_against_real_mcp_server_testclient() -> None:
     mcp_server_root = Path(__file__).resolve().parents[2] / "mcp-server"
     saved_modules = {name: module for name, module in sys.modules.items() if name == "app" or name.startswith("app.")}
