@@ -60,6 +60,22 @@ k3d image import \
 helm upgrade --install exobrain infra/helm/exobrain-stack --dependency-update
 ```
 
+MCP server defaults are configured in `infra/helm/exobrain-stack/values.yaml` under:
+
+- `mcpServer.image.repository`: `exobrain/mcp-server`
+- `mcpServer.image.tag`: `0.1.0`
+- `mcpServer.service.port`: `3001`
+- `mcpServer.env.APP_ENV`: `cluster`
+- `mcpServer.env.LOG_LEVEL`: `INFO`
+
+Override these as needed, for example:
+
+```bash
+helm upgrade --install exobrain infra/helm/exobrain-stack --dependency-update \
+  --set mcpServer.image.repository=ghcr.io/acme/custom-mcp-server \
+  --set mcpServer.image.tag=latest
+```
+
 To force a full rollout (to recreate pods with newly pulled Docker images):
 
 ```bash
