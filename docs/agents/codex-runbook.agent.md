@@ -169,7 +169,7 @@ Use two terminals:
 ./scripts/local/run-assistant-frontend.sh
 ```
 
-This keeps backend auth/journal/chat APIs real while replacing OpenAI/Tavily calls with local mocks (`MAIN_AGENT_USE_MOCK=true`, `WEB_TOOLS_USE_MOCK=true`).
+This keeps backend auth/journal/chat APIs real while replacing model/tool calls with local mock responses (`MAIN_AGENT_USE_MOCK=true`).
 
 ## Frontend E2E suite (Playwright)
 

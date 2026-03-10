@@ -91,9 +91,6 @@ class Settings(BaseSettings):
         alias="KNOWLEDGE_INTERFACE_CONNECT_TIMEOUT_SECONDS",
         gt=0,
     )
-    tavily_api_key: str | None = Field(default=None, alias="TAVILY_API_KEY")
-    web_tools_use_mock: bool = Field(default=False, alias="WEB_TOOLS_USE_MOCK")
-    web_tools_mock_data_file: str | None = Field(default=None, alias="WEB_TOOLS_MOCK_DATA_FILE")
     knowledge_update_max_tokens: int = Field(default=8000, alias="KNOWLEDGE_UPDATE_MAX_TOKENS")
 
     mcp_server_url: str = Field(default="http://localhost:8001", alias="MCP_SERVER_URL")
