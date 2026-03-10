@@ -32,7 +32,7 @@ def _build_test_client_with_upper_tool() -> TestClient:
         metadata_provider=lambda: ToolMetadata(
             name="upper",
             description="Uppercase input text.",
-            input_schema=UpperToolInput.model_json_schema(),
+            inputSchema=UpperToolInput.model_json_schema(),
         ),
         invocation_parser=UpperToolInput.model_validate,
         handler=lambda args: UpperToolOutput(text=args.text.upper()),

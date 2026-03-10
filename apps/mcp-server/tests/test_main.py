@@ -21,8 +21,16 @@ def test_list_tools() -> None:
     body = response.json()
     assert [tool["name"] for tool in body["tools"]] == ["echo", "add", "web_search", "web_fetch"]
     web_fetch = next(tool for tool in body["tools"] if tool["name"] == "web_fetch")
-    assert web_fetch["input_schema"]["properties"]["url"]["type"] == "string"
+    assert web_fetch["inputSchema"]["properties"]["url"]["type"] == "string"
 
+
+def test_list_tools_exposes_only_canonical_input_schema_field() -> None:
+    response = client.get("/mcp/tools")
+
+    assert response.status_code == 200
+    for tool in response.json()["tools"]:
+        assert "inputSchema" in tool
+        assert "input_schema" not in tool
 
 def test_invoke_echo_tool() -> None:
     response = client.post(

@@ -197,7 +197,7 @@ Model/tool vars:
 
 ## MCP tool HTTP contract
 
-assistant-backend integrates with mcp-server over HTTP REST. The integration contract is request/response JSON over `/mcp/tools` and `/mcp/tools/invoke` (not JSON-RPC).
+assistant-backend integrates with mcp-server over HTTP REST. The integration contract is request/response JSON over `/mcp/tools` and `/mcp/tools/invoke` (not JSON-RPC). Tool metadata uses `inputSchema` (camelCase) as the canonical input schema field.
 
 ### Canonical request/response examples
 
@@ -209,7 +209,7 @@ assistant-backend integrates with mcp-server over HTTP REST. The integration con
     {
       "name": "web_search",
       "description": "Search the web for relevant results",
-      "input_schema": {
+      "inputSchema": {
         "type": "object",
         "properties": {
           "query": {"type": "string"},
