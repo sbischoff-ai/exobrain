@@ -31,12 +31,11 @@ def create_web_search_client(settings: Settings) -> StaticWebSearchClient | Tavi
     if provider == "static":
         return StaticWebSearchClient()
 
-    use_static_for_local = provider == "auto" and settings.app_env.lower() in {"local", "test"}
-    if use_static_for_local:
-        return StaticWebSearchClient()
-
     if provider not in {"auto", "tavily"}:
         raise ValueError(f"Unsupported WEB_SEARCH_PROVIDER: {settings.web_search_provider}")
+
+    if provider == "auto" and not settings.tavily_api_key and settings.app_env.lower() in {"local", "test"}:
+        return StaticWebSearchClient()
 
     if not settings.tavily_api_key:
         raise ValueError("TAVILY_API_KEY is required when WEB_SEARCH_PROVIDER resolves to tavily")
