@@ -1,70 +1,45 @@
 from __future__ import annotations
 
-from app.adapters.tool_adapters import ToolAdapterRegistry
+from app.adapters.tool_registry import ToolRegistry
 from app.adapters.web_tools import WebToolError
 from app.contracts import (
-    AddToolInvocation,
-    AddToolSuccess,
-    EchoToolInvocation,
-    EchoToolSuccess,
     ListToolsResponse,
+    ToolInvocation,
     ToolError,
     ToolErrorEnvelope,
     ToolResult,
-    WebFetchToolInvocation,
-    WebFetchToolSuccess,
-    WebSearchToolInvocation,
-    WebSearchToolSuccess,
+    ToolSuccessEnvelope,
 )
 
 
 class ToolService:
-    def __init__(self, registry: ToolAdapterRegistry):
+    def __init__(self, registry: ToolRegistry):
         self._registry = registry
 
     def list_tools(self) -> ListToolsResponse:
         return ListToolsResponse(tools=self._registry.list_tools())
 
-    def invoke_tool(
-        self, invocation: EchoToolInvocation | AddToolInvocation | WebSearchToolInvocation | WebFetchToolInvocation
-    ) -> ToolResult:
-        if invocation.name == "echo":
-            return EchoToolSuccess(
-                name="echo",
-                result=self._registry.invoke_echo(invocation.arguments),
+    def invoke_tool(self, invocation: ToolInvocation) -> ToolResult:
+        registration = self._registry.get(invocation.name)
+        if registration is None:
+            return ToolErrorEnvelope(
+                name=invocation.name,
+                error=ToolError(code="TOOL_NOT_FOUND", message=f"Unknown tool: {invocation.name}"),
                 metadata=invocation.metadata,
             )
 
-        if invocation.name == "add":
-            return AddToolSuccess(
-                name="add",
-                result=self._registry.invoke_add(invocation.arguments),
-                metadata=invocation.metadata,
-            )
-
-        if invocation.name == "web_search":
-            try:
-                return WebSearchToolSuccess(
-                    name="web_search",
-                    result=self._registry.invoke_web_search(invocation.arguments),
-                    metadata=invocation.metadata,
-                )
-            except WebToolError as exc:
-                return ToolErrorEnvelope(
-                    name="web_search",
-                    error=ToolError(code="WEB_SEARCH_FAILED", message=str(exc)),
-                    metadata=invocation.metadata,
-                )
-
+        parsed_arguments = registration.parse_arguments(invocation.arguments)
         try:
-            return WebFetchToolSuccess(
-                name="web_fetch",
-                result=self._registry.invoke_web_fetch(invocation.arguments),
+            return ToolSuccessEnvelope(
+                name=registration.name,
+                result=registration.handler(parsed_arguments),
                 metadata=invocation.metadata,
             )
         except WebToolError as exc:
+            if registration.error_code is None:
+                raise
             return ToolErrorEnvelope(
-                name="web_fetch",
-                error=ToolError(code="WEB_FETCH_FAILED", message=str(exc)),
+                name=registration.name,
+                error=ToolError(code=registration.error_code, message=str(exc)),
                 metadata=invocation.metadata,
             )

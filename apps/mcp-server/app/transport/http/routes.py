@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from fastapi import APIRouter
+from fastapi.exceptions import RequestValidationError
+from pydantic import ValidationError
 
 from app.contracts import HealthResponse, ListToolsResponse, ToolInvocation, ToolResult
 from app.services.tool_service import ToolService
@@ -19,6 +21,9 @@ def build_router(tool_service: ToolService) -> APIRouter:
 
     @router.post("/mcp/tools/invoke", response_model=ToolResult)
     async def invoke_tool(invocation: ToolInvocation) -> ToolResult:
-        return tool_service.invoke_tool(invocation)
+        try:
+            return tool_service.invoke_tool(invocation)
+        except ValidationError as exc:
+            raise RequestValidationError(exc.errors()) from exc
 
     return router

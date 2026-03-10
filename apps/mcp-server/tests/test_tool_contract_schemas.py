@@ -1,25 +1,39 @@
 import pytest
-from pydantic import TypeAdapter, ValidationError
+from pydantic import ValidationError
 
+from app.adapters.tool_adapters import ToolAdapterRegistry
+from app.adapters.tool_registry import build_tool_registry
+from app.adapters.web_tools import StaticWebSearchClient, WebFetchAdapter, WebSearchAdapter
 from app.contracts import EchoToolSuccess, ToolErrorEnvelope, ToolInvocation, WebFetchToolOutput, WebSearchToolOutput
 
 
-INVOCATION_ADAPTER = TypeAdapter(ToolInvocation)
+def _tool_registry():
+    web_client = StaticWebSearchClient()
+    return build_tool_registry(
+        ToolAdapterRegistry(
+            web_search_adapter=WebSearchAdapter(client=web_client),
+            web_fetch_adapter=WebFetchAdapter(client=web_client),
+        )
+    )
 
 
 def test_invocation_schema_rejects_unknown_fields() -> None:
     with pytest.raises(ValidationError):
-        INVOCATION_ADAPTER.validate_python(
+        ToolInvocation.model_validate(
             {
                 "name": "echo",
-                "arguments": {"text": "hello", "extra": "nope"},
+                "arguments": {"text": "hello"},
+                "unexpected": "nope",
             }
         )
 
 
 def test_invocation_schema_rejects_missing_required_fields() -> None:
+    add_tool = _tool_registry().get("add")
+    assert add_tool is not None
+
     with pytest.raises(ValidationError):
-        INVOCATION_ADAPTER.validate_python({"name": "web_search", "arguments": {}})
+        add_tool.parse_arguments({})
 
 
 def test_output_schema_rejects_malformed_web_search_payload() -> None:
@@ -50,8 +64,11 @@ def test_success_envelope_rejects_invalid_result_shape() -> None:
 
 
 def test_invocation_schema_rejects_missing_web_fetch_url() -> None:
+    web_fetch = _tool_registry().get("web_fetch")
+    assert web_fetch is not None
+
     with pytest.raises(ValidationError):
-        INVOCATION_ADAPTER.validate_python({"name": "web_fetch", "arguments": {"max_chars": 500}})
+        web_fetch.parse_arguments({"max_chars": 500})
 
 
 def test_output_schema_rejects_malformed_web_fetch_payload() -> None:
