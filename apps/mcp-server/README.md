@@ -12,6 +12,8 @@ Python service providing a minimal MCP runtime with strict tool contracts.
 
 ## Endpoints and contracts
 
+The runtime exposes an HTTP REST transport for MCP tool operations. It does **not** expose a JSON-RPC endpoint.
+
 - `GET /healthz`
   - Readiness check endpoint.
   - Response: `{ "status": "ok" }`
@@ -22,14 +24,95 @@ Python service providing a minimal MCP runtime with strict tool contracts.
     - `name`: tool identifier
     - `arguments`: tool-specific payload
     - `metadata` (optional): correlation/request IDs
-  - Supported tools:
-    - `echo`: `{ "name": "echo", "arguments": { "text": "..." } }`
-    - `add`: `{ "name": "add", "arguments": { "a": 1, "b": 2 } }`
-    - `web_search`: `{ "name": "web_search", "arguments": { "query": "..." } }`
-    - `web_fetch`: `{ "name": "web_fetch", "arguments": { "url": "...", "max_chars": 4000 } }`
   - Typed result envelope:
     - success: `{ "ok": true, "name": "...", "result": {...}, "metadata": {...} }`
     - error: `{ "ok": false, "name": "...", "error": {"code": "...", "message": "..."}, "metadata": {...} }`
+
+### Canonical request/response examples
+
+`GET /mcp/tools`
+
+```json
+{
+  "tools": [
+    {
+      "name": "web_search",
+      "description": "Search the web for relevant results",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": {"type": "string"},
+          "max_results": {"type": "integer", "minimum": 1, "maximum": 10},
+          "recency_days": {"type": "integer", "minimum": 1}
+        },
+        "required": ["query"],
+        "additionalProperties": false
+      }
+    }
+  ]
+}
+```
+
+`POST /mcp/tools/invoke` request body:
+
+```json
+{
+  "name": "web_fetch",
+  "arguments": {
+    "url": "https://example.com",
+    "max_chars": 4000
+  },
+  "metadata": {
+    "correlation_id": "chat-123",
+    "request_id": "req-456"
+  }
+}
+```
+
+Success response body:
+
+```json
+{
+  "ok": true,
+  "name": "web_fetch",
+  "result": {
+    "url": "https://example.com",
+    "title": "Example Domain",
+    "content_text": "...",
+    "extracted_at": "2026-03-01T10:30:00Z",
+    "content_truncated": false
+  },
+  "metadata": {
+    "correlation_id": "chat-123",
+    "request_id": "req-456"
+  }
+}
+```
+
+Error response body:
+
+```json
+{
+  "ok": false,
+  "name": "web_fetch",
+  "error": {
+    "code": "TOOL_INVOCATION_ERROR",
+    "message": "failed to fetch url"
+  },
+  "metadata": {
+    "correlation_id": "chat-123",
+    "request_id": "req-456"
+  }
+}
+```
+
+### Contract source of truth
+
+Canonical MCP HTTP contract types are defined in `apps/mcp-server/app/contracts/`:
+
+- `tools.py`: list-tools and invoke request/response envelopes.
+- `health.py`: health endpoint response schema.
+- `base.py`: strict schema base model (`extra="forbid"`).
 
 ## Local run
 

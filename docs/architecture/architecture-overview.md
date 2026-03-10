@@ -24,6 +24,7 @@ This document gives a stable, high-level map of Exobrain runtime components and 
   - Asynchronous job orchestrator/worker consuming NATS subjects and persisting job state.
 - **mcp-server** (`apps/mcp-server`)
   - Dedicated MCP tool runtime exposing typed tool discovery and invocation endpoints.
+  - Owns the canonical MCP HTTP contract and tool catalog metadata served to assistant-backend.
 - **PostgreSQL metastore**
   - Assistant state and relational metadata.
 - **Memgraph**
@@ -35,10 +36,22 @@ This document gives a stable, high-level map of Exobrain runtime components and 
 
 ## Integration boundaries
 
-- Frontend uses backend HTTP APIs (`/api/*`).
-- Backend may call knowledge-interface over gRPC for retrieval/update use cases.
-- Backend calls mcp-server over HTTP for tool discovery/invocation during agent execution.
-- Backend publishes asynchronous job requests to NATS; job-orchestrator workers execute them out-of-band.
+### Protocol boundary map
+
+- Frontend -> assistant-backend: HTTP REST (`/api/*`).
+- assistant-backend -> knowledge-interface: gRPC.
+- assistant-backend -> mcp-server: HTTP REST (`GET /mcp/tools`, `POST /mcp/tools/invoke`), not JSON-RPC.
+- assistant-backend -> job-orchestrator: gRPC (`EnqueueJob`), with downstream worker execution over NATS/JetStream.
+- job-orchestrator workers -> external stores: PostgreSQL/Memgraph/Qdrant adapters as needed by job type.
+
+### MCP tool catalog ownership
+
+- `apps/mcp-server` owns the tool catalog exposed by `GET /mcp/tools`, including tool names, descriptions, and input JSON schemas.
+- `apps/assistant-backend` consumes that catalog at runtime and should not define a parallel source of truth for MCP tool schemas.
+- Canonical schema/module path: `apps/mcp-server/app/contracts/` (especially `tools.py` for invocation/list envelopes).
+
+### Data boundaries
+
 - Backend persists assistant domain state in PostgreSQL.
 - Knowledge workflows may rely on Memgraph and Qdrant.
 
