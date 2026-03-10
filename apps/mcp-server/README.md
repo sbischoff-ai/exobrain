@@ -8,6 +8,7 @@ Python service providing a minimal MCP runtime with strict tool contracts.
 - Exposes MCP-style tool discovery and invocation endpoints.
 - Enforces strict Pydantic request/response schemas for tool inputs/outputs.
 - Keeps architecture layered: HTTP transport -> service -> adapters.
+- Centralizes tool registration in `app/adapters/tool_registry.py` (metadata, parser, handler).
 - Hosts migrated web-search adapter logic with provider clients hidden behind interfaces.
 
 ## Endpoints and contracts
@@ -113,6 +114,17 @@ Canonical MCP HTTP contract types are defined in `apps/mcp-server/app/contracts/
 - `tools.py`: list-tools and invoke request/response envelopes.
 - `health.py`: health endpoint response schema.
 - `base.py`: strict schema base model (`extra="forbid"`).
+
+### Tool registration and dispatch
+
+Tool wiring is centralized in `app/adapters/tool_registry.py`. Each registry entry defines:
+
+- `name`
+- `metadata_provider` (description + JSON schema)
+- `invocation_parser` (per-tool Pydantic validation)
+- `handler` function
+
+`ToolService` uses registry lookup/dispatch instead of per-tool branching.
 
 ## Local run
 

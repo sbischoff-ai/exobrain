@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal
+from typing import Any, Literal
 
 from pydantic import Field
 
@@ -72,34 +72,10 @@ class WebFetchToolOutput(StrictModel):
     content_truncated: bool
 
 
-class EchoToolInvocation(StrictModel):
-    name: Literal["echo"]
-    arguments: EchoToolInput
+class ToolInvocation(StrictModel):
+    name: str = Field(min_length=1)
+    arguments: dict[str, Any]
     metadata: CorrelationMetadata | None = None
-
-
-class AddToolInvocation(StrictModel):
-    name: Literal["add"]
-    arguments: AddToolInput
-    metadata: CorrelationMetadata | None = None
-
-
-class WebSearchToolInvocation(StrictModel):
-    name: Literal["web_search"]
-    arguments: WebSearchToolInput
-    metadata: CorrelationMetadata | None = None
-
-
-class WebFetchToolInvocation(StrictModel):
-    name: Literal["web_fetch"]
-    arguments: WebFetchToolInput
-    metadata: CorrelationMetadata | None = None
-
-
-ToolInvocation = Annotated[
-    EchoToolInvocation | AddToolInvocation | WebSearchToolInvocation | WebFetchToolInvocation,
-    Field(discriminator="name"),
-]
 
 
 class ToolError(StrictModel):
@@ -142,4 +118,11 @@ class ToolErrorEnvelope(StrictModel):
     metadata: CorrelationMetadata | None = None
 
 
-ToolResult = EchoToolSuccess | AddToolSuccess | WebSearchToolSuccess | WebFetchToolSuccess | ToolErrorEnvelope
+class ToolSuccessEnvelope(StrictModel):
+    ok: Literal[True] = True
+    name: str
+    result: Any
+    metadata: CorrelationMetadata | None = None
+
+
+ToolResult = ToolSuccessEnvelope | ToolErrorEnvelope
