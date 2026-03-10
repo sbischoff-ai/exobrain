@@ -159,8 +159,6 @@ print_env_expectation NATS_MONITOR_PORT 18222 false
 print_env_expectation QDRANT_URL http://localhost:6333 false
 print_env_expectation ASSISTANT_CACHE_REDIS_URL redis://localhost:16379/0 false
 print_env_expectation MAIN_AGENT_USE_MOCK true false
-print_env_expectation WEB_TOOLS_USE_MOCK true false
-print_env_expectation WEB_TOOLS_MOCK_DATA_FILE "${ROOT_DIR}/apps/assistant-backend/mock-data/web-tools.mock.json" false
 print_env_expectation E2E_USE_EXISTING_SERVER false false
 print_env_expectation E2E_FORCE_REINSTALL false false
 
