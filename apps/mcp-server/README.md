@@ -8,7 +8,8 @@ Python service providing a minimal MCP runtime with strict tool contracts.
 - Exposes MCP-style tool discovery and invocation endpoints.
 - Enforces strict Pydantic request/response schemas for tool inputs/outputs.
 - Keeps architecture layered: HTTP transport -> service -> adapters.
-- Centralizes tool registration in `app/adapters/tool_registry.py` (metadata, parser, handler).
+- Splits tool registrations by category in adapter registry builders (`utility`, `web`, extensible to future categories).
+- Composes enabled tool categories and feature flags from settings in `app.main:create_tool_registry`.
 - Hosts migrated web-search adapter logic with provider clients hidden behind interfaces.
 
 ## Endpoints and contracts
@@ -117,14 +118,23 @@ Canonical MCP HTTP contract types are defined in `apps/mcp-server/app/contracts/
 
 ### Tool registration and dispatch
 
-Tool wiring is centralized in `app/adapters/tool_registry.py`. Each registry entry defines:
+`ToolRegistration` remains the central contract in `app/adapters/tool_registry.py`. Each registration defines:
 
 - `name`
+- `category`
 - `metadata_provider` (description + JSON schema)
 - `invocation_parser` (per-tool Pydantic validation)
 - `handler` function
+- optional `feature_flag` settings gate
+- optional `dependencies` declaration for external/runtime requirements
 
-`ToolService` uses registry lookup/dispatch instead of per-tool branching.
+Category-specific builders live under `app/adapters/*_registry_builder.py` and are composed by `create_tool_registry` using `ENABLED_TOOL_CATEGORIES` plus per-category feature flags.
+
+`ToolService` uses registry lookup/dispatch instead of per-tool branching and returns:
+
+- discriminated known success envelopes for built-in tools (`echo`, `add`, `web_search`, `web_fetch`)
+- a documented generic success envelope for dynamically registered tools
+- typed error envelopes for failures
 
 ## Local run
 
@@ -148,6 +158,9 @@ cd apps/mcp-server
 - `MCP_SERVER_HOST` (default: `0.0.0.0`)
 - `MCP_SERVER_PORT` (default: `8090`)
 - `WEB_SEARCH_PROVIDER` (`auto` | `static` | `tavily`, default: `auto`)
+- `ENABLED_TOOL_CATEGORIES` (comma-delimited, default: `utility,web`)
+- `ENABLE_UTILITY_TOOLS` (default: `true`)
+- `ENABLE_WEB_TOOLS` (default: `true`)
 - `TAVILY_API_KEY` (required when provider resolves to `tavily`)
 - `TAVILY_BASE_URL` (default: `https://api.tavily.com`)
 
