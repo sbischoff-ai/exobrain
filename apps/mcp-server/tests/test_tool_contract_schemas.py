@@ -2,19 +2,20 @@ import pytest
 from pydantic import ValidationError
 
 from app.adapters.tool_adapters import ToolAdapterRegistry
-from app.adapters.tool_registry import build_tool_registry
 from app.adapters.web_tools import StaticWebSearchClient, WebFetchAdapter, WebSearchAdapter
 from app.contracts import EchoToolSuccess, ToolErrorEnvelope, ToolInvocation, WebFetchToolOutput, WebSearchToolOutput
+from app.main import create_tool_registry
+from app.settings import Settings
 
 
 def _tool_registry():
     web_client = StaticWebSearchClient()
-    return build_tool_registry(
-        ToolAdapterRegistry(
-            web_search_adapter=WebSearchAdapter(client=web_client),
-            web_fetch_adapter=WebFetchAdapter(client=web_client),
-        )
+    adapters = ToolAdapterRegistry(
+        web_search_adapter=WebSearchAdapter(client=web_client),
+        web_fetch_adapter=WebFetchAdapter(client=web_client),
     )
+    settings = Settings.model_validate({"APP_ENV": "test", "WEB_SEARCH_PROVIDER": "static"})
+    return create_tool_registry(adapters, settings)
 
 
 def test_invocation_schema_rejects_unknown_fields() -> None:

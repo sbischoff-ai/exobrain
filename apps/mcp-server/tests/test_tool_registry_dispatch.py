@@ -2,9 +2,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import Field
 
-from app.adapters.tool_adapters import ToolAdapterRegistry
-from app.adapters.tool_registry import ToolRegistration, ToolRegistry, build_tool_registry
-from app.adapters.web_tools import StaticWebSearchClient, WebFetchAdapter, WebSearchAdapter
+from app.adapters.tool_registry import ToolRegistration, ToolRegistry
 from app.contracts import ToolMetadata
 from app.contracts.base import StrictModel
 from app.services.tool_service import ToolService
@@ -20,15 +18,10 @@ class UpperToolOutput(StrictModel):
 
 
 def _build_test_client_with_upper_tool() -> TestClient:
-    web_client = StaticWebSearchClient()
-    adapters = ToolAdapterRegistry(
-        web_search_adapter=WebSearchAdapter(client=web_client),
-        web_fetch_adapter=WebFetchAdapter(client=web_client),
-    )
-
-    registry = build_tool_registry(adapters)
+    registry = ToolRegistry(registrations=[])
     upper_registration = ToolRegistration(
         name="upper",
+        category="custom",
         metadata_provider=lambda: ToolMetadata(
             name="upper",
             description="Uppercase input text.",

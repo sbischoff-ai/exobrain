@@ -111,6 +111,15 @@ class WebFetchToolSuccess(StrictModel):
     metadata: CorrelationMetadata | None = None
 
 
+class GenericToolSuccessEnvelope(StrictModel):
+    """Fallback success envelope for dynamically registered tools."""
+
+    ok: Literal[True] = True
+    name: str
+    result: Any
+    metadata: CorrelationMetadata | None = None
+
+
 class ToolErrorEnvelope(StrictModel):
     ok: Literal[False] = False
     name: str
@@ -118,11 +127,6 @@ class ToolErrorEnvelope(StrictModel):
     metadata: CorrelationMetadata | None = None
 
 
-class ToolSuccessEnvelope(StrictModel):
-    ok: Literal[True] = True
-    name: str
-    result: Any
-    metadata: CorrelationMetadata | None = None
-
-
+KnownToolSuccess = EchoToolSuccess | AddToolSuccess | WebSearchToolSuccess | WebFetchToolSuccess
+ToolSuccessEnvelope = KnownToolSuccess | GenericToolSuccessEnvelope
 ToolResult = ToolSuccessEnvelope | ToolErrorEnvelope
