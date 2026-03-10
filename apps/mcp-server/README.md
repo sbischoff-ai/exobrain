@@ -147,3 +147,14 @@ cd apps/mcp-server
 - `LOG_LEVEL` (optional)
 - `MCP_SERVER_HOST` (default: `0.0.0.0`)
 - `MCP_SERVER_PORT` (default: `8090`)
+- `WEB_SEARCH_PROVIDER` (`auto` | `static` | `tavily`, default: `auto`)
+- `TAVILY_API_KEY` (required when provider resolves to `tavily`)
+- `TAVILY_BASE_URL` (default: `https://api.tavily.com`)
+
+### Web search runtime modes
+
+- `WEB_SEARCH_PROVIDER=auto`:
+  - `APP_ENV=local` or `APP_ENV=test` uses `StaticWebSearchClient` (deterministic local/test behavior).
+  - all other environments use Tavily.
+- `WEB_SEARCH_PROVIDER=static`: always uses `StaticWebSearchClient`.
+- `WEB_SEARCH_PROVIDER=tavily`: always uses Tavily and requires `TAVILY_API_KEY`.

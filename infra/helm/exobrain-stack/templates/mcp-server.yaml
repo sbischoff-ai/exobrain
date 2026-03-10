@@ -24,6 +24,13 @@ spec:
               value: {{ .Values.mcpServer.env.APP_ENV | quote }}
             - name: LOG_LEVEL
               value: {{ .Values.mcpServer.env.LOG_LEVEL | quote }}
+            - name: WEB_SEARCH_PROVIDER
+              value: {{ .Values.mcpServer.env.WEB_SEARCH_PROVIDER | quote }}
+            - name: TAVILY_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.mcpServer.secrets.tavilyApiKey.name | quote }}
+                  key: {{ .Values.mcpServer.secrets.tavilyApiKey.key | quote }}
           ports:
             - containerPort: {{ .Values.mcpServer.service.port }}
           readinessProbe:
