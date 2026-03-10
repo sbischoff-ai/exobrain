@@ -93,7 +93,7 @@ class Settings(BaseSettings):
     )
     knowledge_update_max_tokens: int = Field(default=8000, alias="KNOWLEDGE_UPDATE_MAX_TOKENS")
 
-    mcp_server_url: str = Field(default="http://localhost:8001", alias="MCP_SERVER_URL")
+    mcp_server_url: str = Field(default="http://localhost:8090", alias="MCP_SERVER_URL")
     mcp_request_timeout_seconds: float = Field(
         default=5.0,
         alias="MCP_REQUEST_TIMEOUT_SECONDS",

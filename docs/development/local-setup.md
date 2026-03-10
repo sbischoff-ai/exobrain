@@ -59,6 +59,7 @@ This script starts local infrastructure, resets graph stores, applies database m
 ./scripts/local/build-knowledge-interface.sh
 ./scripts/local/build-assistant-frontend.sh
 ./scripts/local/build-model-provider.sh
+./scripts/local/build-mcp-server.sh
 ```
 
 `knowledge-graph-reset.sh` preserves prior running state for memgraph/qdrant/memgraph-lab (does not auto-start if they were down).

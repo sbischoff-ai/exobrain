@@ -171,7 +171,7 @@ Core runtime vars:
 - `JOB_ORCHESTRATOR_CONNECT_TIMEOUT_SECONDS` (gRPC request timeout in seconds, default `5.0`)
 - `KNOWLEDGE_INTERFACE_GRPC_TARGET` (knowledge-interface gRPC endpoint for read APIs, default `localhost:50051`)
 - `KNOWLEDGE_INTERFACE_CONNECT_TIMEOUT_SECONDS` (knowledge-interface gRPC request timeout in seconds, default `5.0`)
-- `MCP_SERVER_URL` (MCP HTTP base URL used by assistant tool calls, default `http://localhost:8001` (client calls `/mcp/tools` and `/mcp/tools/invoke`))
+- `MCP_SERVER_URL` (MCP HTTP base URL used by assistant tool calls, default `http://localhost:8090` (client calls `/mcp/tools` and `/mcp/tools/invoke`))
 - `MCP_REQUEST_TIMEOUT_SECONDS` (MCP tool list/invoke timeout in seconds, default `5.0`)
 - `MCP_MAX_RETRIES` (MCP retry attempts for timeout/transient transport failures, default `2`)
 - Knowledge wiki category trees are derived from active `GetSchema` node types (`kind=node`, ids prefixed `node.`), rooted at direct children of `node.entity` (excluding `node.block` and `node.universe`), and sorted by `display_name` then `id`.
