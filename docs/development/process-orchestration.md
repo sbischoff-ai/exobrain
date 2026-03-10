@@ -26,7 +26,7 @@ This guide defines the canonical way to start Exobrain processes for local devel
 
 `job-orchestrator` is launched via `scripts/local/run-job-orchestrator.sh`, which starts both the gRPC API (`app.main_api`) and worker (`app.main_worker`) unless disabled via `JOB_ORCHESTRATOR_API_ENABLED=false` or `JOB_ORCHESTRATOR_WORKER_ENABLED=false`.
 
-`mcp-server` is launched via `scripts/local/run-mcp-server.sh` and should remain running whenever backend tool execution flows are under test.
+`mcp-server` is launched via `scripts/local/run-mcp-server.sh` and should remain running for backend agent tool execution flows (tool discovery and invocation).
 
 ## Script ownership matrix
 
@@ -57,11 +57,6 @@ assistant-backend -> job-orchestrator (gRPC EnqueueJob) -> JetStream jobs.<job_t
 - **Backend integration errors about missing tables**: rerun `./scripts/local/assistant-db-setup.sh`.
 - **Agent tool invocation failures**: ensure `mcp-server` is running and `MCP_SERVER_URL` in assistant-backend points at the expected endpoint.
 - **Knowledge interface embedding errors**: ensure `model-provider` is running and `MODEL_PROVIDER_BASE_URL` points to it.
-
-## Out-of-scope deployment artifacts
-
-This change only adds local process helpers and mprocs wiring for `mcp-server`.
-Helm/Docker deployment artifact changes are intentionally deferred as a follow-up to keep scope minimal (smallest-change-first).
 
 ## References
 

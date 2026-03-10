@@ -189,6 +189,93 @@ Model/tool vars:
 - `MAIN_AGENT_MODEL` (alias, default `agent`)
 - Agent tools are discovered from MCP `GET /mcp/tools` and executed via `POST /mcp/tools/invoke`; tool lifecycle SSE events still map known tool names (`web_search`, `web_fetch`) to user-facing progress updates.
 
+## MCP tool HTTP contract
+
+assistant-backend integrates with mcp-server over HTTP REST. The integration contract is request/response JSON over `/mcp/tools` and `/mcp/tools/invoke` (not JSON-RPC).
+
+### Canonical request/response examples
+
+`GET /mcp/tools`
+
+```json
+{
+  "tools": [
+    {
+      "name": "web_search",
+      "description": "Search the web for relevant results",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": {"type": "string"},
+          "max_results": {"type": "integer", "minimum": 1, "maximum": 10},
+          "recency_days": {"type": "integer", "minimum": 1}
+        },
+        "required": ["query"],
+        "additionalProperties": false
+      }
+    }
+  ]
+}
+```
+
+`POST /mcp/tools/invoke` request body:
+
+```json
+{
+  "name": "web_fetch",
+  "arguments": {
+    "url": "https://example.com",
+    "max_chars": 4000
+  },
+  "metadata": {
+    "correlation_id": "chat-123",
+    "request_id": "req-456"
+  }
+}
+```
+
+Success response body:
+
+```json
+{
+  "ok": true,
+  "name": "web_fetch",
+  "result": {
+    "url": "https://example.com",
+    "title": "Example Domain",
+    "content_text": "...",
+    "extracted_at": "2026-03-01T10:30:00Z",
+    "content_truncated": false
+  },
+  "metadata": {
+    "correlation_id": "chat-123",
+    "request_id": "req-456"
+  }
+}
+```
+
+Error response body:
+
+```json
+{
+  "ok": false,
+  "name": "web_fetch",
+  "error": {
+    "code": "TOOL_INVOCATION_ERROR",
+    "message": "failed to fetch url"
+  },
+  "metadata": {
+    "correlation_id": "chat-123",
+    "request_id": "req-456"
+  }
+}
+```
+
+### Contract source of truth
+
+Canonical MCP HTTP contract types live in `apps/mcp-server/app/contracts/` and are owned by the mcp-server service.
+
+
 OpenAPI and logging:
 
 - `APP_ENV=local` enables `/docs`; non-local disables OpenAPI docs.
