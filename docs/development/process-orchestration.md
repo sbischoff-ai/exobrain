@@ -55,7 +55,7 @@ assistant-backend -> job-orchestrator (gRPC EnqueueJob) -> JetStream jobs.<job_t
 - **`mprocs: command not found`**: run via `nix-shell` so `shell.nix` tooling is loaded.
 - **Port in use**: stop previous local processes on `8000`, `50051`, `5173`, or update script env vars.
 - **Backend integration errors about missing tables**: rerun `./scripts/local/assistant-db-setup.sh`.
-- **Agent tool invocation failures**: ensure `mcp-server` is running and `MCP_SERVER_URL` in assistant-backend points at the expected endpoint.
+- **Agent tool invocation failures**: ensure `mcp-server` is running and `MCP_SERVER_URL` in assistant-backend points at the expected endpoint (`http://localhost:8090` by default).
 - **Knowledge interface embedding errors**: ensure `model-provider` is running and `MODEL_PROVIDER_BASE_URL` points to it.
 
 ## References

@@ -27,6 +27,7 @@ run_step "build assistant backend" ./scripts/local/build-assistant-backend.sh
 run_step "build assistant frontend" ./scripts/local/build-assistant-frontend.sh
 run_step "build job orchestrator" ./scripts/local/build-job-orchestrator.sh
 run_step "build knowledge interface" ./scripts/local/build-knowledge-interface.sh
+run_step "build mcp server" ./scripts/local/build-mcp-server.sh
 run_step "build model provider" ./scripts/local/build-model-provider.sh
 
 echo

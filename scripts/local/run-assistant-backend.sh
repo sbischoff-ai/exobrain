@@ -9,7 +9,7 @@ export EXOBRAIN_NATS_URL=${EXOBRAIN_NATS_URL:-nats://localhost:14222}
 export RESHAPE_SCHEMA_QUERY=${RESHAPE_SCHEMA_QUERY:-$(reshape schema-query)}
 export MODEL_PROVIDER_BASE_URL=${MODEL_PROVIDER_BASE_URL:-http://localhost:8010/v1}
 export MAIN_AGENT_MODEL=${MAIN_AGENT_MODEL:-agent}
-export MCP_SERVER_URL=${MCP_SERVER_URL:-http://localhost:8001}
+export MCP_SERVER_URL=${MCP_SERVER_URL:-http://localhost:8090}
 
 if [[ -n "${CODEX_HOME:-}" ]]; then
   export MAIN_AGENT_USE_MOCK=${MAIN_AGENT_USE_MOCK:-true}
