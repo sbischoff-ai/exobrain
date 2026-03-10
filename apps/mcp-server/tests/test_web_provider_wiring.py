@@ -20,12 +20,20 @@ def _settings(**overrides: object) -> Settings:
     return Settings.model_validate(base)
 
 
-def test_auto_provider_uses_static_in_local() -> None:
+def test_auto_provider_uses_static_in_local_without_api_key() -> None:
     client = create_web_search_client(_settings(APP_ENV="local", WEB_SEARCH_PROVIDER="auto"))
 
     from app.adapters.web_tools import StaticWebSearchClient
 
     assert isinstance(client, StaticWebSearchClient)
+
+
+def test_auto_provider_uses_tavily_in_local_when_api_key_is_set() -> None:
+    client = create_web_search_client(
+        _settings(APP_ENV="local", WEB_SEARCH_PROVIDER="auto", TAVILY_API_KEY="token")
+    )
+
+    assert isinstance(client, TavilyWebSearchClient)
 
 
 def test_auto_provider_uses_tavily_outside_local_test() -> None:

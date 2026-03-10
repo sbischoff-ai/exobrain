@@ -82,6 +82,8 @@ Full-stack profile:
 ./scripts/local/run-fullstack-suite.sh
 ```
 
+If you want `mcp-server` web tools (`web_search`, `web_fetch`) to use real Tavily responses in local/fullstack runs, set `TAVILY_API_KEY` in your shell (or in `apps/mcp-server/.env` once created). Without a Tavily key, local/test auto mode falls back to static example responses.
+
 Knowledge-update enqueue flow:
 
 ```text

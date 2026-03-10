@@ -167,7 +167,8 @@ cd apps/mcp-server
 ### Web search runtime modes
 
 - `WEB_SEARCH_PROVIDER=auto`:
-  - `APP_ENV=local` or `APP_ENV=test` uses `StaticWebSearchClient` (deterministic local/test behavior).
-  - all other environments use Tavily.
+  - uses Tavily whenever `TAVILY_API_KEY` is set (including `APP_ENV=local` and `APP_ENV=test`).
+  - falls back to `StaticWebSearchClient` only for `APP_ENV=local` or `APP_ENV=test` when no `TAVILY_API_KEY` is configured.
+  - requires `TAVILY_API_KEY` in all other environments.
 - `WEB_SEARCH_PROVIDER=static`: always uses `StaticWebSearchClient`.
 - `WEB_SEARCH_PROVIDER=tavily`: always uses Tavily and requires `TAVILY_API_KEY`.
