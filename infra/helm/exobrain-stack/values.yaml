@@ -145,6 +145,27 @@ modelProvider:
           upstream_model: text-embedding-3-large
           defaults: {}
 
+mcpServer:
+  replicaCount: 1
+  image:
+    repository: exobrain/mcp-server
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 3001
+  env:
+    APP_ENV: cluster
+    LOG_LEVEL: INFO
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+
 metastore:
   replicaCount: 1
   image:
