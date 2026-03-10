@@ -53,6 +53,12 @@ ASSISTANT_BACKEND_INTEGRATION_ENV_FILE=tests/integration/.env.integration \
   uv run --with pytest --with pytest-asyncio --with httpx pytest -m integration
 ```
 
+MCP bridge integration coverage (assistant `build_mcp_tools` + mounted `apps/mcp-server` app):
+
+```bash
+cd apps/assistant-backend && uv run --extra dev pytest tests/integration/test_mcp_tool_bridge_integration.py
+```
+
 Run static checks + tests together:
 
 ```bash
