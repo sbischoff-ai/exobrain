@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/svelte';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/svelte';
+import { describe, expect, it, vi } from 'vitest';
 
 import PageCard from './PageCard.svelte';
 
@@ -21,4 +21,22 @@ describe('PageCard', () => {
     expect(container.querySelector('p')).toHaveClass('summary-clamp');
   });
 
+  it('stops click propagation so parent category cards are not activated', async () => {
+    const { container } = render(PageCard, {
+      props: {
+        page: {
+          id: 'page-2',
+          title: 'Nested Page',
+          summary: null
+        }
+      }
+    });
+
+    const parentClick = vi.fn();
+    container.addEventListener('click', parentClick);
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Nested Page' }));
+
+    expect(parentClick).not.toHaveBeenCalled();
+  });
 });
