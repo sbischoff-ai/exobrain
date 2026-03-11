@@ -1,6 +1,6 @@
 pub mod errors;
 pub mod grpc;
-pub mod mappers;
+pub mod mapping;
 
 pub mod proto {
     tonic::include_proto!("exobrain.knowledge.v1");

@@ -2,9 +2,9 @@ use anyhow::{anyhow, Result};
 
 use crate::domain::{GetEntityContextQuery, GetEntityContextResult};
 
-use super::KnowledgeApplication;
+use crate::application::KnowledgeApplication;
 
-pub(super) async fn get_entity_context(
+pub(crate) async fn get_entity_context(
     app: &KnowledgeApplication,
     mut query: GetEntityContextQuery,
 ) -> Result<GetEntityContextResult> {

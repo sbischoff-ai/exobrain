@@ -4,258 +4,26 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset, NaiveDate, NaiveDateTime, NaiveTime};
 use neo4rs::{query, BoltMap, BoltType, ConfigBuilder, Graph, Txn};
-use qdrant_client::{
-    qdrant::{
-        value::Kind, Condition, CreateCollectionBuilder, DeletePointsBuilder, Distance, Filter,
-        PointId, PointStruct, SearchPointsBuilder, UpsertPointsBuilder, Value, VectorParamsBuilder,
-    },
-    Qdrant,
-};
-use reqwest::header::CONTENT_TYPE;
-use serde::{Deserialize, Serialize};
-use sqlx::{postgres::PgPoolOptions, PgPool, Row};
 use tracing::warn;
+
+use crate::infrastructure::qdrant::{payload_i64, payload_string, QdrantVectorStore};
 
 use crate::{
     domain::{
-        EdgeEndpointRule, EmbeddedBlock, EntityCandidate, EntityContextBlockItem,
-        EntityContextEntitySnapshot, EntityContextNeighborItem, EntityContextOtherEntity,
-        ExistingBlockContext, ExtractionUniverse, FindEntityCandidatesQuery, GetEntityContextQuery,
+        EmbeddedBlock, EntityCandidate, EntityContextBlockItem, EntityContextEntitySnapshot,
+        EntityContextNeighborItem, EntityContextOtherEntity, ExistingBlockContext,
+        ExtractionUniverse, FindEntityCandidatesQuery, GetEntityContextQuery,
         GetEntityContextResult, GraphDelta, ListEntitiesByTypeQuery, ListEntitiesByTypeResult,
-        NeighborDirection, NodeRelationshipCounts, PropertyScalar, PropertyValue, SchemaKind,
-        SchemaType, TypeInheritance, TypeProperty, TypedEntityListItem,
-        UpsertSchemaTypePropertyInput, UserInitGraphNodeIds, Visibility,
+        NeighborDirection, NodeRelationshipCounts, PropertyScalar, PropertyValue,
+        TypedEntityListItem, UserInitGraphNodeIds, Visibility,
     },
-    ports::{Embedder, GraphRepository, SchemaRepository},
+    ports::GraphRepository,
 };
 
 const ENTITY_BLOCK_VOLUME_WEIGHT: f64 = 0.30;
 const ENTITY_OWNERSHIP_WEIGHT: f64 = 0.15;
 const ENTITY_NEIGHBOR_COUNT_WEIGHT: f64 = 0.10;
 const ENTITY_LIST_DEFAULT_UPDATED_AT_EPOCH: &str = "1970-01-01T00:00:00Z";
-
-pub struct PostgresSchemaRepository {
-    pool: PgPool,
-}
-
-impl PostgresSchemaRepository {
-    pub async fn new(dsn: &str) -> Result<Self> {
-        let pool = PgPoolOptions::new().max_connections(5).connect(dsn).await?;
-        Ok(Self { pool })
-    }
-}
-
-#[async_trait]
-impl SchemaRepository for PostgresSchemaRepository {
-    async fn get_by_kind(&self, kind: SchemaKind) -> Result<Vec<SchemaType>> {
-        let rows = sqlx::query(
-            "SELECT id, kind, name, description, active FROM knowledge_graph_schema_types WHERE kind = $1 AND active = TRUE ORDER BY name",
-        )
-        .bind(kind.as_db_str())
-        .fetch_all(&self.pool)
-        .await?;
-
-        Ok(rows
-            .into_iter()
-            .map(|row| SchemaType {
-                id: row.get("id"),
-                kind: row.get("kind"),
-                name: row.get("name"),
-                description: row.get("description"),
-                active: row.get("active"),
-            })
-            .collect())
-    }
-
-    async fn upsert(&self, schema_type: &SchemaType) -> Result<SchemaType> {
-        let row = sqlx::query(
-            r#"INSERT INTO knowledge_graph_schema_types (id, kind, name, description, active)
-            VALUES ($1, $2, $3, $4, $5)
-            ON CONFLICT (id)
-            DO UPDATE SET kind = EXCLUDED.kind, name = EXCLUDED.name, description = EXCLUDED.description, active = EXCLUDED.active, updated_at = NOW()
-            RETURNING id, kind, name, description, active"#,
-        )
-        .bind(&schema_type.id)
-        .bind(&schema_type.kind)
-        .bind(&schema_type.name)
-        .bind(&schema_type.description)
-        .bind(schema_type.active)
-        .fetch_one(&self.pool)
-        .await?;
-
-        Ok(SchemaType {
-            id: row.get("id"),
-            kind: row.get("kind"),
-            name: row.get("name"),
-            description: row.get("description"),
-            active: row.get("active"),
-        })
-    }
-
-    async fn get_type_inheritance(&self) -> Result<Vec<TypeInheritance>> {
-        let rows = sqlx::query(
-            "SELECT child_type_id, parent_type_id, description, active FROM knowledge_graph_schema_type_inheritance WHERE active = TRUE ORDER BY child_type_id, parent_type_id",
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        Ok(rows
-            .into_iter()
-            .map(|row| TypeInheritance {
-                child_type_id: row.get("child_type_id"),
-                parent_type_id: row.get("parent_type_id"),
-                description: row.get("description"),
-                active: row.get("active"),
-            })
-            .collect())
-    }
-
-    async fn get_all_properties(&self) -> Result<Vec<TypeProperty>> {
-        let rows = sqlx::query(
-            "SELECT owner_type_id, prop_name, value_type, required, readable, writable, active, description FROM knowledge_graph_schema_type_properties WHERE active = TRUE ORDER BY owner_type_id, prop_name",
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        Ok(rows
-            .into_iter()
-            .map(|row| TypeProperty {
-                owner_type_id: row.get("owner_type_id"),
-                prop_name: row.get("prop_name"),
-                value_type: row.get("value_type"),
-                required: row.get("required"),
-                readable: row.get("readable"),
-                writable: row.get("writable"),
-                active: row.get("active"),
-                description: row.get("description"),
-            })
-            .collect())
-    }
-
-    async fn get_edge_endpoint_rules(&self) -> Result<Vec<EdgeEndpointRule>> {
-        let rows = sqlx::query(
-            "SELECT edge_type_id, from_node_type_id, to_node_type_id, active, description FROM knowledge_graph_schema_edge_rules WHERE active = TRUE ORDER BY edge_type_id, from_node_type_id, to_node_type_id",
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        Ok(rows
-            .into_iter()
-            .map(|row| EdgeEndpointRule {
-                edge_type_id: row.get("edge_type_id"),
-                from_node_type_id: row.get("from_node_type_id"),
-                to_node_type_id: row.get("to_node_type_id"),
-                active: row.get("active"),
-                description: row.get("description"),
-            })
-            .collect())
-    }
-
-    async fn get_schema_type(&self, id: &str) -> Result<Option<SchemaType>> {
-        let row = sqlx::query(
-            "SELECT id, kind, name, description, active FROM knowledge_graph_schema_types WHERE id = $1",
-        )
-        .bind(id)
-        .fetch_optional(&self.pool)
-        .await?;
-
-        Ok(row.map(|row| SchemaType {
-            id: row.get("id"),
-            kind: row.get("kind"),
-            name: row.get("name"),
-            description: row.get("description"),
-            active: row.get("active"),
-        }))
-    }
-
-    async fn get_parent_for_child(&self, child_type_id: &str) -> Result<Option<String>> {
-        let row = sqlx::query(
-            "SELECT parent_type_id FROM knowledge_graph_schema_type_inheritance WHERE child_type_id = $1 AND active = TRUE LIMIT 1",
-        )
-        .bind(child_type_id)
-        .fetch_optional(&self.pool)
-        .await?;
-
-        Ok(row.map(|r| r.get("parent_type_id")))
-    }
-
-    async fn is_descendant_of_entity(&self, node_type_id: &str) -> Result<bool> {
-        if node_type_id == "node.entity" {
-            return Ok(true);
-        }
-
-        let row = sqlx::query(
-            r#"WITH RECURSIVE lineage AS (
-                SELECT child_type_id, parent_type_id
-                FROM knowledge_graph_schema_type_inheritance
-                WHERE child_type_id = $1 AND active = TRUE
-                UNION ALL
-                SELECT i.child_type_id, i.parent_type_id
-                FROM knowledge_graph_schema_type_inheritance i
-                JOIN lineage l ON i.child_type_id = l.parent_type_id
-                WHERE i.active = TRUE
-            )
-            SELECT 1 AS found FROM lineage WHERE parent_type_id = 'node.entity' LIMIT 1"#,
-        )
-        .bind(node_type_id)
-        .fetch_optional(&self.pool)
-        .await?;
-
-        Ok(row.is_some())
-    }
-
-    async fn upsert_inheritance(
-        &self,
-        child_type_id: &str,
-        parent_type_id: &str,
-        description: &str,
-    ) -> Result<()> {
-        sqlx::query(
-            r#"INSERT INTO knowledge_graph_schema_type_inheritance (child_type_id, parent_type_id, active, description, universe_id)
-            VALUES ($1, $2, TRUE, $3, NULL)
-            ON CONFLICT (child_type_id, parent_type_id)
-            DO UPDATE SET active = TRUE, description = EXCLUDED.description"#,
-        )
-        .bind(child_type_id)
-        .bind(parent_type_id)
-        .bind(description)
-        .execute(&self.pool)
-        .await?;
-
-        Ok(())
-    }
-
-    async fn upsert_type_property(
-        &self,
-        owner_type_id: &str,
-        property: &UpsertSchemaTypePropertyInput,
-    ) -> Result<()> {
-        sqlx::query(
-            r#"INSERT INTO knowledge_graph_schema_type_properties (owner_type_id, prop_name, value_type, required, readable, writable, active, description)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            ON CONFLICT (owner_type_id, prop_name)
-            DO UPDATE SET
-              value_type = EXCLUDED.value_type,
-              required = EXCLUDED.required,
-              readable = EXCLUDED.readable,
-              writable = EXCLUDED.writable,
-              active = EXCLUDED.active,
-              description = EXCLUDED.description"#,
-        )
-        .bind(owner_type_id)
-        .bind(&property.prop_name)
-        .bind(&property.value_type)
-        .bind(property.required)
-        .bind(property.readable)
-        .bind(property.writable)
-        .bind(property.active)
-        .bind(&property.description)
-        .execute(&self.pool)
-        .await?;
-
-        Ok(())
-    }
-}
 
 pub struct Neo4jGraphStore {
     graph: Graph,
@@ -943,90 +711,6 @@ fn to_typed_entity_list_item(
     }
 }
 
-pub struct QdrantVectorStore {
-    client: Qdrant,
-    collection: String,
-    vector_size: u64,
-}
-
-impl QdrantVectorStore {
-    pub fn new(url: &str, collection: &str) -> Result<Self> {
-        let normalized = normalize_qdrant_grpc_url(url);
-        let client = Qdrant::from_url(&normalized).build()?;
-        Ok(Self {
-            client,
-            collection: collection.to_string(),
-            vector_size: 3072,
-        })
-    }
-
-    async fn ensure_collection(&self) -> Result<()> {
-        if self.client.collection_exists(&self.collection).await? {
-            return Ok(());
-        }
-
-        self.client
-            .create_collection(
-                CreateCollectionBuilder::new(&self.collection)
-                    .vectors_config(VectorParamsBuilder::new(self.vector_size, Distance::Cosine)),
-            )
-            .await
-            .with_context(|| format!("failed to create qdrant collection {}", self.collection))?;
-        Ok(())
-    }
-
-    async fn upsert_blocks(&self, blocks: &[EmbeddedBlock]) -> Result<()> {
-        if blocks.is_empty() {
-            return Ok(());
-        }
-
-        for block in blocks {
-            if block.vector.is_empty() {
-                anyhow::bail!(
-                    "block {} produced an empty embedding vector; cannot upsert to qdrant",
-                    block.block.id
-                );
-            }
-            if block.vector.len() as u64 != self.vector_size {
-                anyhow::bail!(
-                    "block {} embedding dimension {} does not match configured qdrant dimension {}",
-                    block.block.id,
-                    block.vector.len(),
-                    self.vector_size
-                );
-            }
-        }
-
-        self.ensure_collection().await?;
-
-        let points: Vec<PointStruct> = blocks.iter().map(to_point).collect();
-        self.client
-            .upsert_points(UpsertPointsBuilder::new(&self.collection, points).wait(true))
-            .await?;
-
-        Ok(())
-    }
-
-    async fn rollback_points(&self, blocks: &[EmbeddedBlock]) -> Result<()> {
-        if blocks.is_empty() {
-            return Ok(());
-        }
-
-        let ids: Vec<PointId> = blocks
-            .iter()
-            .map(|b| PointId::from(b.block.id.clone()))
-            .collect();
-        self.client
-            .delete_points(
-                DeletePointsBuilder::new(&self.collection)
-                    .points(ids)
-                    .wait(true),
-            )
-            .await?;
-        Ok(())
-    }
-}
-
 pub struct MemgraphQdrantGraphRepository {
     graph_store: Neo4jGraphStore,
     vector_store: QdrantVectorStore,
@@ -1222,22 +906,13 @@ impl GraphRepository for MemgraphQdrantGraphRepository {
 
         if let Some(vector) = query_vector {
             let search_limit = (find_query.limit.unwrap_or(10) as u64).saturating_mul(8);
-            let search = SearchPointsBuilder::new(
-                &self.vector_store.collection,
-                vector.to_vec(),
-                search_limit,
-            )
-            .with_payload(true)
-            .filter(qdrant_user_or_shared_access_filter(&find_query.user_id));
-
-            let response = self
+            let points = self
                 .vector_store
-                .client
-                .search_points(search)
+                .search(vector, search_limit, &find_query.user_id)
                 .await
                 .context("failed to query qdrant semantic candidates")?;
 
-            for point in response.result {
+            for point in points {
                 let Some(root_entity_id) = payload_string(&point.payload, "root_entity_id") else {
                     continue;
                 };
@@ -1577,60 +1252,8 @@ fn compute_name_score(
     }
 }
 
-fn payload_string(payload: &HashMap<String, Value>, key: &str) -> Option<String> {
-    payload
-        .get(key)
-        .and_then(|value| value.kind.as_ref())
-        .and_then(|kind| match kind {
-            Kind::StringValue(value) => Some(value.clone()),
-            _ => None,
-        })
-}
-
-fn payload_i64(payload: &HashMap<String, Value>, key: &str) -> Option<i64> {
-    payload
-        .get(key)
-        .and_then(|value| value.kind.as_ref())
-        .and_then(|kind| match kind {
-            Kind::IntegerValue(value) => Some(*value),
-            Kind::DoubleValue(value) => Some(*value as i64),
-            _ => None,
-        })
-}
-
 fn memgraph_user_or_shared_access_clause(alias: &str) -> String {
     format!("({alias}.user_id = $user_id OR {alias}.visibility = 'SHARED')")
-}
-
-fn qdrant_user_or_shared_access_filter(user_id: &str) -> Filter {
-    Filter::should([
-        Condition::matches("user_id", user_id.to_string()),
-        Condition::matches("visibility", "SHARED".to_string()),
-    ])
-}
-
-fn to_point(embedded: &EmbeddedBlock) -> PointStruct {
-    let mut payload = HashMap::new();
-    payload.insert(
-        "block_id".to_string(),
-        Value::from(embedded.block.id.clone()),
-    );
-    payload.insert(
-        "universe_id".to_string(),
-        Value::from(embedded.universe_id.clone()),
-    );
-    payload.insert("user_id".to_string(), Value::from(embedded.user_id.clone()));
-    payload.insert(
-        "visibility".to_string(),
-        Value::from(visibility_as_str(embedded.visibility).to_string()),
-    );
-    payload.insert("text".to_string(), Value::from(embedded.text.clone()));
-    payload.insert(
-        "root_entity_id".to_string(),
-        Value::from(embedded.root_entity_id.clone()),
-    );
-    payload.insert("block_level".to_string(), Value::from(embedded.block_level));
-    PointStruct::new(embedded.block.id.clone(), embedded.vector.clone(), payload)
 }
 
 fn sanitize_labels(labels: &[String]) -> Result<Vec<String>> {
@@ -1732,98 +1355,6 @@ fn property_scalar_to_bolt_type(value: &PropertyScalar) -> BoltType {
     }
 }
 
-#[derive(Debug, Serialize)]
-struct EmbeddingRequest<'a> {
-    input: &'a [String],
-    model: &'a str,
-}
-
-#[derive(Debug, Deserialize)]
-struct EmbeddingResponse {
-    data: Vec<EmbeddingDatum>,
-}
-
-#[derive(Debug, Deserialize)]
-struct EmbeddingDatum {
-    embedding: Vec<f32>,
-}
-
-pub struct OpenAiCompatibleEmbedder {
-    client: reqwest::Client,
-    base_url: String,
-    model_alias: String,
-}
-
-impl OpenAiCompatibleEmbedder {
-    pub fn new(base_url: String, model_alias: String) -> Self {
-        Self {
-            client: reqwest::Client::new(),
-            base_url,
-            model_alias,
-        }
-    }
-}
-
-#[async_trait]
-impl Embedder for OpenAiCompatibleEmbedder {
-    async fn embed_texts(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
-        if texts.is_empty() {
-            return Ok(vec![]);
-        }
-
-        let url = format!("{}/embeddings", self.base_url.trim_end_matches('/'));
-        let response: EmbeddingResponse = self
-            .client
-            .post(url)
-            .header(CONTENT_TYPE, "application/json")
-            .json(&EmbeddingRequest {
-                input: texts,
-                model: &self.model_alias,
-            })
-            .send()
-            .await?
-            .error_for_status()?
-            .json()
-            .await?;
-
-        Ok(response.data.into_iter().map(|d| d.embedding).collect())
-    }
-}
-
-pub struct MockEmbedder;
-
-#[async_trait]
-impl Embedder for MockEmbedder {
-    async fn embed_texts(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
-        Ok(texts
-            .iter()
-            .map(|text| {
-                let mut v = vec![0.0_f32; 3072];
-                for (idx, byte) in text.as_bytes().iter().enumerate() {
-                    v[idx % 3072] += (*byte as f32) / 255.0;
-                }
-                v
-            })
-            .collect())
-    }
-}
-
-fn normalize_qdrant_grpc_url(url: &str) -> String {
-    let mut normalized = if url.starts_with("http://") || url.starts_with("https://") {
-        url.to_string()
-    } else {
-        format!("http://{url}")
-    };
-
-    if normalized.ends_with(":6333") {
-        normalized = format!("{}:6334", &normalized[..normalized.len() - 5]);
-    } else if normalized.ends_with(":16333") {
-        normalized = format!("{}:16334", &normalized[..normalized.len() - 6]);
-    }
-
-    normalized
-}
-
 fn internal_timestamp_trigger_specs() -> [(&'static str, &'static str); 4] {
     [
         (
@@ -1892,14 +1423,16 @@ mod tests {
         build_get_entity_context_block_neighbors_query, build_get_entity_context_blocks_query,
         build_get_entity_context_entity_query, build_get_entity_context_neighbors_query,
         build_list_entities_by_type_query, compute_name_score, internal_timestamp_trigger_specs,
-        memgraph_user_or_shared_access_clause, normalize_qdrant_grpc_url, parse_block_level,
-        parse_neighbor_direction, payload_i64, payload_string, prop_as_aliases,
-        property_scalar_to_bolt_type, property_values_to_bolt_map,
-        qdrant_user_or_shared_access_filter, semantic_score_with_block_level,
-        to_typed_entity_list_item, trigger_name_column_candidates, type_id_to_memgraph_label,
-        upsert_semantic_candidate, validate_edge_type, MockEmbedder,
+        memgraph_user_or_shared_access_clause, parse_block_level, parse_neighbor_direction,
+        prop_as_aliases, property_scalar_to_bolt_type, property_values_to_bolt_map,
+        semantic_score_with_block_level, to_typed_entity_list_item, trigger_name_column_candidates,
+        type_id_to_memgraph_label, upsert_semantic_candidate, validate_edge_type,
     };
     use crate::domain::Visibility;
+    use crate::infrastructure::embedding::MockEmbedder;
+    use crate::infrastructure::qdrant::{
+        normalize_qdrant_grpc_url, payload_i64, payload_string, qdrant_user_or_shared_access_filter,
+    };
     use crate::ports::Embedder;
     use chrono::{DateTime, FixedOffset, NaiveDate, NaiveDateTime, NaiveTime};
     use neo4rs::BoltType;

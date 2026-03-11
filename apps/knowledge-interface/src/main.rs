@@ -1,19 +1,21 @@
-mod adapters;
+mod application;
 mod config;
 mod domain;
+mod infrastructure;
 mod ports;
 mod presentation;
-mod service;
 mod transport;
 
 use std::sync::Arc;
 
-use adapters::{
-    MemgraphQdrantGraphRepository, MockEmbedder, Neo4jGraphStore, OpenAiCompatibleEmbedder,
-    PostgresSchemaRepository, QdrantVectorStore,
-};
+use application::KnowledgeApplication;
 use config::AppConfig;
-use service::KnowledgeApplication;
+use infrastructure::{
+    embedding::{MockEmbedder, OpenAiCompatibleEmbedder},
+    memgraph::{MemgraphQdrantGraphRepository, Neo4jGraphStore},
+    postgres::PostgresSchemaRepository,
+    qdrant::QdrantVectorStore,
+};
 use tracing_subscriber::EnvFilter;
 use transport::grpc::run_server;
 

@@ -2,9 +2,9 @@ use anyhow::{anyhow, Result};
 
 use crate::domain::{FindEntityCandidatesQuery, FindEntityCandidatesResult};
 
-use super::KnowledgeApplication;
+use crate::application::KnowledgeApplication;
 
-pub(super) async fn find_entity_candidates(
+pub(crate) async fn find_entity_candidates(
     app: &KnowledgeApplication,
     mut query: FindEntityCandidatesQuery,
 ) -> Result<FindEntityCandidatesResult> {
