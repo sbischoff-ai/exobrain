@@ -27,7 +27,8 @@ def build_knowledge_tool_registrations(adapters: ToolAdapterRegistry) -> list[To
             category="knowledge",
             metadata_provider=schema_metadata(
                 "get_entity_context",
-                "Hydrate compact markdown context for a canonical entity_id and return related entity handles for follow-up retrieval.",
+                "Use this after resolve_entities, or when canonical entity_id is already known in context (for example from a prior get_entity_context related entity). "
+                "Hydrate compact markdown context for that canonical node and return related entity handles for follow-up retrieval.",
                 GetEntityContextToolInput,
             ),
             invocation_parser=input_parser(GetEntityContextToolInput),
