@@ -746,6 +746,26 @@ async fn find_node_type_candidates_rpc_returns_candidates() {
 }
 
 #[tokio::test]
+async fn find_node_type_candidates_rpc_rejects_empty_payload() {
+    let service = make_service(SchemaRepoFixture::default(), GraphRepoFixture::default());
+
+    let error = service
+        .find_node_type_candidates(Request::new(FindNodeTypeCandidatesRequest {
+            name: " ".to_string(),
+            description: "\n".to_string(),
+            limit: None,
+        }))
+        .await
+        .expect_err("rpc should fail");
+
+    assert_eq!(error.code(), Code::InvalidArgument);
+    assert_eq!(
+        error.message(),
+        "at least one of name or description is required"
+    );
+}
+
+#[tokio::test]
 async fn find_edge_type_candidates_rpc_rejects_empty_payload() {
     let service = make_service(SchemaRepoFixture::default(), GraphRepoFixture::default());
 
@@ -763,4 +783,34 @@ async fn find_edge_type_candidates_rpc_rejects_empty_payload() {
         error.message(),
         "at least one of name or description is required"
     );
+}
+
+#[tokio::test]
+async fn find_edge_type_candidates_rpc_returns_candidates() {
+    let service = make_service_with_type_vectors(
+        SchemaRepoFixture::default(),
+        GraphRepoFixture::default(),
+        TypeVectorRepoFixture {
+            node_candidates: Vec::new(),
+            edge_candidates: vec![crate::domain::TypeCandidate {
+                type_id: "edge.assigned_to".to_string(),
+                name: "ASSIGNED_TO".to_string(),
+                description: "assignment".to_string(),
+                score: 0.91,
+            }],
+        },
+    );
+
+    let reply = service
+        .find_edge_type_candidates(Request::new(FindEdgeTypeCandidatesRequest {
+            name: " assigned ".to_string(),
+            description: " relationship ".to_string(),
+            limit: Some(3),
+        }))
+        .await
+        .expect("rpc should succeed")
+        .into_inner();
+
+    assert_eq!(reply.candidates.len(), 1);
+    assert_eq!(reply.candidates[0].type_id, "edge.assigned_to");
 }
