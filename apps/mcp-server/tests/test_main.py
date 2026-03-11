@@ -1,7 +1,8 @@
 from fastapi.testclient import TestClient
 
 from app.adapters.web_tools import StaticWebSearchClient
-from app.main import app
+from app.main import app, create_app
+from app.settings import Settings
 
 
 client = TestClient(app)
@@ -19,10 +20,31 @@ def test_list_tools() -> None:
 
     assert response.status_code == 200
     body = response.json()
+    assert "resolve_entities" in [tool["name"] for tool in body["tools"]]
     assert [tool["name"] for tool in body["tools"]] == ["echo", "add", "resolve_entities", "web_search", "web_fetch"]
     web_fetch = next(tool for tool in body["tools"] if tool["name"] == "web_fetch")
     assert web_fetch["inputSchema"]["properties"]["url"]["type"] == "string"
 
+
+
+
+def test_list_tools_omits_resolve_entities_when_knowledge_disabled() -> None:
+    disabled_client = TestClient(
+        create_app(
+            Settings.model_validate(
+                {
+                    "APP_ENV": "test",
+                    "WEB_SEARCH_PROVIDER": "static",
+                    "ENABLE_KNOWLEDGE_TOOLS": False,
+                }
+            )
+        )
+    )
+
+    response = disabled_client.get("/mcp/tools")
+
+    assert response.status_code == 200
+    assert [tool["name"] for tool in response.json()["tools"]] == ["echo", "add", "web_search", "web_fetch"]
 
 def test_list_tools_exposes_only_canonical_input_schema_field() -> None:
     response = client.get("/mcp/tools")
@@ -124,4 +146,30 @@ def test_invoke_web_fetch_tool_returns_error_envelope_on_adapter_failure(monkeyp
         "name": "web_fetch",
         "error": {"code": "WEB_FETCH_FAILED", "message": "web_fetch failed: network down"},
         "metadata": None,
+    }
+
+
+def test_invoke_resolve_entities_tool_returns_placeholder_envelope_shape() -> None:
+    response = client.post(
+        "/mcp/tools/invoke",
+        json={"name": "resolve_entities", "arguments": {"entities": [{"name": "Acme Corp"}]}},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["name"] == "resolve_entities"
+    assert body["metadata"] is None
+    assert isinstance(body["result"]["results"], list)
+    assert len(body["result"]["results"]) == 1
+    item = body["result"]["results"][0]
+    assert item.keys() == {
+        "entity_id",
+        "name",
+        "aliases",
+        "entity_type",
+        "description",
+        "status",
+        "confidence",
+        "newly_created",
     }

@@ -21,6 +21,7 @@ The runtime exposes an HTTP REST transport for MCP tool operations. It does **no
   - Response: `{ "status": "ok" }`
 - `GET /mcp/tools`
   - Lists available tools and their input JSON schemas in `inputSchema` (camelCase).
+  - Includes `resolve_entities` when the `knowledge` category is enabled and `ENABLE_KNOWLEDGE_TOOLS=true`.
 - `POST /mcp/tools/invoke`
   - Invokes a single tool with a typed invocation envelope:
     - `name`: tool identifier
@@ -133,6 +134,7 @@ Category-specific builders live under `app/adapters/*_registry_builder.py` and a
 `ToolService` uses registry lookup/dispatch instead of per-tool branching and returns:
 
 - discriminated known success envelopes for built-in tools (`echo`, `add`, `web_search`, `web_fetch`, `resolve_entities`)
+  - `resolve_entities` currently returns deterministic placeholder resolution data in local/test flows (no external service dependency).
 - a documented generic success envelope for dynamically registered tools
 - typed error envelopes for failures
 
