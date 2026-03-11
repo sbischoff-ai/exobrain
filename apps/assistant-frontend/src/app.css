@@ -56,6 +56,7 @@ body {
   color: #a89984;
   font-family: 'Space Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace;
 }
+button, input, select, textarea { font: inherit; }
 h1,h2,h3,h4,h5,h6,p { margin: 0; }
 
 .app-shell { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
@@ -792,10 +793,6 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
 :root[data-theme='purple-intelligence'] .brand h1 {
   font-family: 'Newsreader', 'Iowan Old Style', 'Palatino Linotype', Palatino, serif;
   text-shadow: 0 0 10px rgb(162 89 255 / 22%);
-}
-
-:root[data-theme='purple-intelligence'] .chat-input textarea {
-  font-family: 'JetBrains Mono', 'Space Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 :root[data-theme='purple-intelligence'] .header {
