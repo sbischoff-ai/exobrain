@@ -545,8 +545,13 @@ async def test_get_page_detail_maps_entity_neighbors_and_block_markdown() -> Non
         entity_properties={
             "description": "Entity summary",
             "status": "active",
+            "priority": "high",
             "id": "filtered-id",
             "created_at": "filtered-created",
+            "updated_at": "filtered-updated",
+            "visibility": "filtered-visibility",
+            "user_id": "filtered-user",
+            "type_id": "filtered-type",
         },
         blocks=[
             knowledge_pb2.EntityContextBlock(id="block-0", block_level=0, text="Summary"),
@@ -588,7 +593,11 @@ async def test_get_page_detail_maps_entity_neighbors_and_block_markdown() -> Non
     assert response["title"] == "Entity One"
     assert response["summary"] == "Summary"
     assert response["metadata"]["created_at"] == "2026-02-19T09:00:00Z"
-    assert response["properties"] == {"description": "Entity summary", "status": "active"}
+    assert response["properties"] == {
+        "description": "Entity summary",
+        "status": "active",
+        "priority": "high",
+    }
     assert response["links"] == [
         {"page_id": "entity-2", "title": "Entity Two", "summary": "Linked summary"}
     ]
@@ -600,6 +609,10 @@ async def test_get_page_detail_maps_entity_neighbors_and_block_markdown() -> Non
 async def test_get_page_detail_renders_level_zero_as_paragraph_and_nested_as_list() -> None:
     reply = knowledge_pb2.GetEntityContextReply(
         entity=knowledge_pb2.EntityContextCore(id="entity-1", type_id="node.note", name="Entity One"),
+        entity_properties={
+            "status": "draft",
+            "id": "filtered-id",
+        },
         blocks=[
             knowledge_pb2.EntityContextBlock(id="b1", block_level=0, text="# Heading"),
             knowledge_pb2.EntityContextBlock(id="b2", block_level=1, text="Bullet"),
@@ -615,7 +628,35 @@ async def test_get_page_detail_renders_level_zero_as_paragraph_and_nested_as_lis
     response = await service.get_page_detail(user_id="user-1", page_id="entity-1")
 
     assert response["summary"] == "# Heading"
+    assert response["properties"] == {"status": "draft"}
     assert response["content_markdown"] == "# Heading\n\nBullet"
+
+
+@pytest.mark.asyncio
+async def test_get_page_detail_returns_empty_properties_when_only_reserved_keys() -> None:
+    reply = knowledge_pb2.GetEntityContextReply(
+        entity=knowledge_pb2.EntityContextCore(
+            id="entity-1", type_id="node.note", name="Entity One"
+        ),
+        entity_properties={
+            "created_at": "filtered-created",
+            "updated_at": "filtered-updated",
+            "visibility": "filtered-visibility",
+            "user_id": "filtered-user",
+            "type_id": "filtered-type",
+            "id": "filtered-id",
+        },
+    )
+    service = KnowledgeService(
+        database=FakeDatabase([]),
+        job_publisher=FakeJobPublisher(),
+        knowledge_interface_client=FakeKnowledgeInterfaceClient(entity_context_reply=reply),
+        settings=Settings(),
+    )
+
+    response = await service.get_page_detail(user_id="user-1", page_id="entity-1")
+
+    assert response["properties"] == {}
 
 
 @pytest.mark.asyncio

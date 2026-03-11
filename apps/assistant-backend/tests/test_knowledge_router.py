@@ -42,6 +42,7 @@ class FakeKnowledgeService:
         self.category_pages_error: Exception | None = None
         self.page_detail_calls: list[dict[str, object]] = []
         self.page_detail_error: Exception | None = None
+        self.page_detail_response_overrides: dict[str, object] = {}
 
 
     async def list_wiki_category_tree(self, *, universe_id: str) -> list[dict[str, object]]:
@@ -101,7 +102,7 @@ class FakeKnowledgeService:
         self.page_detail_calls.append({"user_id": user_id, "page_id": page_id})
         if self.page_detail_error is not None:
             raise self.page_detail_error
-        return {
+        response = {
             "id": page_id,
             "category_id": "node.note",
             "title": "Entity One",
@@ -116,6 +117,8 @@ class FakeKnowledgeService:
             ],
             "content_markdown": "Root\n\nChild",
         }
+        response.update(self.page_detail_response_overrides)
+        return response
 
     async def enqueue_update_job(
         self, *, user_id: str, journal_reference: str | None = None
@@ -534,12 +537,40 @@ def test_api_knowledge_page_returns_mapped_payload() -> None:
     assert payload["id"] == "entity-1"
     assert payload["title"] == "Entity One"
     assert payload["metadata"]["created_at"] == "2026-02-19T09:00:00Z"
+    assert "properties" in payload
     assert payload["properties"] == {"status": "active", "description": "Entity One"}
     assert payload["links"][0]["page_id"] == "entity-2"
     assert payload["summary"] == "Root"
     assert "entity" not in payload
     assert payload["content_markdown"] == "Root\n\nChild"
     assert service.page_detail_calls == [{"user_id": "user-1", "page_id": "entity-1"}]
+
+
+def test_api_knowledge_page_includes_empty_properties_object() -> None:
+    principal = UnifiedPrincipal(
+        user_id="user-1", email="u@example.com", display_name="User"
+    )
+    service = FakeKnowledgeService()
+    service.page_detail_response_overrides = {"properties": {}}
+    container = build_test_container({KnowledgeServiceProtocol: service})
+
+    app = FastAPI()
+
+    @app.middleware("http")
+    async def attach_container(request, call_next):
+        request.app.state.container = container
+        return await call_next(request)
+
+    app.dependency_overrides[get_required_auth_context] = lambda: principal
+    app.include_router(knowledge_router.router, prefix="/api")
+
+    with TestClient(app) as client:
+        response = client.get("/api/knowledge/page/entity-1")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert "properties" in payload
+    assert payload["properties"] == {}
 
 
 @pytest.mark.parametrize(
