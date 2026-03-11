@@ -161,6 +161,7 @@ cd apps/mcp-server
 - `ENABLED_TOOL_CATEGORIES` (comma-delimited, default: `utility,web`)
 - `ENABLE_UTILITY_TOOLS` (default: `true`)
 - `ENABLE_WEB_TOOLS` (default: `true`)
+- `ENABLE_KNOWLEDGE_TOOLS` (default: `false`)
 - `TAVILY_API_KEY` (required when provider resolves to `tavily`)
 - `TAVILY_BASE_URL` (default: `https://api.tavily.com`)
 

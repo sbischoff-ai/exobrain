@@ -64,6 +64,15 @@ def test_create_tool_registry_preserves_category_order_with_empty_categories() -
     assert [tool.name for tool in registry.registrations()] == ["web_search", "web_fetch", "echo", "add"]
 
 
+def test_create_tool_registry_includes_knowledge_when_flag_enabled() -> None:
+    registry = create_tool_registry(
+        _adapters(),
+        _settings(ENABLED_TOOL_CATEGORIES="knowledge", ENABLE_KNOWLEDGE_TOOLS=True),
+    )
+
+    assert [tool.name for tool in registry.registrations()] == ["resolve_entities"]
+
+
 def test_new_category_tool_works_without_service_branching_changes() -> None:
     reverse_registration = ToolRegistration(
         name="reverse",

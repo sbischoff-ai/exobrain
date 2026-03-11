@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     enabled_tool_categories: tuple[str, ...] = Field(default=("utility", "web"), alias="ENABLED_TOOL_CATEGORIES")
     enable_utility_tools: bool = Field(default=True, alias="ENABLE_UTILITY_TOOLS")
     enable_web_tools: bool = Field(default=True, alias="ENABLE_WEB_TOOLS")
+    enable_knowledge_tools: bool = Field(default=False, alias="ENABLE_KNOWLEDGE_TOOLS")
 
     @field_validator("enabled_tool_categories", mode="before")
     @classmethod
