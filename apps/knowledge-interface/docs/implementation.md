@@ -1,124 +1,171 @@
 # Knowledge Interface Rust Implementation Guide
 
-This document is code-oriented: it helps a new contributor quickly navigate the Rust service internals.
+This guide maps the `KnowledgeInterface` proto contract to the current Rust implementation so contributors can trace behavior end-to-end.
 
-## Architecture and directory map
+## Source map (current)
 
-- `src/main.rs`
-  - process startup and dependency wiring
-  - infrastructure adapter composition
-  - root graph bootstrap + gRPC server startup
-- `src/application/`
-  - `mod.rs`: thin `KnowledgeApplication` orchestrator/facade
-  - `use_cases/`: one module per RPC-aligned use case (`entity_search`, `entity_context`, `entity_listing`, `upsert_graph_delta`, `extraction_schema`)
-- `src/transport/`
-  - `grpc/`: tonic handlers and server bootstrap
-  - `mapping/`: proto ↔ domain conversions only
-  - `errors.rs`: transport-level error mapping
-- `src/domain/`
-  - entities, value objects, and validation-centric types
-- `src/infrastructure/`
-  - `postgres.rs`: `SchemaRepository` adapter (Postgres)
-  - `embedding.rs`: embedding provider adapters
-  - `qdrant.rs`: vector-store adapter + payload helpers
-  - `memgraph.rs`: graph-store + graph repository public exports
-  - `legacy.rs`: Memgraph-oriented repository implementation and related query helpers
-- `src/ports.rs`
-  - application-facing ports (traits) for infrastructure dependencies
+- Contract
+  - `proto/knowledge.proto`
+- Binary/bootstrap
+  - `src/main.rs` (dependency wiring, startup bootstrap call, server launch)
+  - `src/config.rs` (runtime config/env parsing)
+- Application orchestration
+  - `src/application/mod.rs` (`KnowledgeApplication` service methods)
+  - `src/application/use_cases/` (use-case helpers for search/list/context/upsert/extraction)
+- Transport
+  - `src/transport/grpc/mod.rs` (all RPC handler implementations)
+  - `src/transport/mapping/mod.rs` (proto ↔ domain mapper functions)
+  - `src/transport/errors.rs` (transport error mapping)
+- Ports and adapters
+  - `src/ports.rs` (repository/embedder traits)
+  - `src/infrastructure/postgres.rs` (schema repository adapter)
+  - `src/infrastructure/memgraph.rs` + `src/infrastructure/legacy.rs` (graph repository/store logic)
+  - `src/infrastructure/qdrant.rs` (vector store adapter)
+  - `src/infrastructure/embedding.rs` (embedder adapters)
+- Presentation helpers
+  - `src/presentation/upsert_delta_json_schema.rs` (JSON schema payload for `GetUpsertGraphDeltaJsonSchema`)
 
-## Request/flow walkthrough
+## RPC implementation map (proto-driven)
 
-### 1) `GetSchema`
+### `Health`
+- **Transport handler entrypoint:** `transport/grpc/mod.rs::KnowledgeGrpcService::health`
+- **Mapper functions:** none
+- **Use-case/service function:** inline constant response in handler (no application call)
+- **Repository/client calls:** none
 
-1. gRPC handler in `src/transport/grpc/` forwards to `KnowledgeApplication::get_schema`.
-2. `src/application/mod.rs` coordinates canonical `node` and `edge` schema loading.
-3. use-case helpers in `src/application/use_cases/` provide extraction/schema context shaping.
-4. handler maps full canonical schema objects to proto reply.
+### `GetSchema`
+- **Transport handler entrypoint:** `transport/grpc/mod.rs::KnowledgeGrpcService::get_schema`
+- **Mapper functions:** `to_proto_schema_type`, `to_proto_type_property`, `to_proto_type_inheritance`, `to_proto_edge_endpoint_rule`
+- **Use-case/service function:** `application/mod.rs::KnowledgeApplication::get_schema`
+- **Repository/client calls:**
+  - `SchemaRepository::get_by_kind` (node + edge)
+  - `SchemaRepository::get_type_inheritance`
+  - `SchemaRepository::get_all_properties`
+  - `SchemaRepository::get_edge_endpoint_rules`
 
-### 2) `UpsertSchemaType`
+### `GetUpsertGraphDeltaJsonSchema`
+- **Transport handler entrypoint:** `transport/grpc/mod.rs::KnowledgeGrpcService::get_upsert_graph_delta_json_schema`
+- **Mapper functions:** none
+- **Use-case/service function:** none (presentation helper only)
+- **Repository/client calls:** none (calls `presentation/upsert_delta_json_schema.rs::try_upsert_graph_delta_json_schema_string`)
 
-1. gRPC handler maps proto payload to domain `SchemaType`.
-2. `KnowledgeApplication::upsert_schema_type` (application layer) validates parent/type rules:
-   - nodes must inherit from `node.entity` (except `node.entity` itself)
-   - single-parent enforcement for node inheritance
-   - edge inheritance is rejected
-3. schema type, inheritance row, and additive properties are upserted via repository.
+### `GetEntityExtractionSchemaContext`
+- **Transport handler entrypoint:** `transport/grpc/mod.rs::KnowledgeGrpcService::get_entity_extraction_schema_context`
+- **Mapper functions:** `to_proto_extraction_entity_type`, `to_proto_extraction_universe`
+- **Use-case/service function:**
+  - `KnowledgeApplication::get_entity_extraction_schema_types`
+  - `KnowledgeApplication::get_extraction_universes`
+  - extraction assembly helper: `use_cases/extraction_schema.rs::build_extraction_entity_types_from_input`
+- **Repository/client calls:**
+  - `SchemaRepository::get_by_kind` (node)
+  - `SchemaRepository::get_type_inheritance`
+  - `GraphRepository::get_extraction_universes`
 
-### 3) `UpsertGraphDelta`
+### `GetEdgeExtractionSchemaContext`
+- **Transport handler entrypoint:** `transport/grpc/mod.rs::KnowledgeGrpcService::get_edge_extraction_schema_context`
+- **Mapper functions:** `to_proto_extraction_edge_type`
+- **Use-case/service function:**
+  - `KnowledgeApplication::get_edge_extraction_schema_types`
+  - extraction assembly helper: `use_cases/extraction_schema.rs::build_extraction_edge_types_from_input`
+- **Repository/client calls:**
+  - `SchemaRepository::get_by_kind` (node + edge)
+  - `SchemaRepository::get_type_inheritance`
+  - `SchemaRepository::get_edge_endpoint_rules`
 
-1. gRPC handler maps proto payload into `GraphDelta`.
-2. application orchestrator pre-processes distinct `user_id` values across universes/entities/blocks/edges and initializes missing user starter graphs before continuing; this implicit path deterministically uses `user_id` as `user_name`.
-3. `application/use_cases/upsert_graph_delta.rs` validates the delta against canonical schema types/properties/rules.
-4. the same use-case extracts block text from typed properties (`text`) and generates embeddings.
-5. application passes graph delta + embedded blocks to the graph repository port.
-6. infrastructure adapters write Memgraph + Qdrant with transaction/rollback behavior.
+### `GetEntityTypePropertyContext`
+- **Transport handler entrypoint:** `transport/grpc/mod.rs::KnowledgeGrpcService::get_entity_type_property_context`
+- **Mapper functions:** `to_proto_property_context`
+- **Use-case/service function:**
+  - `KnowledgeApplication::get_entity_type_property_context`
+  - helper: `use_cases/extraction_schema.rs::build_entity_type_property_context`
+- **Repository/client calls:** indirect via `KnowledgeApplication::get_schema`:
+  - `SchemaRepository::get_by_kind` (node + edge)
+  - `SchemaRepository::get_type_inheritance`
+  - `SchemaRepository::get_all_properties`
+  - `SchemaRepository::get_edge_endpoint_rules`
 
-### 4) `GetUserInitGraph`
+### `UpsertSchemaType`
+- **Transport handler entrypoint:** `transport/grpc/mod.rs::KnowledgeGrpcService::upsert_schema_type`
+- **Mapper functions:** inline proto→domain mapping in handler for `UpsertSchemaTypeCommand` / `UpsertSchemaTypePropertyInput`
+- **Use-case/service function:** `KnowledgeApplication::upsert_schema_type`
+- **Repository/client calls:**
+  - `SchemaRepository::get_schema_type`
+  - `SchemaRepository::is_descendant_of_entity`
+  - `SchemaRepository::get_parent_for_child`
+  - `SchemaRepository::upsert`
+  - `SchemaRepository::upsert_inheritance` (node subtypes)
+  - `SchemaRepository::upsert_type_property`
 
-1. gRPC handler validates and forwards `user_id` + `user_name`.
-2. `KnowledgeApplication::get_user_init_graph` first checks a durable Memgraph initialization marker keyed by `user_id`.
-3. when the marker is absent, the service builds a deterministic starter delta (all seeded nodes/edges with `PRIVATE` visibility) and writes graph + embeddings.
-4. after a successful write, the service marks the user graph initialized via an idempotent Memgraph `MERGE` marker write.
+### `UpsertGraphDelta`
+- **Transport handler entrypoint:** `transport/grpc/mod.rs::KnowledgeGrpcService::upsert_graph_delta`
+- **Mapper functions:**
+  - request mapping: `to_domain_universe_node`, `to_domain_entity_node`, `to_domain_block_node`, `to_domain_graph_edge`, `to_domain_property_value`, `map_visibility`
+  - error mapping: `transport/errors.rs::map_ingest_error`
+- **Use-case/service function:**
+  - `KnowledgeApplication::upsert_graph_delta`
+  - `KnowledgeApplication::ensure_users_initialized_for_delta`
+  - `use_cases/upsert_graph_delta.rs::upsert_graph_delta_internal`
+- **Repository/client calls:**
+  - user/bootstrap path:
+    - `GraphRepository::user_graph_needs_initialization`
+    - `GraphRepository::mark_user_graph_initialized`
+  - schema validation path:
+    - `SchemaRepository::get_by_kind` (node + edge)
+    - `SchemaRepository::get_type_inheritance`
+    - `SchemaRepository::get_all_properties`
+    - `SchemaRepository::get_edge_endpoint_rules`
+  - relationship/context checks:
+    - `GraphRepository::get_node_relationship_counts`
+    - `GraphRepository::get_existing_block_context`
+  - embedding + persistence:
+    - `Embedder::embed_texts`
+    - `GraphRepository::apply_delta_with_blocks`
 
-### 5) `GetEntityContext`
+### `GetUserInitGraph`
+- **Transport handler entrypoint:** `transport/grpc/mod.rs::KnowledgeGrpcService::get_user_init_graph`
+- **Mapper functions:** none
+- **Use-case/service function:** `KnowledgeApplication::get_user_init_graph`
+- **Repository/client calls:**
+  - `GraphRepository::user_graph_needs_initialization`
+  - `GraphRepository::get_user_init_graph_node_ids`
+  - `GraphRepository::update_person_name`
+  - initialization write path also uses `GraphRepository::mark_user_graph_initialized` and the `UpsertGraphDelta` internal persistence path
 
-1. gRPC handler is present and forwards to application service when wired.
-2. `KnowledgeApplication::get_entity_context` validates required IDs (`entity_id`, `user_id`) and trims input.
-3. service caps `max_block_level` to a safe upper bound before delegating access-aware query semantics to `GraphRepository`.
+### `FindEntityCandidates`
+- **Transport handler entrypoint:** `transport/grpc/mod.rs::KnowledgeGrpcService::find_entity_candidates`
+- **Mapper functions:** `to_domain_find_entity_candidates_query`, `to_proto_entity_candidate`
+- **Use-case/service function:**
+  - `KnowledgeApplication::find_entity_candidates`
+  - `use_cases/entity_search.rs::find_entity_candidates`
+- **Repository/client calls:**
+  - `Embedder::embed_texts` (when `short_description` exists)
+  - `GraphRepository::find_entity_candidates`
 
-## Startup root graph seeding
+### `ListEntitiesByType`
+- **Transport handler entrypoint:** `transport/grpc/mod.rs::KnowledgeGrpcService::list_entities_by_type`
+- **Mapper functions:** `to_domain_list_entities_by_type_query`, `to_proto_list_entities_by_type_reply`, `to_proto_list_entities_by_type_item`
+- **Use-case/service function:**
+  - `KnowledgeApplication::list_entities_by_type`
+  - `use_cases/entity_listing.rs::list_entities_by_type`
+- **Repository/client calls:** `GraphRepository::list_entities_by_type`
 
-During service startup (`src/main.rs`), `KnowledgeApplication::ensure_common_root_graph` checks Memgraph for the shared Exobrain root graph and seeds it when absent. Seeding uses standard ingestion flow so block embeddings are generated with the configured embedding model. Memgraph connection now sets database name from `MEMGRAPH_DB` (default `memgraph`) to avoid Neo4j-driver defaults targeting `neo4j`.
+### `GetEntityContext`
+- **Transport handler entrypoint:** `transport/grpc/mod.rs::KnowledgeGrpcService::get_entity_context`
+- **Mapper functions:** `to_domain_get_entity_context_query`, `to_proto_get_entity_context_reply`, `to_proto_entity_context_neighbor`
+- **Use-case/service function:**
+  - `KnowledgeApplication::get_entity_context`
+  - `use_cases/entity_context.rs::get_entity_context`
+- **Repository/client calls:** `GraphRepository::get_entity_context`
 
-## Internal architecture pattern
+## Startup/bootstrap requirements
 
-The service follows a layered ports-and-adapters style:
+`main.rs` bootstraps runtime dependencies, constructs `KnowledgeApplication`, then calls `KnowledgeApplication::ensure_common_root_graph()` before starting tonic via `run_server`. Root graph seeding uses the same graph-delta ingestion path (including embeddings + repository writes) as normal `UpsertGraphDelta` behavior.
 
-- `KnowledgeApplication` has no direct DB/network code.
-- all side effects occur behind traits in `ports.rs`.
-- `GraphRepository` is now the single write boundary for Memgraph + Qdrant consistency.
+## Contract-driven development note
 
-This keeps business logic testable and isolates integration-specific concerns.
+For this service, functional behavior should remain traceable to one of two contract anchors:
 
-## Canonical schema access
+1. a concrete RPC in `proto/knowledge.proto` and its transport/application/repository call chain, or
+2. a startup bootstrap requirement needed to make the RPC surface valid at runtime (for example shared root graph initialization).
 
-`SchemaRepository` and `KnowledgeApplication` expose canonical schema data directly for `GetSchema`:
-
-- inheritance graph (`get_type_inheritance`)
-- property catalog (`get_all_properties`)
-- edge endpoint rules (`get_edge_endpoint_rules`)
-
-These are surfaced by the current proto contract.
-
-## Where to add new behavior
-
-- New orchestration rule: add in `src/application/` (prefer `use_cases/` module first).
-- New integration backend/provider: implement trait in `src/ports.rs`, wire in `src/main.rs`.
-- New gRPC method mapping: update `proto`, regenerate, then handler logic in `src/transport/grpc/`.
-- New registry SQL shape: add Reshape migration files under
-  `infra/metastore/knowledge-interface/migrations` (do not add runtime DDL).
-
-## Test layout
-
-Current unit tests are colocated with modules:
-
-- `main.rs`: startup and wiring behavior tests
-- `application/mod.rs` + `application/use_cases/*` + `application/tests.rs`: orchestration/use-case tests
-- `transport/grpc/mod.rs` + `transport/grpc/tests.rs`: handler and reply-shape tests
-- `infrastructure/legacy.rs`: Memgraph query/repository helper tests (including Cypher validation and Bolt temporal scalar mapping)
-
-When extending logic, prefer adding tests beside the module under change unless shared fixtures justify extraction.
-
-## Presentation module scope
-
-`src/presentation/` is constrained to artifacts that are explicitly returned by the gRPC contract. Prompt-oriented markdown renderers are intentionally excluded from this crate's compiled module tree until/if the proto surface includes them.
-
-## Universe and label semantics (current)
-
-- IDs are expected to be globally unique (not universe-scoped IDs).
-- Universes are semantic/contextual only and do not determine access scope.
-- Access scope is modeled via `user_id` ownership and `visibility` (`PRIVATE`/`SHARED`).
-- Ingestion requires `user_id`/`visibility` on each universe/entity/block/edge in the delta (no request-level scope fields).
-- Memgraph writes persist `user_id` + `visibility` on entities, blocks, and edges.
-- Qdrant block payloads persist `user_id` + `visibility` for retrieval-time filtering.
-- Clients submit schema `type_id` values; the service resolves full inheritance label chains and applies them to Memgraph nodes during writes.
+When adding logic, prefer attaching it to an RPC flow (or explicit bootstrap path) instead of adding orphan runtime behavior.
