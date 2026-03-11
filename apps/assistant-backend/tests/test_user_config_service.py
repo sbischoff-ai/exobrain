@@ -14,6 +14,7 @@ class FakeDatabase:
             {
                 "id": "00000000-0000-0000-0000-000000000101",
                 "key": "daily_digest_enabled",
+                "name": "Daily digest",
                 "config_type": "boolean",
                 "description": "Enable daily digest reminders in assistant experiences",
                 "default_value": {"kind": "boolean", "value": True},
@@ -23,6 +24,7 @@ class FakeDatabase:
             {
                 "id": "00000000-0000-0000-0000-000000000102",
                 "key": "answer_verbosity",
+                "name": "Answer verbosity",
                 "config_type": "choice",
                 "description": "Preferred default answer detail level",
                 "default_value": {"kind": "choice", "value": "balanced"},
@@ -32,6 +34,7 @@ class FakeDatabase:
             {
                 "id": "00000000-0000-0000-0000-000000000102",
                 "key": "answer_verbosity",
+                "name": "Answer verbosity",
                 "config_type": "choice",
                 "description": "Preferred default answer detail level",
                 "default_value": {"kind": "choice", "value": "balanced"},
@@ -41,6 +44,7 @@ class FakeDatabase:
             {
                 "id": "00000000-0000-0000-0000-000000000102",
                 "key": "answer_verbosity",
+                "name": "Answer verbosity",
                 "config_type": "choice",
                 "description": "Preferred default answer detail level",
                 "default_value": {"kind": "choice", "value": "balanced"},
@@ -98,6 +102,7 @@ async def test_get_effective_configs_returns_defaults_without_overrides() -> Non
 
     assert [item.key for item in configs] == ["daily_digest_enabled", "answer_verbosity"]
     assert configs[0].value is True
+    assert configs[0].name == "Daily digest"
     assert configs[0].using_default is True
     assert configs[1].value == "balanced"
     assert configs[1].using_default is True

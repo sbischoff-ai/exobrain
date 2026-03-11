@@ -164,7 +164,7 @@ Example response:
 ## User config endpoints
 
 ### `GET /api/users/me/configs`
-Returns all effective user configs for the authenticated user, including each config key, config type (`boolean` or `choice`), allowed options for choice configs, current effective value, and default fallback metadata. Config definitions/options are loaded from Postgres and merged with per-user overrides.
+Returns all effective user configs for the authenticated user, including each config key, display name, config type (`boolean` or `choice`), allowed options for choice configs, current effective value, and default fallback metadata. Config definitions/options are loaded from Postgres and merged with per-user overrides.
 
 Example response:
 
@@ -173,6 +173,7 @@ Example response:
   "configs": [
     {
       "key": "frontend.theme",
+      "name": "Theme",
       "config_type": "choice",
       "description": "Controls the interface theme used in assistant clients",
       "options": [
@@ -185,6 +186,7 @@ Example response:
     },
     {
       "key": "daily_digest_enabled",
+      "name": "Daily Digest",
       "config_type": "boolean",
       "description": "Enable daily digest reminders in assistant experiences",
       "options": [],

@@ -42,7 +42,41 @@ function buildSeedState() {
     ]
   };
 
-  return { entries, messagesByReference, sessions: new Set(), streams: new Map() };
+  return {
+    entries,
+    messagesByReference,
+    sessions: new Set(),
+    streams: new Map(),
+    configOverridesBySession: new Map()
+  };
+}
+
+const defaultUserConfigs = [
+  {
+    key: 'frontend.theme',
+    name: 'Theme',
+    config_type: 'choice',
+    description: 'Select the assistant frontend theme',
+    options: [
+      { value: 'gruvbox-dark', label: 'Gruvbox Dark' },
+      { value: 'purple-intelligence', label: 'Purple Intelligence' }
+    ],
+    value: 'gruvbox-dark',
+    default_value: 'gruvbox-dark',
+    using_default: true
+  }
+];
+
+function buildEffectiveConfigs(state, sessionId) {
+  const overrides = state.configOverridesBySession.get(sessionId) || {};
+  return defaultUserConfigs.map((config) => {
+    const hasOverride = Object.hasOwn(overrides, config.key);
+    return {
+      ...config,
+      value: hasOverride ? overrides[config.key] : config.default_value,
+      using_default: !hasOverride
+    };
+  });
 }
 
 function parseCookies(cookieHeader = '') {
@@ -193,6 +227,33 @@ export function createMockApiPlugin({ enabled }) {
             return;
           }
           json(res, 200, { name: 'Test User', email: DEFAULT_EMAIL });
+          return;
+        }
+
+        if (pathname === '/api/users/me/configs' && req.method === 'GET') {
+          const sessionId = requireSession(req, res, state);
+          if (!sessionId) {
+            return;
+          }
+          json(res, 200, { configs: buildEffectiveConfigs(state, sessionId) });
+          return;
+        }
+
+        if (pathname === '/api/users/me/configs' && req.method === 'PATCH') {
+          const sessionId = requireSession(req, res, state);
+          if (!sessionId) {
+            return;
+          }
+          const body = await parseBody(req);
+          const updates = body.updates || [];
+          const overrides = {};
+          for (const update of updates) {
+            if (update?.key) {
+              overrides[update.key] = update.value;
+            }
+          }
+          state.configOverridesBySession.set(sessionId, overrides);
+          json(res, 200, { configs: buildEffectiveConfigs(state, sessionId) });
           return;
         }
 

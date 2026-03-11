@@ -21,6 +21,7 @@ class UserConfigChoiceOption(BaseModel):
 
 class UserConfigItem(BaseModel):
     key: str = Field(..., description="Stable configuration key", examples=["frontend.theme"])
+    name: str = Field(..., description="Display name for this configuration", examples=["Theme"])
     config_type: Literal["boolean", "choice"] = Field(
         ...,
         description="Configuration value type. Supported values: boolean, choice",
@@ -61,6 +62,7 @@ class UserConfigsResponse(BaseModel):
             [
                 {
                     "key": "frontend.theme",
+                    "name": "Theme",
                     "config_type": "choice",
                     "description": "Controls the interface theme used in assistant clients",
                     "options": [

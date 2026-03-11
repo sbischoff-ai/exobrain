@@ -1,0 +1,18 @@
+[[actions]]
+type = "custom"
+complete = """
+ALTER TABLE user_config_definitions
+ADD COLUMN IF NOT EXISTS name TEXT;
+
+UPDATE user_config_definitions
+SET name = INITCAP(REPLACE(SPLIT_PART(key, '.', 2), '_', ' '))
+WHERE (name IS NULL OR name = '')
+  AND POSITION('.' IN key) > 0;
+
+UPDATE user_config_definitions
+SET name = INITCAP(REPLACE(key, '_', ' '))
+WHERE name IS NULL OR name = '';
+
+ALTER TABLE user_config_definitions
+ALTER COLUMN name SET NOT NULL;
+"""

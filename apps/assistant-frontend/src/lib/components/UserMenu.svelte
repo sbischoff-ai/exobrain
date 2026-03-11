@@ -1,7 +1,8 @@
 <script lang="ts">
   import { fade, scale } from 'svelte/transition';
 
-  import type { CurrentUser } from '$lib/models/auth';
+  import type { CurrentUser, UserConfigItem } from '$lib/models/auth';
+  import { userConfigService } from '$lib/services/userConfigService';
 
   export let user: CurrentUser | null = null;
   export let onLogout: () => Promise<void> = async () => {};
@@ -9,7 +10,60 @@
   let menuOpen = false;
   let menuRoot: HTMLDivElement | undefined;
   let authError = '';
+  let configError = '';
   let submitting = false;
+  let loadingConfigs = false;
+  let savingConfigs = false;
+  let configsLoaded = false;
+  let configs: UserConfigItem[] = [];
+  let configValues: Record<string, boolean | string> = {};
+
+  async function toggleMenu(): Promise<void> {
+    menuOpen = !menuOpen;
+    if (menuOpen) {
+      await loadConfigs();
+    }
+  }
+
+  async function loadConfigs(): Promise<void> {
+    if (configsLoaded || loadingConfigs) {
+      return;
+    }
+
+    loadingConfigs = true;
+    configError = '';
+    try {
+      configs = await userConfigService.list();
+      configValues = Object.fromEntries(configs.map((config) => [config.key, config.value]));
+      configsLoaded = true;
+    } catch {
+      configError = 'Could not load user configs.';
+    } finally {
+      loadingConfigs = false;
+    }
+  }
+
+  async function saveConfigs(): Promise<void> {
+    if (!configs.length) {
+      return;
+    }
+
+    savingConfigs = true;
+    configError = '';
+    try {
+      configs = await userConfigService.save(
+        configs.map((config) => ({
+          key: config.key,
+          value: configValues[config.key]
+        }))
+      );
+      configValues = Object.fromEntries(configs.map((config) => [config.key, config.value]));
+    } catch {
+      configError = 'Could not save user configs.';
+    } finally {
+      savingConfigs = false;
+    }
+  }
 
   async function handleLogout() {
     authError = '';
@@ -48,7 +102,7 @@
   <button
     class="user-trigger"
     type="button"
-    on:click={() => (menuOpen = !menuOpen)}
+    on:click={toggleMenu}
     aria-haspopup="true"
     aria-expanded={menuOpen}
     aria-label="Open user menu"
@@ -64,6 +118,58 @@
         <p class="label">Signed in as</p>
         <p class="name">{user?.name}</p>
         <p class="email">{user?.email}</p>
+
+        <section class="configs" aria-label="User configs">
+          <p class="label">User configs</p>
+          {#if loadingConfigs}
+            <p class="config-note">Loading configs…</p>
+          {:else}
+            {#each configs as config (config.key)}
+              <div class="config-item">
+                <label for={config.key} title={config.description}>{config.name}</label>
+                {#if config.config_type === 'choice'}
+                  <select
+                    id={config.key}
+                    value={String(configValues[config.key] ?? '')}
+                    title={config.description}
+                    on:change={(event) => (configValues[config.key] = (event.currentTarget as HTMLSelectElement).value)}
+                  >
+                    {#each config.options as option}
+                      <option value={option.value}>{option.label}</option>
+                    {/each}
+                  </select>
+                {:else}
+                  <div class="radio-group" title={config.description}>
+                    <label>
+                      <input
+                        type="radio"
+                        name={config.key}
+                        value="true"
+                        checked={configValues[config.key] === true}
+                        on:change={() => (configValues[config.key] = true)}
+                      />
+                      On
+                    </label>
+                    <label>
+                      <input
+                        type="radio"
+                        name={config.key}
+                        value="false"
+                        checked={configValues[config.key] === false}
+                        on:change={() => (configValues[config.key] = false)}
+                      />
+                      Off
+                    </label>
+                  </div>
+                {/if}
+              </div>
+            {/each}
+            <button class="action-button" type="button" on:click={saveConfigs} disabled={savingConfigs}>
+              Save changes
+            </button>
+          {/if}
+        </section>
+
         <button class="action-button" type="button" on:click={handleLogout} disabled={submitting}>
           Logout
         </button>
@@ -71,6 +177,9 @@
 
       {#if authError}
         <p class="menu-error">{authError}</p>
+      {/if}
+      {#if configError}
+        <p class="menu-error">{configError}</p>
       {/if}
     </div>
   {/if}
@@ -112,6 +221,26 @@
   .label { font-size: 0.75rem; color: #bdae93; }
   .name { font-weight: 700; }
   .email { color: var(--muted); word-break: break-all; }
+  .configs {
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    padding: 0.55rem 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .config-item { display: flex; flex-direction: column; gap: 0.35rem; }
+  .config-item label { font-size: 0.86rem; }
+  .config-item select {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 0.45rem;
+    padding: 0.35rem 0.45rem;
+  }
+  .radio-group { display: flex; gap: 0.6rem; font-size: 0.84rem; }
+  .radio-group label { display: inline-flex; align-items: center; gap: 0.25rem; }
+  .config-note { color: var(--muted); font-size: 0.82rem; }
   .action-button {
     margin-top: 0.2rem;
     border: 1px solid var(--accent);
