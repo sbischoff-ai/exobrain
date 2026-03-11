@@ -122,41 +122,6 @@ class ToolError(StrictModel):
     message: str
 
 
-class EchoToolSuccess(StrictModel):
-    ok: Literal[True] = True
-    name: Literal["echo"]
-    result: EchoToolOutput
-    metadata: CorrelationMetadata | None = None
-
-
-class AddToolSuccess(StrictModel):
-    ok: Literal[True] = True
-    name: Literal["add"]
-    result: AddToolOutput
-    metadata: CorrelationMetadata | None = None
-
-
-class WebSearchToolSuccess(StrictModel):
-    ok: Literal[True] = True
-    name: Literal["web_search"]
-    result: WebSearchToolOutput
-    metadata: CorrelationMetadata | None = None
-
-
-class WebFetchToolSuccess(StrictModel):
-    ok: Literal[True] = True
-    name: Literal["web_fetch"]
-    result: WebFetchToolOutput
-    metadata: CorrelationMetadata | None = None
-
-
-class ResolveEntitiesToolSuccess(StrictModel):
-    ok: Literal[True] = True
-    name: Literal["resolve_entities"]
-    result: ResolveEntitiesToolOutput
-    metadata: CorrelationMetadata | None = None
-
-
 class GenericToolSuccessEnvelope(StrictModel):
     """Fallback success envelope for dynamically registered tools."""
 
@@ -173,6 +138,5 @@ class ToolErrorEnvelope(StrictModel):
     metadata: CorrelationMetadata | None = None
 
 
-KnownToolSuccess = EchoToolSuccess | AddToolSuccess | WebSearchToolSuccess | WebFetchToolSuccess | ResolveEntitiesToolSuccess
-ToolSuccessEnvelope = KnownToolSuccess | GenericToolSuccessEnvelope
+ToolSuccessEnvelope = GenericToolSuccessEnvelope
 ToolResult = ToolSuccessEnvelope | ToolErrorEnvelope

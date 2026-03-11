@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 from pydantic import Field
 
 from app.adapters.tool_registry import ToolRegistration, ToolRegistry
-from app.contracts import ToolMetadata
+from app.contracts import GenericToolSuccessEnvelope, ToolInvocation, ToolMetadata
 from app.contracts.base import StrictModel
 from app.services.tool_service import ToolService
 from app.transport.http.routes import build_router
@@ -57,5 +57,30 @@ def test_registered_tool_can_be_invoked_without_service_changes() -> None:
         "ok": True,
         "name": "upper",
         "result": {"text": "HELLO"},
+        "metadata": None,
+    }
+
+
+def test_service_returns_generic_success_envelope_for_built_in_tool() -> None:
+    add_registration = ToolRegistration(
+        name="add",
+        category="utility",
+        metadata_provider=lambda: ToolMetadata(
+            name="add",
+            description="Add numbers.",
+            inputSchema={"type": "object"},
+        ),
+        invocation_parser=lambda payload: payload,
+        handler=lambda args: {"sum": args["a"] + args["b"]},
+    )
+    service = ToolService(registry=ToolRegistry(registrations=[add_registration]))
+
+    result = service.invoke_tool(ToolInvocation(name="add", arguments={"a": 2, "b": 3}))
+
+    assert isinstance(result, GenericToolSuccessEnvelope)
+    assert result.model_dump() == {
+        "ok": True,
+        "name": "add",
+        "result": {"sum": 5},
         "metadata": None,
     }

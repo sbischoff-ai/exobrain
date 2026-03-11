@@ -3,16 +3,12 @@ from __future__ import annotations
 from app.adapters.tool_registry import ToolRegistry
 from app.adapters.web_tools import WebToolError
 from app.contracts import (
-    AddToolSuccess,
-    EchoToolSuccess,
     GenericToolSuccessEnvelope,
     ListToolsResponse,
     ToolError,
     ToolErrorEnvelope,
     ToolInvocation,
     ToolResult,
-    WebFetchToolSuccess,
-    WebSearchToolSuccess,
 )
 
 
@@ -35,7 +31,7 @@ class ToolService:
         parsed_arguments = registration.parse_arguments(invocation.arguments)
         try:
             result = registration.handler(parsed_arguments)
-            return self._build_success(registration.name, result, invocation)
+            return GenericToolSuccessEnvelope(name=registration.name, result=result, metadata=invocation.metadata)
         except WebToolError as exc:
             if registration.error_code is None:
                 raise
@@ -44,14 +40,3 @@ class ToolService:
                 error=ToolError(code=registration.error_code, message=str(exc)),
                 metadata=invocation.metadata,
             )
-
-    def _build_success(self, tool_name: str, result: object, invocation: ToolInvocation) -> ToolResult:
-        if tool_name == "echo":
-            return EchoToolSuccess(name="echo", result=result, metadata=invocation.metadata)
-        if tool_name == "add":
-            return AddToolSuccess(name="add", result=result, metadata=invocation.metadata)
-        if tool_name == "web_search":
-            return WebSearchToolSuccess(name="web_search", result=result, metadata=invocation.metadata)
-        if tool_name == "web_fetch":
-            return WebFetchToolSuccess(name="web_fetch", result=result, metadata=invocation.metadata)
-        return GenericToolSuccessEnvelope(name=tool_name, result=result, metadata=invocation.metadata)
