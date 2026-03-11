@@ -18,7 +18,13 @@
   }
 </script>
 
-<div class="page-card" role="button" tabindex="0" on:click={openPage} on:keydown={onCardKeydown}>
+<div
+  class="page-card"
+  role="button"
+  tabindex="0"
+  on:click|stopPropagation={openPage}
+  on:keydown|stopPropagation={onCardKeydown}
+>
   <h4 class="page-link truncate">{page.title}</h4>
   {#if page.summary}
     <p class="summary-clamp">{page.summary}</p>
