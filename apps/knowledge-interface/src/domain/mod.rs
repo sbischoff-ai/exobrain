@@ -289,6 +289,30 @@ pub struct EntityCandidate {
 }
 
 #[derive(Debug, Clone)]
+pub struct EntityLexicalMatch {
+    pub id: String,
+    pub name: String,
+    pub type_id: String,
+    pub score: f64,
+    pub matched_tokens: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct EntitySemanticHit {
+    pub entity_id: String,
+    pub name: String,
+    pub type_id: String,
+    pub score: f64,
+    pub described_by_text: Option<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct RawEntityCandidateData {
+    pub lexical_matches: Vec<EntityLexicalMatch>,
+    pub semantic_hits: Vec<EntitySemanticHit>,
+}
+
+#[derive(Debug, Clone)]
 pub struct FindEntityCandidatesResult {
     pub candidates: Vec<EntityCandidate>,
 }

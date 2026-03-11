@@ -145,8 +145,9 @@ Example request payload:
 
 How to interpret scores:
 
-- Score combines lexical name/alias matching and semantic block similarity.
-- Semantic similarity is weighted by block depth so root description blocks count more.
+- Score composition is implemented in the application use case (`src/application/use_cases/entity_search.rs`) so ranking policy is adapter-independent.
+- Current deterministic weights are `0.55` lexical + `0.45` semantic similarity.
+- Semantic similarity is weighted by block depth so root description blocks count more before composition.
 - Higher score means stronger overall confidence.
 - Candidates are sorted descending by score and capped by `limit`.
 

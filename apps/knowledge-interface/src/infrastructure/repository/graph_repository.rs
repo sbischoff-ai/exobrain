@@ -9,10 +9,10 @@ use crate::infrastructure::qdrant::{payload_i64, payload_string, QdrantVectorSto
 
 use crate::{
     domain::{
-        EmbeddedBlock, EntityCandidate, ExistingBlockContext, ExtractionUniverse,
-        FindEntityCandidatesQuery, GetEntityContextQuery, GetEntityContextResult, GraphDelta,
-        ListEntitiesByTypeQuery, ListEntitiesByTypeResult, NodeRelationshipCounts,
-        UserInitGraphNodeIds, Visibility,
+        EmbeddedBlock, EntityLexicalMatch, EntitySemanticHit, ExistingBlockContext,
+        ExtractionUniverse, FindEntityCandidatesQuery, GetEntityContextQuery,
+        GetEntityContextResult, GraphDelta, ListEntitiesByTypeQuery, ListEntitiesByTypeResult,
+        NodeRelationshipCounts, RawEntityCandidateData, UserInitGraphNodeIds, Visibility,
     },
     ports::GraphRepository,
 };
@@ -146,7 +146,7 @@ impl GraphRepository for MemgraphQdrantGraphRepository {
         &self,
         find_query: &FindEntityCandidatesQuery,
         query_vector: Option<&[f32]>,
-    ) -> Result<Vec<EntityCandidate>> {
+    ) -> Result<RawEntityCandidateData> {
         let names = find_query.names.clone();
         let has_names = !names.is_empty();
         let potential_type_ids = find_query.potential_type_ids.clone();
@@ -243,46 +243,56 @@ impl GraphRepository for MemgraphQdrantGraphRepository {
         }
 
         let ids: Vec<String> = aggregated.keys().cloned().collect();
-        if ids.is_empty() {
-            return Ok(Vec::new());
-        }
+        if !ids.is_empty() {
+            let mut entity_rows = self
+                .graph_store
+                .graph
+                .execute(query(&format!("MATCH (e:Entity) WHERE e.id IN $ids AND {} RETURN e.id AS id, e.name AS name, e.type_id AS type_id", memgraph_user_or_shared_access_clause("e")))
+                    .param("ids", ids)
+                    .param("user_id", find_query.user_id.clone()))
+                .await
+                .context("failed to hydrate candidate display fields")?;
 
-        let mut entity_rows = self
-            .graph_store
-            .graph
-            .execute(query(&format!("MATCH (e:Entity) WHERE e.id IN $ids AND {} RETURN e.id AS id, e.name AS name, e.type_id AS type_id", memgraph_user_or_shared_access_clause("e")))
-                .param("ids", ids)
-                .param("user_id", find_query.user_id.clone()))
-            .await
-            .context("failed to hydrate candidate display fields")?;
-
-        while let Some(row) = entity_rows.next().await? {
-            let id: String = row.get("id")?;
-            if let Some(entry) = aggregated.get_mut(&id) {
-                entry.name = row.get("name")?;
-                entry.type_id = row.get("type_id")?;
+            while let Some(row) = entity_rows.next().await? {
+                let id: String = row.get("id")?;
+                if let Some(entry) = aggregated.get_mut(&id) {
+                    entry.name = row.get("name")?;
+                    entry.type_id = row.get("type_id")?;
+                }
             }
         }
 
-        let mut candidates: Vec<EntityCandidate> = aggregated
-            .into_values()
-            .filter(|entry| !entry.name.is_empty() && !entry.type_id.is_empty())
-            .map(|entry| EntityCandidate {
-                id: entry.id,
-                name: entry.name,
-                described_by_text: entry.described_by_text,
-                score: (0.55 * entry.name_score) + (0.45 * entry.semantic_score_weighted),
-                type_id: entry.type_id,
-                matched_tokens: entry.matched_tokens,
+        let lexical_matches = aggregated
+            .values()
+            .filter(|entry| {
+                !entry.name.is_empty() && !entry.type_id.is_empty() && entry.name_score > 0.0
+            })
+            .map(|entry| EntityLexicalMatch {
+                id: entry.id.clone(),
+                name: entry.name.clone(),
+                type_id: entry.type_id.clone(),
+                score: entry.name_score,
+                matched_tokens: entry.matched_tokens.clone(),
             })
             .collect();
 
-        candidates.sort_by(|a, b| b.score.total_cmp(&a.score));
-        if let Some(limit) = find_query.limit {
-            candidates.truncate(limit);
-        }
+        let semantic_hits = aggregated
+            .into_values()
+            .filter(|entry| entry.semantic_score_weighted > 0.0)
+            .filter(|entry| !entry.name.is_empty() && !entry.type_id.is_empty())
+            .map(|entry| EntitySemanticHit {
+                entity_id: entry.id,
+                name: entry.name,
+                type_id: entry.type_id,
+                score: entry.semantic_score_weighted,
+                described_by_text: entry.described_by_text,
+            })
+            .collect();
 
-        Ok(candidates)
+        Ok(RawEntityCandidateData {
+            lexical_matches,
+            semantic_hits,
+        })
     }
 
     async fn list_entities_by_type(
