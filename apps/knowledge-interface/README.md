@@ -92,6 +92,7 @@ High-risk IDs now have lightweight primitives (`TypeId`, `EntityId`, `UniverseId
 ## Built-in graph bootstrapping
 
 On startup, the service checks whether the shared root graph exists in Memgraph and seeds it if missing. The seed is written through the same validated ingestion pipeline used by gRPC requests, including Qdrant projection updates.
+Qdrant uses separate collections for block embeddings (`blocks`) and schema type embeddings (`schema_node_types`, `schema_edge_types`), each configured with 3072-dimension cosine vectors.
 
 `KnowledgeApplication::ensure_common_root_graph` is startup-only support logic, not an RPC. It exists to satisfy runtime preconditions for the RPC contract (shared `universe.real_world` and `concept.exobrain` roots) before requests are served.
 

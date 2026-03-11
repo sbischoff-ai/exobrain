@@ -10,12 +10,30 @@ use qdrant_client::{
     Qdrant,
 };
 
-use crate::domain::EmbeddedBlock;
+use crate::domain::{EmbeddedBlock, SchemaKind, SchemaType};
+
+const QDRANT_VECTOR_SIZE: u64 = 3072;
+pub(crate) const SCHEMA_NODE_TYPES_COLLECTION: &str = "schema_node_types";
+pub(crate) const SCHEMA_EDGE_TYPES_COLLECTION: &str = "schema_edge_types";
 
 pub struct QdrantVectorStore {
     client: Qdrant,
     collection: String,
     vector_size: u64,
+}
+
+pub struct QdrantTypeVectorStore {
+    client: Qdrant,
+    node_collection: String,
+    edge_collection: String,
+    vector_size: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct TypeScoredCandidate {
+    pub type_id: String,
+    pub score: f32,
+    pub payload: HashMap<String, Value>,
 }
 
 impl QdrantVectorStore {
@@ -25,7 +43,7 @@ impl QdrantVectorStore {
         Ok(Self {
             client,
             collection: collection.to_string(),
-            vector_size: 3072,
+            vector_size: QDRANT_VECTOR_SIZE,
         })
     }
 
@@ -110,6 +128,123 @@ impl QdrantVectorStore {
     }
 }
 
+impl QdrantTypeVectorStore {
+    pub fn new(url: &str) -> Result<Self> {
+        let normalized = normalize_qdrant_grpc_url(url);
+        let client = Qdrant::from_url(&normalized).build()?;
+        Ok(Self {
+            client,
+            node_collection: SCHEMA_NODE_TYPES_COLLECTION.to_string(),
+            edge_collection: SCHEMA_EDGE_TYPES_COLLECTION.to_string(),
+            vector_size: QDRANT_VECTOR_SIZE,
+        })
+    }
+
+    async fn ensure_collection(&self, collection: &str) -> Result<()> {
+        if self.client.collection_exists(collection).await? {
+            return Ok(());
+        }
+
+        self.client
+            .create_collection(
+                CreateCollectionBuilder::new(collection)
+                    .vectors_config(VectorParamsBuilder::new(self.vector_size, Distance::Cosine)),
+            )
+            .await
+            .with_context(|| format!("failed to create qdrant collection {collection}"))?;
+        Ok(())
+    }
+
+    async fn ensure_collections(&self) -> Result<()> {
+        self.ensure_collection(&self.node_collection).await?;
+        self.ensure_collection(&self.edge_collection).await?;
+        Ok(())
+    }
+
+    pub(crate) async fn upsert_schema_type(
+        &self,
+        schema_type: &SchemaType,
+        vector: &[f32],
+    ) -> Result<()> {
+        if vector.is_empty() {
+            anyhow::bail!(
+                "schema type {} produced an empty embedding vector; cannot upsert to qdrant",
+                schema_type.id
+            );
+        }
+        if vector.len() as u64 != self.vector_size {
+            anyhow::bail!(
+                "schema type {} embedding dimension {} does not match configured qdrant dimension {}",
+                schema_type.id,
+                vector.len(),
+                self.vector_size
+            );
+        }
+
+        self.ensure_collections().await?;
+
+        let collection = self.collection_for_kind(&schema_type.kind)?;
+        let point = to_schema_type_point(schema_type, vector.to_vec())?;
+
+        self.client
+            .upsert_points(UpsertPointsBuilder::new(collection, vec![point]).wait(true))
+            .await?;
+        Ok(())
+    }
+
+    pub(crate) async fn search_node_types(
+        &self,
+        vector: &[f32],
+        limit: u64,
+    ) -> Result<Vec<TypeScoredCandidate>> {
+        self.search_collection(&self.node_collection, vector, limit)
+            .await
+    }
+
+    pub(crate) async fn search_edge_types(
+        &self,
+        vector: &[f32],
+        limit: u64,
+    ) -> Result<Vec<TypeScoredCandidate>> {
+        self.search_collection(&self.edge_collection, vector, limit)
+            .await
+    }
+
+    async fn search_collection(
+        &self,
+        collection: &str,
+        vector: &[f32],
+        limit: u64,
+    ) -> Result<Vec<TypeScoredCandidate>> {
+        self.ensure_collection(collection).await?;
+
+        let search =
+            SearchPointsBuilder::new(collection, vector.to_vec(), limit).with_payload(true);
+        let response = self.client.search_points(search).await?;
+
+        Ok(response
+            .result
+            .into_iter()
+            .filter_map(|point| {
+                let type_id = payload_string(&point.payload, "type_id")?;
+                Some(TypeScoredCandidate {
+                    type_id,
+                    score: point.score,
+                    payload: point.payload,
+                })
+            })
+            .collect())
+    }
+
+    fn collection_for_kind(&self, kind: &str) -> Result<&str> {
+        match SchemaKind::from_db_str(kind) {
+            Some(SchemaKind::Node) => Ok(&self.node_collection),
+            Some(SchemaKind::Edge) => Ok(&self.edge_collection),
+            None => anyhow::bail!("unsupported schema type kind '{kind}'"),
+        }
+    }
+}
+
 pub(crate) fn payload_string(payload: &HashMap<String, Value>, key: &str) -> Option<String> {
     payload
         .get(key)
@@ -179,4 +314,106 @@ fn to_point(embedded: &EmbeddedBlock) -> PointStruct {
     );
     payload.insert("block_level".to_string(), Value::from(embedded.block_level));
     PointStruct::new(embedded.block.id.clone(), embedded.vector.clone(), payload)
+}
+
+fn to_schema_type_point(schema_type: &SchemaType, vector: Vec<f32>) -> Result<PointStruct> {
+    let kind = match SchemaKind::from_db_str(&schema_type.kind) {
+        Some(SchemaKind::Node) => "node",
+        Some(SchemaKind::Edge) => "edge",
+        None => anyhow::bail!("unsupported schema type kind '{}'", schema_type.kind),
+    };
+
+    let mut payload = HashMap::new();
+    payload.insert("type_id".to_string(), Value::from(schema_type.id.clone()));
+    payload.insert("kind".to_string(), Value::from(kind.to_string()));
+    payload.insert("name".to_string(), Value::from(schema_type.name.clone()));
+    payload.insert(
+        "description".to_string(),
+        Value::from(schema_type.description.clone()),
+    );
+    payload.insert("active".to_string(), Value::from(schema_type.active));
+
+    Ok(PointStruct::new(schema_type.id.clone(), vector, payload))
+}
+
+pub(crate) fn render_schema_type_embedding_input(schema_type: &SchemaType) -> Result<String> {
+    match SchemaKind::from_db_str(&schema_type.kind) {
+        Some(SchemaKind::Node) => Ok(format!(
+            "entity type: {}\n\ndescription:\n{}",
+            schema_type.name, schema_type.description
+        )),
+        Some(SchemaKind::Edge) => Ok(format!(
+            "relationship type: {}\n\ndescription:\n{}",
+            schema_type.name, schema_type.description
+        )),
+        None => anyhow::bail!("unsupported schema type kind '{}'", schema_type.kind),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn renders_node_type_embedding_input() {
+        let schema_type = SchemaType {
+            id: "node.person".to_string(),
+            kind: "node".to_string(),
+            name: "person".to_string(),
+            description: "A person entity".to_string(),
+            active: true,
+        };
+
+        let input = render_schema_type_embedding_input(&schema_type).expect("input should render");
+        assert_eq!(
+            input,
+            "entity type: person\n\ndescription:\nA person entity"
+        );
+    }
+
+    #[test]
+    fn renders_edge_type_embedding_input() {
+        let schema_type = SchemaType {
+            id: "edge.related_to".to_string(),
+            kind: "edge".to_string(),
+            name: "related_to".to_string(),
+            description: "Connects related entities".to_string(),
+            active: true,
+        };
+
+        let input = render_schema_type_embedding_input(&schema_type).expect("input should render");
+        assert_eq!(
+            input,
+            "relationship type: related_to\n\ndescription:\nConnects related entities"
+        );
+    }
+
+    #[test]
+    fn creates_schema_point_payload_with_type_metadata() {
+        let schema_type = SchemaType {
+            id: "edge.related_to".to_string(),
+            kind: "edge".to_string(),
+            name: "related_to".to_string(),
+            description: "Connects related entities".to_string(),
+            active: false,
+        };
+
+        let point = to_schema_type_point(&schema_type, vec![0.1, 0.2]).expect("point should build");
+        assert_eq!(
+            payload_string(&point.payload, "type_id"),
+            Some(schema_type.id)
+        );
+        assert_eq!(
+            payload_string(&point.payload, "kind"),
+            Some("edge".to_string())
+        );
+        assert_eq!(
+            payload_string(&point.payload, "name"),
+            Some(schema_type.name)
+        );
+        assert_eq!(
+            payload_string(&point.payload, "description"),
+            Some(schema_type.description)
+        );
+    }
 }
