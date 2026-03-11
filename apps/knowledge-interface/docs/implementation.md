@@ -157,6 +157,15 @@ This guide maps the `KnowledgeInterface` proto contract to the current Rust impl
   - `use_cases/entity_context.rs::get_entity_context`
 - **Repository/client calls:** `GraphRepository::get_entity_context`
 
+
+## Testing strategy
+
+Testing is **contract-first** for this service:
+
+- Prioritize table-driven gRPC transport tests in `src/transport/grpc/tests.rs` that assert request/response contracts, field normalization, and transport error-code mapping (`INVALID_ARGUMENT` vs `INTERNAL`) per RPC path.
+- Keep helper-level unit tests only for pure, high-risk logic (for example extraction inheritance/rule resolution) where transport tests alone are too indirect for regression detection.
+- Avoid standalone tests for trivial transport glue (simple option/default forwarding or struct passthrough mapping) unless the behavior is explicitly contract-significant; cover that behavior through RPC-level assertions instead.
+
 ## Startup/bootstrap requirements
 
 `main.rs` bootstraps runtime dependencies, constructs `KnowledgeApplication`, then calls `KnowledgeApplication::ensure_common_root_graph()` before starting tonic via `run_server`. This is startup-only support logic (not an RPC handler) that enforces runtime preconditions for the RPC contract. Root graph seeding uses the same graph-delta ingestion path (including embeddings + repository writes) as normal `UpsertGraphDelta` behavior.
