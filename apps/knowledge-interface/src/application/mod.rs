@@ -753,10 +753,6 @@ fn is_assignable(
     false
 }
 
-fn validate_delta_access_scope(_delta: &GraphDelta) -> Result<()> {
-    Ok(())
-}
-
 fn extract_text(properties: &[crate::domain::PropertyValue]) -> String {
     properties
         .iter()

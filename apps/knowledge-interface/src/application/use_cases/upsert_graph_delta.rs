@@ -6,9 +6,9 @@ use crate::domain::{EmbeddedBlock, GraphDelta, SchemaKind};
 
 use crate::application::{
     block_levels_for_blocks, extract_text, is_assignable, resolve_block_universe_id,
-    resolve_labels_for_type, root_entity_ids_for_blocks, validate_delta_access_scope,
-    validate_graph_id, validate_internal_timestamps_not_provided, validate_properties,
-    KnowledgeApplication, COMMON_UNIVERSE_ID,
+    resolve_labels_for_type, root_entity_ids_for_blocks, validate_graph_id,
+    validate_internal_timestamps_not_provided, validate_properties, KnowledgeApplication,
+    COMMON_UNIVERSE_ID,
 };
 
 pub(crate) async fn upsert_graph_delta_internal(
@@ -16,7 +16,6 @@ pub(crate) async fn upsert_graph_delta_internal(
     mut delta: GraphDelta,
 ) -> Result<()> {
     let inheritance = validate_delta_against_schema(app, &delta).await?;
-    validate_delta_access_scope(&delta)?;
 
     for entity in &mut delta.entities {
         entity.resolved_labels = resolve_labels_for_type(&entity.type_id, &inheritance);
