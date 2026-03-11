@@ -2,12 +2,12 @@ use anyhow::{anyhow, Result};
 
 use crate::domain::{ListEntitiesByTypeQuery, ListEntitiesByTypeResult};
 
-use super::{
+use crate::application::{
     KnowledgeApplication, LIST_ENTITIES_BY_TYPE_DEFAULT_PAGE_SIZE,
     LIST_ENTITIES_BY_TYPE_MAX_PAGE_SIZE,
 };
 
-pub(super) async fn list_entities_by_type(
+pub(crate) async fn list_entities_by_type(
     app: &KnowledgeApplication,
     mut query: ListEntitiesByTypeQuery,
 ) -> Result<ListEntitiesByTypeResult> {

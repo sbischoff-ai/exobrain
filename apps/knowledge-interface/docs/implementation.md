@@ -2,42 +2,43 @@
 
 This document is code-oriented: it helps a new contributor quickly navigate the Rust service internals.
 
-## Source map
+## Architecture and directory map
 
 - `src/main.rs`
-  - process startup
-  - environment loading
-  - adapter wiring
-  - startup root-graph bootstrap check
-  - gRPC server + reflection toggle
-- `src/service.rs`
-  - application orchestration (`KnowledgeApplication`)
-  - canonical schema orchestration (`node`/`edge` schema kinds)
-  - full-schema aggregation for `GetSchema` (types + properties + inheritance + edge rules)
-- `src/adapters.rs`
-  - infrastructure integrations:
-    - Postgres schema registry repository (`sqlx`)
-    - Memgraph + Qdrant coordinated graph repository (`neo4rs` + `qdrant-client`)
-    - OpenAI embedding client (`reqwest`)
-    - deterministic mock embedder for offline dev
+  - process startup and dependency wiring
+  - infrastructure adapter composition
+  - root graph bootstrap + gRPC server startup
+- `src/application/`
+  - `mod.rs`: thin `KnowledgeApplication` orchestrator/facade
+  - `use_cases/`: one module per RPC-aligned use case (`entity_search`, `entity_context`, `entity_listing`, `upsert_graph_delta`, `extraction_schema`)
+- `src/transport/`
+  - `grpc/`: tonic handlers and server bootstrap
+  - `mapping/`: proto ↔ domain conversions only
+  - `errors.rs`: transport-level error mapping
+- `src/domain/`
+  - entities, value objects, and validation-centric types
+- `src/infrastructure/`
+  - `postgres.rs`: `SchemaRepository` adapter (Postgres)
+  - `embedding.rs`: embedding provider adapters
+  - `qdrant.rs`: vector-store adapter + payload helpers
+  - `memgraph.rs`: graph-store + graph repository public exports
+  - `legacy.rs`: Memgraph-oriented repository implementation and related query helpers
 - `src/ports.rs`
-  - service-facing trait contracts for repositories/stores/providers
-- `src/domain.rs`
-  - DTOs used across service/adapters
+  - application-facing ports (traits) for infrastructure dependencies
 
 ## Request/flow walkthrough
 
 ### 1) `GetSchema`
 
-1. gRPC handler in `main.rs` forwards to `KnowledgeApplication::get_schema`.
-2. `service.rs` loads canonical `node` and `edge` types from repository.
-3. `service.rs` loads inheritance, property contracts, and edge rules.
+1. gRPC handler in `src/transport/grpc/` forwards to `KnowledgeApplication::get_schema`.
+2. `src/application/mod.rs` coordinates canonical `node` and `edge` schema loading.
+3. use-case helpers in `src/application/use_cases/` provide extraction/schema context shaping.
 4. handler maps full canonical schema objects to proto reply.
 
 ### 2) `UpsertSchemaType`
 
 1. gRPC handler maps proto payload to domain `SchemaType`.
-2. `KnowledgeApplication::upsert_schema_type` validates parent/type rules:
+2. `KnowledgeApplication::upsert_schema_type` (application layer) validates parent/type rules:
    - nodes must inherit from `node.entity` (except `node.entity` itself)
    - single-parent enforcement for node inheritance
    - edge inheritance is rejected
@@ -46,11 +47,11 @@ This document is code-oriented: it helps a new contributor quickly navigate the 
 ### 3) `UpsertGraphDelta`
 
 1. gRPC handler maps proto payload into `GraphDelta`.
-2. service pre-processes distinct `user_id` values across universes/entities/blocks/edges and initializes missing user starter graphs before continuing; this implicit path deterministically uses `user_id` as `user_name`.
-3. service validates the delta against canonical schema types/properties/rules.
-4. service extracts block text from typed properties (`text`) and generates embeddings.
-5. service hands both graph delta and embedded blocks to one repository call.
-6. adapter layer writes Memgraph + Qdrant with transaction/rollback behavior.
+2. application orchestrator pre-processes distinct `user_id` values across universes/entities/blocks/edges and initializes missing user starter graphs before continuing; this implicit path deterministically uses `user_id` as `user_name`.
+3. `application/use_cases/upsert_graph_delta.rs` validates the delta against canonical schema types/properties/rules.
+4. the same use-case extracts block text from typed properties (`text`) and generates embeddings.
+5. application passes graph delta + embedded blocks to the graph repository port.
+6. infrastructure adapters write Memgraph + Qdrant with transaction/rollback behavior.
 
 ### 4) `GetUserInitGraph`
 
@@ -67,11 +68,11 @@ This document is code-oriented: it helps a new contributor quickly navigate the 
 
 ## Startup root graph seeding
 
-During service startup (`main.rs`), `KnowledgeApplication::ensure_common_root_graph` checks Memgraph for the shared Exobrain root graph and seeds it when absent. Seeding uses standard ingestion flow so block embeddings are generated with the configured embedding model. Memgraph connection now sets database name from `MEMGRAPH_DB` (default `memgraph`) to avoid Neo4j-driver defaults targeting `neo4j`.
+During service startup (`src/main.rs`), `KnowledgeApplication::ensure_common_root_graph` checks Memgraph for the shared Exobrain root graph and seeds it when absent. Seeding uses standard ingestion flow so block embeddings are generated with the configured embedding model. Memgraph connection now sets database name from `MEMGRAPH_DB` (default `memgraph`) to avoid Neo4j-driver defaults targeting `neo4j`.
 
 ## Internal architecture pattern
 
-The service follows a ports-and-adapters style:
+The service follows a layered ports-and-adapters style:
 
 - `KnowledgeApplication` has no direct DB/network code.
 - all side effects occur behind traits in `ports.rs`.
@@ -91,9 +92,9 @@ These are surfaced by the current proto contract.
 
 ## Where to add new behavior
 
-- New orchestration rule: add in `service.rs`.
-- New integration backend/provider: implement trait in `ports.rs`, wire in `main.rs`.
-- New gRPC method mapping: update `proto`, regenerate, then handler logic in `main.rs`.
+- New orchestration rule: add in `src/application/` (prefer `use_cases/` module first).
+- New integration backend/provider: implement trait in `src/ports.rs`, wire in `src/main.rs`.
+- New gRPC method mapping: update `proto`, regenerate, then handler logic in `src/transport/grpc/`.
 - New registry SQL shape: add Reshape migration files under
   `infra/metastore/knowledge-interface/migrations` (do not add runtime DDL).
 
@@ -101,9 +102,10 @@ These are surfaced by the current proto contract.
 
 Current unit tests are colocated with modules:
 
-- `main.rs`: config/reflection behavior tests
-- `service.rs`: schema/orchestration tests
-- `adapters.rs`: Memgraph/Qdrant adapter helper tests (including Cypher validation and Bolt temporal scalar mapping)
+- `main.rs`: startup and wiring behavior tests
+- `application/mod.rs` + `application/use_cases/*` + `application/tests.rs`: orchestration/use-case tests
+- `transport/grpc/mod.rs` + `transport/grpc/tests.rs`: handler and reply-shape tests
+- `infrastructure/legacy.rs`: Memgraph query/repository helper tests (including Cypher validation and Bolt temporal scalar mapping)
 
 When extending logic, prefer adding tests beside the module under change unless shared fixtures justify extraction.
 

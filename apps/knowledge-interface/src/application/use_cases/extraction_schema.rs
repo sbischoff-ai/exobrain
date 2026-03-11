@@ -457,7 +457,7 @@ fn extraction_allowed_edge_sort_key(
 
 #[cfg(test)]
 mod tests {
-    use super::{
+    use crate::application::{
         build_entity_type_property_context, build_extraction_edge_types_from_input,
         EntityTypePropertyContextOptions, ExtractionSchemaBuildInput, ExtractionSchemaOptions,
     };
