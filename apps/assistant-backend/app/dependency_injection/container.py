@@ -20,6 +20,7 @@ from app.services.contracts import (
     KnowledgeServiceProtocol,
     MCPClientProtocol,
     SessionStoreProtocol,
+    UserConfigServiceProtocol,
     UserServiceProtocol,
 )
 from app.services.database_service import DatabaseService
@@ -30,6 +31,7 @@ from app.services.knowledge_interface_client import KnowledgeInterfaceClient
 from app.services.knowledge_service import KnowledgeService
 from app.services.mcp_client import MCPClient
 from app.services.session_store import RedisSessionStore
+from app.services.user_config_service import UserConfigService
 from app.services.user_service import UserService
 
 
@@ -88,6 +90,7 @@ def build_container(settings: Settings) -> punq.Container:
         scope=punq.Scope.singleton,
     )
     container.register(UserServiceProtocol, factory=UserService, scope=punq.Scope.singleton)
+    container.register(UserConfigServiceProtocol, factory=UserConfigService, scope=punq.Scope.singleton)
     container.register(AuthServiceProtocol, factory=AuthService, scope=punq.Scope.singleton)
     container.register(ConversationServiceProtocol, factory=ConversationService, scope=punq.Scope.singleton)
     container.register(JournalServiceProtocol, factory=JournalService, scope=punq.Scope.singleton)
