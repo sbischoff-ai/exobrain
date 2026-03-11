@@ -11,6 +11,7 @@ Applies to `apps/assistant-frontend/**`.
 
 ## UI/UX behavior guardrails
 
+- Use theme-aware styling tokens (`var(--...)`) and inherited typography for all UI elements so component fonts/colors stay consistent across supported themes.
 - Production logging defaults should remain conservative (`warn` or higher) unless explicitly requested otherwise.
 - Intro/journal startup flow depends on cookie-auth intro gating plus `sessionStorage` snapshots (`exobrain.assistant.session`); keep journal sync behavior aligned with `/api/journal/{reference}` and `/api/journal/today` fallback behavior.
 - Message APIs are newest-first for pagination; normalize to chronological order before rendering.

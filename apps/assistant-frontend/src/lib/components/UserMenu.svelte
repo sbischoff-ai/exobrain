@@ -235,10 +235,12 @@
     background: var(--surface);
     border: 1px solid var(--border);
     color: var(--text);
+    font: inherit;
     border-radius: 0.45rem;
     padding: 0.35rem 0.45rem;
   }
-  .radio-group { display: flex; gap: 0.6rem; font-size: 0.84rem; }
+  .radio-group { display: flex; gap: 0.6rem; font: inherit; font-size: 0.84rem; }
+  .radio-group input { font: inherit; }
   .radio-group label { display: inline-flex; align-items: center; gap: 0.25rem; }
   .config-note { color: var(--muted); font-size: 0.82rem; }
   .action-button {
