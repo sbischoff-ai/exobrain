@@ -9,6 +9,7 @@ SvelteKit application for intro/login gating, journal navigation, and streaming 
 - Workspace view snapshots in `sessionStorage` (`exobrain.assistant.workspaceView`) for mode/explorer continuity.
 - SSE-driven streaming message rendering with tool call/response cards.
 - Header action to trigger knowledge-base update jobs with live in-progress watch state.
+- Runtime theme switching via header control between `gruvbox-dark` (default) and `purple-intelligence`, with persisted preference in `localStorage` (`exobrain.assistant.theme`).
 - Mermaid diagram blocks and KaTeX math expressions render in assistant messages.
 - Mermaid diagrams render inside a styled, non-transparent panel with side margins for readability.
 
@@ -60,6 +61,7 @@ cd apps/assistant-frontend && ./scripts/verify.sh
 - Workspace mode (`chat`/`knowledge`) and knowledge explorer route/expansion state are restored on bootstrap and persisted on view navigation.
 - Knowledge mode swaps the chat body for a data-backed explorer with `CategoryOverview`, `CategoryPage`, and markdown-rendered `KnowledgePage` detail flows, including breadcrumbs, recursive collapsible category tree navigation, metadata timestamps, related-page cards, and Streamdown rendering parity with chat messages.
 - Knowledge update action appears in the top-right header actions cluster, immediately next to the user menu.
+- Theme toggle appears in the header actions cluster and updates CSS variables/fonts at runtime without reload.
 - Knowledge update action is exposed as an accessible circular header control (`aria-label` + tooltip).
 - Knowledge update is disabled when viewing a past journal, while app state is loading/syncing, while an update is already in progress, and whenever there are no new messages since the last successful update (`title="nothing to update"`).
 - Knowledge browsing service normalizes backend category/page payload fields (`category_id`, `display_name`, `sub_categories`, `knowledge_pages`, `metadata`) into frontend-facing contracts for tree, category previews, lists, and page detail views.

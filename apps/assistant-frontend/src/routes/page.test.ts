@@ -45,6 +45,8 @@ describe('root page', () => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
     window.sessionStorage.clear();
+    window.localStorage.clear();
+    document.documentElement.removeAttribute('data-theme');
     MockEventSource.latest = null;
     MockEventSource.instances = [];
   });
@@ -241,6 +243,41 @@ describe('root page', () => {
       expect(knowledgeUpdate).toHaveAttribute('title', 'Switch to today to update knowledge base');
       expect(input).toHaveAttribute('title', 'You can not chat with past journals.');
       expect(send).toHaveAttribute('title', 'You can not chat with past journals.');
+    });
+  });
+
+
+  it('toggles theme at runtime and persists local preference', async () => {
+    window.sessionStorage.setItem(
+      'exobrain.assistant.session',
+      JSON.stringify({
+        user: { name: 'Test User', email: 'test.user@exobrain.local' },
+        journalReference: '2026/02/19',
+        messageCount: 0,
+        messages: []
+      })
+    );
+
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(jsonResponse({ name: 'Test User', email: 'test.user@exobrain.local' }))
+      .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19', message_count: 0 }))
+      .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
+      .mockResolvedValueOnce(jsonResponse([{ reference: '2026/02/19' }]));
+
+    render(Page);
+
+    const themeButton = await screen.findByRole('button', {
+      name: 'Switch to purple-intelligence theme'
+    });
+
+    expect(document.documentElement.getAttribute('data-theme')).toBe('gruvbox-dark');
+
+    await fireEvent.click(themeButton);
+
+    await waitFor(() => {
+      expect(document.documentElement.getAttribute('data-theme')).toBe('purple-intelligence');
+      expect(window.localStorage.getItem('exobrain.assistant.theme')).toBe('purple-intelligence');
+      expect(screen.getByRole('button', { name: 'Switch to gruvbox-dark theme' })).toBeInTheDocument();
     });
   });
 

@@ -7,6 +7,7 @@
   import type { CurrentUser } from '$lib/models/auth';
   import type { JournalEntry, StoredMessage } from '$lib/models/journal';
   import type { ExplorerRouteState, WorkspaceMode } from '$lib/stores/workspaceViewStore';
+  import type { ThemeName } from '$lib/stores/themeStore';
 
   export let user: CurrentUser;
   export let journalEntries: JournalEntry[] = [];
@@ -29,6 +30,7 @@
   export let viewMode: WorkspaceMode = 'chat';
   export let explorerRoute: ExplorerRouteState = { type: 'overview' };
   export let expandedCategories: Record<string, boolean> = {};
+  export let theme: ThemeName = 'gruvbox-dark';
 
   const dispatch = createEventDispatcher<{
     logout: void;
@@ -39,6 +41,7 @@
     loadOlder: void;
     knowledgeUpdate: void;
     toggleViewMode: void;
+    toggleTheme: void;
     explorerNavigate: { route: ExplorerRouteState };
     expandedCategoriesChange: { expanded: Record<string, boolean> };
   }>();
@@ -49,6 +52,9 @@
 
   $: viewModeButtonTitle = viewMode === 'chat' ? 'Switch to Knowledge Explorer' : 'Switch to Journal Chat';
   $: viewModeButtonLabel = viewMode === 'chat' ? 'Switch to Knowledge Explorer' : 'Switch to Journal Chat';
+  $: themeButtonTitle =
+    theme === 'gruvbox-dark' ? 'Switch to purple-intelligence theme' : 'Switch to gruvbox-dark theme';
+  $: themeButtonLabel = themeButtonTitle;
 </script>
 
 <div class="app-shell">
@@ -59,6 +65,15 @@
         <h1>DRVID</h1>
       </div>
       <div class="header-actions">
+        <button
+          class="header-action-button"
+          type="button"
+          on:click={() => dispatch('toggleTheme')}
+          aria-label={themeButtonLabel}
+          title={themeButtonTitle}
+        >
+          <span aria-hidden="true">◐</span>
+        </button>
         <button
           class="header-action-button"
           type="button"
@@ -165,7 +180,7 @@
 
   .header-action-button:hover:not(:disabled) {
     border-color: var(--accent);
-    background: #5a4f48;
+    background: var(--explorer-card-hover-bg);
   }
 
   .header-action-button:disabled {

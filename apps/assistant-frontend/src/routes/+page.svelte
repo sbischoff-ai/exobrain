@@ -18,6 +18,13 @@
     type SessionState
   } from '$lib/stores/journalSessionStore';
   import {
+    applyTheme,
+    loadTheme,
+    saveTheme,
+    toggleTheme,
+    type ThemeName
+  } from '$lib/stores/themeStore';
+  import {
     clearWorkspaceViewState,
     loadWorkspaceViewState,
     saveWorkspaceViewState,
@@ -78,6 +85,7 @@
   let workspaceMode: WorkspaceMode = 'chat';
   let explorerRoute: ExplorerRouteState = { type: 'overview' };
   let expandedCategories: Record<string, boolean> = {};
+  let theme: ThemeName = 'gruvbox-dark';
   let requestError = '';
   let currentMessageCount = 0;
 
@@ -118,6 +126,8 @@
     workspaceMode = workspaceViewState.mode;
     explorerRoute = workspaceViewState.explorerRoute;
     expandedCategories = workspaceViewState.expandedCategories;
+    theme = loadTheme();
+    applyTheme(theme);
 
     try {
       const me = await authService.getCurrentUser();
@@ -183,6 +193,12 @@
       explorerRoute,
       expandedCategories
     });
+  }
+
+  function handleToggleTheme(): void {
+    theme = toggleTheme(theme);
+    saveTheme(theme);
+    applyTheme(theme);
   }
 
   function handleToggleViewMode(): void {
@@ -707,6 +723,7 @@
   <IntroLoginPanel {authError} on:login={login} />
 {:else if user}
   <AssistantWorkspace
+    {theme}
     {user}
     {journalEntries}
     {currentReference}
@@ -730,6 +747,7 @@
     {expandedCategories}
     on:logout={logout}
     on:knowledgeUpdate={handleKnowledgeUpdate}
+    on:toggleTheme={handleToggleTheme}
     on:toggleViewMode={handleToggleViewMode}
     on:explorerNavigate={handleExplorerNavigate}
     on:expandedCategoriesChange={handleExpandedCategoriesChange}
