@@ -186,3 +186,22 @@ async def test_update_configs_rejects_non_boolean_values_for_boolean_type() -> N
 
     with pytest.raises(InvalidUserConfigValueError):
         await service.update_configs("user-1", {"daily_digest_enabled": "false"})
+
+
+def test_deserialize_stored_value_rejects_non_json_string_value() -> None:
+    service = UserConfigService(FakeDatabase())
+
+    with pytest.raises(InvalidUserConfigValueError):
+        service._deserialize_stored_value("frontend.theme", "gruvbox-dark")
+
+
+def test_deserialize_stored_value_accepts_json_string_encoded_value() -> None:
+    service = UserConfigService(FakeDatabase())
+
+    assert (
+        service._deserialize_stored_value(
+            "frontend.theme",
+            '{"kind":"choice","value":"purple-intelligence"}',
+        )
+        == "purple-intelligence"
+    )
