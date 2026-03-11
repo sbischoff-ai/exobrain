@@ -31,6 +31,8 @@ pub trait SchemaRepository: Send + Sync {
         owner_type_id: &str,
         property: &UpsertSchemaTypePropertyInput,
     ) -> Result<()>;
+
+    async fn delete_schema_type(&self, id: &str) -> Result<()>;
 }
 
 #[async_trait]
@@ -78,4 +80,13 @@ pub trait GraphRepository: Send + Sync {
 #[async_trait]
 pub trait Embedder: Send + Sync {
     async fn embed_texts(&self, texts: &[String]) -> Result<Vec<Vec<f32>>>;
+}
+
+#[async_trait]
+pub trait TypeVectorRepository: Send + Sync {
+    async fn upsert_schema_type_vector(
+        &self,
+        schema_type: &SchemaType,
+        vector: &[f32],
+    ) -> Result<()>;
 }

@@ -153,6 +153,9 @@ impl SchemaRepository for SchemaRepoFixture {
     ) -> Result<()> {
         Err(anyhow!("not implemented"))
     }
+    async fn delete_schema_type(&self, _id: &str) -> Result<()> {
+        Err(anyhow!("not implemented"))
+    }
 }
 
 #[derive(Clone, Default)]
