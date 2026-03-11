@@ -14,6 +14,8 @@ service KnowledgeInterface {
   rpc UpsertGraphDelta(UpsertGraphDeltaRequest) returns (UpsertGraphDeltaReply);
   rpc GetUserInitGraph(GetUserInitGraphRequest) returns (GetUserInitGraphReply);
   rpc FindEntityCandidates(FindEntityCandidatesRequest) returns (FindEntityCandidatesReply);
+  rpc FindNodeTypeCandidates(FindNodeTypeCandidatesRequest) returns (FindNodeTypeCandidatesReply);
+  rpc FindEdgeTypeCandidates(FindEdgeTypeCandidatesRequest) returns (FindEdgeTypeCandidatesReply);
   rpc ListEntitiesByType(ListEntitiesByTypeRequest) returns (ListEntitiesByTypeReply);
   rpc GetEntityContext(GetEntityContextRequest) returns (GetEntityContextReply);
 }
@@ -267,6 +269,33 @@ message EntityCandidate {
 
 message FindEntityCandidatesReply {
   repeated EntityCandidate candidates = 1;
+}
+
+message FindNodeTypeCandidatesRequest {
+  string name = 1;
+  string description = 2;
+  optional uint32 limit = 3;
+}
+
+message FindEdgeTypeCandidatesRequest {
+  string name = 1;
+  string description = 2;
+  optional uint32 limit = 3;
+}
+
+message TypeCandidate {
+  string type_id = 1;
+  string name = 2;
+  string description = 3;
+  double score = 4;
+}
+
+message FindNodeTypeCandidatesReply {
+  repeated TypeCandidate candidates = 1;
+}
+
+message FindEdgeTypeCandidatesReply {
+  repeated TypeCandidate candidates = 1;
 }
 
 message ListEntitiesByTypeRequest {

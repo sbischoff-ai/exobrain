@@ -91,6 +91,22 @@ pub trait TypeVectorRepository: Send + Sync {
         vector: &[f32],
     ) -> Result<()>;
 
+    async fn search_node_type_candidates(
+        &self,
+        _vector: &[f32],
+        _limit: u64,
+    ) -> Result<Vec<crate::domain::TypeCandidate>> {
+        Ok(Vec::new())
+    }
+
+    async fn search_edge_type_candidates(
+        &self,
+        _vector: &[f32],
+        _limit: u64,
+    ) -> Result<Vec<crate::domain::TypeCandidate>> {
+        Ok(Vec::new())
+    }
+
     async fn get_schema_type_ids_by_kind(&self, _kind: SchemaKind) -> Result<HashSet<String>> {
         Ok(HashSet::new())
     }

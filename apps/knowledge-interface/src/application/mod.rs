@@ -10,10 +10,11 @@ use crate::domain::EmbeddedBlock;
 use crate::{
     domain::{
         BlockNode, EntityNode, ExtractionUniverse, FindEntityCandidatesQuery,
-        FindEntityCandidatesResult, FullSchema, GetEntityContextQuery, GetEntityContextResult,
-        GraphDelta, GraphEdge, ListEntitiesByTypeQuery, ListEntitiesByTypeResult, PropertyScalar,
-        PropertyValue, SchemaKind, SchemaType, UniverseNode, UpsertSchemaTypeCommand,
-        UserInitGraphNodeIds, Visibility,
+        FindEntityCandidatesResult, FindTypeCandidatesQuery, FindTypeCandidatesResult, FullSchema,
+        GetEntityContextQuery, GetEntityContextResult, GraphDelta, GraphEdge,
+        ListEntitiesByTypeQuery, ListEntitiesByTypeResult, PropertyScalar, PropertyValue,
+        SchemaKind, SchemaType, UniverseNode, UpsertSchemaTypeCommand, UserInitGraphNodeIds,
+        Visibility,
     },
     ports::{Embedder, GraphRepository, SchemaRepository, TypeVectorRepository},
 };
@@ -696,6 +697,20 @@ impl KnowledgeApplication {
         query: FindEntityCandidatesQuery,
     ) -> AppResult<FindEntityCandidatesResult> {
         use_cases::entity_search::find_entity_candidates(self, query).await
+    }
+
+    pub async fn find_node_type_candidates(
+        &self,
+        query: FindTypeCandidatesQuery,
+    ) -> AppResult<FindTypeCandidatesResult> {
+        use_cases::type_search::find_node_type_candidates(self, query).await
+    }
+
+    pub async fn find_edge_type_candidates(
+        &self,
+        query: FindTypeCandidatesQuery,
+    ) -> AppResult<FindTypeCandidatesResult> {
+        use_cases::type_search::find_edge_type_candidates(self, query).await
     }
 
     pub async fn list_entities_by_type(

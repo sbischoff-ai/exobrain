@@ -3,9 +3,10 @@ use crate::application::KnowledgeApplication;
 use crate::domain::{
     EdgeEndpointRule, FullSchema, SchemaKind, SchemaType, TypeInheritance, TypeProperty,
 };
-use crate::ports::{Embedder, GraphRepository, SchemaRepository};
+use crate::ports::{Embedder, GraphRepository, SchemaRepository, TypeVectorRepository};
 use crate::presentation::upsert_delta_json_schema::UPSERT_GRAPH_DELTA_SCHEMA_ID;
 use crate::transport::proto::{
+    FindEdgeTypeCandidatesRequest, FindNodeTypeCandidatesRequest,
     GetEdgeExtractionSchemaContextRequest, GetEntityExtractionSchemaContextRequest,
     GetEntityTypePropertyContextRequest, GetUpsertGraphDeltaJsonSchemaRequest, HealthRequest,
 };
@@ -239,22 +240,62 @@ impl GraphRepository for GraphRepoFixture {
     }
 }
 
+#[derive(Clone, Default)]
+struct TypeVectorRepoFixture {
+    node_candidates: Vec<crate::domain::TypeCandidate>,
+    edge_candidates: Vec<crate::domain::TypeCandidate>,
+}
+
+#[async_trait]
+impl TypeVectorRepository for TypeVectorRepoFixture {
+    async fn upsert_schema_type_vector(
+        &self,
+        _schema_type: &SchemaType,
+        _vector: &[f32],
+    ) -> Result<()> {
+        Err(anyhow!("not implemented"))
+    }
+
+    async fn search_node_type_candidates(
+        &self,
+        _vector: &[f32],
+        _limit: u64,
+    ) -> Result<Vec<crate::domain::TypeCandidate>> {
+        Ok(self.node_candidates.clone())
+    }
+
+    async fn search_edge_type_candidates(
+        &self,
+        _vector: &[f32],
+        _limit: u64,
+    ) -> Result<Vec<crate::domain::TypeCandidate>> {
+        Ok(self.edge_candidates.clone())
+    }
+}
+
 struct NoopEmbedder;
 
 #[async_trait]
 impl Embedder for NoopEmbedder {
-    async fn embed_texts(&self, _texts: &[String]) -> Result<Vec<Vec<f32>>> {
-        Err(anyhow!("not implemented"))
+    async fn embed_texts(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
+        Ok(texts.iter().map(|_| vec![0.1_f32, 0.2_f32]).collect())
     }
 }
 
 fn make_service(schema: SchemaRepoFixture, graph: GraphRepoFixture) -> KnowledgeGrpcService {
+    make_service_with_type_vectors(schema, graph, TypeVectorRepoFixture::default())
+}
+
+fn make_service_with_type_vectors(
+    schema: SchemaRepoFixture,
+    graph: GraphRepoFixture,
+    type_vectors: TypeVectorRepoFixture,
+) -> KnowledgeGrpcService {
     KnowledgeGrpcService {
-        app: Arc::new(KnowledgeApplication::new(
-            Arc::new(schema),
-            Arc::new(graph),
-            Arc::new(NoopEmbedder),
-        )),
+        app: Arc::new(
+            KnowledgeApplication::new(Arc::new(schema), Arc::new(graph), Arc::new(NoopEmbedder))
+                .with_type_vector_repository(Arc::new(type_vectors)),
+        ),
     }
 }
 
@@ -672,4 +713,54 @@ fn extraction_schema_algorithm_filters_inactive_types_and_rules() {
     );
 
     assert_eq!(entity_types.len(), 2);
+}
+
+#[tokio::test]
+async fn find_node_type_candidates_rpc_returns_candidates() {
+    let service = make_service_with_type_vectors(
+        SchemaRepoFixture::default(),
+        GraphRepoFixture::default(),
+        TypeVectorRepoFixture {
+            node_candidates: vec![crate::domain::TypeCandidate {
+                type_id: "node.person".to_string(),
+                name: "Person".to_string(),
+                description: "Human".to_string(),
+                score: 0.88,
+            }],
+            edge_candidates: Vec::new(),
+        },
+    );
+
+    let reply = service
+        .find_node_type_candidates(Request::new(FindNodeTypeCandidatesRequest {
+            name: " person ".to_string(),
+            description: " human ".to_string(),
+            limit: Some(5),
+        }))
+        .await
+        .expect("rpc should succeed")
+        .into_inner();
+
+    assert_eq!(reply.candidates.len(), 1);
+    assert_eq!(reply.candidates[0].type_id, "node.person");
+}
+
+#[tokio::test]
+async fn find_edge_type_candidates_rpc_rejects_empty_payload() {
+    let service = make_service(SchemaRepoFixture::default(), GraphRepoFixture::default());
+
+    let error = service
+        .find_edge_type_candidates(Request::new(FindEdgeTypeCandidatesRequest {
+            name: " ".to_string(),
+            description: "\n".to_string(),
+            limit: None,
+        }))
+        .await
+        .expect_err("rpc should fail");
+
+    assert_eq!(error.code(), Code::InvalidArgument);
+    assert_eq!(
+        error.message(),
+        "at least one of name or description is required"
+    );
 }

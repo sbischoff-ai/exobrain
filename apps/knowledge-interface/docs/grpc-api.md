@@ -591,3 +591,39 @@ Example JSON response payload:
   "promptContextMarkdown": "# Entity context\n\n## Entity core summary\n..."
 }
 ```
+
+## FindNodeTypeCandidates / FindEdgeTypeCandidates
+
+These RPCs provide semantic matching of non-canonical type text to canonical schema types.
+
+### Request schema
+
+```proto
+message FindNodeTypeCandidatesRequest {
+  string name = 1;
+  string description = 2;
+  optional uint32 limit = 3;
+}
+
+message FindEdgeTypeCandidatesRequest {
+  string name = 1;
+  string description = 2;
+  optional uint32 limit = 3;
+}
+```
+
+`name` and `description` are normalized server-side (trim + lowercase) before embedding.
+At least one of them must be non-empty.
+
+### Response schema
+
+```proto
+message TypeCandidate {
+  string type_id = 1;
+  string name = 2;
+  string description = 3;
+  double score = 4;
+}
+```
+
+Results are sorted by score descending and return canonical type metadata from the schema type vector payload.

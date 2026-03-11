@@ -11,7 +11,7 @@ use qdrant_client::{
     Qdrant,
 };
 
-use crate::domain::{EmbeddedBlock, SchemaKind, SchemaType};
+use crate::domain::{EmbeddedBlock, SchemaKind, SchemaType, TypeCandidate};
 use crate::ports::TypeVectorRepository;
 
 const QDRANT_VECTOR_SIZE: u64 = 3072;
@@ -29,13 +29,6 @@ pub struct QdrantTypeVectorStore {
     node_collection: String,
     edge_collection: String,
     vector_size: u64,
-}
-
-#[derive(Debug, Clone)]
-pub struct TypeScoredCandidate {
-    pub type_id: String,
-    pub score: f32,
-    pub payload: HashMap<String, Value>,
 }
 
 impl QdrantVectorStore {
@@ -198,7 +191,7 @@ impl QdrantTypeVectorStore {
         &self,
         vector: &[f32],
         limit: u64,
-    ) -> Result<Vec<TypeScoredCandidate>> {
+    ) -> Result<Vec<TypeCandidate>> {
         self.search_collection(&self.node_collection, vector, limit)
             .await
     }
@@ -207,7 +200,7 @@ impl QdrantTypeVectorStore {
         &self,
         vector: &[f32],
         limit: u64,
-    ) -> Result<Vec<TypeScoredCandidate>> {
+    ) -> Result<Vec<TypeCandidate>> {
         self.search_collection(&self.edge_collection, vector, limit)
             .await
     }
@@ -217,7 +210,7 @@ impl QdrantTypeVectorStore {
         collection: &str,
         vector: &[f32],
         limit: u64,
-    ) -> Result<Vec<TypeScoredCandidate>> {
+    ) -> Result<Vec<TypeCandidate>> {
         self.ensure_collection(collection).await?;
 
         let search =
@@ -229,10 +222,13 @@ impl QdrantTypeVectorStore {
             .into_iter()
             .filter_map(|point| {
                 let type_id = payload_string(&point.payload, "type_id")?;
-                Some(TypeScoredCandidate {
+                let name = payload_string(&point.payload, "name")?;
+                let description = payload_string(&point.payload, "description")?;
+                Some(TypeCandidate {
                     type_id,
-                    score: point.score,
-                    payload: point.payload,
+                    name,
+                    description,
+                    score: point.score as f64,
                 })
             })
             .collect())
@@ -360,6 +356,22 @@ impl TypeVectorRepository for QdrantTypeVectorStore {
         vector: &[f32],
     ) -> Result<()> {
         self.upsert_schema_type(schema_type, vector).await
+    }
+
+    async fn search_node_type_candidates(
+        &self,
+        vector: &[f32],
+        limit: u64,
+    ) -> Result<Vec<TypeCandidate>> {
+        self.search_node_types(vector, limit).await
+    }
+
+    async fn search_edge_type_candidates(
+        &self,
+        vector: &[f32],
+        limit: u64,
+    ) -> Result<Vec<TypeCandidate>> {
+        self.search_edge_types(vector, limit).await
     }
 
     async fn get_schema_type_ids_by_kind(&self, kind: SchemaKind) -> Result<HashSet<String>> {
