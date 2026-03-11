@@ -1,4 +1,3 @@
-use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};
 
 use anyhow::{anyhow, Result};
@@ -16,17 +15,6 @@ pub(crate) struct ExtractionSchemaBuildInput {
 #[derive(Debug, Clone)]
 pub(crate) struct ExtractionSchemaOptions {
     pub include_inactive: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ExtractionAllowedEdge {
-    pub edge_type_id: String,
-    pub edge_name: String,
-    pub edge_description: String,
-    pub other_entity_type_id: String,
-    pub other_entity_type_name: String,
-    pub min_cardinality: Option<u32>,
-    pub max_cardinality: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -51,8 +39,6 @@ pub(crate) struct ExtractionEntityType {
     pub name: String,
     pub description: String,
     pub inheritance_chain: Vec<String>,
-    pub outgoing_edges: Vec<ExtractionAllowedEdge>,
-    pub incoming_edges: Vec<ExtractionAllowedEdge>,
 }
 
 #[derive(Debug, Clone)]
@@ -84,12 +70,6 @@ pub(crate) fn build_extraction_entity_types_from_input(
     input: ExtractionSchemaBuildInput,
     options: ExtractionSchemaOptions,
 ) -> Vec<ExtractionEntityType> {
-    let type_name_by_id: HashMap<String, String> = input
-        .node_types
-        .iter()
-        .map(|node| (node.id.clone(), node.name.clone()))
-        .collect();
-
     let parent_by_child: BTreeMap<String, String> = input
         .inheritance
         .iter()
@@ -106,18 +86,6 @@ pub(crate) fn build_extraction_entity_types_from_input(
             acc
         });
 
-    let edge_meta_by_id: HashMap<String, (String, String)> = input
-        .edge_types
-        .iter()
-        .filter(|edge| options.include_inactive || edge.active)
-        .map(|edge| {
-            (
-                edge.id.clone(),
-                (edge.name.clone(), edge.description.clone()),
-            )
-        })
-        .collect();
-
     let mut entity_types = input
         .node_types
         .into_iter()
@@ -133,67 +101,11 @@ pub(crate) fn build_extraction_entity_types_from_input(
             }
             inheritance_chain.reverse();
 
-            let mut outgoing_edges: Vec<ExtractionAllowedEdge> = input
-                .edge_rules
-                .iter()
-                .filter(|rule| options.include_inactive || rule.active)
-                .filter(|rule| {
-                    extraction_type_is_assignable(
-                        &node.id,
-                        &rule.from_node_type_id,
-                        &parent_by_child,
-                    )
-                })
-                .filter_map(|rule| {
-                    let (edge_name, edge_description) = edge_meta_by_id.get(&rule.edge_type_id)?;
-                    Some(ExtractionAllowedEdge {
-                        edge_type_id: rule.edge_type_id.clone(),
-                        edge_name: edge_name.clone(),
-                        edge_description: edge_description.clone(),
-                        other_entity_type_id: rule.to_node_type_id.clone(),
-                        other_entity_type_name: type_name_by_id
-                            .get(&rule.to_node_type_id)
-                            .cloned()
-                            .unwrap_or_default(),
-                        min_cardinality: None,
-                        max_cardinality: None,
-                    })
-                })
-                .collect();
-            outgoing_edges.sort_by(extraction_allowed_edge_sort_key);
-
-            let mut incoming_edges: Vec<ExtractionAllowedEdge> = input
-                .edge_rules
-                .iter()
-                .filter(|rule| options.include_inactive || rule.active)
-                .filter(|rule| {
-                    extraction_type_is_assignable(&node.id, &rule.to_node_type_id, &parent_by_child)
-                })
-                .filter_map(|rule| {
-                    let (edge_name, edge_description) = edge_meta_by_id.get(&rule.edge_type_id)?;
-                    Some(ExtractionAllowedEdge {
-                        edge_type_id: rule.edge_type_id.clone(),
-                        edge_name: edge_name.clone(),
-                        edge_description: edge_description.clone(),
-                        other_entity_type_id: rule.from_node_type_id.clone(),
-                        other_entity_type_name: type_name_by_id
-                            .get(&rule.from_node_type_id)
-                            .cloned()
-                            .unwrap_or_default(),
-                        min_cardinality: None,
-                        max_cardinality: None,
-                    })
-                })
-                .collect();
-            incoming_edges.sort_by(extraction_allowed_edge_sort_key);
-
             ExtractionEntityType {
                 type_id: node.id,
                 name: node.name,
                 description: node.description,
                 inheritance_chain,
-                outgoing_edges,
-                incoming_edges,
             }
         })
         .collect::<Vec<_>>();
@@ -442,17 +354,6 @@ fn extraction_type_is_assignable(
     }
 
     false
-}
-
-fn extraction_allowed_edge_sort_key(
-    a: &ExtractionAllowedEdge,
-    b: &ExtractionAllowedEdge,
-) -> Ordering {
-    a.edge_type_id
-        .cmp(&b.edge_type_id)
-        .then_with(|| a.other_entity_type_id.cmp(&b.other_entity_type_id))
-        .then_with(|| a.edge_name.cmp(&b.edge_name))
-        .then_with(|| a.other_entity_type_name.cmp(&b.other_entity_type_name))
 }
 
 #[cfg(test)]
