@@ -8,6 +8,8 @@ from typing import Protocol
 import asyncpg
 
 from app.api.schemas.auth import LoginRequest, UnifiedPrincipal, UserResponse
+from app.api.schemas.users import UserConfigItem
+
 from app.services.knowledge_stream import KnowledgeUpdateStreamEvent
 from app.services.chat_stream import ChatStreamEvent
 from app.services.grpc import knowledge_pb2
@@ -41,6 +43,17 @@ class UserServiceProtocol(Protocol):
     async def get_user(self, user_id: str) -> UserResponse | None:
         """Load a user profile by id for authenticated request contexts."""
 
+
+
+
+class UserConfigServiceProtocol(Protocol):
+    """User-config contract for effective reads and validated updates."""
+
+    async def get_effective_configs(self, user_id: str) -> list[UserConfigItem]:
+        """Return all effective config entries for a user, applying defaults when overrides are absent."""
+
+    async def update_configs(self, user_id: str, updates: dict[str, bool | str]) -> list[UserConfigItem]:
+        """Persist one or more config updates and return the resulting effective config list."""
 
 class ConversationServiceProtocol(Protocol):
     """Persistence contract for conversation and message records."""

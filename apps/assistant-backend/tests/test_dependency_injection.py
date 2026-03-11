@@ -16,6 +16,7 @@ from app.services.contracts import (
     KnowledgeServiceProtocol,
     MCPClientProtocol,
     SessionStoreProtocol,
+    UserConfigServiceProtocol,
     UserServiceProtocol,
 )
 
@@ -27,6 +28,7 @@ def test_container_resolves_singleton_services() -> None:
     assert container.resolve(SessionStoreProtocol) is container.resolve(SessionStoreProtocol)
     assert container.resolve(JournalCacheProtocol) is container.resolve(JournalCacheProtocol)
     assert container.resolve(UserServiceProtocol) is container.resolve(UserServiceProtocol)
+    assert container.resolve(UserConfigServiceProtocol) is container.resolve(UserConfigServiceProtocol)
     assert container.resolve(AuthServiceProtocol) is container.resolve(AuthServiceProtocol)
     assert container.resolve(ConversationServiceProtocol) is container.resolve(ConversationServiceProtocol)
     assert container.resolve(JournalServiceProtocol) is container.resolve(JournalServiceProtocol)

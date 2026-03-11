@@ -160,6 +160,15 @@ Example response:
 }
 ```
 
+
+## User config endpoints
+
+### `GET /api/users/me/configs`
+Returns all effective user configs for the authenticated user, including each config key, config type (`boolean` or `choice`), allowed options for choice configs, current effective value, and default fallback metadata.
+
+### `PATCH /api/users/me/configs`
+Accepts one or more config updates in a single request and returns the full effective config list after validation and update application.
+
 ## Configuration
 
 Core runtime vars:
