@@ -6,3 +6,5 @@ SEED_SQL=${SEED_SQL:-infra/metastore/knowledge-interface/seeds/001_starter_schem
 
 echo "Seeding starter schema types into knowledge_graph_schema_types"
 psql "$KNOWLEDGE_SCHEMA_DSN" -v ON_ERROR_STOP=1 -f "$SEED_SQL"
+
+echo "Starter schema types seeded. Starting knowledge-interface will now auto-backfill schema type vectors in Qdrant when needed."
