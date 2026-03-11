@@ -49,10 +49,21 @@ describe('root page', () => {
     document.documentElement.removeAttribute('data-theme');
     MockEventSource.latest = null;
     MockEventSource.instances = [];
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const rawUrl = String(input);
+        if (rawUrl.includes('/api/users/me/configs')) {
+          return jsonResponse({ configs: [] });
+        }
+        throw new Error(`unmocked fetch call: ${rawUrl}`);
+      })
+    );
   });
 
   it('shows intro login page when no active session exists', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(jsonResponse({}, 401));
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(jsonResponse({}, 401));
 
     render(Page);
 
@@ -73,7 +84,7 @@ describe('root page', () => {
     );
 
     const fetchSpy = vi
-      .spyOn(globalThis, 'fetch')
+      .mocked(globalThis.fetch)
       .mockResolvedValueOnce(jsonResponse({ name: 'Test User', email: 'test.user@exobrain.local' }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/01/01', message_count: 70 }))
       .mockResolvedValueOnce(
@@ -108,7 +119,7 @@ describe('root page', () => {
       })
     );
 
-    vi.spyOn(globalThis, 'fetch')
+    vi.mocked(globalThis.fetch)
       .mockResolvedValueOnce(jsonResponse({ name: 'Test User', email: 'test.user@exobrain.local' }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/01/01', message_count: 2 }))
       .mockResolvedValueOnce(
@@ -169,11 +180,12 @@ describe('root page', () => {
     );
 
     const fetchSpy = vi
-      .spyOn(globalThis, 'fetch')
+      .mocked(globalThis.fetch)
       .mockResolvedValueOnce(jsonResponse({ name: 'Test User', email: 'test.user@exobrain.local' }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/01/01', message_count: 55 }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
       .mockResolvedValueOnce(jsonResponse([{ reference: '2026/02/19' }, { reference: '2026/01/01' }]))
+      .mockResolvedValueOnce(jsonResponse({ configs: [] }))
       .mockResolvedValueOnce(
         jsonResponse([
           { id: 'm1', role: 'assistant', content: 'older a', sequence: 53 },
@@ -211,11 +223,12 @@ describe('root page', () => {
       })
     );
 
-    vi.spyOn(globalThis, 'fetch')
+    vi.mocked(globalThis.fetch)
       .mockResolvedValueOnce(jsonResponse({ name: 'Test User', email: 'test.user@exobrain.local' }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19', message_count: 0 }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
       .mockResolvedValueOnce(jsonResponse([{ reference: '2026/02/19' }, { reference: '2025/01/14' }]))
+      .mockResolvedValueOnce(jsonResponse({ configs: [] }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2025/01/14', message_count: 2 }))
       .mockResolvedValueOnce(
         jsonResponse([
@@ -258,7 +271,7 @@ describe('root page', () => {
       })
     );
 
-    vi.spyOn(globalThis, 'fetch')
+    vi.mocked(globalThis.fetch)
       .mockResolvedValueOnce(jsonResponse({ name: 'Test User', email: 'test.user@exobrain.local' }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19', message_count: 0 }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
@@ -308,6 +321,7 @@ describe('root page', () => {
       expect(document.documentElement.getAttribute('data-theme')).toBe('purple-intelligence');
     });
 
+    await screen.findByRole('button', { name: 'Open user menu' });
     await fireEvent.click(screen.getByRole('button', { name: 'Open user menu' }));
     const themeSelect = await screen.findByLabelText('Theme');
 
@@ -333,7 +347,7 @@ describe('root page', () => {
       })
     );
 
-    vi.spyOn(globalThis, 'fetch')
+    vi.mocked(globalThis.fetch)
       .mockResolvedValueOnce(jsonResponse({ name: 'Test User', email: 'test.user@exobrain.local' }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19', message_count: 0 }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
@@ -393,7 +407,7 @@ describe('root page', () => {
     );
 
     const fetchSpy = vi
-      .spyOn(globalThis, 'fetch')
+      .mocked(globalThis.fetch)
       .mockResolvedValueOnce(jsonResponse({ name: 'Test User', email: 'test.user@exobrain.local' }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2025/01/14', message_count: 1 }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
@@ -431,7 +445,7 @@ describe('root page', () => {
     );
 
     const fetchSpy = vi
-      .spyOn(globalThis, 'fetch')
+      .mocked(globalThis.fetch)
       .mockResolvedValueOnce(jsonResponse({ name: 'Test User', email: 'test.user@exobrain.local' }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19', message_count: 0 }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
@@ -468,7 +482,7 @@ describe('root page', () => {
       })
     );
 
-    vi.spyOn(globalThis, 'fetch')
+    vi.mocked(globalThis.fetch)
       .mockResolvedValueOnce(jsonResponse({ name: 'Test User', email: 'test.user@exobrain.local' }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19', message_count: 1 }))
       .mockResolvedValueOnce(
@@ -497,7 +511,7 @@ describe('root page', () => {
       })
     );
 
-    vi.spyOn(globalThis, 'fetch')
+    vi.mocked(globalThis.fetch)
       .mockResolvedValueOnce(jsonResponse({ name: 'Test User', email: 'test.user@exobrain.local' }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19', message_count: 0 }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
@@ -527,7 +541,7 @@ describe('root page', () => {
     vi.stubGlobal('EventSource', MockEventSource as unknown as typeof EventSource);
 
     const fetchSpy = vi
-      .spyOn(globalThis, 'fetch')
+      .mocked(globalThis.fetch)
       .mockResolvedValueOnce(jsonResponse({ name: 'Test User', email: 'test.user@exobrain.local' }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19', message_count: 2 }))
       .mockResolvedValueOnce(
@@ -605,7 +619,7 @@ describe('root page', () => {
 
     vi.stubGlobal('EventSource', MockEventSource as unknown as typeof EventSource);
 
-    vi.spyOn(globalThis, 'fetch')
+    vi.mocked(globalThis.fetch)
       .mockResolvedValueOnce(jsonResponse({ name: 'Test User', email: 'test.user@exobrain.local' }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19', message_count: 2 }))
       .mockResolvedValueOnce(
@@ -654,7 +668,7 @@ describe('root page', () => {
 
     vi.stubGlobal('EventSource', MockEventSource as unknown as typeof EventSource);
 
-    vi.spyOn(globalThis, 'fetch')
+    vi.mocked(globalThis.fetch)
       .mockResolvedValueOnce(jsonResponse({ name: 'Test User', email: 'test.user@exobrain.local' }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19', message_count: 2 }))
       .mockResolvedValueOnce(
@@ -703,7 +717,7 @@ describe('root page', () => {
 
     vi.stubGlobal('EventSource', MockEventSource as unknown as typeof EventSource);
 
-    vi.spyOn(globalThis, 'fetch')
+    vi.mocked(globalThis.fetch)
       .mockResolvedValueOnce(jsonResponse({ name: 'Test User', email: 'test.user@exobrain.local' }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19', message_count: 2 }))
       .mockResolvedValueOnce(
@@ -754,7 +768,7 @@ describe('root page', () => {
       })
     );
 
-    vi.spyOn(globalThis, 'fetch')
+    vi.mocked(globalThis.fetch)
       .mockResolvedValueOnce(jsonResponse({ name: 'Test User', email: 'test.user@exobrain.local' }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19', message_count: 0 }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
@@ -797,7 +811,7 @@ describe('root page', () => {
 
     vi.stubGlobal('EventSource', MockEventSource as unknown as typeof EventSource);
 
-    vi.spyOn(globalThis, 'fetch')
+    vi.mocked(globalThis.fetch)
       .mockResolvedValueOnce(jsonResponse({ name: 'Test User', email: 'test.user@exobrain.local' }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19', message_count: 0 }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
@@ -845,7 +859,7 @@ describe('root page', () => {
 
     vi.stubGlobal('EventSource', MockEventSource as unknown as typeof EventSource);
 
-    vi.spyOn(globalThis, 'fetch')
+    vi.mocked(globalThis.fetch)
       .mockResolvedValueOnce(jsonResponse({ name: 'Test User', email: 'test.user@exobrain.local' }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19', message_count: 0 }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
@@ -902,11 +916,12 @@ describe('root page', () => {
 
     vi.stubGlobal('EventSource', MockEventSource as unknown as typeof EventSource);
 
-    vi.spyOn(globalThis, 'fetch')
+    vi.mocked(globalThis.fetch)
       .mockResolvedValueOnce(jsonResponse({ name: 'Test User', email: 'test.user@exobrain.local' }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19', message_count: 0 }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
       .mockResolvedValueOnce(jsonResponse([{ reference: '2026/02/19' }, { reference: '2025/01/14' }]))
+      .mockResolvedValueOnce(jsonResponse({ configs: [] }))
       .mockResolvedValueOnce(jsonResponse({ stream_id: 'stream-1' }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
       .mockResolvedValueOnce(jsonResponse([{ reference: '2026/02/19' }, { reference: '2025/01/14' }]))
@@ -977,7 +992,7 @@ describe('root page', () => {
       })
     );
 
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+    vi.mocked(globalThis.fetch).mockImplementation(async (input) => {
       const rawUrl = typeof input === 'string' ? input : String((input as { url?: unknown }).url ?? input);
       
       if (rawUrl.includes('/api/users/me/configs')) {

@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import UserMenu from './UserMenu.svelte';
 
@@ -26,13 +26,19 @@ function configsResponse(theme: string) {
   } as Response;
 }
 
+
+beforeEach(() => {
+  vi.unstubAllGlobals();
+  vi.stubGlobal('fetch', vi.fn());
+});
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
 describe('UserMenu', () => {
   it('loads and renders user configs in dropdown', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(configsResponse('gruvbox-dark'));
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(configsResponse('gruvbox-dark'));
 
     render(UserMenu, {
       props: {
@@ -44,11 +50,11 @@ describe('UserMenu', () => {
 
     expect(await screen.findByText('User configs')).toBeInTheDocument();
     expect(screen.getByLabelText('Theme')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+    expect(await screen.findByRole('button', { name: 'Save changes' })).toBeDisabled();
   });
 
   it('enables Save changes only after config changes and emits theme updates', async () => {
-    vi.spyOn(globalThis, 'fetch')
+    vi.mocked(globalThis.fetch)
       .mockResolvedValueOnce(configsResponse('gruvbox-dark'))
       .mockResolvedValueOnce(configsResponse('gruvbox-dark'));
 
@@ -60,7 +66,7 @@ describe('UserMenu', () => {
 
     await fireEvent.click(screen.getByRole('button', { name: 'Open user menu' }));
 
-    const saveButton = screen.getByRole('button', { name: 'Save changes' });
+    const saveButton = await screen.findByRole('button', { name: 'Save changes' });
     expect(saveButton).toBeDisabled();
 
     await fireEvent.change(screen.getByLabelText('Theme'), { target: { value: 'purple-intelligence' } });
@@ -69,7 +75,9 @@ describe('UserMenu', () => {
   });
 
   it('resets unsaved config changes and emits persisted theme on close', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(configsResponse('gruvbox-dark'));
+    vi.mocked(globalThis.fetch)
+      .mockResolvedValueOnce(configsResponse('gruvbox-dark'))
+      .mockResolvedValueOnce(configsResponse('gruvbox-dark'));
 
     render(UserMenu, {
       props: {
@@ -78,19 +86,19 @@ describe('UserMenu', () => {
     });
 
     await fireEvent.click(screen.getByRole('button', { name: 'Open user menu' }));
-    const themeSelect = screen.getByLabelText('Theme');
+    const themeSelect = await screen.findByLabelText('Theme');
 
     await fireEvent.change(themeSelect, { target: { value: 'purple-intelligence' } });
     await fireEvent.keyDown(window, { key: 'Escape' });
 
     await fireEvent.click(screen.getByRole('button', { name: 'Open user menu' }));
 
-    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+    expect(await screen.findByRole('button', { name: 'Save changes' })).toBeDisabled();
     expect((screen.getByLabelText('Theme') as HTMLSelectElement).value).toBe('gruvbox-dark');
   });
 
   it('shows signed-in user details in dropdown', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({ ok: true, json: async () => ({ configs: [] }) } as Response);
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce({ ok: true, json: async () => ({ configs: [] }) } as Response);
 
     render(UserMenu, {
       props: {
@@ -107,7 +115,7 @@ describe('UserMenu', () => {
 
   it('calls parent logout handler when logout is clicked', async () => {
     const onLogout = vi.fn().mockResolvedValue(undefined);
-    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({ ok: true, json: async () => ({ configs: [] }) } as Response);
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce({ ok: true, json: async () => ({ configs: [] }) } as Response);
 
     render(UserMenu, {
       props: {
