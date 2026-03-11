@@ -43,20 +43,52 @@ def test_list_tools_includes_agent_facing_input_descriptions() -> None:
     assert response.status_code == 200
     tools = {tool["name"]: tool for tool in response.json()["tools"]}
 
+    # Tool metadata must be self-descriptive enough for autonomous agent tool selection.
+    for tool_name, required_phrase_groups in {
+        "web_search": [("search", "sources"), ("web", "external")],
+        "web_fetch": [("fetch", "extract"), ("url", "page")],
+        "resolve_entities": [("resolve", "matching"), ("entities", "entity")],
+    }.items():
+        description = tools[tool_name]["description"]
+        assert isinstance(description, str)
+        assert len(description.strip()) >= 20
+        lowered_description = description.lower()
+        for phrase_group in required_phrase_groups:
+            assert any(phrase in lowered_description for phrase in phrase_group)
+
+    def assert_field_description_contains(
+        properties: dict[str, dict[str, str]], field_name: str, required_phrases: list[str]
+    ) -> None:
+        description = properties[field_name].get("description", "")
+        assert isinstance(description, str)
+        assert len(description.strip()) >= 20
+        lowered_description = description.lower()
+        for phrase in required_phrases:
+            assert phrase in lowered_description
+
     web_search_properties = tools["web_search"]["inputSchema"]["properties"]
-    for field in ["query", "max_results", "recency_days", "include_domains", "exclude_domains"]:
-        assert web_search_properties[field]["description"]
+    assert_field_description_contains(web_search_properties, "query", ["search", "web"])
+    assert_field_description_contains(web_search_properties, "max_results", ["maximum", "results"])
+    assert_field_description_contains(web_search_properties, "recency_days", ["days", "recently"])
+    assert_field_description_contains(web_search_properties, "include_domains", ["allowlist", "domain"])
+    assert_field_description_contains(web_search_properties, "exclude_domains", ["blocklist", "domain"])
 
     web_fetch_properties = tools["web_fetch"]["inputSchema"]["properties"]
-    for field in ["url", "max_chars"]:
-        assert web_fetch_properties[field]["description"]
+    assert_field_description_contains(web_fetch_properties, "url", ["url", "fetch"])
+    assert_field_description_contains(web_fetch_properties, "max_chars", ["maximum", "characters"])
 
     resolve_entities_schema = tools["resolve_entities"]["inputSchema"]
-    assert resolve_entities_schema["properties"]["entities"]["description"]
+    assert_field_description_contains(resolve_entities_schema["properties"], "entities", ["entities", "resolve"])
 
     resolve_entity_item_properties = resolve_entities_schema["$defs"]["ResolveEntitiesInputItem"]["properties"]
-    for field in ["name", "type_hint", "description_hint", "expected_existence"]:
-        assert resolve_entity_item_properties[field]["description"]
+    assert_field_description_contains(resolve_entity_item_properties, "name", ["entity", "name"])
+    assert_field_description_contains(resolve_entity_item_properties, "type_hint", ["category", "matching"])
+    assert_field_description_contains(resolve_entity_item_properties, "description_hint", ["disambiguation", "details"])
+    assert_field_description_contains(
+        resolve_entity_item_properties,
+        "expected_existence",
+        ["exist", "new"],
+    )
 
 
 def test_list_tools_omits_resolve_entities_when_knowledge_disabled() -> None:
