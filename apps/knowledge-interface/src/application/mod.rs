@@ -12,8 +12,8 @@ use crate::{
         BlockNode, EntityNode, ExtractionUniverse, FindEntityCandidatesQuery,
         FindEntityCandidatesResult, FullSchema, GetEntityContextQuery, GetEntityContextResult,
         GraphDelta, GraphEdge, ListEntitiesByTypeQuery, ListEntitiesByTypeResult, PropertyScalar,
-        PropertyValue, SchemaKind, SchemaType, UniverseNode, UpsertSchemaTypeCommand,
-        UserInitGraphNodeIds, Visibility,
+        PropertyValue, SchemaKind, SchemaType, TypeMatchingQuery, TypeMatchingResult, UniverseNode,
+        UpsertSchemaTypeCommand, UserInitGraphNodeIds, Visibility,
     },
     ports::{Embedder, GraphRepository, SchemaRepository, TypeVectorRepository},
 };
@@ -617,6 +617,20 @@ impl KnowledgeApplication {
         query: FindEntityCandidatesQuery,
     ) -> AppResult<FindEntityCandidatesResult> {
         use_cases::entity_search::find_entity_candidates(self, query).await
+    }
+
+    pub async fn find_node_type_candidates(
+        &self,
+        query: TypeMatchingQuery,
+    ) -> AppResult<TypeMatchingResult> {
+        use_cases::type_matching::find_node_type_candidates(self, query).await
+    }
+
+    pub async fn find_edge_type_candidates(
+        &self,
+        query: TypeMatchingQuery,
+    ) -> AppResult<TypeMatchingResult> {
+        use_cases::type_matching::find_edge_type_candidates(self, query).await
     }
 
     pub async fn list_entities_by_type(

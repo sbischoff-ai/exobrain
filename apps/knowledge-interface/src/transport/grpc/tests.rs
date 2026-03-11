@@ -6,6 +6,7 @@ use crate::domain::{
 use crate::ports::{Embedder, GraphRepository, SchemaRepository};
 use crate::presentation::upsert_delta_json_schema::UPSERT_GRAPH_DELTA_SCHEMA_ID;
 use crate::transport::proto::{
+    FindEdgeTypeCandidatesRequest, FindNodeTypeCandidatesRequest,
     GetEdgeExtractionSchemaContextRequest, GetEntityExtractionSchemaContextRequest,
     GetEntityTypePropertyContextRequest, GetUpsertGraphDeltaJsonSchemaRequest, HealthRequest,
 };
@@ -672,4 +673,50 @@ fn extraction_schema_algorithm_filters_inactive_types_and_rules() {
     );
 
     assert_eq!(entity_types.len(), 2);
+}
+
+#[tokio::test]
+async fn find_node_type_candidates_rejects_empty_input() {
+    let service = make_service(SchemaRepoFixture::default(), GraphRepoFixture::default());
+    let err = service
+        .find_node_type_candidates(Request::new(FindNodeTypeCandidatesRequest {
+            name: "   ".to_string(),
+            description: "".to_string(),
+            limit: None,
+        }))
+        .await
+        .expect_err("request should fail validation");
+
+    assert_eq!(err.code(), Code::InvalidArgument);
+}
+
+#[tokio::test]
+async fn find_edge_type_candidates_requires_vector_repo() {
+    struct SuccessEmbedder;
+
+    #[async_trait]
+    impl Embedder for SuccessEmbedder {
+        async fn embed_texts(&self, _texts: &[String]) -> Result<Vec<Vec<f32>>> {
+            Ok(vec![vec![0.1, 0.2]])
+        }
+    }
+
+    let service = KnowledgeGrpcService {
+        app: Arc::new(KnowledgeApplication::new(
+            Arc::new(SchemaRepoFixture::default()),
+            Arc::new(GraphRepoFixture::default()),
+            Arc::new(SuccessEmbedder),
+        )),
+    };
+
+    let err = service
+        .find_edge_type_candidates(Request::new(FindEdgeTypeCandidatesRequest {
+            name: "related to".to_string(),
+            description: "connects entities".to_string(),
+            limit: Some(5),
+        }))
+        .await
+        .expect_err("request should fail when type vector repo is unavailable");
+
+    assert_eq!(err.code(), Code::FailedPrecondition);
 }

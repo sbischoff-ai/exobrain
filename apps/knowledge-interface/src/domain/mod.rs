@@ -440,6 +440,26 @@ pub struct FindEntityCandidatesResult {
 }
 
 #[derive(Debug, Clone)]
+pub struct TypeMatchingQuery {
+    pub name: String,
+    pub description: String,
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TypeScoredCandidate {
+    pub type_id: String,
+    pub name: String,
+    pub description: String,
+    pub score: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct TypeMatchingResult {
+    pub candidates: Vec<TypeScoredCandidate>,
+}
+
+#[derive(Debug, Clone)]
 pub struct GetEntityContextQuery {
     pub entity_id: String,
     pub user_id: String,

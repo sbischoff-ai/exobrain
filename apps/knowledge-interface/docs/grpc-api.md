@@ -590,3 +590,37 @@ Example JSON response payload:
   "promptContextMarkdown": "# Entity context\n\n## Entity core summary\n..."
 }
 ```
+
+## FindNodeTypeCandidates and FindEdgeTypeCandidates
+
+These RPCs provide semantic type matching against canonical schema types stored in Qdrant.
+
+```proto
+message FindNodeTypeCandidatesRequest {
+  string name = 1;
+  string description = 2;
+  optional uint32 limit = 3;
+}
+
+message FindEdgeTypeCandidatesRequest {
+  string name = 1;
+  string description = 2;
+  optional uint32 limit = 3;
+}
+
+message TypeCandidate {
+  string type_id = 1;
+  string name = 2;
+  string description = 3;
+  double score = 4;
+}
+```
+
+Behavior:
+
+- input `name` and `description` are trimmed before embedding
+- at least one of `name` or `description` must be non-empty
+- embedding text template matches schema upsert behavior:
+  - node: `entity type: {name}\n\ndescription:\n{description}`
+  - edge: `relationship type: {name}\n\ndescription:\n{description}`
+- response items return canonical values (`type_id`, `name`, `description`) plus similarity `score`

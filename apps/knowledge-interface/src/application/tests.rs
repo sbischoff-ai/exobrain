@@ -584,6 +584,22 @@ impl TypeVectorRepository for CapturingTypeVectorRepository {
             .push((schema_type.clone(), vector.to_vec()));
         Ok(())
     }
+
+    async fn search_node_type_vectors(
+        &self,
+        _query_vector: &[f32],
+        _limit: u64,
+    ) -> Result<Vec<crate::domain::TypeScoredCandidate>> {
+        Ok(Vec::new())
+    }
+
+    async fn search_edge_type_vectors(
+        &self,
+        _query_vector: &[f32],
+        _limit: u64,
+    ) -> Result<Vec<crate::domain::TypeScoredCandidate>> {
+        Ok(Vec::new())
+    }
 }
 
 struct FakeEmbedder;

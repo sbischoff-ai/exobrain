@@ -9,7 +9,8 @@ use crate::application::{
     KnowledgeApplication,
 };
 use crate::domain::{
-    SchemaKind, SchemaType, UpsertSchemaTypeCommand, UpsertSchemaTypePropertyInput,
+    SchemaKind, SchemaType, TypeMatchingQuery, TypeScoredCandidate, UpsertSchemaTypeCommand,
+    UpsertSchemaTypePropertyInput,
 };
 use crate::presentation::upsert_delta_json_schema::{
     try_upsert_graph_delta_json_schema_string, UPSERT_GRAPH_DELTA_SCHEMA_ID,
@@ -26,12 +27,14 @@ use super::mapping::{
 };
 use super::proto::knowledge_interface_server::{KnowledgeInterface, KnowledgeInterfaceServer};
 use super::proto::{
-    ExtractionEdgeType, ExtractionEntityType, ExtractionUniverse, FindEntityCandidatesReply,
-    FindEntityCandidatesRequest, GetEdgeExtractionSchemaContextReply,
-    GetEdgeExtractionSchemaContextRequest, GetEntityContextReply, GetEntityContextRequest,
-    GetEntityExtractionSchemaContextReply, GetEntityExtractionSchemaContextRequest,
-    GetEntityTypePropertyContextReply, GetEntityTypePropertyContextRequest, GetSchemaReply,
-    GetSchemaRequest, GetUpsertGraphDeltaJsonSchemaReply, GetUpsertGraphDeltaJsonSchemaRequest,
+    ExtractionEdgeType, ExtractionEntityType, ExtractionUniverse, FindEdgeTypeCandidatesReply,
+    FindEdgeTypeCandidatesRequest, FindEntityCandidatesReply, FindEntityCandidatesRequest,
+    FindNodeTypeCandidatesReply, FindNodeTypeCandidatesRequest,
+    GetEdgeExtractionSchemaContextReply, GetEdgeExtractionSchemaContextRequest,
+    GetEntityContextReply, GetEntityContextRequest, GetEntityExtractionSchemaContextReply,
+    GetEntityExtractionSchemaContextRequest, GetEntityTypePropertyContextReply,
+    GetEntityTypePropertyContextRequest, GetSchemaReply, GetSchemaRequest,
+    GetUpsertGraphDeltaJsonSchemaReply, GetUpsertGraphDeltaJsonSchemaRequest,
     GetUserInitGraphReply, GetUserInitGraphRequest, HealthReply, HealthRequest,
     ListEntitiesByTypeReply, ListEntitiesByTypeRequest, UpsertGraphDeltaReply,
     UpsertGraphDeltaRequest, UpsertSchemaTypeReply, UpsertSchemaTypeRequest,
@@ -103,6 +106,34 @@ fn to_proto_extraction_universe(universe: ServiceExtractionUniverseContext) -> E
         id: universe.id,
         name: universe.name,
         described_by_text: universe.described_by_text,
+    }
+}
+
+fn to_domain_type_matching_query(
+    name: String,
+    description: String,
+    limit: Option<u32>,
+) -> Result<TypeMatchingQuery, Status> {
+    let name = name.trim().to_string();
+    let description = description.trim().to_string();
+
+    if name.is_empty() && description.is_empty() {
+        return Err(Status::invalid_argument("name or description is required"));
+    }
+
+    Ok(TypeMatchingQuery {
+        name,
+        description,
+        limit: limit.map(|value| value as usize),
+    })
+}
+
+fn to_proto_type_candidate(candidate: TypeScoredCandidate) -> super::proto::TypeCandidate {
+    super::proto::TypeCandidate {
+        type_id: candidate.type_id,
+        name: candidate.name,
+        description: candidate.description,
+        score: candidate.score,
     }
 }
 
@@ -344,6 +375,50 @@ impl KnowledgeInterface for KnowledgeGrpcService {
                 .candidates
                 .into_iter()
                 .map(to_proto_entity_candidate)
+                .collect(),
+        }))
+    }
+
+    async fn find_node_type_candidates(
+        &self,
+        request: Request<FindNodeTypeCandidatesRequest>,
+    ) -> Result<Response<FindNodeTypeCandidatesReply>, Status> {
+        let payload = request.into_inner();
+        let query =
+            to_domain_type_matching_query(payload.name, payload.description, payload.limit)?;
+        let result = self
+            .app
+            .find_node_type_candidates(query)
+            .await
+            .map_err(map_application_error)?;
+
+        Ok(Response::new(FindNodeTypeCandidatesReply {
+            candidates: result
+                .candidates
+                .into_iter()
+                .map(to_proto_type_candidate)
+                .collect(),
+        }))
+    }
+
+    async fn find_edge_type_candidates(
+        &self,
+        request: Request<FindEdgeTypeCandidatesRequest>,
+    ) -> Result<Response<FindEdgeTypeCandidatesReply>, Status> {
+        let payload = request.into_inner();
+        let query =
+            to_domain_type_matching_query(payload.name, payload.description, payload.limit)?;
+        let result = self
+            .app
+            .find_edge_type_candidates(query)
+            .await
+            .map_err(map_application_error)?;
+
+        Ok(Response::new(FindEdgeTypeCandidatesReply {
+            candidates: result
+                .candidates
+                .into_iter()
+                .map(to_proto_type_candidate)
                 .collect(),
         }))
     }

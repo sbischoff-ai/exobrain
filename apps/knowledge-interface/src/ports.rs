@@ -89,4 +89,16 @@ pub trait TypeVectorRepository: Send + Sync {
         schema_type: &SchemaType,
         vector: &[f32],
     ) -> Result<()>;
+
+    async fn search_node_type_vectors(
+        &self,
+        query_vector: &[f32],
+        limit: u64,
+    ) -> Result<Vec<crate::domain::TypeScoredCandidate>>;
+
+    async fn search_edge_type_vectors(
+        &self,
+        query_vector: &[f32],
+        limit: u64,
+    ) -> Result<Vec<crate::domain::TypeScoredCandidate>>;
 }
