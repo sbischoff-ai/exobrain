@@ -110,6 +110,7 @@ class FakeKnowledgeService:
                 "created_at": "2026-02-19T09:00:00Z",
                 "updated_at": "2026-02-19T10:00:00Z",
             },
+            "properties": {"status": "active", "description": "Entity One"},
             "links": [
                 {"page_id": "entity-2", "title": "Entity Two", "summary": "Linked"}
             ],
@@ -533,6 +534,7 @@ def test_api_knowledge_page_returns_mapped_payload() -> None:
     assert payload["id"] == "entity-1"
     assert payload["title"] == "Entity One"
     assert payload["metadata"]["created_at"] == "2026-02-19T09:00:00Z"
+    assert payload["properties"] == {"status": "active", "description": "Entity One"}
     assert payload["links"][0]["page_id"] == "entity-2"
     assert payload["summary"] == "Root"
     assert "entity" not in payload

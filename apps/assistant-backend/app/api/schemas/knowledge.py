@@ -115,6 +115,10 @@ class KnowledgePageDetailResponse(BaseModel):
         validation_alias=AliasChoices("metadata"),
         description="Page metadata including canonical timestamps only",
     )
+    properties: dict[str, str] = Field(
+        default_factory=dict,
+        description="Entity-type-specific key/value properties from the upstream entity context",
+    )
     links: list[dict[str, str | None]] = Field(
         default_factory=list,
         description="Mapped related pages from entity neighbors, deduplicated by page_id",

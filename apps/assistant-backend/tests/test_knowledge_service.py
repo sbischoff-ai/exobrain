@@ -542,7 +542,12 @@ async def test_get_page_detail_maps_entity_neighbors_and_block_markdown() -> Non
             created_at="2026-02-19T09:00:00Z",
             updated_at="2026-02-19T10:00:00Z",
         ),
-        entity_properties={"description": "Entity summary"},
+        entity_properties={
+            "description": "Entity summary",
+            "status": "active",
+            "id": "filtered-id",
+            "created_at": "filtered-created",
+        },
         blocks=[
             knowledge_pb2.EntityContextBlock(id="block-0", block_level=0, text="Summary"),
             knowledge_pb2.EntityContextBlock(id="block-1", block_level=1, text="Root"),
@@ -583,6 +588,7 @@ async def test_get_page_detail_maps_entity_neighbors_and_block_markdown() -> Non
     assert response["title"] == "Entity One"
     assert response["summary"] == "Summary"
     assert response["metadata"]["created_at"] == "2026-02-19T09:00:00Z"
+    assert response["properties"] == {"description": "Entity summary", "status": "active"}
     assert response["links"] == [
         {"page_id": "entity-2", "title": "Entity Two", "summary": "Linked summary"}
     ]
@@ -883,7 +889,14 @@ async def test_get_page_detail_maps_metadata_links_and_content() -> None:
             created_at="2026-02-19T09:00:00Z",
             updated_at="2026-02-19T10:00:00Z",
         ),
-        entity_properties={"description": "Canonical summary"},
+        entity_properties={
+            "description": "Canonical summary",
+            "status": "published",
+            "visibility": "private",
+            "type_id": "node.event",
+            "user_id": "user-1",
+            "updated_at": "filtered-updated",
+        },
         blocks=[
             knowledge_pb2.EntityContextBlock(id="b0", block_level=0, text="Summary"),
             knowledge_pb2.EntityContextBlock(id="b1", block_level=1, text="Root"),
@@ -910,6 +923,10 @@ async def test_get_page_detail_maps_metadata_links_and_content() -> None:
     assert response["metadata"] == {
         "created_at": "2026-02-19T09:00:00Z",
         "updated_at": "2026-02-19T10:00:00Z",
+    }
+    assert response["properties"] == {
+        "description": "Canonical summary",
+        "status": "published",
     }
     assert response["links"] == [
         {"page_id": "entity-2", "title": "Entity Two", "summary": "Related page"}
