@@ -3,7 +3,9 @@ use std::collections::HashMap;
 use anyhow::{Context, Result};
 use neo4rs::{query, BoltMap, BoltType, ConfigBuilder, Graph, Txn};
 
-use super::conversion::{bolt_map_remove_aliases, bolt_map_to_property_values};
+use super::conversion::{
+    bolt_map_remove_aliases, bolt_map_to_property_values, parse_alias_payload,
+};
 
 use crate::domain::{
     EntityContextBlockItem, EntityContextEntitySnapshot, EntityContextNeighborItem,
@@ -775,20 +777,7 @@ fn prop_as_aliases(props: &[PropertyValue]) -> Vec<String> {
         return Vec::new();
     };
 
-    let trimmed = raw.trim();
-    if trimmed.starts_with('[') && trimmed.ends_with(']') {
-        let inner = &trimmed[1..trimmed.len() - 1];
-        let parsed: Vec<String> = inner
-            .split(',')
-            .map(|item| item.trim().trim_matches('"').to_string())
-            .filter(|item| !item.is_empty())
-            .collect();
-        if !parsed.is_empty() {
-            return parsed;
-        }
-    }
-
-    vec![raw]
+    parse_alias_payload(&raw)
 }
 
 fn prop_as_float(props: &[PropertyValue], key: &str) -> Option<f64> {

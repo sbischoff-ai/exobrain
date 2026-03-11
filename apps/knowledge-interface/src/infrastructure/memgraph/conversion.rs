@@ -4,6 +4,21 @@ use neo4rs::{BoltMap, BoltType};
 
 use crate::domain::{PropertyScalar, PropertyValue};
 
+pub(crate) fn parse_alias_payload(raw: &str) -> Vec<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Vec::new();
+    }
+
+    if trimmed.starts_with('[') && trimmed.ends_with(']') {
+        if let Ok(parsed) = serde_json::from_str::<Vec<String>>(trimmed) {
+            return parsed;
+        }
+    }
+
+    vec![trimmed.to_string()]
+}
+
 pub(crate) fn bolt_map_remove_aliases(map: &mut BoltMap, key: &str) -> Vec<String> {
     let Some(value) = map.value.remove(key) else {
         return Vec::new();
@@ -18,24 +33,7 @@ pub(crate) fn bolt_map_remove_aliases(map: &mut BoltMap, key: &str) -> Vec<Strin
                 _ => None,
             })
             .collect(),
-        BoltType::String(v) => {
-            let raw = v.value.trim().to_string();
-            if raw.starts_with('[') && raw.ends_with(']') {
-                let parsed: Vec<String> = raw[1..raw.len() - 1]
-                    .split(',')
-                    .map(|item| item.trim().trim_matches('"').to_string())
-                    .filter(|item| !item.is_empty())
-                    .collect();
-                if !parsed.is_empty() {
-                    return parsed;
-                }
-            }
-            if raw.is_empty() {
-                Vec::new()
-            } else {
-                vec![raw]
-            }
-        }
+        BoltType::String(v) => parse_alias_payload(&v.value),
         _ => Vec::new(),
     }
 }
@@ -115,7 +113,7 @@ fn temporal_scalar_from_datetime_zone_id(value: neo4rs::BoltDateTimeZoneId) -> P
 
 #[cfg(test)]
 mod tests {
-    use super::{bolt_map_remove_aliases, bolt_type_to_property_scalar};
+    use super::{bolt_map_remove_aliases, bolt_type_to_property_scalar, parse_alias_payload};
     use chrono::{DateTime, FixedOffset, NaiveDate, NaiveDateTime, NaiveTime};
     use neo4rs::{BoltMap, BoltString, BoltType};
 
@@ -130,6 +128,32 @@ mod tests {
             bolt_map_remove_aliases(&mut map, "aliases"),
             vec!["alpha", "beta"]
         );
+    }
+
+    #[test]
+    fn parses_alias_payload_json_list() {
+        assert_eq!(
+            parse_alias_payload("[\"alpha\",\"beta\"]"),
+            vec!["alpha", "beta"]
+        );
+    }
+
+    #[test]
+    fn parses_alias_payload_json_entries_with_commas() {
+        assert_eq!(
+            parse_alias_payload("[\"alpha,beta\",\"gamma\"]"),
+            vec!["alpha,beta", "gamma"]
+        );
+    }
+
+    #[test]
+    fn falls_back_for_malformed_bracketed_alias_payload() {
+        assert_eq!(parse_alias_payload("[alpha,beta]"), vec!["[alpha,beta]"]);
+    }
+
+    #[test]
+    fn returns_empty_for_empty_alias_payload() {
+        assert_eq!(parse_alias_payload("   \n\t  "), Vec::<String>::new());
     }
 
     #[test]
