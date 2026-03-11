@@ -10,6 +10,7 @@ use qdrant_client::{
     },
     Qdrant,
 };
+use uuid::Uuid;
 
 use crate::domain::{EmbeddedBlock, SchemaKind, SchemaType};
 use crate::ports::TypeVectorRepository;
@@ -17,6 +18,7 @@ use crate::ports::TypeVectorRepository;
 const QDRANT_VECTOR_SIZE: u64 = 3072;
 pub(crate) const SCHEMA_NODE_TYPES_COLLECTION: &str = "schema_node_types";
 pub(crate) const SCHEMA_EDGE_TYPES_COLLECTION: &str = "schema_edge_types";
+const SCHEMA_TYPE_POINT_ID_NAMESPACE: Uuid = Uuid::NAMESPACE_OID;
 
 pub struct QdrantVectorStore {
     client: Qdrant,
@@ -335,7 +337,19 @@ fn to_schema_type_point(schema_type: &SchemaType, vector: Vec<f32>) -> Result<Po
     );
     payload.insert("active".to_string(), Value::from(schema_type.active));
 
-    Ok(PointStruct::new(schema_type.id.clone(), vector, payload))
+    Ok(PointStruct::new(
+        schema_type_point_id(schema_type),
+        vector,
+        payload,
+    ))
+}
+
+fn schema_type_point_id(schema_type: &SchemaType) -> String {
+    Uuid::new_v5(
+        &SCHEMA_TYPE_POINT_ID_NAMESPACE,
+        format!("schema-type:{}:{}", schema_type.kind, schema_type.id).as_bytes(),
+    )
+    .to_string()
 }
 
 pub(crate) fn render_schema_type_embedding_input(schema_type: &SchemaType) -> Result<String> {
@@ -462,6 +476,35 @@ mod tests {
         assert_eq!(
             payload_string(&point.payload, "description"),
             Some(schema_type.description)
+        );
+    }
+
+    #[test]
+    fn creates_schema_point_with_qdrant_compatible_uuid_id() {
+        let schema_type = SchemaType {
+            id: "node.ai_agent".to_string(),
+            kind: "node".to_string(),
+            name: "ai_agent".to_string(),
+            description: "Assistant profile".to_string(),
+            active: true,
+        };
+
+        let point = to_schema_type_point(&schema_type, vec![0.1, 0.2]).expect("point should build");
+        let point_id = point.id.expect("point id should be set");
+
+        let parsed_uuid = match point_id.point_id_options {
+            Some(qdrant_client::qdrant::point_id::PointIdOptions::Uuid(uuid)) => {
+                Uuid::parse_str(&uuid).expect("point id should be a valid uuid")
+            }
+            _ => panic!("schema type point id should use UUID point id"),
+        };
+
+        assert_eq!(
+            parsed_uuid,
+            Uuid::new_v5(
+                &SCHEMA_TYPE_POINT_ID_NAMESPACE,
+                b"schema-type:node:node.ai_agent"
+            )
         );
     }
 }
