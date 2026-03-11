@@ -1264,11 +1264,11 @@ async fn upsert_graph_delta_initializes_missing_users_before_main_write() {
         blocks: vec![BlockNode {
             id: "550e8400-e29b-41d4-a716-446655440012".to_string(),
             type_id: "node.block".to_string(),
-            user_id: "user-ready".to_string(),
+            user_id: "user-missing".to_string(),
             visibility: Visibility::Private,
             properties: vec![PropertyValue {
                 key: "text".to_string(),
-                value: PropertyScalar::String("A note from an initialized user".to_string()),
+                value: PropertyScalar::String("A note from the initializing user".to_string()),
             }],
             resolved_labels: vec![],
         }],
@@ -1276,7 +1276,7 @@ async fn upsert_graph_delta_initializes_missing_users_before_main_write() {
             from_id: "550e8400-e29b-41d4-a716-446655440011".to_string(),
             to_id: "550e8400-e29b-41d4-a716-446655440012".to_string(),
             edge_type: "DESCRIBED_BY".to_string(),
-            user_id: "user-ready".to_string(),
+            user_id: "user-missing".to_string(),
             visibility: Visibility::Private,
             properties: default_edge_properties("test linkage"),
         }],
@@ -1707,7 +1707,109 @@ async fn accepts_block_contradicts_edge() {
 }
 
 #[tokio::test]
-async fn accepts_cross_user_scope_in_single_delta() {
+async fn rejects_edge_user_id_mismatch_with_endpoint_owner() {
+    let app = KnowledgeApplication::new(
+        Arc::new(FakeSchemaRepo::new()),
+        Arc::new(FakeGraphRepository { root_exists: false }),
+        Arc::new(FakeEmbedder),
+    );
+
+    let err = app
+        .upsert_graph_delta(GraphDelta {
+            universes: vec![],
+            entities: vec![EntityNode {
+                id: "550e8400-e29b-41d4-a716-4466554400ab".to_string(),
+                type_id: "node.person".to_string(),
+                universe_id: None,
+                user_id: "user-1".to_string(),
+                visibility: Visibility::Shared,
+                properties: vec![PropertyValue {
+                    key: "name".to_string(),
+                    value: PropertyScalar::String("Cross User Person".to_string()),
+                }],
+                resolved_labels: vec![],
+            }],
+            blocks: vec![BlockNode {
+                id: "d0e2ceb6-3daa-441f-a87b-2168ac723ca7".to_string(),
+                type_id: "node.block".to_string(),
+                user_id: "user-1".to_string(),
+                visibility: Visibility::Shared,
+                properties: vec![PropertyValue {
+                    key: "text".to_string(),
+                    value: PropertyScalar::String("cross-user block".to_string()),
+                }],
+                resolved_labels: vec![],
+            }],
+            edges: vec![GraphEdge {
+                from_id: "550e8400-e29b-41d4-a716-4466554400ab".to_string(),
+                to_id: "d0e2ceb6-3daa-441f-a87b-2168ac723ca7".to_string(),
+                edge_type: "DESCRIBED_BY".to_string(),
+                user_id: "user-2".to_string(),
+                visibility: Visibility::Shared,
+                properties: default_edge_properties("cross-user edge"),
+            }],
+        })
+        .await
+        .expect_err("edge owner should match endpoint owners");
+
+    assert!(err
+        .to_string()
+        .contains("has user_id user-2 but from node owner is user-1"));
+}
+
+#[tokio::test]
+async fn rejects_shared_edge_when_endpoint_node_is_private() {
+    let app = KnowledgeApplication::new(
+        Arc::new(FakeSchemaRepo::new()),
+        Arc::new(FakeGraphRepository { root_exists: false }),
+        Arc::new(FakeEmbedder),
+    );
+
+    let err = app
+        .upsert_graph_delta(GraphDelta {
+            universes: vec![],
+            entities: vec![EntityNode {
+                id: "650e8400-e29b-41d4-a716-4466554400ab".to_string(),
+                type_id: "node.person".to_string(),
+                universe_id: None,
+                user_id: "user-1".to_string(),
+                visibility: Visibility::Private,
+                properties: vec![PropertyValue {
+                    key: "name".to_string(),
+                    value: PropertyScalar::String("Private Person".to_string()),
+                }],
+                resolved_labels: vec![],
+            }],
+            blocks: vec![BlockNode {
+                id: "e0e2ceb6-3daa-441f-a87b-2168ac723ca7".to_string(),
+                type_id: "node.block".to_string(),
+                user_id: "user-1".to_string(),
+                visibility: Visibility::Shared,
+                properties: vec![PropertyValue {
+                    key: "text".to_string(),
+                    value: PropertyScalar::String("mixed visibility block".to_string()),
+                }],
+                resolved_labels: vec![],
+            }],
+            edges: vec![GraphEdge {
+                from_id: "650e8400-e29b-41d4-a716-4466554400ab".to_string(),
+                to_id: "e0e2ceb6-3daa-441f-a87b-2168ac723ca7".to_string(),
+                edge_type: "DESCRIBED_BY".to_string(),
+                user_id: "user-1".to_string(),
+                visibility: Visibility::Shared,
+                properties: default_edge_properties("shared edge to private node"),
+            }],
+        })
+        .await
+        .expect_err("shared edges may only connect shared nodes");
+
+    assert!(err
+        .to_string()
+        .contains("is SHARED but from node 650e8400-e29b-41d4-a716-4466554400ab is Private"));
+}
+
+#[tokio::test]
+async fn accepts_private_edge_between_private_and_shared_nodes_for_same_owner() {
     let app = KnowledgeApplication::new(
         Arc::new(FakeSchemaRepo::new()),
         Arc::new(FakeGraphRepository { root_exists: false }),
@@ -1717,39 +1819,39 @@ async fn accepts_cross_user_scope_in_single_delta() {
     app.upsert_graph_delta(GraphDelta {
         universes: vec![],
         entities: vec![EntityNode {
-            id: "550e8400-e29b-41d4-a716-4466554400ab".to_string(),
+            id: "750e8400-e29b-41d4-a716-4466554400ab".to_string(),
             type_id: "node.person".to_string(),
             universe_id: None,
-            user_id: "user-2".to_string(),
+            user_id: "user-1".to_string(),
             visibility: Visibility::Private,
             properties: vec![PropertyValue {
                 key: "name".to_string(),
-                value: PropertyScalar::String("Cross User Person".to_string()),
+                value: PropertyScalar::String("Private Person".to_string()),
             }],
             resolved_labels: vec![],
         }],
         blocks: vec![BlockNode {
-            id: "d0e2ceb6-3daa-441f-a87b-2168ac723ca7".to_string(),
+            id: "f0e2ceb6-3daa-441f-a87b-2168ac723ca7".to_string(),
             type_id: "node.block".to_string(),
-            user_id: "user-3".to_string(),
+            user_id: "user-1".to_string(),
             visibility: Visibility::Shared,
             properties: vec![PropertyValue {
                 key: "text".to_string(),
-                value: PropertyScalar::String("cross-user block".to_string()),
+                value: PropertyScalar::String("private edge to shared block".to_string()),
             }],
             resolved_labels: vec![],
         }],
         edges: vec![GraphEdge {
-            from_id: "550e8400-e29b-41d4-a716-4466554400ab".to_string(),
-            to_id: "d0e2ceb6-3daa-441f-a87b-2168ac723ca7".to_string(),
+            from_id: "750e8400-e29b-41d4-a716-4466554400ab".to_string(),
+            to_id: "f0e2ceb6-3daa-441f-a87b-2168ac723ca7".to_string(),
             edge_type: "DESCRIBED_BY".to_string(),
-            user_id: "user-4".to_string(),
-            visibility: Visibility::Shared,
-            properties: default_edge_properties("cross-user edge"),
+            user_id: "user-1".to_string(),
+            visibility: Visibility::Private,
+            properties: default_edge_properties("private edge to shared node"),
         }],
     })
     .await
-    .expect("cross-user records should be accepted in a single delta");
+    .expect("private edges should allow private/shared endpoints for same owner");
 }
 
 struct CandidateGraphRepository {

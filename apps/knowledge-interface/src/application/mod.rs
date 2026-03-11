@@ -753,8 +753,79 @@ fn is_assignable(
     false
 }
 
-fn validate_delta_access_scope(_delta: &GraphDelta) -> Result<()> {
-    Ok(())
+fn validate_delta_access_scope(delta: &GraphDelta) -> Result<()> {
+    let mut node_scope_by_id: HashMap<String, (String, Visibility)> = HashMap::new();
+    let mut errors = Vec::new();
+
+    let mut register_node_scope = |kind: &str, id: &str, user_id: &str, visibility: Visibility| {
+        if let Some((existing_user_id, existing_visibility)) = node_scope_by_id.get(id) {
+            if *existing_user_id != user_id || *existing_visibility != visibility {
+                errors.push(format!(
+                    "{} {} conflicts with another node record for id {} (user_id={}, visibility={:?})",
+                    kind, id, id, existing_user_id, existing_visibility
+                ));
+            }
+            return;
+        }
+
+        node_scope_by_id.insert(id.to_string(), (user_id.to_string(), visibility));
+    };
+
+    for universe in &delta.universes {
+        register_node_scope(
+            "universe",
+            &universe.id,
+            &universe.user_id,
+            universe.visibility,
+        );
+    }
+
+    for entity in &delta.entities {
+        register_node_scope("entity", &entity.id, &entity.user_id, entity.visibility);
+    }
+
+    for block in &delta.blocks {
+        register_node_scope("block", &block.id, &block.user_id, block.visibility);
+    }
+
+    for edge in &delta.edges {
+        let from_scope = node_scope_by_id.get(&edge.from_id);
+        let to_scope = node_scope_by_id.get(&edge.to_id);
+
+        for (label, endpoint_node_id, endpoint_scope) in [
+            ("from", edge.from_id.as_str(), from_scope),
+            ("to", edge.to_id.as_str(), to_scope),
+        ] {
+            let Some((endpoint_user_id, endpoint_visibility)) = endpoint_scope else {
+                continue;
+            };
+
+            if *endpoint_user_id != edge.user_id {
+                errors.push(format!(
+                    "edge {} {}->{} has user_id {} but {} node owner is {}",
+                    edge.edge_type, edge.from_id, edge.to_id, edge.user_id, label, endpoint_user_id,
+                ));
+            }
+
+            if edge.visibility == Visibility::Shared && *endpoint_visibility != Visibility::Shared {
+                errors.push(format!(
+                    "edge {} {}->{} is SHARED but {} node {} is {:?}; SHARED edges may only connect SHARED nodes",
+                    edge.edge_type,
+                    edge.from_id,
+                    edge.to_id,
+                    label,
+                    endpoint_node_id,
+                    endpoint_visibility,
+                ));
+            }
+        }
+    }
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(anyhow!(errors.join("; ")))
+    }
 }
 
 fn extract_text(properties: &[crate::domain::PropertyValue]) -> String {

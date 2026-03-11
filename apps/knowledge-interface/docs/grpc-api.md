@@ -60,8 +60,11 @@ Edges are validated with schema rules (`knowledge_graph_schema_edge_rules`).
 
 For example, a `RELATED_TO` edge is valid only if a matching rule exists for source and target node types (or their ancestors).
 
-- For `PRIVATE` edge writes, endpoint nodes may be either `PRIVATE` or `SHARED`; caller services enforce RBAC/user boundaries.
-- `UpsertGraphDelta` may include mixed-user node/edge records in a single request; ownership policies are enforced by upstream caller services.
+- Access scope is validated per record in `UpsertGraphDelta`:
+  - each edge `user_id` must match both endpoint node owners (`from_id` and `to_id`) when those endpoint nodes are present in the same payload
+  - `SHARED` edges may connect only `SHARED` endpoint nodes
+  - `PRIVATE` edges may connect endpoint nodes with either `PRIVATE` or `SHARED` visibility (same-owner only)
+  - mixed-user writes in one request are allowed only when there are no cross-owner edges between the mixed-owner nodes
 - Graph-state cardinality is enforced after applying the delta:
   - `(:Entity)-[:DESCRIBED_BY]->(:Block)` is enforced as 1-to-1 cardinality (an entity may not have more than one outgoing `DESCRIBED_BY`, and each block still has one incoming parent edge).
   - `(:Universe)-[:DESCRIBED_BY]->(:Block)` is also enforced as 1-to-1 (a universe may not have more than one outgoing `DESCRIBED_BY`).
