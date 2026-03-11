@@ -137,3 +137,22 @@ async def test_patch_me_configs_updates_multiple_keys() -> None:
             },
         )
     ]
+
+
+@pytest.mark.asyncio
+async def test_patch_me_configs_accepts_single_update_payload() -> None:
+    principal = UnifiedPrincipal(user_id="u-1", email="a@example.com", display_name="A")
+    config_service = FakeUserConfigService()
+    container = build_test_container({UserConfigServiceProtocol: config_service})
+    request = build_test_request(container)
+    payload = UserConfigsPatchRequest(update=UserConfigUpdate(key="daily_digest_enabled", value=False))
+
+    response = await users_router.patch_me_configs(payload=payload, request=request, principal=principal)
+
+    assert response.configs[0].key == "daily_digest_enabled"
+    assert config_service.update_calls == [("u-1", {"daily_digest_enabled": False})]
+
+
+def test_user_configs_patch_request_requires_update_or_updates() -> None:
+    with pytest.raises(ValueError):
+        UserConfigsPatchRequest()
