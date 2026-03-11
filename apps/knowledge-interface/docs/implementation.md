@@ -171,6 +171,41 @@ Testing is **contract-first** for this service:
 
 `main.rs` bootstraps runtime dependencies, constructs `KnowledgeApplication`, then calls `KnowledgeApplication::ensure_common_root_graph()` before starting tonic via `run_server`. This is startup-only support logic (not an RPC handler) that enforces runtime preconditions for the RPC contract. Root graph seeding uses the same graph-delta ingestion path (including embeddings + repository writes) as normal `UpsertGraphDelta` behavior.
 
+Startup also runs `KnowledgeApplication::sync_all_schema_type_vectors()` before serving traffic. This checks both schema kinds and backfills vectors when Postgres schema rows and Qdrant collections diverge.
+
+## Qdrant collections and projection responsibilities
+
+The service uses three Qdrant collections with distinct roles:
+
+- `blocks`: vector index for `node.block` content used by `FindEntityCandidates` semantic matching.
+- `schema_node_types`: vector index for canonical node type metadata used by `FindNodeTypeCandidates`.
+- `schema_edge_types`: vector index for canonical edge type metadata used by `FindEdgeTypeCandidates`.
+
+All collections use cosine distance with 3072-d vectors. Block writes happen inside graph-delta persistence (`GraphRepository::apply_delta_with_blocks`), while schema-type writes flow through the type-vector repository (`TypeVectorRepository::upsert_schema_type_vector`).
+
+## Schema type sync lifecycle
+
+Schema type vectors are maintained in two moments:
+
+1. **Startup backfill** (`sync_all_schema_type_vectors`)
+   - loads canonical schema types by kind from Postgres
+   - compares the expected type-id set to stored Qdrant type-id sets
+   - when mismatched, re-embeds and upserts all types for that kind
+2. **Per-upsert hook** (`upsert_schema_type`)
+   - after DB upsert succeeds, embeds the updated type text and upserts one vector
+   - if vector sync fails, rolls back the schema DB write to keep stores consistent
+
+This split keeps cold-start recovery simple (full idempotent reconciliation) while keeping steady-state updates incremental.
+
+## Embedding template consistency
+
+Schema type vectors and type-candidate queries intentionally share canonical prompt templates:
+
+- node type template: `entity type: {name}\n\ndescription:\n{description}`
+- edge type template: `relationship type: {name}\n\ndescription:\n{description}`
+
+Because nearest-neighbor search quality depends on query/index vectors living in the same embedding manifold, changing template wording in only one path can silently degrade recall and ranking. Keep indexing and query template changes synchronized and covered by tests.
+
 ## Contract-driven development note
 
 For this service, functional behavior should remain traceable to one of two contract anchors:

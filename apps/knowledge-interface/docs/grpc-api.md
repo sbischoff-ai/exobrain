@@ -1,7 +1,9 @@
 # Knowledge Interface gRPC API and Graph Delta Contract
 
 This document describes what clients must send to `UpsertGraphDelta` and
-`GetUserInitGraph`, plus how to query `FindEntityCandidates`, `GetEntityContext`, `GetEntityExtractionSchemaContext`, and `GetEdgeExtractionSchemaContext`.
+`GetUserInitGraph`, plus how to query `FindEntityCandidates`, `FindNodeTypeCandidates`,
+`FindEdgeTypeCandidates`, `GetEntityContext`, `GetEntityExtractionSchemaContext`, and
+`GetEdgeExtractionSchemaContext`.
 
 ## Core rule
 
@@ -587,8 +589,7 @@ Example JSON response payload:
       "text": "## Notes\n- Worked on the Analytical Engine"
     }
   ],
-  "neighbors": [],
-  "promptContextMarkdown": "# Entity context\n\n## Entity core summary\n..."
+  "neighbors": []
 }
 ```
 
@@ -613,7 +614,7 @@ message FindEdgeTypeCandidatesRequest {
 ```
 
 `name` and `description` are normalized server-side (trim + lowercase) before embedding.
-At least one of them must be non-empty.
+At least one must be non-empty.
 
 ### Response schema
 
@@ -624,6 +625,56 @@ message TypeCandidate {
   string description = 3;
   double score = 4;
 }
+
+message FindNodeTypeCandidatesReply {
+  repeated TypeCandidate candidates = 1;
+}
+
+message FindEdgeTypeCandidatesReply {
+  repeated TypeCandidate candidates = 1;
+}
 ```
 
-Results are sorted by score descending and return canonical type metadata from the schema type vector payload.
+### Request example
+
+```json
+{
+  "name": "person",
+  "description": "a human individual in the graph",
+  "limit": 5
+}
+```
+
+### Response example
+
+```json
+{
+  "candidates": [
+    {
+      "typeId": "node.person",
+      "name": "Person",
+      "description": "A human person",
+      "score": 0.8924
+    },
+    {
+      "typeId": "node.ai_agent",
+      "name": "AI Agent",
+      "description": "An AI assistant/agent entity",
+      "score": 0.7011
+    }
+  ]
+}
+```
+
+### Matching semantics
+
+- The service builds a canonical embedding prompt from normalized request fields:
+  - node search: `entity type: {name}\n\ndescription:\n{description}`
+  - edge search: `relationship type: {name}\n\ndescription:\n{description}`
+- Prompt templates are intentionally shared with schema-type indexing input so query/search vectors live in the same embedding space.
+- Search executes against kind-specific Qdrant collections:
+  - `FindNodeTypeCandidates` → `schema_node_types`
+  - `FindEdgeTypeCandidates` → `schema_edge_types`
+- `limit` defaults to `10` and is clamped to `[1, 50]`.
+- Candidates are sorted by `score DESC`, then `type_id ASC` for deterministic ties.
+- Each candidate payload is projected from stored schema metadata (`type_id`, `name`, `description`) plus similarity score.
