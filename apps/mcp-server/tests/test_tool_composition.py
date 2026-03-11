@@ -5,7 +5,7 @@ from pydantic import Field
 from app.adapters.tool_adapters import ToolAdapterRegistry
 from app.adapters.tool_registry import ToolRegistration, ToolRegistry
 from app.adapters.web_tools import StaticWebSearchClient, WebFetchAdapter, WebSearchAdapter
-from app.contracts import ToolMetadata
+from app.contracts import ResolveEntitiesToolInput, ToolMetadata
 from app.contracts.base import StrictModel
 from app.main import create_tool_registry
 from app.services.tool_service import ToolService
@@ -88,4 +88,52 @@ def test_new_category_tool_works_without_service_branching_changes() -> None:
         "name": "reverse",
         "result": {"text": "olleh"},
         "metadata": None,
+    }
+
+
+def test_invoke_resolve_entities_returns_deterministic_placeholders() -> None:
+    adapters = _adapters()
+
+    result = adapters.invoke_resolve_entities(
+        ResolveEntitiesToolInput.model_validate(
+            {
+                "entities": [
+                    {
+                        "name": "  Acme   Corp ",
+                        "type_hint": " organization ",
+                        "description_hint": "Supplier account",
+                        "expected_existence": "new",
+                    },
+                    {
+                        "name": "Jane Doe",
+                        "expected_existence": "existing",
+                    },
+                ]
+            }
+        )
+    )
+
+    assert result.model_dump() == {
+        "results": [
+            {
+                "entity_id": "placeholder-entity-001-acme-corp",
+                "name": "Acme Corp",
+                "aliases": ["  Acme   Corp "],
+                "entity_type": "organization",
+                "description": "Supplier account",
+                "status": "unresolved",
+                "confidence": 0.2,
+                "newly_created": True,
+            },
+            {
+                "entity_id": "placeholder-entity-002-jane-doe",
+                "name": "Jane Doe",
+                "aliases": [],
+                "entity_type": "unknown",
+                "description": "Placeholder resolution result.",
+                "status": "unresolved",
+                "confidence": 0.2,
+                "newly_created": False,
+            },
+        ]
     }
