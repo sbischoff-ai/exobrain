@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from app.api.schemas.users import UserConfigChoiceOption, UserConfigItem
+from app.services.contracts import DatabaseServiceProtocol
 
 
 @dataclass(frozen=True)
@@ -26,53 +27,161 @@ class InvalidUserConfigValueError(ValueError):
 class UserConfigService:
     """Provides effective user config values and validates config updates."""
 
-    _DEFINITIONS: tuple[ConfigDefinition, ...] = (
-        ConfigDefinition(
-            key="daily_digest_enabled",
-            config_type="boolean",
-            description="Enable daily digest reminders in assistant experiences",
-            default_value=True,
-        ),
-        ConfigDefinition(
-            key="answer_verbosity",
-            config_type="choice",
-            description="Preferred default answer detail level",
-            default_value="balanced",
-            options=(
-                UserConfigChoiceOption(value="concise", label="Concise"),
-                UserConfigChoiceOption(value="balanced", label="Balanced"),
-                UserConfigChoiceOption(value="detailed", label="Detailed"),
-            ),
-        ),
-    )
-
-    def __init__(self) -> None:
-        self._definitions_by_key: dict[str, ConfigDefinition] = {definition.key: definition for definition in self._DEFINITIONS}
-        self._overrides_by_user_id: dict[str, dict[str, bool | str]] = {}
+    def __init__(self, database: DatabaseServiceProtocol) -> None:
+        self._database = database
 
     async def get_effective_configs(self, user_id: str) -> list[UserConfigItem]:
-        overrides = self._overrides_by_user_id.get(user_id, {})
-        return [self._effective_item(definition, overrides) for definition in self._DEFINITIONS]
+        definitions = await self._load_definitions()
+        overrides = await self._load_overrides(user_id)
+        return [self._effective_item(definition, overrides) for definition in definitions]
 
     async def update_configs(self, user_id: str, updates: dict[str, bool | str]) -> list[UserConfigItem]:
+        definitions = await self._load_definitions()
+        definitions_by_key = {definition.key: definition for definition in definitions}
+
         for key, value in updates.items():
-            definition = self._definitions_by_key.get(key)
+            definition = definitions_by_key.get(key)
             if definition is None:
                 raise UnknownUserConfigError(key)
             self._validate(definition, value)
 
-        overrides = self._overrides_by_user_id.setdefault(user_id, {})
+        await self._persist_overrides(user_id, updates, definitions_by_key)
+        overrides = await self._load_overrides(user_id)
+        return [self._effective_item(definition, overrides) for definition in definitions]
+
+    async def _load_definitions(self) -> list[ConfigDefinition]:
+        rows = await self._database.fetch(
+            """
+            SELECT
+              d.key,
+              d.config_type,
+              d.description,
+              d.default_value,
+              o.option_value,
+              o.option_label,
+              o.display_order AS option_display_order
+            FROM user_config_definitions d
+            LEFT JOIN user_config_options o
+              ON o.config_key = d.key
+            ORDER BY d.display_order ASC, d.key ASC, o.display_order ASC, o.option_value ASC
+            """
+        )
+
+        definitions_by_key: dict[str, ConfigDefinition] = {}
+        ordered_keys: list[str] = []
+        options_by_key: dict[str, list[UserConfigChoiceOption]] = {}
+
+        for row in rows:
+            key = str(row["key"])
+            if key not in definitions_by_key:
+                raw_config_type = str(row["config_type"])
+                default_value = row["default_value"]
+                if raw_config_type == "boolean":
+                    config_type: Literal["boolean", "choice"] = "boolean"
+                    default_value = self._coerce_boolean(key, default_value)
+                elif raw_config_type == "choice":
+                    config_type = "choice"
+                    default_value = str(default_value)
+                else:
+                    raise InvalidUserConfigValueError(key)
+
+                definitions_by_key[key] = ConfigDefinition(
+                    key=key,
+                    config_type=config_type,
+                    description=str(row["description"]),
+                    default_value=default_value,
+                )
+                ordered_keys.append(key)
+
+            option_value = row["option_value"]
+            if option_value is None:
+                continue
+            options_by_key.setdefault(key, []).append(
+                UserConfigChoiceOption(value=str(option_value), label=str(row["option_label"]))
+            )
+
+        definitions: list[ConfigDefinition] = []
+        for key in ordered_keys:
+            definition = definitions_by_key[key]
+            definitions.append(
+                ConfigDefinition(
+                    key=definition.key,
+                    config_type=definition.config_type,
+                    description=definition.description,
+                    default_value=definition.default_value,
+                    options=tuple(options_by_key.get(key, [])),
+                )
+            )
+        return definitions
+
+    async def _load_overrides(self, user_id: str) -> dict[str, bool | str]:
+        rows = await self._database.fetch(
+            """
+            SELECT config_key, config_value
+            FROM user_config_overrides
+            WHERE user_id = $1::uuid
+            """,
+            user_id,
+        )
+        return {str(row["config_key"]): row["config_value"] for row in rows}
+
+    async def _persist_overrides(
+        self,
+        user_id: str,
+        updates: dict[str, bool | str],
+        definitions_by_key: dict[str, ConfigDefinition],
+    ) -> None:
+        if not updates:
+            return
+
+        keys: list[str] = []
+        values: list[bool | str] = []
+        defaults: list[bool | str] = []
         for key, value in updates.items():
-            definition = self._definitions_by_key[key]
-            if value == definition.default_value:
-                overrides.pop(key, None)
-            else:
-                overrides[key] = value
+            keys.append(key)
+            values.append(value)
+            defaults.append(definitions_by_key[key].default_value)
 
-        if not overrides:
-            self._overrides_by_user_id.pop(user_id, None)
+        await self._database.execute(
+            """
+            WITH incoming AS (
+              SELECT
+                key,
+                value,
+                default_value
+              FROM unnest($2::text[], $3::text[], $4::text[]) AS t(key, value, default_value)
+            ),
+            removed AS (
+              DELETE FROM user_config_overrides uco
+              USING incoming i
+              WHERE uco.user_id = $1::uuid
+                AND uco.config_key = i.key
+                AND i.value = i.default_value
+            )
+            INSERT INTO user_config_overrides (user_id, config_key, config_value, updated_at)
+            SELECT $1::uuid, i.key, i.value, NOW()
+            FROM incoming i
+            WHERE i.value <> i.default_value
+            ON CONFLICT (user_id, config_key)
+            DO UPDATE SET config_value = EXCLUDED.config_value, updated_at = NOW()
+            """,
+            user_id,
+            keys,
+            [str(value).lower() if isinstance(value, bool) else value for value in values],
+            [str(value).lower() if isinstance(value, bool) else value for value in defaults],
+        )
 
-        return [self._effective_item(definition, overrides) for definition in self._DEFINITIONS]
+
+    def _coerce_boolean(self, key: str, value: bool | str | object) -> bool:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            lowered = value.lower()
+            if lowered == "true":
+                return True
+            if lowered == "false":
+                return False
+        raise InvalidUserConfigValueError(key)
 
     def _validate(self, definition: ConfigDefinition, value: bool | str) -> None:
         if definition.config_type == "boolean":
@@ -89,6 +198,8 @@ class UserConfigService:
     def _effective_item(self, definition: ConfigDefinition, overrides: dict[str, bool | str]) -> UserConfigItem:
         has_override = definition.key in overrides
         effective_value = overrides.get(definition.key, definition.default_value)
+        if definition.config_type == "boolean":
+            effective_value = self._coerce_boolean(definition.key, effective_value)
         return UserConfigItem(
             key=definition.key,
             config_type=definition.config_type,
