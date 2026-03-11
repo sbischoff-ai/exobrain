@@ -150,9 +150,8 @@ Category-specific builders live under `app/adapters/*_registry_builder.py` and a
 
 `ToolService` uses registry lookup/dispatch instead of per-tool branching and returns:
 
-- discriminated known success envelopes for built-in tools (`echo`, `add`, `web_search`, `web_fetch`, `resolve_entities`)
+- one generic success envelope for all tools (built-in and dynamically registered)
   - `resolve_entities` currently returns deterministic placeholder resolution data in local/test flows (no external service dependency).
-- a documented generic success envelope for dynamically registered tools
 - typed error envelopes for failures
 
 ## Local run

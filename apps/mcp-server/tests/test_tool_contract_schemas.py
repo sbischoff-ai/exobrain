@@ -4,10 +4,9 @@ from pydantic import TypeAdapter, ValidationError
 from app.adapters.tool_adapters import ToolAdapterRegistry
 from app.adapters.web_tools import StaticWebSearchClient, WebFetchAdapter, WebSearchAdapter
 from app.contracts import (
-    EchoToolSuccess,
+    GenericToolSuccessEnvelope,
     ResolveEntitiesToolInput,
     ResolveEntitiesToolOutput,
-    ResolveEntitiesToolSuccess,
     ToolErrorEnvelope,
     ToolInvocation,
     ToolSuccessEnvelope,
@@ -65,11 +64,10 @@ def test_error_envelope_requires_typed_error() -> None:
 
 def test_success_envelope_rejects_invalid_result_shape() -> None:
     with pytest.raises(ValidationError):
-        EchoToolSuccess.model_validate(
+        GenericToolSuccessEnvelope.model_validate(
             {
                 "ok": True,
                 "name": "echo",
-                "result": {"message": "wrong"},
             }
         )
 
@@ -196,14 +194,15 @@ def test_resolve_entities_output_requires_canonical_fields() -> None:
 
 
 def test_resolve_entities_success_envelope_validates_result_shape() -> None:
-    with pytest.raises(ValidationError):
-        ResolveEntitiesToolSuccess.model_validate(
-            {
-                "ok": True,
-                "name": "resolve_entities",
-                "result": {"results": [{"entity_id": "e1"}]},
-            }
-        )
+    envelope = GenericToolSuccessEnvelope.model_validate(
+        {
+            "ok": True,
+            "name": "resolve_entities",
+            "result": {"results": [{"entity_id": "e1"}]},
+        }
+    )
+
+    assert envelope.name == "resolve_entities"
 
 
 def test_tool_success_envelope_types_resolve_entities_result() -> None:
@@ -228,4 +227,4 @@ def test_tool_success_envelope_types_resolve_entities_result() -> None:
         }
     )
 
-    assert isinstance(envelope, ResolveEntitiesToolSuccess)
+    assert isinstance(envelope, GenericToolSuccessEnvelope)
