@@ -52,6 +52,18 @@ def test_create_tool_registry_respects_feature_flags() -> None:
     assert [tool.name for tool in registry.registrations()] == ["echo", "add"]
 
 
+def test_create_tool_registry_ignores_unknown_categories() -> None:
+    registry = create_tool_registry(_adapters(), _settings(ENABLED_TOOL_CATEGORIES="utility,unknown,web"))
+
+    assert [tool.name for tool in registry.registrations()] == ["echo", "add", "web_search", "web_fetch"]
+
+
+def test_create_tool_registry_preserves_category_order_with_empty_categories() -> None:
+    registry = create_tool_registry(_adapters(), _settings(ENABLED_TOOL_CATEGORIES="web,knowledge,utility"))
+
+    assert [tool.name for tool in registry.registrations()] == ["web_search", "web_fetch", "echo", "add"]
+
+
 def test_new_category_tool_works_without_service_branching_changes() -> None:
     reverse_registration = ToolRegistration(
         name="reverse",

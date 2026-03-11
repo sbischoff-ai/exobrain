@@ -5,6 +5,7 @@ from collections.abc import Callable
 from fastapi import FastAPI
 
 from app.adapters.tavily import TavilyWebSearchClient
+from app.adapters.knowledge_registry_builder import build_knowledge_tool_registrations
 from app.adapters.tool_adapters import ToolAdapterRegistry
 from app.adapters.tool_registry import ToolRegistration, ToolRegistry
 from app.adapters.utility_registry_builder import build_utility_tool_registrations
@@ -21,6 +22,7 @@ ToolCategoryBuilder = Callable[[ToolAdapterRegistry], list[ToolRegistration]]
 
 CATEGORY_BUILDERS: dict[str, ToolCategoryBuilder] = {
     "utility": build_utility_tool_registrations,
+    "knowledge": build_knowledge_tool_registrations,
     "web": build_web_tool_registrations,
 }
 
