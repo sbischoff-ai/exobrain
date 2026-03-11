@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from typing import Literal
 
 from app.api.schemas.users import UserConfigChoiceOption, UserConfigItem
@@ -9,6 +10,7 @@ from app.services.contracts import DatabaseServiceProtocol
 
 @dataclass(frozen=True)
 class ConfigDefinition:
+    id: str
     key: str
     config_type: Literal["boolean", "choice"]
     description: str
@@ -53,6 +55,7 @@ class UserConfigService:
         rows = await self._database.fetch(
             """
             SELECT
+              d.id,
               d.key,
               d.config_type,
               d.description,
@@ -61,8 +64,10 @@ class UserConfigService:
               o.option_label,
               o.display_order AS option_display_order
             FROM user_config_definitions d
-            LEFT JOIN user_config_options o
-              ON o.config_key = d.key
+            LEFT JOIN user_config_choice_options o
+              ON o.definition_id = d.id
+             AND o.is_active = TRUE
+            WHERE d.is_active = TRUE
             ORDER BY d.display_order ASC, d.key ASC, o.display_order ASC, o.option_value ASC
             """
         )
@@ -75,7 +80,7 @@ class UserConfigService:
             key = str(row["key"])
             if key not in definitions_by_key:
                 raw_config_type = str(row["config_type"])
-                default_value = row["default_value"]
+                default_value = self._deserialize_stored_value(key, row["default_value"])
                 if raw_config_type == "boolean":
                     config_type: Literal["boolean", "choice"] = "boolean"
                     default_value = self._coerce_boolean(key, default_value)
@@ -86,6 +91,7 @@ class UserConfigService:
                     raise InvalidUserConfigValueError(key)
 
                 definitions_by_key[key] = ConfigDefinition(
+                    id=str(row["id"]),
                     key=key,
                     config_type=config_type,
                     description=str(row["description"]),
@@ -105,6 +111,7 @@ class UserConfigService:
             definition = definitions_by_key[key]
             definitions.append(
                 ConfigDefinition(
+                    id=definition.id,
                     key=definition.key,
                     config_type=definition.config_type,
                     description=definition.description,
@@ -117,13 +124,16 @@ class UserConfigService:
     async def _load_overrides(self, user_id: str) -> dict[str, bool | str]:
         rows = await self._database.fetch(
             """
-            SELECT config_key, config_value
-            FROM user_config_overrides
-            WHERE user_id = $1::uuid
+            SELECT d.key, ucv.value
+            FROM user_config_values ucv
+            INNER JOIN user_config_definitions d
+              ON d.id = ucv.definition_id
+            WHERE ucv.user_id = $1::uuid
+              AND d.is_active = TRUE
             """,
             user_id,
         )
-        return {str(row["config_key"]): row["config_value"] for row in rows}
+        return {str(row["key"]): self._deserialize_stored_value(str(row["key"]), row["value"]) for row in rows}
 
     async def _persist_overrides(
         self,
@@ -134,42 +144,57 @@ class UserConfigService:
         if not updates:
             return
 
-        keys: list[str] = []
-        values: list[bool | str] = []
-        defaults: list[bool | str] = []
+        definition_ids: list[str] = []
+        values: list[str] = []
+        defaults: list[str] = []
         for key, value in updates.items():
-            keys.append(key)
-            values.append(value)
-            defaults.append(definitions_by_key[key].default_value)
+            definition = definitions_by_key[key]
+            definition_ids.append(definition.id)
+            values.append(self._serialize_value(definition.config_type, value))
+            defaults.append(self._serialize_value(definition.config_type, definition.default_value))
 
         await self._database.execute(
             """
             WITH incoming AS (
               SELECT
-                key,
-                value,
-                default_value
-              FROM unnest($2::text[], $3::text[], $4::text[]) AS t(key, value, default_value)
+                definition_id,
+                value_json::jsonb AS value,
+                default_json::jsonb AS default_value
+              FROM unnest($2::uuid[], $3::text[], $4::text[]) AS t(definition_id, value_json, default_json)
             ),
             removed AS (
-              DELETE FROM user_config_overrides uco
+              DELETE FROM user_config_values ucv
               USING incoming i
-              WHERE uco.user_id = $1::uuid
-                AND uco.config_key = i.key
+              WHERE ucv.user_id = $1::uuid
+                AND ucv.definition_id = i.definition_id
                 AND i.value = i.default_value
             )
-            INSERT INTO user_config_overrides (user_id, config_key, config_value, updated_at)
-            SELECT $1::uuid, i.key, i.value, NOW()
+            INSERT INTO user_config_values (user_id, definition_id, value, updated_at)
+            SELECT $1::uuid, i.definition_id, i.value, NOW()
             FROM incoming i
             WHERE i.value <> i.default_value
-            ON CONFLICT (user_id, config_key)
-            DO UPDATE SET config_value = EXCLUDED.config_value, updated_at = NOW()
+            ON CONFLICT (user_id, definition_id)
+            DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
             """,
             user_id,
-            keys,
-            [str(value).lower() if isinstance(value, bool) else value for value in values],
-            [str(value).lower() if isinstance(value, bool) else value for value in defaults],
+            definition_ids,
+            values,
+            defaults,
         )
+
+    def _serialize_value(self, config_type: Literal["boolean", "choice"], value: bool | str) -> str:
+        return json.dumps({"kind": config_type, "value": value})
+
+    def _deserialize_stored_value(self, key: str, raw: object) -> bool | str:
+        if not isinstance(raw, dict):
+            raise InvalidUserConfigValueError(key)
+        raw_kind = raw.get("kind")
+        raw_value = raw.get("value")
+        if raw_kind == "boolean":
+            return self._coerce_boolean(key, raw_value)
+        if raw_kind == "choice" and isinstance(raw_value, str):
+            return raw_value
+        raise InvalidUserConfigValueError(key)
 
 
     def _coerce_boolean(self, key: str, value: bool | str | object) -> bool:

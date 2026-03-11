@@ -1,0 +1,251 @@
+[[actions]]
+type = "create_table"
+name = "user_config_definitions"
+primary_key = ["id"]
+
+    [[actions.columns]]
+    name = "id"
+    type = "UUID"
+    nullable = false
+    default = "gen_random_uuid()"
+
+    [[actions.columns]]
+    name = "key"
+    type = "TEXT"
+    nullable = false
+
+    [[actions.columns]]
+    name = "description"
+    type = "TEXT"
+    nullable = false
+
+    [[actions.columns]]
+    name = "config_type"
+    type = "TEXT"
+    nullable = false
+
+    [[actions.columns]]
+    name = "default_value"
+    type = "JSONB"
+    nullable = false
+
+    [[actions.columns]]
+    name = "display_order"
+    type = "INTEGER"
+    nullable = false
+    default = "0"
+
+    [[actions.columns]]
+    name = "is_active"
+    type = "BOOLEAN"
+    nullable = false
+    default = "TRUE"
+
+    [[actions.columns]]
+    name = "created_at"
+    type = "TIMESTAMPTZ"
+    nullable = false
+    default = "NOW()"
+
+    [[actions.columns]]
+    name = "updated_at"
+    type = "TIMESTAMPTZ"
+    nullable = false
+    default = "NOW()"
+
+[[actions]]
+type = "add_index"
+table = "user_config_definitions"
+
+    [actions.index]
+    name = "user_config_definitions_key_unique"
+    columns = ["key"]
+    unique = true
+
+[[actions]]
+type = "add_index"
+table = "user_config_definitions"
+
+    [actions.index]
+    name = "idx_user_config_definitions_active_order"
+    columns = ["is_active", "display_order", "key"]
+
+[[actions]]
+type = "create_table"
+name = "user_config_choice_options"
+primary_key = ["id"]
+
+    [[actions.columns]]
+    name = "id"
+    type = "UUID"
+    nullable = false
+    default = "gen_random_uuid()"
+
+    [[actions.columns]]
+    name = "definition_id"
+    type = "UUID"
+    nullable = false
+
+    [[actions.columns]]
+    name = "option_value"
+    type = "TEXT"
+    nullable = false
+
+    [[actions.columns]]
+    name = "option_label"
+    type = "TEXT"
+    nullable = false
+
+    [[actions.columns]]
+    name = "display_order"
+    type = "INTEGER"
+    nullable = false
+    default = "0"
+
+    [[actions.columns]]
+    name = "is_active"
+    type = "BOOLEAN"
+    nullable = false
+    default = "TRUE"
+
+    [[actions.columns]]
+    name = "created_at"
+    type = "TIMESTAMPTZ"
+    nullable = false
+    default = "NOW()"
+
+[[actions]]
+type = "add_foreign_key"
+table = "user_config_choice_options"
+
+    [actions.foreign_key]
+    columns = ["definition_id"]
+    referenced_table = "user_config_definitions"
+    referenced_columns = ["id"]
+
+[[actions]]
+type = "add_index"
+table = "user_config_choice_options"
+
+    [actions.index]
+    name = "user_config_choice_options_definition_value_unique"
+    columns = ["definition_id", "option_value"]
+    unique = true
+
+[[actions]]
+type = "add_index"
+table = "user_config_choice_options"
+
+    [actions.index]
+    name = "idx_user_config_choice_options_active_order"
+    columns = ["definition_id", "is_active", "display_order", "option_value"]
+
+[[actions]]
+type = "create_table"
+name = "user_config_values"
+primary_key = ["id"]
+
+    [[actions.columns]]
+    name = "id"
+    type = "UUID"
+    nullable = false
+    default = "gen_random_uuid()"
+
+    [[actions.columns]]
+    name = "user_id"
+    type = "UUID"
+    nullable = false
+
+    [[actions.columns]]
+    name = "definition_id"
+    type = "UUID"
+    nullable = false
+
+    [[actions.columns]]
+    name = "value"
+    type = "JSONB"
+    nullable = false
+
+    [[actions.columns]]
+    name = "created_at"
+    type = "TIMESTAMPTZ"
+    nullable = false
+    default = "NOW()"
+
+    [[actions.columns]]
+    name = "updated_at"
+    type = "TIMESTAMPTZ"
+    nullable = false
+    default = "NOW()"
+
+[[actions]]
+type = "add_foreign_key"
+table = "user_config_values"
+
+    [actions.foreign_key]
+    columns = ["user_id"]
+    referenced_table = "users"
+    referenced_columns = ["id"]
+
+[[actions]]
+type = "add_foreign_key"
+table = "user_config_values"
+
+    [actions.foreign_key]
+    columns = ["definition_id"]
+    referenced_table = "user_config_definitions"
+    referenced_columns = ["id"]
+
+[[actions]]
+type = "add_index"
+table = "user_config_values"
+
+    [actions.index]
+    name = "user_config_values_user_definition_unique"
+    columns = ["user_id", "definition_id"]
+    unique = true
+
+[[actions]]
+type = "add_index"
+table = "user_config_values"
+
+    [actions.index]
+    name = "idx_user_config_values_definition"
+    columns = ["definition_id"]
+
+[[actions]]
+type = "custom"
+complete = """
+ALTER TABLE user_config_definitions
+ADD CONSTRAINT user_config_definitions_type_check
+CHECK (config_type IN ('boolean', 'choice'));
+
+ALTER TABLE user_config_definitions
+ADD CONSTRAINT user_config_definitions_default_value_shape_check
+CHECK (
+  jsonb_typeof(default_value) = 'object'
+  AND default_value ? 'kind'
+  AND default_value ? 'value'
+  AND default_value->>'kind' = config_type
+  AND (
+    (config_type = 'boolean' AND jsonb_typeof(default_value->'value') = 'boolean')
+    OR (config_type = 'choice' AND jsonb_typeof(default_value->'value') = 'string')
+  )
+);
+
+ALTER TABLE user_config_choice_options
+ADD CONSTRAINT user_config_choice_options_non_empty_value_check
+CHECK (length(trim(option_value)) > 0);
+
+ALTER TABLE user_config_values
+ADD CONSTRAINT user_config_values_value_shape_check
+CHECK (
+  jsonb_typeof(value) = 'object'
+  AND value ? 'kind'
+  AND value ? 'value'
+  AND (
+    (value->>'kind' = 'boolean' AND jsonb_typeof(value->'value') = 'boolean')
+    OR (value->>'kind' = 'choice' AND jsonb_typeof(value->'value') = 'string')
+  )
+);
+"""
