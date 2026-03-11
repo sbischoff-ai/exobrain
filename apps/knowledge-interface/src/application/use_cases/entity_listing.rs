@@ -2,10 +2,10 @@ use anyhow::{anyhow, Result};
 
 use crate::domain::{ListEntitiesByTypeQuery, ListEntitiesByTypeResult};
 
-use crate::application::{
-    KnowledgeApplication, LIST_ENTITIES_BY_TYPE_DEFAULT_PAGE_SIZE,
-    LIST_ENTITIES_BY_TYPE_MAX_PAGE_SIZE,
+use crate::application::pagination::{
+    LIST_ENTITIES_BY_TYPE_DEFAULT_PAGE_SIZE, LIST_ENTITIES_BY_TYPE_MAX_PAGE_SIZE,
 };
+use crate::application::KnowledgeApplication;
 
 pub(crate) async fn list_entities_by_type(
     app: &KnowledgeApplication,

@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
@@ -8,16 +8,22 @@ use crate::domain::EmbeddedBlock;
 
 use crate::{
     domain::{
-        BlockNode, EntityNode, ExistingBlockContext, ExtractionUniverse, FindEntityCandidatesQuery,
+        BlockNode, EntityNode, ExtractionUniverse, FindEntityCandidatesQuery,
         FindEntityCandidatesResult, FullSchema, GetEntityContextQuery, GetEntityContextResult,
         GraphDelta, GraphEdge, ListEntitiesByTypeQuery, ListEntitiesByTypeResult, PropertyScalar,
-        PropertyValue, SchemaKind, SchemaType, TypeId, UniverseNode, UpsertSchemaTypeCommand,
+        PropertyValue, SchemaKind, SchemaType, UniverseNode, UpsertSchemaTypeCommand,
         UserInitGraphNodeIds, Visibility,
     },
     ports::{Embedder, GraphRepository, SchemaRepository},
 };
 
+pub(crate) mod graph_resolution;
+pub(crate) mod pagination;
+pub(crate) mod type_hierarchy;
 pub mod use_cases;
+pub(crate) mod validation;
+
+use self::validation::is_global_property_owner;
 
 pub(crate) use use_cases::extraction_schema::{
     build_entity_type_property_context, build_extraction_edge_types_from_input,
@@ -28,12 +34,10 @@ pub(crate) use use_cases::extraction_schema::{
 };
 
 const EXOBRAIN_USER_ID: &str = "exobrain";
-const COMMON_UNIVERSE_ID: &str = "9d7f0fa5-78c1-4805-9efb-3f8f16090d7f";
+pub(crate) const COMMON_UNIVERSE_ID: &str = "9d7f0fa5-78c1-4805-9efb-3f8f16090d7f";
 const COMMON_UNIVERSE_NAME: &str = "Real World";
 const COMMON_EXOBRAIN_ENTITY_ID: &str = "8c75cc89-6204-4fed-aec1-34d032ff95ee";
 const COMMON_EXOBRAIN_BLOCK_ID: &str = "ea5ca80f-346b-4f66-bff2-d307ce5d7da9";
-const LIST_ENTITIES_BY_TYPE_DEFAULT_PAGE_SIZE: u32 = 50;
-const LIST_ENTITIES_BY_TYPE_MAX_PAGE_SIZE: u32 = 200;
 pub struct KnowledgeApplication {
     schema_repository: Arc<dyn SchemaRepository>,
     graph_repository: Arc<dyn GraphRepository>,
@@ -569,44 +573,6 @@ impl KnowledgeApplication {
     }
 }
 
-fn resolve_labels_for_type(
-    type_id: &str,
-    inheritance: &[crate::domain::TypeInheritance],
-) -> Vec<String> {
-    let mut chain = vec![type_id.to_string()];
-    let mut current = type_id.to_string();
-    loop {
-        let parent = inheritance
-            .iter()
-            .find(|edge| edge.child_type_id == current)
-            .map(|edge| edge.parent_type_id.clone());
-        match parent {
-            Some(next) => {
-                chain.push(next.clone());
-                current = next;
-            }
-            None => break,
-        }
-    }
-
-    chain
-        .into_iter()
-        .rev()
-        .map(|id| id.trim_start_matches("node.").to_string())
-        .map(|label| {
-            let mut chars = label.chars();
-            match chars.next() {
-                Some(first) => format!(
-                    "{}{}",
-                    first.to_ascii_uppercase(),
-                    chars.collect::<String>()
-                ),
-                None => label,
-            }
-        })
-        .collect()
-}
-
 fn default_edge_properties(provenance_hint: &str) -> Vec<PropertyValue> {
     vec![
         PropertyValue {
@@ -622,334 +588,6 @@ fn default_edge_properties(provenance_hint: &str) -> Vec<PropertyValue> {
             value: PropertyScalar::String(provenance_hint.to_string()),
         },
     ]
-}
-
-fn validate_internal_timestamps_not_provided(
-    subject_id: &str,
-    provided: &[PropertyValue],
-    errors: &mut Vec<String>,
-) {
-    for prop in provided {
-        if prop.key == "created_at" || prop.key == "updated_at" {
-            errors.push(format!(
-                "{} cannot set internal property '{}'",
-                subject_id, prop.key
-            ));
-        }
-    }
-}
-
-fn schema_kind_for_type_id(value: &str) -> Option<SchemaKind> {
-    let id = TypeId::parse(value).ok()?;
-    let raw = id.as_str();
-    let prefix = raw.split('.').next().unwrap_or(raw);
-    SchemaKind::from_db_str(prefix)
-}
-
-fn is_global_property_owner(owner_type_id: &str, property_owner_type_id: &str) -> bool {
-    let Some(owner_kind) = schema_kind_for_type_id(owner_type_id) else {
-        return false;
-    };
-
-    property_owner_type_id == owner_kind.as_db_str()
-}
-
-fn validate_graph_id(id: &str, kind: &str) -> std::result::Result<(), String> {
-    match kind {
-        "entity" => crate::domain::EntityId::parse(id).map(|_| ()),
-        "universe" => crate::domain::UniverseId::parse(id).map(|_| ()),
-        _ => {
-            if id.trim().is_empty() {
-                return Err(format!("{kind} id is required"));
-            }
-            if uuid::Uuid::parse_str(id).is_err() {
-                return Err(format!("{kind} id '{}' must be a valid UUID", id));
-            }
-            Ok(())
-        }
-    }
-}
-
-fn validate_properties(
-    subject_id: &str,
-    owner_type_id: &str,
-    provided: &[PropertyValue],
-    all_properties: &[crate::domain::TypeProperty],
-    inheritance: &[crate::domain::TypeInheritance],
-    errors: &mut Vec<String>,
-) {
-    let allowed = collect_allowed_properties(owner_type_id, all_properties, inheritance);
-    let required: HashSet<String> = all_properties
-        .iter()
-        .filter(|p| {
-            p.required
-                && (p.owner_type_id == owner_type_id
-                    || is_assignable(owner_type_id, &p.owner_type_id, inheritance)
-                    || is_global_property_owner(owner_type_id, &p.owner_type_id))
-        })
-        .map(|p| p.prop_name.clone())
-        .collect();
-
-    for property in provided {
-        if !allowed.contains_key(&property.key) {
-            errors.push(format!(
-                "{} property '{}' is not allowed for {}",
-                subject_id, property.key, owner_type_id
-            ));
-        }
-    }
-
-    for req in required {
-        if req == "id" {
-            continue;
-        }
-        if !provided.iter().any(|p| p.key == req) {
-            errors.push(format!(
-                "{} is missing required property '{}'",
-                subject_id, req
-            ));
-        }
-    }
-}
-
-fn collect_allowed_properties(
-    owner_type_id: &str,
-    all_properties: &[crate::domain::TypeProperty],
-    inheritance: &[crate::domain::TypeInheritance],
-) -> HashMap<String, String> {
-    all_properties
-        .iter()
-        .filter(|prop| {
-            prop.owner_type_id == owner_type_id
-                || is_assignable(owner_type_id, &prop.owner_type_id, inheritance)
-                || is_global_property_owner(owner_type_id, &prop.owner_type_id)
-        })
-        .map(|prop| (prop.prop_name.clone(), prop.value_type.clone()))
-        .collect()
-}
-
-fn is_assignable(
-    actual: &str,
-    expected: &str,
-    inheritance: &[crate::domain::TypeInheritance],
-) -> bool {
-    if actual == expected {
-        return true;
-    }
-
-    let mut stack = vec![actual.to_string()];
-    let mut seen = HashSet::new();
-    while let Some(current) = stack.pop() {
-        if !seen.insert(current.clone()) {
-            continue;
-        }
-        for parent in inheritance.iter().filter(|i| i.child_type_id == current) {
-            if parent.parent_type_id == expected {
-                return true;
-            }
-            stack.push(parent.parent_type_id.clone());
-        }
-    }
-    false
-}
-
-fn extract_text(properties: &[crate::domain::PropertyValue]) -> String {
-    properties
-        .iter()
-        .find_map(|prop| match (&prop.key[..], &prop.value) {
-            ("text", PropertyScalar::String(value)) => Some(value.clone()),
-            _ => None,
-        })
-        .unwrap_or_default()
-}
-
-async fn block_levels_for_blocks(
-    blocks: &[BlockNode],
-    edges: &[GraphEdge],
-    graph_repository: &dyn GraphRepository,
-) -> Result<HashMap<String, i64>> {
-    let contexts =
-        existing_block_context_for_referenced_summarize_parents(blocks, edges, graph_repository)
-            .await?;
-
-    let block_ids: HashSet<&str> = blocks.iter().map(|b| b.id.as_str()).collect();
-    let mut levels: HashMap<String, i64> = HashMap::new();
-
-    for edge in edges {
-        if edge.edge_type.eq_ignore_ascii_case("DESCRIBED_BY")
-            && block_ids.contains(edge.to_id.as_str())
-        {
-            levels.entry(edge.to_id.clone()).or_insert(0);
-        }
-    }
-
-    for (block_id, context) in &contexts {
-        levels
-            .entry(block_id.clone())
-            .or_insert(context.block_level);
-    }
-
-    for block in blocks {
-        if levels.contains_key(&block.id) {
-            continue;
-        }
-        if let Some(existing) = graph_repository
-            .get_existing_block_context(&block.id, &block.user_id, block.visibility)
-            .await?
-        {
-            levels.insert(block.id.clone(), existing.block_level);
-        }
-    }
-
-    let summarize_edges: Vec<(&str, &str)> = edges
-        .iter()
-        .filter(|edge| {
-            edge.edge_type.eq_ignore_ascii_case("SUMMARIZES")
-                && (block_ids.contains(edge.from_id.as_str())
-                    || contexts.contains_key(edge.from_id.as_str()))
-                && block_ids.contains(edge.to_id.as_str())
-        })
-        .map(|edge| (edge.from_id.as_str(), edge.to_id.as_str()))
-        .collect();
-
-    let mut changed = true;
-    while changed {
-        changed = false;
-        for (from_id, to_id) in &summarize_edges {
-            if let Some(from_level) = levels.get(*from_id) {
-                let candidate = from_level + 1;
-                let existing = levels.get(*to_id).copied();
-                if existing.is_none() || candidate < existing.unwrap_or(i64::MAX) {
-                    levels.insert((*to_id).to_string(), candidate);
-                    changed = true;
-                }
-            }
-        }
-    }
-
-    levels.retain(|id, _| block_ids.contains(id.as_str()));
-
-    Ok(levels)
-}
-
-async fn root_entity_ids_for_blocks(
-    blocks: &[BlockNode],
-    edges: &[GraphEdge],
-    graph_repository: &dyn GraphRepository,
-) -> Result<HashMap<String, String>> {
-    let contexts =
-        existing_block_context_for_referenced_summarize_parents(blocks, edges, graph_repository)
-            .await?;
-
-    let block_ids: HashSet<&str> = blocks.iter().map(|b| b.id.as_str()).collect();
-    let described_by_parents: HashMap<&str, &str> = edges
-        .iter()
-        .filter(|e| {
-            e.edge_type.eq_ignore_ascii_case("DESCRIBED_BY") && block_ids.contains(e.to_id.as_str())
-        })
-        .map(|e| (e.to_id.as_str(), e.from_id.as_str()))
-        .collect();
-    let summarize_parents: HashMap<&str, &str> = edges
-        .iter()
-        .filter(|e| {
-            e.edge_type.eq_ignore_ascii_case("SUMMARIZES") && block_ids.contains(e.to_id.as_str())
-        })
-        .map(|e| (e.to_id.as_str(), e.from_id.as_str()))
-        .collect();
-
-    let mut out = HashMap::new();
-    for block in blocks {
-        let mut current = block.id.as_str();
-        let mut seen = HashSet::new();
-        loop {
-            if !seen.insert(current) {
-                return Err(anyhow!(
-                    "cycle detected while resolving root_entity_id for block {}",
-                    block.id
-                ));
-            }
-            if let Some(root_entity) = described_by_parents.get(current) {
-                out.insert(block.id.clone(), (*root_entity).to_string());
-                break;
-            }
-            if let Some(parent_block) = summarize_parents.get(current) {
-                if let Some(parent_context) = contexts.get(*parent_block) {
-                    out.insert(block.id.clone(), parent_context.root_entity_id.clone());
-                    break;
-                }
-                current = parent_block;
-                continue;
-            }
-            if let Some(context) = contexts.get(current) {
-                out.insert(block.id.clone(), context.root_entity_id.clone());
-                break;
-            }
-            if let Some(existing) = graph_repository
-                .get_existing_block_context(current, &block.user_id, block.visibility)
-                .await?
-            {
-                out.insert(block.id.clone(), existing.root_entity_id);
-                break;
-            }
-            return Err(anyhow!(
-                "unable to resolve root_entity_id for block {} from DESCRIBED_BY/SUMMARIZES edges",
-                block.id
-            ));
-        }
-    }
-    Ok(out)
-}
-
-async fn existing_block_context_for_referenced_summarize_parents(
-    blocks: &[BlockNode],
-    edges: &[GraphEdge],
-    graph_repository: &dyn GraphRepository,
-) -> Result<HashMap<String, ExistingBlockContext>> {
-    let block_ids: HashSet<&str> = blocks.iter().map(|b| b.id.as_str()).collect();
-    let parent_scopes: HashMap<&str, (&str, Visibility)> = edges
-        .iter()
-        .filter(|edge| {
-            edge.edge_type.eq_ignore_ascii_case("SUMMARIZES")
-                && block_ids.contains(edge.to_id.as_str())
-                && !block_ids.contains(edge.from_id.as_str())
-        })
-        .map(|edge| {
-            (
-                edge.from_id.as_str(),
-                (edge.user_id.as_str(), edge.visibility),
-            )
-        })
-        .collect();
-
-    let mut contexts = HashMap::new();
-    for (parent_id, (user_id, visibility)) in parent_scopes {
-        let context = graph_repository
-            .get_existing_block_context(parent_id, user_id, visibility)
-            .await?
-            .ok_or_else(|| {
-                anyhow!(
-                    "unable to resolve root_entity_id for block {} from DESCRIBED_BY/SUMMARIZES edges",
-                    parent_id
-                )
-            })?;
-        contexts.insert(parent_id.to_string(), context);
-    }
-
-    Ok(contexts)
-}
-
-fn resolve_block_universe_id<'a>(
-    root_entity_ids: &HashMap<String, String>,
-    block: &BlockNode,
-    entities: &'a [EntityNode],
-) -> &'a str {
-    if let Some(root_entity_id) = root_entity_ids.get(&block.id) {
-        if let Some(entity) = entities.iter().find(|entity| &entity.id == root_entity_id) {
-            return entity.universe_id.as_deref().unwrap_or(COMMON_UNIVERSE_ID);
-        }
-    }
-
-    COMMON_UNIVERSE_ID
 }
 
 #[cfg(test)]
