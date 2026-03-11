@@ -97,6 +97,25 @@ describe('UserMenu', () => {
     expect((screen.getByLabelText('Theme') as HTMLSelectElement).value).toBe('gruvbox-dark');
   });
 
+  it('shows success message after saving config changes', async () => {
+    vi.mocked(globalThis.fetch)
+      .mockResolvedValueOnce(configsResponse('gruvbox-dark'))
+      .mockResolvedValueOnce(configsResponse('purple-intelligence'));
+
+    render(UserMenu, {
+      props: {
+        user: { name: 'Alice', email: 'alice@example.com' }
+      }
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Open user menu' }));
+    await fireEvent.change(await screen.findByLabelText('Theme'), { target: { value: 'purple-intelligence' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Config changes saved.');
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+  });
+
   it('shows signed-in user details in dropdown', async () => {
     vi.mocked(globalThis.fetch).mockResolvedValueOnce({ ok: true, json: async () => ({ configs: [] }) } as Response);
 
