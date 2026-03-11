@@ -27,7 +27,7 @@ describe('AssistantWorkspace', () => {
     const toKnowledge = screen.getByRole('button', { name: 'Switch to Knowledge Explorer' });
     expect(toKnowledge).toHaveAttribute('title', 'Switch to Knowledge Explorer');
     const toKnowledgeIcon = toKnowledge.querySelector('path');
-    expect(toKnowledgeIcon?.getAttribute('d')).toContain('M5 4.5A2.5 2.5');
+    expect(toKnowledgeIcon?.getAttribute('d')).toContain('M31,7.663L2.516,0.067');
 
     await rerender({ ...baseProps, viewMode: 'knowledge' });
 
