@@ -1,12 +1,12 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use qdrant_client::{
     qdrant::{
         value::Kind, Condition, CreateCollectionBuilder, DeletePointsBuilder, Distance, Filter,
-        PointId, PointStruct, ScoredPoint, SearchPointsBuilder, UpsertPointsBuilder, Value,
-        VectorParamsBuilder,
+        PointId, PointStruct, ScoredPoint, ScrollPointsBuilder, SearchPointsBuilder,
+        UpsertPointsBuilder, Value, VectorParamsBuilder,
     },
     Qdrant,
 };
@@ -360,6 +360,42 @@ impl TypeVectorRepository for QdrantTypeVectorStore {
         vector: &[f32],
     ) -> Result<()> {
         self.upsert_schema_type(schema_type, vector).await
+    }
+
+    async fn get_schema_type_ids_by_kind(&self, kind: SchemaKind) -> Result<HashSet<String>> {
+        let collection = match kind {
+            SchemaKind::Node => &self.node_collection,
+            SchemaKind::Edge => &self.edge_collection,
+        };
+
+        self.ensure_collection(collection).await?;
+
+        let mut type_ids = HashSet::new();
+        let mut next_offset = None;
+
+        loop {
+            let mut request = ScrollPointsBuilder::new(collection)
+                .limit(256)
+                .with_payload(true);
+            if let Some(offset) = next_offset.clone() {
+                request = request.offset(offset);
+            }
+
+            let response = self.client.scroll(request).await?;
+
+            for point in response.result {
+                if let Some(type_id) = payload_string(&point.payload, "type_id") {
+                    type_ids.insert(type_id);
+                }
+            }
+
+            match response.next_page_offset {
+                Some(offset) => next_offset = Some(offset),
+                None => break,
+            }
+        }
+
+        Ok(type_ids)
     }
 }
 #[cfg(test)]

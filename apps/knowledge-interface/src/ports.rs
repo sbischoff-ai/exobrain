@@ -1,5 +1,6 @@
 use anyhow::Result;
 use async_trait::async_trait;
+use std::collections::HashSet;
 
 use crate::domain::{
     EdgeEndpointRule, EmbeddedBlock, ExistingBlockContext, ExtractionUniverse,
@@ -89,4 +90,8 @@ pub trait TypeVectorRepository: Send + Sync {
         schema_type: &SchemaType,
         vector: &[f32],
     ) -> Result<()>;
+
+    async fn get_schema_type_ids_by_kind(&self, _kind: SchemaKind) -> Result<HashSet<String>> {
+        Ok(HashSet::new())
+    }
 }

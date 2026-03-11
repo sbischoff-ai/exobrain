@@ -96,6 +96,8 @@ Qdrant uses separate collections for block embeddings (`blocks`) and schema type
 
 For `UpsertSchemaType`, the service embeds canonical type text (`entity type: ...` / `relationship type: ...`) via the same `Embedder` path used elsewhere, then upserts the vector to kind-specific Qdrant collections. Inactive schema types remain indexed with `active=false` payload for query-time filtering. If vector sync fails after DB upsert, the schema type DB write is rolled back and the request returns a contextual error.
 
+On startup, the service also checks whether canonical schema types in Postgres are already in sync with `schema_node_types` / `schema_edge_types` in Qdrant. If not, it backfills all type vectors for the out-of-sync kind before serving gRPC traffic. The startup routine is idempotent and safe to run after schema seed/reset workflows.
+
 `KnowledgeApplication::ensure_common_root_graph` is startup-only support logic, not an RPC. It exists to satisfy runtime preconditions for the RPC contract (shared `universe.real_world` and `concept.exobrain` roots) before requests are served.
 
 Internal Memgraph timestamp triggers are ensured idempotently during startup by checking `SHOW TRIGGERS` and creating only missing triggers, so pre-existing triggers are treated as already-initialized state instead of a fatal error.

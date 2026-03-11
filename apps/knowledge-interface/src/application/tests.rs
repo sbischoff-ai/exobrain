@@ -1,5 +1,5 @@
 use super::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
@@ -558,6 +558,7 @@ impl GraphRepository for FakeGraphRepository {
 struct CapturingTypeVectorRepository {
     seen: Arc<Mutex<Vec<(SchemaType, Vec<f32>)>>>,
     fail_for_type_id: Option<String>,
+    existing_by_kind: HashMap<String, HashSet<String>>,
 }
 
 #[async_trait]
@@ -583,6 +584,14 @@ impl TypeVectorRepository for CapturingTypeVectorRepository {
             .expect("type vector lock should not be poisoned")
             .push((schema_type.clone(), vector.to_vec()));
         Ok(())
+    }
+
+    async fn get_schema_type_ids_by_kind(&self, kind: SchemaKind) -> Result<HashSet<String>> {
+        Ok(self
+            .existing_by_kind
+            .get(kind.as_db_str())
+            .cloned()
+            .unwrap_or_default())
     }
 }
 
@@ -1107,6 +1116,7 @@ async fn upsert_schema_type_syncs_type_vector_with_active_payload_support() {
     .with_type_vector_repository(Arc::new(CapturingTypeVectorRepository {
         seen: seen.clone(),
         fail_for_type_id: None,
+        existing_by_kind: HashMap::new(),
     }));
 
     let upserted = app
@@ -1145,6 +1155,7 @@ async fn upsert_schema_type_rolls_back_when_type_vector_sync_fails() {
     .with_type_vector_repository(Arc::new(CapturingTypeVectorRepository {
         seen: Arc::new(Mutex::new(Vec::new())),
         fail_for_type_id: Some("node.person".to_string()),
+        existing_by_kind: HashMap::new(),
     }));
 
     let err = app
@@ -1171,6 +1182,91 @@ async fn upsert_schema_type_rolls_back_when_type_vector_sync_fails() {
     assert!(
         schema_type.is_none(),
         "schema write should have been rolled back"
+    );
+}
+
+#[tokio::test]
+async fn sync_all_schema_type_vectors_backfills_when_out_of_sync() {
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let app = KnowledgeApplication::new(
+        Arc::new(FakeSchemaRepo::new()),
+        Arc::new(FakeGraphRepository { root_exists: false }),
+        Arc::new(FakeEmbedder),
+    )
+    .with_type_vector_repository(Arc::new(CapturingTypeVectorRepository {
+        seen: seen.clone(),
+        fail_for_type_id: None,
+        existing_by_kind: HashMap::new(),
+    }));
+
+    app.sync_all_schema_type_vectors()
+        .await
+        .expect("startup sync should succeed");
+
+    let expected_total = FakeSchemaRepo::new()
+        .get_by_kind(SchemaKind::Node)
+        .await
+        .expect("node types should load")
+        .len()
+        + FakeSchemaRepo::new()
+            .get_by_kind(SchemaKind::Edge)
+            .await
+            .expect("edge types should load")
+            .len();
+
+    let seen = seen
+        .lock()
+        .expect("type vector lock should not be poisoned");
+    assert_eq!(seen.len(), expected_total);
+}
+
+#[tokio::test]
+async fn sync_all_schema_type_vectors_skips_when_already_in_sync() {
+    let seen = Arc::new(Mutex::new(Vec::new()));
+
+    let mut existing_by_kind = HashMap::new();
+    existing_by_kind.insert(
+        SchemaKind::Node.as_db_str().to_string(),
+        FakeSchemaRepo::new()
+            .get_by_kind(SchemaKind::Node)
+            .await
+            .expect("node types should load")
+            .into_iter()
+            .map(|t| t.id)
+            .collect(),
+    );
+    existing_by_kind.insert(
+        SchemaKind::Edge.as_db_str().to_string(),
+        FakeSchemaRepo::new()
+            .get_by_kind(SchemaKind::Edge)
+            .await
+            .expect("edge types should load")
+            .into_iter()
+            .map(|t| t.id)
+            .collect(),
+    );
+
+    let app = KnowledgeApplication::new(
+        Arc::new(FakeSchemaRepo::new()),
+        Arc::new(FakeGraphRepository { root_exists: false }),
+        Arc::new(FakeEmbedder),
+    )
+    .with_type_vector_repository(Arc::new(CapturingTypeVectorRepository {
+        seen: seen.clone(),
+        fail_for_type_id: None,
+        existing_by_kind,
+    }));
+
+    app.sync_all_schema_type_vectors()
+        .await
+        .expect("startup sync should succeed");
+
+    let seen = seen
+        .lock()
+        .expect("type vector lock should not be poisoned");
+    assert!(
+        seen.is_empty(),
+        "should skip embedding/upsert when already in sync"
     );
 }
 

@@ -50,5 +50,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     app.ensure_common_root_graph().await?;
+    app.sync_all_schema_type_vectors().await?;
     run_server(app, cfg.enable_reflection()).await
 }

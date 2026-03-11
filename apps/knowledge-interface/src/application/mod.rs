@@ -387,6 +387,85 @@ impl KnowledgeApplication {
         Ok(())
     }
 
+    pub async fn sync_all_schema_type_vectors(&self) -> AppResult<()> {
+        let Some(type_vector_repository) = self.type_vector_repository.as_ref() else {
+            info!("schema type vector startup sync skipped; repository not configured");
+            return Ok(());
+        };
+
+        self.sync_schema_type_vectors_by_kind(SchemaKind::Node, type_vector_repository)
+            .await?;
+        self.sync_schema_type_vectors_by_kind(SchemaKind::Edge, type_vector_repository)
+            .await?;
+
+        Ok(())
+    }
+
+    async fn sync_schema_type_vectors_by_kind(
+        &self,
+        kind: SchemaKind,
+        type_vector_repository: &Arc<dyn TypeVectorRepository>,
+    ) -> AppResult<()> {
+        let schema_types = self.schema_repository.get_by_kind(kind).await?;
+        let total_types = schema_types.len();
+
+        let stored_type_ids = type_vector_repository
+            .get_schema_type_ids_by_kind(kind)
+            .await?;
+        let schema_type_ids: HashSet<String> = schema_types.iter().map(|t| t.id.clone()).collect();
+
+        if stored_type_ids == schema_type_ids {
+            info!(
+                kind = %kind.as_db_str(),
+                total_types,
+                "schema type vector collections already in sync"
+            );
+            return Ok(());
+        }
+
+        let mut embedding_inputs = Vec::with_capacity(schema_types.len());
+        for schema_type in &schema_types {
+            embedding_inputs.push(
+                crate::infrastructure::qdrant::render_schema_type_embedding_input(schema_type)?,
+            );
+        }
+
+        info!(
+            kind = %kind.as_db_str(),
+            total_types,
+            existing_vectors = stored_type_ids.len(),
+            "backfilling schema type vectors"
+        );
+        let vectors = self.embedder.embed_texts(&embedding_inputs).await?;
+        if vectors.len() != schema_types.len() {
+            return Err(ApplicationError::Internal(anyhow::anyhow!(format!(
+                "embedder returned {} vectors for {} schema types",
+                vectors.len(),
+                schema_types.len()
+            ))));
+        }
+
+        for (schema_type, vector) in schema_types.iter().zip(vectors.iter()) {
+            type_vector_repository
+                .upsert_schema_type_vector(schema_type, vector)
+                .await
+                .map_err(|error| {
+                    ApplicationError::Internal(anyhow::anyhow!(format!(
+                        "failed to sync vector for schema type {} (kind {}): {error}",
+                        schema_type.id, schema_type.kind
+                    )))
+                })?;
+        }
+
+        info!(
+            kind = %kind.as_db_str(),
+            total_types,
+            "completed schema type vector backfill"
+        );
+
+        Ok(())
+    }
+
     pub async fn ensure_common_root_graph(&self) -> AppResult<()> {
         if self.graph_repository.common_root_graph_exists().await? {
             return Ok(());
