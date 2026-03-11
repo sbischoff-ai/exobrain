@@ -6,6 +6,17 @@ from app.settings import Settings
 
 
 client = TestClient(app)
+utility_enabled_client = TestClient(
+    create_app(
+        Settings.model_validate(
+            {
+                "APP_ENV": "test",
+                "WEB_SEARCH_PROVIDER": "static",
+                "ENABLE_UTILITY_TOOLS": True,
+            }
+        )
+    )
+)
 
 
 def test_healthz() -> None:
@@ -21,11 +32,9 @@ def test_list_tools() -> None:
     assert response.status_code == 200
     body = response.json()
     assert "resolve_entities" in [tool["name"] for tool in body["tools"]]
-    assert [tool["name"] for tool in body["tools"]] == ["echo", "add", "resolve_entities", "web_search", "web_fetch"]
+    assert [tool["name"] for tool in body["tools"]] == ["resolve_entities", "web_search", "web_fetch"]
     web_fetch = next(tool for tool in body["tools"] if tool["name"] == "web_fetch")
     assert web_fetch["inputSchema"]["properties"]["url"]["type"] == "string"
-
-
 
 
 def test_list_tools_omits_resolve_entities_when_knowledge_disabled() -> None:
@@ -44,7 +53,8 @@ def test_list_tools_omits_resolve_entities_when_knowledge_disabled() -> None:
     response = disabled_client.get("/mcp/tools")
 
     assert response.status_code == 200
-    assert [tool["name"] for tool in response.json()["tools"]] == ["echo", "add", "web_search", "web_fetch"]
+    assert [tool["name"] for tool in response.json()["tools"]] == ["web_search", "web_fetch"]
+
 
 def test_list_tools_exposes_only_canonical_input_schema_field() -> None:
     response = client.get("/mcp/tools")
@@ -54,8 +64,9 @@ def test_list_tools_exposes_only_canonical_input_schema_field() -> None:
         assert "inputSchema" in tool
         assert "input_schema" not in tool
 
+
 def test_invoke_echo_tool() -> None:
-    response = client.post(
+    response = utility_enabled_client.post(
         "/mcp/tools/invoke",
         json={"name": "echo", "arguments": {"text": "hello"}},
     )
@@ -70,7 +81,7 @@ def test_invoke_echo_tool() -> None:
 
 
 def test_invoke_add_tool() -> None:
-    response = client.post(
+    response = utility_enabled_client.post(
         "/mcp/tools/invoke",
         json={"name": "add", "arguments": {"a": 2, "b": 3}},
     )
@@ -121,7 +132,7 @@ def test_invoke_web_fetch_tool_rejects_invalid_payload() -> None:
 
 
 def test_invoke_tool_rejects_invalid_arguments() -> None:
-    response = client.post(
+    response = utility_enabled_client.post(
         "/mcp/tools/invoke",
         json={"name": "add", "arguments": {"a": 2, "b": "nope"}},
     )

@@ -38,7 +38,7 @@ def _adapters() -> ToolAdapterRegistry:
 
 
 def test_create_tool_registry_loads_enabled_categories() -> None:
-    registry = create_tool_registry(_adapters(), _settings(ENABLED_TOOL_CATEGORIES="utility"))
+    registry = create_tool_registry(_adapters(), _settings(ENABLED_TOOL_CATEGORIES="utility", ENABLE_UTILITY_TOOLS=True))
 
     assert [tool.name for tool in registry.registrations()] == ["echo", "add"]
 
@@ -46,20 +46,20 @@ def test_create_tool_registry_loads_enabled_categories() -> None:
 def test_create_tool_registry_respects_feature_flags() -> None:
     registry = create_tool_registry(
         _adapters(),
-        _settings(ENABLED_TOOL_CATEGORIES="utility,web", ENABLE_WEB_TOOLS=False),
+        _settings(ENABLED_TOOL_CATEGORIES="utility,web", ENABLE_UTILITY_TOOLS=True, ENABLE_WEB_TOOLS=False),
     )
 
     assert [tool.name for tool in registry.registrations()] == ["echo", "add"]
 
 
 def test_create_tool_registry_ignores_unknown_categories() -> None:
-    registry = create_tool_registry(_adapters(), _settings(ENABLED_TOOL_CATEGORIES="utility,unknown,web"))
+    registry = create_tool_registry(_adapters(), _settings(ENABLED_TOOL_CATEGORIES="utility,unknown,web", ENABLE_UTILITY_TOOLS=True))
 
     assert [tool.name for tool in registry.registrations()] == ["echo", "add", "web_search", "web_fetch"]
 
 
 def test_create_tool_registry_preserves_category_order_with_empty_categories() -> None:
-    registry = create_tool_registry(_adapters(), _settings(ENABLED_TOOL_CATEGORIES="web,knowledge,utility"))
+    registry = create_tool_registry(_adapters(), _settings(ENABLED_TOOL_CATEGORIES="web,knowledge,utility", ENABLE_UTILITY_TOOLS=True))
 
     assert [tool.name for tool in registry.registrations()] == ["web_search", "web_fetch", "resolve_entities", "echo", "add"]
 
@@ -68,8 +68,6 @@ def test_create_tool_registry_includes_knowledge_by_default() -> None:
     registry = create_tool_registry(_adapters(), _settings())
 
     assert [tool.name for tool in registry.registrations()] == [
-        "echo",
-        "add",
         "resolve_entities",
         "web_search",
         "web_fetch",
@@ -90,7 +88,7 @@ def test_create_tool_registry_includes_knowledge_when_flag_enabled() -> None:
 def test_create_tool_registry_excludes_knowledge_when_flag_disabled() -> None:
     registry = create_tool_registry(
         _adapters(),
-        _settings(ENABLED_TOOL_CATEGORIES="utility,knowledge", ENABLE_KNOWLEDGE_TOOLS=False),
+        _settings(ENABLED_TOOL_CATEGORIES="utility,knowledge", ENABLE_UTILITY_TOOLS=True, ENABLE_KNOWLEDGE_TOOLS=False),
     )
 
     registrations = registry.registrations()

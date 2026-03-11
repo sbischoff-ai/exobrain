@@ -159,6 +159,7 @@ Category-specific builders live under `app/adapters/*_registry_builder.py` and a
 
 ```bash
 cd apps/mcp-server
+cp .env.example .env
 uv sync --extra dev
 uv run uvicorn app.main:app --host 0.0.0.0 --port 8090
 ```
@@ -178,7 +179,7 @@ cd apps/mcp-server
 - `MCP_SERVER_PORT` (default: `8090`)
 - `WEB_SEARCH_PROVIDER` (`auto` | `static` | `tavily`, default: `auto`)
 - `ENABLED_TOOL_CATEGORIES` (comma-delimited, default: `utility,knowledge,web`)
-- `ENABLE_UTILITY_TOOLS` (default: `true`)
+- `ENABLE_UTILITY_TOOLS` (default: `false`)
 - `ENABLE_WEB_TOOLS` (default: `true`)
 - `ENABLE_KNOWLEDGE_TOOLS` (default: `true`)
 - `TAVILY_API_KEY` (required when provider resolves to `tavily`)
