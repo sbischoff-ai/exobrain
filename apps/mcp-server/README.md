@@ -31,6 +31,23 @@ The runtime exposes an HTTP REST transport for MCP tool operations. It does **no
     - success: `{ "ok": true, "name": "...", "result": {...}, "metadata": {...} }`
     - error: `{ "ok": false, "name": "...", "error": {"code": "...", "message": "..."}, "metadata": {...} }`
 
+## Tool contracts
+
+The complete catalog of available tools and their request/response contracts is documented in:
+
+- [`docs/tool-contracts.md`](docs/tool-contracts.md)
+
+That document includes:
+
+- Discovery metadata shape (`GET /mcp/tools` output)
+- Invocation envelope and error envelope contracts (`POST /mcp/tools/invoke`)
+- Input and output field-level constraints for every currently registered tool:
+  - `echo`
+  - `add`
+  - `web_search`
+  - `web_fetch`
+  - `resolve_entities`
+
 ### Canonical request/response examples
 
 `GET /mcp/tools`
