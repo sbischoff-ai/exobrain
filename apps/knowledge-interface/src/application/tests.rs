@@ -1245,6 +1245,66 @@ async fn sync_all_schema_type_vectors_backfills_when_out_of_sync() {
 }
 
 #[tokio::test]
+async fn sync_all_schema_type_vectors_checks_node_and_edge_kinds_on_startup() {
+    let kind_queries = Arc::new(Mutex::new(Vec::new()));
+
+    struct KindTrackingTypeVectorRepository {
+        kind_queries: Arc<Mutex<Vec<String>>>,
+    }
+
+    #[async_trait]
+    impl TypeVectorRepository for KindTrackingTypeVectorRepository {
+        async fn upsert_schema_type_vector(
+            &self,
+            _schema_type: &SchemaType,
+            _vector: &[f32],
+        ) -> Result<()> {
+            Ok(())
+        }
+
+        async fn search_node_type_candidates(
+            &self,
+            _vector: &[f32],
+            _limit: u64,
+        ) -> Result<Vec<crate::domain::TypeCandidate>> {
+            Ok(Vec::new())
+        }
+
+        async fn search_edge_type_candidates(
+            &self,
+            _vector: &[f32],
+            _limit: u64,
+        ) -> Result<Vec<crate::domain::TypeCandidate>> {
+            Ok(Vec::new())
+        }
+
+        async fn get_schema_type_ids_by_kind(&self, kind: SchemaKind) -> Result<HashSet<String>> {
+            self.kind_queries
+                .lock()
+                .expect("lock should be available")
+                .push(kind.as_db_str().to_string());
+            Ok(HashSet::new())
+        }
+    }
+
+    let app = KnowledgeApplication::new(
+        Arc::new(FakeSchemaRepo::new()),
+        Arc::new(FakeGraphRepository { root_exists: false }),
+        Arc::new(FakeEmbedder),
+    )
+    .with_type_vector_repository(Arc::new(KindTrackingTypeVectorRepository {
+        kind_queries: Arc::clone(&kind_queries),
+    }));
+
+    app.sync_all_schema_type_vectors()
+        .await
+        .expect("startup sync should succeed");
+
+    let kind_queries = kind_queries.lock().expect("lock should be available");
+    assert_eq!(kind_queries.as_slice(), ["node", "edge"]);
+}
+
+#[tokio::test]
 async fn sync_all_schema_type_vectors_skips_when_already_in_sync() {
     let seen = Arc::new(Mutex::new(Vec::new()));
 
@@ -2099,6 +2159,61 @@ impl Embedder for TrackingEmbedder {
             .push(texts.to_vec());
         Ok(self.vectors.clone())
     }
+}
+
+struct SingleVectorEmbedder {
+    seen_texts: Arc<Mutex<Vec<Vec<String>>>>,
+}
+
+#[async_trait]
+impl Embedder for SingleVectorEmbedder {
+    async fn embed_texts(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
+        self.seen_texts
+            .lock()
+            .expect("lock should be available")
+            .push(texts.to_vec());
+        Ok(texts.iter().map(|_| vec![0.1_f32, 0.2_f32]).collect())
+    }
+}
+
+#[tokio::test]
+async fn upsert_schema_type_uses_stable_canonical_embedding_text_format() {
+    let seen_texts = Arc::new(Mutex::new(Vec::new()));
+    let app = KnowledgeApplication::new(
+        Arc::new(FakeSchemaRepo::new()),
+        Arc::new(FakeGraphRepository { root_exists: false }),
+        Arc::new(SingleVectorEmbedder {
+            seen_texts: Arc::clone(&seen_texts),
+        }),
+    )
+    .with_type_vector_repository(Arc::new(CapturingTypeVectorRepository {
+        seen: Arc::new(Mutex::new(Vec::new())),
+        fail_for_type_id: None,
+        existing_by_kind: HashMap::new(),
+        node_candidates: Vec::new(),
+        edge_candidates: Vec::new(),
+    }));
+
+    app.upsert_schema_type(UpsertSchemaTypeCommand {
+        schema_type: SchemaType {
+            id: "node.person".to_string(),
+            kind: "node".to_string(),
+            name: "Person".to_string(),
+            description: "A human being".to_string(),
+            active: true,
+        },
+        parent_type_id: Some("node.entity".to_string()),
+        properties: vec![],
+    })
+    .await
+    .expect("upsert should succeed");
+
+    let seen_texts = seen_texts.lock().expect("lock should be available");
+    assert_eq!(seen_texts.len(), 1);
+    assert_eq!(
+        seen_texts[0],
+        vec!["entity type: Person\n\ndescription:\nA human being".to_string()]
+    );
 }
 
 #[tokio::test]

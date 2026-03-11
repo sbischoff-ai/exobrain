@@ -217,21 +217,7 @@ impl QdrantTypeVectorStore {
             SearchPointsBuilder::new(collection, vector.to_vec(), limit).with_payload(true);
         let response = self.client.search_points(search).await?;
 
-        Ok(response
-            .result
-            .into_iter()
-            .filter_map(|point| {
-                let type_id = payload_string(&point.payload, "type_id")?;
-                let name = payload_string(&point.payload, "name")?;
-                let description = payload_string(&point.payload, "description")?;
-                Some(TypeCandidate {
-                    type_id,
-                    name,
-                    description,
-                    score: point.score as f64,
-                })
-            })
-            .collect())
+        Ok(type_candidates_from_scored_points(response.result))
     }
 
     fn collection_for_kind(&self, kind: &str) -> Result<&str> {
@@ -334,6 +320,25 @@ fn to_schema_type_point(schema_type: &SchemaType, vector: Vec<f32>) -> Result<Po
     Ok(PointStruct::new(schema_type.id.clone(), vector, payload))
 }
 
+fn type_candidates_from_scored_points(mut points: Vec<ScoredPoint>) -> Vec<TypeCandidate> {
+    points.sort_by(|left, right| right.score.total_cmp(&left.score));
+
+    points
+        .into_iter()
+        .filter_map(|point| {
+            let type_id = payload_string(&point.payload, "type_id")?;
+            let name = payload_string(&point.payload, "name")?;
+            let description = payload_string(&point.payload, "description")?;
+            Some(TypeCandidate {
+                type_id,
+                name,
+                description,
+                score: point.score as f64,
+            })
+        })
+        .collect()
+}
+
 pub(crate) fn render_schema_type_embedding_input(schema_type: &SchemaType) -> Result<String> {
     match SchemaKind::from_db_str(&schema_type.kind) {
         Some(SchemaKind::Node) => Ok(format!(
@@ -413,6 +418,7 @@ impl TypeVectorRepository for QdrantTypeVectorStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use qdrant_client::qdrant::{point_id::PointIdOptions, PointId, Value};
 
     #[test]
     fn renders_node_type_embedding_input() {
@@ -475,5 +481,89 @@ mod tests {
             payload_string(&point.payload, "description"),
             Some(schema_type.description)
         );
+    }
+
+    #[test]
+    fn decodes_schema_type_payload_fields_from_point() {
+        let schema_type = SchemaType {
+            id: "node.person".to_string(),
+            kind: "node".to_string(),
+            name: "Person".to_string(),
+            description: "A human being".to_string(),
+            active: true,
+        };
+
+        let point = to_schema_type_point(&schema_type, vec![0.1, 0.2]).expect("point should build");
+        assert_eq!(
+            payload_string(&point.payload, "type_id"),
+            Some("node.person".to_string())
+        );
+        assert_eq!(
+            payload_string(&point.payload, "name"),
+            Some("Person".to_string())
+        );
+        assert_eq!(
+            payload_string(&point.payload, "description"),
+            Some("A human being".to_string())
+        );
+    }
+
+    #[test]
+    fn maps_type_candidates_and_orders_by_descending_score() {
+        let mut high_payload = HashMap::new();
+        high_payload.insert(
+            "type_id".to_string(),
+            Value::from("edge.assigned_to".to_string()),
+        );
+        high_payload.insert("name".to_string(), Value::from("ASSIGNED_TO".to_string()));
+        high_payload.insert(
+            "description".to_string(),
+            Value::from("assignment".to_string()),
+        );
+
+        let mut low_payload = HashMap::new();
+        low_payload.insert(
+            "type_id".to_string(),
+            Value::from("edge.related_to".to_string()),
+        );
+        low_payload.insert("name".to_string(), Value::from("RELATED_TO".to_string()));
+        low_payload.insert(
+            "description".to_string(),
+            Value::from("relation".to_string()),
+        );
+
+        let points = vec![
+            ScoredPoint {
+                id: Some(PointId {
+                    point_id_options: Some(PointIdOptions::Uuid("2".to_string())),
+                }),
+                payload: low_payload,
+                score: 0.2,
+                vectors: None,
+                shard_key: None,
+                order_value: None,
+                version: 0,
+            },
+            ScoredPoint {
+                id: Some(PointId {
+                    point_id_options: Some(PointIdOptions::Uuid("1".to_string())),
+                }),
+                payload: high_payload,
+                score: 0.9,
+                vectors: None,
+                shard_key: None,
+                order_value: None,
+                version: 0,
+            },
+        ];
+
+        let mapped = type_candidates_from_scored_points(points);
+        assert_eq!(mapped.len(), 2);
+        assert_eq!(mapped[0].type_id, "edge.assigned_to");
+        assert_eq!(mapped[0].name, "ASSIGNED_TO");
+        assert_eq!(mapped[0].description, "assignment");
+        assert!((mapped[0].score - 0.9).abs() < 1e-6);
+        assert_eq!(mapped[1].type_id, "edge.related_to");
+        assert!((mapped[1].score - 0.2).abs() < 1e-6);
     }
 }
