@@ -166,8 +166,68 @@ Example response:
 ### `GET /api/users/me/configs`
 Returns all effective user configs for the authenticated user, including each config key, config type (`boolean` or `choice`), allowed options for choice configs, current effective value, and default fallback metadata. Config definitions/options are loaded from Postgres and merged with per-user overrides.
 
+Example response:
+
+```json
+{
+  "configs": [
+    {
+      "key": "frontend.theme",
+      "config_type": "choice",
+      "description": "Controls the interface theme used in assistant clients",
+      "options": [
+        {"value": "gruvbox-dark", "label": "Gruvbox Dark"},
+        {"value": "purple-intelligence", "label": "Purple Intelligence"}
+      ],
+      "value": "purple-intelligence",
+      "default_value": "gruvbox-dark",
+      "using_default": false
+    },
+    {
+      "key": "daily_digest_enabled",
+      "config_type": "boolean",
+      "description": "Enable daily digest reminders in assistant experiences",
+      "options": [],
+      "value": true,
+      "default_value": true,
+      "using_default": true
+    }
+  ]
+}
+```
+
 ### `PATCH /api/users/me/configs`
 Accepts one or more config updates in a single request and returns the full effective config list after validation and update application. Boolean updates must be strict `true`/`false`, choice updates must match configured options, and writes are applied atomically.
+
+Single-update example:
+
+```json
+{
+  "update": {
+    "key": "frontend.theme",
+    "value": "purple-intelligence"
+  }
+}
+```
+
+Batch-update example:
+
+```json
+{
+  "updates": [
+    {"key": "frontend.theme", "value": "gruvbox-dark"},
+    {"key": "daily_digest_enabled", "value": false}
+  ]
+}
+```
+
+Validation/default semantics:
+
+- Unknown config keys return `400`.
+- Choice values must be one of the configured `options[].value` values or the request returns `400`.
+- Boolean values must be JSON booleans (`true`/`false`), not strings.
+- Effective values are computed as `override if present else default_value`.
+- If a submitted value matches the definition's default value, any stored override is removed and `using_default` becomes `true` in subsequent reads.
 
 ## Configuration
 

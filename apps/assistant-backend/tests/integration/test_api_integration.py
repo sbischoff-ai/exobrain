@@ -153,6 +153,58 @@ def test_users_me_unauthorized_without_auth(client: httpx.Client) -> None:
 
 
 @pytest.mark.integration
+def test_users_me_configs_requires_auth(client: httpx.Client) -> None:
+    response = client.get("/api/users/me/configs")
+    assert response.status_code == 401
+
+
+@pytest.mark.integration
+def test_users_me_configs_fetch_and_patch_with_bearer(client: httpx.Client) -> None:
+    tokens = _api_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+
+    fetched = client.get("/api/users/me/configs", headers=headers)
+    assert fetched.status_code == 200
+    configs_payload = fetched.json()["configs"]
+    assert isinstance(configs_payload, list)
+    assert configs_payload
+
+    digest_before = next(config for config in configs_payload if config["key"] == "daily_digest_enabled")
+    original_digest_value = bool(digest_before["value"])
+
+    updated = client.patch(
+        "/api/users/me/configs",
+        headers=headers,
+        json={"updates": [{"key": "daily_digest_enabled", "value": (not original_digest_value)}]},
+    )
+    assert updated.status_code == 200
+    updated_by_key = {item["key"]: item for item in updated.json()["configs"]}
+    assert updated_by_key["daily_digest_enabled"]["value"] is (not original_digest_value)
+
+    reset = client.patch(
+        "/api/users/me/configs",
+        headers=headers,
+        json={"update": {"key": "daily_digest_enabled", "value": original_digest_value}},
+    )
+    assert reset.status_code == 200
+    reset_by_key = {item["key"]: item for item in reset.json()["configs"]}
+    assert reset_by_key["daily_digest_enabled"]["value"] is original_digest_value
+
+
+@pytest.mark.integration
+def test_users_me_configs_patch_rejects_invalid_value(client: httpx.Client) -> None:
+    tokens = _api_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+
+    response = client.patch(
+        "/api/users/me/configs",
+        headers=headers,
+        json={"update": {"key": "daily_digest_enabled", "value": "false"}},
+    )
+    assert response.status_code == 400
+
+
+@pytest.mark.integration
 def test_chat_and_journal_endpoints_persist_activity(client: httpx.Client) -> None:
     anonymous_chat = client.post("/api/chat/message", json={"message": "Hello anonymously", "client_message_id": str(uuid.uuid4())})
     assert anonymous_chat.status_code == 401
