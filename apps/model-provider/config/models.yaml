@@ -2,7 +2,7 @@ aliases:
   router:
     provider: openai
     mode: chat
-    upstream_model: gpt-5-mini
+    upstream_model: gpt-5-nano
     defaults:
       temperature: 0.1
       max_completion_tokens: 1200
@@ -14,16 +14,24 @@ aliases:
       temperature: 0.2
       max_completion_tokens: 1800
   reasoner:
+    provider: openai
+    mode: chat
+    upstream_model: gpt-5.4
+    defaults:
+      temperature: 0.1
+      max_completion_tokens: 2400
+      reasoning_effort: high
+  agent:
     provider: anthropic
     mode: chat
     upstream_model: claude-sonnet-4-6
     defaults:
-      temperature: 0.1
-      max_tokens: 2400
-  agent:
+      temperature: 0.0
+      max_tokens: 1800
+  coder:
     provider: openai
     mode: chat
-    upstream_model: gpt-5.2
+    upstream_model: gpt-5.3-codex
     defaults:
       temperature: 0.0
       max_completion_tokens: 1800
