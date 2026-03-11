@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::str::FromStr;
 
 use crate::domain::{PropertyValue, SchemaKind, TypeId, TypeInheritance, TypeProperty};
 
@@ -20,7 +21,7 @@ pub(crate) fn validate_internal_timestamps_not_provided(
 }
 
 fn schema_kind_for_type_id(value: &str) -> Option<SchemaKind> {
-    let id = TypeId::parse(value).ok()?;
+    let id = TypeId::from_str(value).ok()?;
     let raw = id.as_str();
     let prefix = raw.split('.').next().unwrap_or(raw);
     SchemaKind::from_db_str(prefix)
@@ -36,17 +37,19 @@ pub(crate) fn is_global_property_owner(owner_type_id: &str, property_owner_type_
 
 pub(crate) fn validate_graph_id(id: &str, kind: &str) -> std::result::Result<(), String> {
     match kind {
-        "entity" => crate::domain::EntityId::parse(id).map(|_| ()),
-        "universe" => crate::domain::UniverseId::parse(id).map(|_| ()),
-        _ => {
+        "entity" => crate::domain::EntityId::from_str(id)
+            .map(|_| ())
+            .map_err(|err| err.to_string()),
+        "universe" => crate::domain::UniverseId::from_str(id)
+            .map(|_| ())
+            .map_err(|err| err.to_string()),
+        _ => id.parse::<uuid::Uuid>().map(|_| ()).map_err(|_| {
             if id.trim().is_empty() {
-                return Err(format!("{kind} id is required"));
+                format!("{kind} id is required")
+            } else {
+                format!("{kind} id '{}' must be a valid UUID", id)
             }
-            if uuid::Uuid::parse_str(id).is_err() {
-                return Err(format!("{kind} id '{}' must be a valid UUID", id));
-            }
-            Ok(())
-        }
+        }),
     }
 }
 
@@ -116,8 +119,26 @@ mod tests {
     #[test]
     fn validate_graph_id_checks_kind_specific_and_uuid_rules() {
         assert!(validate_graph_id("11111111-1111-1111-1111-111111111111", "entity").is_ok());
-        assert!(validate_graph_id("", "block").is_err());
-        assert!(validate_graph_id("not-a-uuid", "block").is_err());
+        assert_eq!(
+            validate_graph_id("", "block").expect_err("empty block id should fail"),
+            "block id is required"
+        );
+        assert_eq!(
+            validate_graph_id("not-a-uuid", "block").expect_err("invalid block id should fail"),
+            "block id 'not-a-uuid' must be a valid UUID"
+        );
+    }
+
+    #[test]
+    fn validate_graph_id_maps_domain_errors() {
+        assert_eq!(
+            validate_graph_id("", "entity").expect_err("empty entity id should fail"),
+            "entity id is required"
+        );
+        assert_eq!(
+            validate_graph_id("bad", "universe").expect_err("invalid universe id should fail"),
+            "universe id 'bad' must be a valid UUID"
+        );
     }
 
     #[test]
