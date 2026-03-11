@@ -12,6 +12,7 @@ from app.services.contracts import DatabaseServiceProtocol
 class ConfigDefinition:
     id: str
     key: str
+    name: str
     config_type: Literal["boolean", "choice"]
     description: str
     default_value: bool | str
@@ -57,6 +58,7 @@ class UserConfigService:
             SELECT
               d.id,
               d.key,
+              d.name,
               d.config_type,
               d.description,
               d.default_value,
@@ -93,6 +95,7 @@ class UserConfigService:
                 definitions_by_key[key] = ConfigDefinition(
                     id=str(row["id"]),
                     key=key,
+                    name=str(row["name"]),
                     config_type=config_type,
                     description=str(row["description"]),
                     default_value=default_value,
@@ -113,6 +116,7 @@ class UserConfigService:
                 ConfigDefinition(
                     id=definition.id,
                     key=definition.key,
+                    name=definition.name,
                     config_type=definition.config_type,
                     description=definition.description,
                     default_value=definition.default_value,
@@ -227,6 +231,7 @@ class UserConfigService:
             effective_value = self._coerce_boolean(definition.key, effective_value)
         return UserConfigItem(
             key=definition.key,
+            name=definition.name,
             config_type=definition.config_type,
             description=definition.description,
             options=list(definition.options),

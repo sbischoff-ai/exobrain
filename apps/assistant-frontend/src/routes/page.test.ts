@@ -632,6 +632,7 @@ describe('root page', () => {
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
       .mockResolvedValueOnce(jsonResponse([{ reference: '2026/02/19' }]))
       .mockResolvedValueOnce(jsonResponse({ job_id: 'job-logout' }))
+      .mockResolvedValueOnce(jsonResponse({ configs: [] }))
       .mockResolvedValueOnce(jsonResponse({}, 204));
 
     const { unmount } = render(Page);
@@ -893,6 +894,10 @@ describe('root page', () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const rawUrl = typeof input === 'string' ? input : String((input as { url?: unknown }).url ?? input);
       
+      if (rawUrl.includes('/api/users/me/configs')) {
+        return jsonResponse({ configs: [] });
+      }
+
       if (rawUrl.includes('/api/users/me')) {
         return jsonResponse({ name: 'Test User', email: 'test.user@exobrain.local' });
       }

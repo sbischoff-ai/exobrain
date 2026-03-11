@@ -33,6 +33,7 @@ class FakeUserConfigService:
         return [
             UserConfigItem(
                 key="answer_verbosity",
+                name="Answer verbosity",
                 config_type="choice",
                 description="Preferred answer detail level",
                 options=[
@@ -52,6 +53,7 @@ class FakeUserConfigService:
         return [
             UserConfigItem(
                 key="daily_digest_enabled",
+                name="Daily digest",
                 config_type="boolean",
                 description="Enable daily digest reminders",
                 value=bool(updates["daily_digest_enabled"]),

@@ -1,6 +1,7 @@
 WITH upsert_definition AS (
   INSERT INTO user_config_definitions (
     key,
+    name,
     description,
     config_type,
     default_value,
@@ -10,6 +11,7 @@ WITH upsert_definition AS (
   )
   VALUES (
     'frontend.theme',
+    'Theme',
     'Select the assistant frontend theme',
     'choice',
     '{"kind":"choice","value":"gruvbox-dark"}'::jsonb,
@@ -20,6 +22,7 @@ WITH upsert_definition AS (
   ON CONFLICT (key)
   DO UPDATE SET
     description = EXCLUDED.description,
+    name = EXCLUDED.name,
     config_type = EXCLUDED.config_type,
     default_value = EXCLUDED.default_value,
     display_order = EXCLUDED.display_order,
