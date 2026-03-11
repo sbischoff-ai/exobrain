@@ -19,7 +19,7 @@ def test_list_tools() -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert [tool["name"] for tool in body["tools"]] == ["echo", "add", "web_search", "web_fetch"]
+    assert [tool["name"] for tool in body["tools"]] == ["echo", "add", "resolve_entities", "web_search", "web_fetch"]
     web_fetch = next(tool for tool in body["tools"] if tool["name"] == "web_fetch")
     assert web_fetch["inputSchema"]["properties"]["url"]["type"] == "string"
 
