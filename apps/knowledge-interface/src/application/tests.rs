@@ -4,12 +4,17 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 
+use crate::application::graph_resolution::{block_levels_for_blocks, root_entity_ids_for_blocks};
+use crate::application::pagination::{
+    LIST_ENTITIES_BY_TYPE_DEFAULT_PAGE_SIZE, LIST_ENTITIES_BY_TYPE_MAX_PAGE_SIZE,
+};
+
 use crate::{
     domain::{
-        BlockNode, EdgeEndpointRule, EntityCandidate, EntityNode, ExtractionUniverse,
-        FindEntityCandidatesQuery, GraphEdge, NodeRelationshipCounts, PropertyValue,
-        TypeInheritance, TypeProperty, UpsertSchemaTypePropertyInput, UserInitGraphNodeIds,
-        Visibility,
+        BlockNode, EdgeEndpointRule, EntityCandidate, EntityNode, ExistingBlockContext,
+        ExtractionUniverse, FindEntityCandidatesQuery, GraphEdge, NodeRelationshipCounts,
+        PropertyValue, TypeInheritance, TypeProperty, UpsertSchemaTypePropertyInput,
+        UserInitGraphNodeIds, Visibility,
     },
     ports::{Embedder, GraphRepository, SchemaRepository},
 };

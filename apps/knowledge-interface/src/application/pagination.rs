@@ -1,0 +1,2 @@
+pub(crate) const LIST_ENTITIES_BY_TYPE_DEFAULT_PAGE_SIZE: u32 = 50;
+pub(crate) const LIST_ENTITIES_BY_TYPE_MAX_PAGE_SIZE: u32 = 200;
