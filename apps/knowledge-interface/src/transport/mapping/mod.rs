@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use chrono::DateTime;
 use tonic::Status;
 
 use crate::domain::{
@@ -308,7 +309,9 @@ pub(crate) fn to_domain_property_value(
         proto::property_value::Value::FloatValue(v) => PropertyScalar::Float(v),
         proto::property_value::Value::IntValue(v) => PropertyScalar::Int(v),
         proto::property_value::Value::BoolValue(v) => PropertyScalar::Bool(v),
-        proto::property_value::Value::DatetimeValue(v) => PropertyScalar::Datetime(v),
+        proto::property_value::Value::DatetimeValue(v) => {
+            PropertyScalar::Datetime(normalize_rfc3339_datetime(&v)?)
+        }
         proto::property_value::Value::JsonValue(v) => PropertyScalar::Json(v),
     };
 
@@ -316,6 +319,12 @@ pub(crate) fn to_domain_property_value(
         key: value.key,
         value: scalar,
     })
+}
+
+fn normalize_rfc3339_datetime(value: &str) -> Result<String, Status> {
+    DateTime::parse_from_rfc3339(value.trim())
+        .map(|datetime| datetime.to_rfc3339())
+        .map_err(|_| Status::invalid_argument("datetime must be RFC3339"))
 }
 
 pub(crate) fn map_visibility(value: i32) -> Result<Visibility, Status> {
@@ -371,6 +380,53 @@ mod tests {
         let error = result.expect_err("expected missing value to fail");
         assert_eq!(error.code(), Code::InvalidArgument);
         assert_eq!(error.message(), "property value is required");
+    }
+
+    #[test]
+    fn to_domain_property_value_accepts_valid_rfc3339_datetime() {
+        let value = to_domain_property_value(proto::PropertyValue {
+            key: "updated_at".to_string(),
+            value: Some(proto::property_value::Value::DatetimeValue(
+                "2026-03-03T15:56:25+00:00".to_string(),
+            )),
+        })
+        .expect("expected valid datetime");
+
+        assert_eq!(value.key, "updated_at");
+        assert!(matches!(
+            value.value,
+            PropertyScalar::Datetime(v) if v == "2026-03-03T15:56:25+00:00"
+        ));
+    }
+
+    #[test]
+    fn to_domain_property_value_rejects_invalid_datetime_format() {
+        let result = to_domain_property_value(proto::PropertyValue {
+            key: "updated_at".to_string(),
+            value: Some(proto::property_value::Value::DatetimeValue(
+                "2026/03/03 15:56:25".to_string(),
+            )),
+        });
+
+        let error = result.expect_err("expected invalid datetime to fail");
+        assert_eq!(error.code(), Code::InvalidArgument);
+        assert_eq!(error.message(), "datetime must be RFC3339");
+    }
+
+    #[test]
+    fn to_domain_property_value_trims_datetime_before_parse() {
+        let value = to_domain_property_value(proto::PropertyValue {
+            key: "updated_at".to_string(),
+            value: Some(proto::property_value::Value::DatetimeValue(
+                "  2026-03-03T15:56:25+00:00  ".to_string(),
+            )),
+        })
+        .expect("expected trimmed datetime to parse");
+
+        assert!(matches!(
+            value.value,
+            PropertyScalar::Datetime(v) if v == "2026-03-03T15:56:25+00:00"
+        ));
     }
 
     #[test]
