@@ -190,6 +190,11 @@ class UserConfigService:
         return json.dumps({"kind": config_type, "value": value})
 
     def _deserialize_stored_value(self, key: str, raw: object) -> bool | str:
+        if isinstance(raw, str):
+            try:
+                raw = json.loads(raw)
+            except json.JSONDecodeError as exc:
+                raise InvalidUserConfigValueError(key) from exc
         if not isinstance(raw, dict):
             raise InvalidUserConfigValueError(key)
         raw_kind = raw.get("kind")
