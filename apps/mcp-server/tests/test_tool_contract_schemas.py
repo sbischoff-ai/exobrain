@@ -3,7 +3,16 @@ from pydantic import ValidationError
 
 from app.adapters.tool_adapters import ToolAdapterRegistry
 from app.adapters.web_tools import StaticWebSearchClient, WebFetchAdapter, WebSearchAdapter
-from app.contracts import EchoToolSuccess, ToolErrorEnvelope, ToolInvocation, WebFetchToolOutput, WebSearchToolOutput
+from app.contracts import (
+    EchoToolSuccess,
+    ResolveEntitiesToolInput,
+    ResolveEntitiesToolOutput,
+    ResolveEntitiesToolSuccess,
+    ToolErrorEnvelope,
+    ToolInvocation,
+    WebFetchToolOutput,
+    WebSearchToolOutput,
+)
 from app.main import create_tool_registry
 from app.settings import Settings
 
@@ -75,3 +84,55 @@ def test_invocation_schema_rejects_missing_web_fetch_url() -> None:
 def test_output_schema_rejects_malformed_web_fetch_payload() -> None:
     with pytest.raises(ValidationError):
         WebFetchToolOutput.model_validate({"url": "https://example.com", "title": "x"})
+
+
+def test_resolve_entities_input_requires_non_empty_entities() -> None:
+    with pytest.raises(ValidationError):
+        ResolveEntitiesToolInput.model_validate({"entities": []})
+
+
+def test_resolve_entities_input_rejects_invalid_entity_name() -> None:
+    with pytest.raises(ValidationError):
+        ResolveEntitiesToolInput.model_validate(
+            {
+                "entities": [
+                    {
+                        "name": "",
+                        "type_hint": "person",
+                        "description_hint": "from sales",
+                        "expected_existence": "existing",
+                    }
+                ]
+            }
+        )
+
+
+def test_resolve_entities_output_rejects_invalid_confidence() -> None:
+    with pytest.raises(ValidationError):
+        ResolveEntitiesToolOutput.model_validate(
+            {
+                "results": [
+                    {
+                        "entity_id": "e1",
+                        "name": "Alice",
+                        "aliases": ["A"],
+                        "entity_type": "person",
+                        "description": "example",
+                        "status": "matched",
+                        "confidence": 1.2,
+                        "newly_created": False,
+                    }
+                ]
+            }
+        )
+
+
+def test_resolve_entities_success_envelope_validates_result_shape() -> None:
+    with pytest.raises(ValidationError):
+        ResolveEntitiesToolSuccess.model_validate(
+            {
+                "ok": True,
+                "name": "resolve_entities",
+                "result": {"results": [{"entity_id": "e1"}]},
+            }
+        )
