@@ -151,7 +151,7 @@ message GetUpsertGraphDeltaJsonSchemaReply {
 
 Response behavior:
 
-- `json_schema` contains a deterministic JSON Schema **Draft 2020-12** document string generated from a single serializer path for cache/snapshot stability.
+- `json_schema` contains a deterministic JSON Schema **Draft 2020-12** document string generated from `schemars` DTO definitions that mirror `UpsertGraphDeltaRequest`.
 - `json_schema` uses **proto field names** (snake_case), matching `UpsertGraphDeltaRequest` field naming expectations.
 - schema root is an object with required arrays: `universes`, `entities`, `blocks`, `edges`.
 - node/edge records require proto-aligned fields and UUID-constrained IDs are marked with `format: "uuid"`.
