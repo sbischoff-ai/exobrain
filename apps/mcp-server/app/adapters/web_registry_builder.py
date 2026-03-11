@@ -12,7 +12,10 @@ def build_web_tool_registrations(adapters: ToolAdapterRegistry) -> list[ToolRegi
             category="web",
             metadata_provider=schema_metadata(
                 "web_search",
-                "Search the web for candidate sources and return normalized title/url/snippet metadata.",
+                "Use this when you need candidate external sources before answering. "
+                "Set max_results (1-10) to control recall; snippets are normalized summaries capped to ~320 chars and "
+                "the provider may still return fewer results than requested. Interpret each result as discovery metadata "
+                "(title/url/snippet/optional score+published_at), not verified facts; follow up with web_fetch on promising URLs.",
                 WebSearchToolInput,
             ),
             invocation_parser=input_parser(WebSearchToolInput),
@@ -26,7 +29,10 @@ def build_web_tool_registrations(adapters: ToolAdapterRegistry) -> list[ToolRegi
             category="web",
             metadata_provider=schema_metadata(
                 "web_fetch",
-                "Fetch readable plaintext from a URL and return normalized content metadata.",
+                "Use this when you already have a URL and need readable page text for grounding or quoting. "
+                "max_chars is required output bounding (100-20000); returned content_text is normalized plaintext and "
+                "may omit markup or non-readable sections. content_truncated=true means text hit max_chars and you should "
+                "raise max_chars or fetch another source for full context.",
                 WebFetchToolInput,
             ),
             invocation_parser=input_parser(WebFetchToolInput),

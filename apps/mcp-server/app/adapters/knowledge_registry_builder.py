@@ -12,7 +12,9 @@ def build_knowledge_tool_registrations(adapters: ToolAdapterRegistry) -> list[To
             category="knowledge",
             metadata_provider=schema_metadata(
                 "resolve_entities",
-                "Resolve input entities against the knowledge graph and create missing entities when intent indicates creation.",
+                "Use this to map user-relevant named entities from the prompt to canonical knowledge-graph nodes before calling get_entity_context. "
+                "Send only entities that should exist in this user-scoped graph, and use expected_existence to hint new vs existing when known. "
+                "Current local/test behavior is placeholder-only: entity_id is synthetic, status is unresolved, confidence is low, and newly_created is inferred from expected_existence rather than real graph writes.",
                 ResolveEntitiesToolInput,
             ),
             invocation_parser=input_parser(ResolveEntitiesToolInput),
