@@ -199,7 +199,7 @@
     cursor: pointer;
     transition: background-color 120ms ease, border-color 120ms ease;
   }
-  .user-trigger:hover { border-color: var(--accent); background: #5a4f48; }
+  .user-trigger:hover { border-color: var(--accent); background: var(--surface-soft); }
   .user-trigger svg {
     width: calc(1.45rem * var(--mobile-ui-scale, 1));
     height: calc(1.45rem * var(--mobile-ui-scale, 1));
@@ -212,13 +212,13 @@
     width: min(18rem, 84vw);
     border-radius: 0.8rem;
     border: 1px solid var(--border);
-    background: #3c3836;
-    box-shadow: 0 12px 28px rgb(0 0 0 / 30%);
+    background: var(--bg);
+    box-shadow: var(--shadow-panel);
     padding: 0.8rem;
     z-index: 100;
   }
   .user-details { display: flex; flex-direction: column; gap: 0.6rem; }
-  .label { font-size: 0.75rem; color: #bdae93; }
+  .label { font-size: 0.75rem; color: var(--text-label); }
   .name { font-weight: 700; }
   .email { color: var(--muted); word-break: break-all; }
   .configs {
@@ -230,7 +230,7 @@
     gap: 0.5rem;
   }
   .config-item { display: flex; flex-direction: column; gap: 0.35rem; }
-  .config-item label { font-size: 0.86rem; }
+  .config-item label { font-size: 0.86rem; font-family: inherit; }
   .config-item select {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -241,19 +241,19 @@
   }
   .radio-group { display: flex; gap: 0.6rem; font: inherit; font-size: 0.84rem; }
   .radio-group input { font: inherit; }
-  .radio-group label { display: inline-flex; align-items: center; gap: 0.25rem; }
+  .radio-group label { display: inline-flex; align-items: center; gap: 0.25rem; font-family: inherit; }
   .config-note { color: var(--muted); font-size: 0.82rem; }
   .action-button {
     margin-top: 0.2rem;
     border: 1px solid var(--accent);
     border-radius: 0.55rem;
     background: var(--accent);
-    color: #282828;
+    color: var(--text-on-accent);
     font: inherit;
     font-weight: 700;
     padding: 0.45rem 0.7rem;
     cursor: pointer;
   }
   .action-button:disabled { opacity: 0.6; cursor: not-allowed; }
-  .menu-error { color: #fb4934; margin-top: 0.55rem; font-size: 0.82rem; }
+  .menu-error { color: var(--error); margin-top: 0.55rem; font-size: 0.82rem; }
 </style>
