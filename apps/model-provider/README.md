@@ -91,6 +91,8 @@ Provider adapters use the official provider SDKs (`openai`, `anthropic`) for req
 - Provider SDK clients are process-wide singletons (per provider/api key/timeout/retry config) so concurrent requests share one OpenAI and one Anthropic client instance.
 - Conservative throttling defaults are enabled per provider (`max_retries=8`, `max_concurrent_requests=2`) to reduce upstream `420/429` rate-limit failures under bursty parallel traffic.
 OpenAI chat aliases should use `max_completion_tokens` defaults (not `max_tokens`) for GPT-5 compatibility.
+- Default chat aliases are: `router -> gpt-5-nano`, `worker -> gpt-5-mini`, `reasoner -> gpt-5.4`, `agent -> claude-sonnet-4-6`, `architect -> claude-opus-4-6`, and `coder -> gpt-5.3-codex`.
+- For OpenAI GPT-5 reasoning models, alias defaults may include OpenAI-specific fields such as `reasoning_effort` (for example `high` on the `reasoner` alias), which are passed through to upstream chat-completions requests.
 - The `architect` alias has an in-memory token budget guard: each request payload is estimated as `round(len(payload_json)/4)` tokens and tracked in a shared process list for the last 60 seconds. If the rolling sum meets/exceeds the configured threshold, forwarding is delayed by `60s - time since previous architect request`.
 
 Config knobs (environment variables):
