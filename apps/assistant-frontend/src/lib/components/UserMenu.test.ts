@@ -1,27 +1,38 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import UserMenu from './UserMenu.svelte';
 
+function configsResponse(theme: string) {
+  return {
+    ok: true,
+    json: async () => ({
+      configs: [
+        {
+          key: 'frontend.theme',
+          name: 'Theme',
+          config_type: 'choice',
+          description: 'Select the assistant frontend theme',
+          options: [
+            { value: 'gruvbox-dark', label: 'Gruvbox Dark' },
+            { value: 'purple-intelligence', label: 'Purple Intelligence' }
+          ],
+          value: theme,
+          default_value: 'gruvbox-dark',
+          using_default: theme === 'gruvbox-dark'
+        }
+      ]
+    })
+  } as Response;
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 describe('UserMenu', () => {
   it('loads and renders user configs in dropdown', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        configs: [
-          {
-            key: 'frontend.theme',
-            name: 'Theme',
-            config_type: 'choice',
-            description: 'Select the assistant frontend theme',
-            options: [{ value: 'gruvbox-dark', label: 'Gruvbox Dark' }],
-            value: 'gruvbox-dark',
-            default_value: 'gruvbox-dark',
-            using_default: true
-          }
-        ]
-      })
-    } as Response);
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(configsResponse('gruvbox-dark'));
 
     render(UserMenu, {
       props: {
@@ -33,7 +44,49 @@ describe('UserMenu', () => {
 
     expect(await screen.findByText('User configs')).toBeInTheDocument();
     expect(screen.getByLabelText('Theme')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Save changes' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+  });
+
+  it('enables Save changes only after config changes and emits theme updates', async () => {
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(configsResponse('gruvbox-dark'))
+      .mockResolvedValueOnce(configsResponse('gruvbox-dark'));
+
+    render(UserMenu, {
+      props: {
+        user: { name: 'Alice', email: 'alice@example.com' }
+      }
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Open user menu' }));
+
+    const saveButton = screen.getByRole('button', { name: 'Save changes' });
+    expect(saveButton).toBeDisabled();
+
+    await fireEvent.change(screen.getByLabelText('Theme'), { target: { value: 'purple-intelligence' } });
+
+    expect(saveButton).toBeEnabled();
+  });
+
+  it('resets unsaved config changes and emits persisted theme on close', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(configsResponse('gruvbox-dark'));
+
+    render(UserMenu, {
+      props: {
+        user: { name: 'Alice', email: 'alice@example.com' }
+      }
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Open user menu' }));
+    const themeSelect = screen.getByLabelText('Theme');
+
+    await fireEvent.change(themeSelect, { target: { value: 'purple-intelligence' } });
+    await fireEvent.keyDown(window, { key: 'Escape' });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Open user menu' }));
+
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+    expect((screen.getByLabelText('Theme') as HTMLSelectElement).value).toBe('gruvbox-dark');
   });
 
   it('shows signed-in user details in dropdown', async () => {

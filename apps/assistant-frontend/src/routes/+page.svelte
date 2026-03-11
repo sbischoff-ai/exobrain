@@ -17,13 +17,7 @@
     saveSessionState,
     type SessionState
   } from '$lib/stores/journalSessionStore';
-  import {
-    applyTheme,
-    loadTheme,
-    saveTheme,
-    toggleTheme,
-    type ThemeName
-  } from '$lib/stores/themeStore';
+  import { applyTheme, getDefaultTheme, isThemeName, type ThemeName } from '$lib/stores/themeStore';
   import {
     clearWorkspaceViewState,
     loadWorkspaceViewState,
@@ -32,6 +26,7 @@
     type WorkspaceMode
   } from '$lib/stores/workspaceViewStore';
   import { makeClientMessageId, toStoredMessages } from '$lib/utils/message';
+  import { userConfigService } from '$lib/services/userConfigService';
 
   interface ChatStartResponse {
     stream_id: string;
@@ -126,7 +121,7 @@
     workspaceMode = workspaceViewState.mode;
     explorerRoute = workspaceViewState.explorerRoute;
     expandedCategories = workspaceViewState.expandedCategories;
-    theme = loadTheme();
+    theme = getDefaultTheme();
     applyTheme(theme);
 
     try {
@@ -136,6 +131,7 @@
 
       if (authenticated) {
         await refreshAllState();
+        await applyUserThemePreference();
       }
     } catch {
       authError = 'Could not load session status. Please try again.';
@@ -154,6 +150,7 @@
       authenticated = true;
       user = await authService.getCurrentUser();
       await refreshAllState();
+      await applyUserThemePreference();
     } catch {
       authError = 'Login failed. Check your credentials and try again.';
     }
@@ -195,9 +192,29 @@
     });
   }
 
-  function handleToggleTheme(): void {
-    theme = toggleTheme(theme);
-    saveTheme(theme);
+
+  async function applyUserThemePreference(): Promise<void> {
+    try {
+      const configs = await userConfigService.list();
+      const themeConfig = configs.find((config) => config.key === 'frontend.theme');
+      if (isThemeName(themeConfig?.value)) {
+        theme = themeConfig.value;
+      } else {
+        theme = getDefaultTheme();
+      }
+      applyTheme(theme);
+    } catch {
+      theme = getDefaultTheme();
+      applyTheme(theme);
+    }
+  }
+
+  function handleThemeChange(event: CustomEvent<{ theme: string }>): void {
+    if (!isThemeName(event.detail.theme)) {
+      return;
+    }
+
+    theme = event.detail.theme;
     applyTheme(theme);
   }
 
@@ -723,7 +740,6 @@
   <IntroLoginPanel {authError} on:login={login} />
 {:else if user}
   <AssistantWorkspace
-    {theme}
     {user}
     {journalEntries}
     {currentReference}
@@ -747,8 +763,8 @@
     {expandedCategories}
     on:logout={logout}
     on:knowledgeUpdate={handleKnowledgeUpdate}
-    on:toggleTheme={handleToggleTheme}
     on:toggleViewMode={handleToggleViewMode}
+    on:themeChange={handleThemeChange}
     on:explorerNavigate={handleExplorerNavigate}
     on:expandedCategoriesChange={handleExpandedCategoriesChange}
     on:toggleSidebar={() => (sidebarCollapsed = !sidebarCollapsed)}

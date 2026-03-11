@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createEventDispatcher } from 'svelte';
   import { fade, scale } from 'svelte/transition';
 
   import type { CurrentUser, UserConfigItem } from '$lib/models/auth';
@@ -14,19 +15,42 @@
   let submitting = false;
   let loadingConfigs = false;
   let savingConfigs = false;
-  let configsLoaded = false;
   let configs: UserConfigItem[] = [];
   let configValues: Record<string, boolean | string> = {};
+  let persistedConfigValues: Record<string, boolean | string> = {};
+
+  const dispatch = createEventDispatcher<{
+    themeChange: { theme: string };
+  }>();
+
+  $: hasConfigChanges = configs.some((config) => configValues[config.key] !== persistedConfigValues[config.key]);
 
   async function toggleMenu(): Promise<void> {
-    menuOpen = !menuOpen;
     if (menuOpen) {
+      closeMenu();
+    } else {
+      menuOpen = true;
       await loadConfigs();
     }
   }
 
+  function closeMenu(): void {
+    menuOpen = false;
+    configError = '';
+
+    if (!hasConfigChanges) {
+      return;
+    }
+
+    configValues = { ...persistedConfigValues };
+    const persistedTheme = persistedConfigValues['frontend.theme'];
+    if (typeof persistedTheme === 'string') {
+      dispatch('themeChange', { theme: persistedTheme });
+    }
+  }
+
   async function loadConfigs(): Promise<void> {
-    if (configsLoaded || loadingConfigs) {
+    if (loadingConfigs) {
       return;
     }
 
@@ -35,7 +59,7 @@
     try {
       configs = await userConfigService.list();
       configValues = Object.fromEntries(configs.map((config) => [config.key, config.value]));
-      configsLoaded = true;
+      persistedConfigValues = { ...configValues };
     } catch {
       configError = 'Could not load user configs.';
     } finally {
@@ -58,6 +82,7 @@
         }))
       );
       configValues = Object.fromEntries(configs.map((config) => [config.key, config.value]));
+      persistedConfigValues = { ...configValues };
     } catch {
       configError = 'Could not save user configs.';
     } finally {
@@ -71,7 +96,7 @@
 
     try {
       await onLogout();
-      menuOpen = false;
+      closeMenu();
     } catch {
       authError = 'Logout failed. Please try again.';
     } finally {
@@ -85,13 +110,20 @@
     }
 
     if (!menuRoot.contains(event.target as Node | null)) {
-      menuOpen = false;
+      closeMenu();
     }
   }
 
   function onWindowKeydown(event: KeyboardEvent): void {
     if (event.key === 'Escape') {
-      menuOpen = false;
+      closeMenu();
+    }
+  }
+
+  function updateConfigValue(configKey: string, value: boolean | string): void {
+    configValues = { ...configValues, [configKey]: value };
+    if (configKey === 'frontend.theme' && typeof value === 'string') {
+      dispatch('themeChange', { theme: value });
     }
   }
 </script>
@@ -132,7 +164,7 @@
                     id={config.key}
                     value={String(configValues[config.key] ?? '')}
                     title={config.description}
-                    on:change={(event) => (configValues[config.key] = (event.currentTarget as HTMLSelectElement).value)}
+                    on:change={(event) => updateConfigValue(config.key, (event.currentTarget as HTMLSelectElement).value)}
                   >
                     {#each config.options as option}
                       <option value={option.value}>{option.label}</option>
@@ -146,7 +178,7 @@
                         name={config.key}
                         value="true"
                         checked={configValues[config.key] === true}
-                        on:change={() => (configValues[config.key] = true)}
+                        on:change={() => updateConfigValue(config.key, true)}
                       />
                       On
                     </label>
@@ -156,7 +188,7 @@
                         name={config.key}
                         value="false"
                         checked={configValues[config.key] === false}
-                        on:change={() => (configValues[config.key] = false)}
+                        on:change={() => updateConfigValue(config.key, false)}
                       />
                       Off
                     </label>
@@ -164,7 +196,7 @@
                 {/if}
               </div>
             {/each}
-            <button class="action-button" type="button" on:click={saveConfigs} disabled={savingConfigs}>
+            <button class="action-button" type="button" on:click={saveConfigs} disabled={savingConfigs || !hasConfigChanges}>
               Save changes
             </button>
           {/if}
