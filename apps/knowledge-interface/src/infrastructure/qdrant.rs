@@ -10,6 +10,7 @@ use qdrant_client::{
     },
     Qdrant,
 };
+use uuid::{uuid, Uuid};
 
 use crate::domain::{EmbeddedBlock, SchemaKind, SchemaType, TypeCandidate};
 use crate::ports::TypeVectorRepository;
@@ -317,7 +318,15 @@ fn to_schema_type_point(schema_type: &SchemaType, vector: Vec<f32>) -> Result<Po
     );
     payload.insert("active".to_string(), Value::from(schema_type.active));
 
-    Ok(PointStruct::new(schema_type.id.clone(), vector, payload))
+    let point_id = schema_type_point_uuid(&schema_type.id);
+
+    Ok(PointStruct::new(point_id.to_string(), vector, payload))
+}
+
+// Qdrant point IDs must be UUID or u64, so business IDs like `node.*` cannot be used directly.
+fn schema_type_point_uuid(type_id: &str) -> Uuid {
+    const SCHEMA_TYPE_VECTOR_NAMESPACE: Uuid = uuid!("4eb19fec-bee2-5362-a80f-fe43dcf0ed08");
+    Uuid::new_v5(&SCHEMA_TYPE_VECTOR_NAMESPACE, type_id.as_bytes())
 }
 
 fn type_candidates_from_scored_points(mut points: Vec<ScoredPoint>) -> Vec<TypeCandidate> {
@@ -465,6 +474,17 @@ mod tests {
         };
 
         let point = to_schema_type_point(&schema_type, vec![0.1, 0.2]).expect("point should build");
+        let point_id = point
+            .id
+            .as_ref()
+            .and_then(|id| id.point_id_options.as_ref())
+            .and_then(|id| match id {
+                PointIdOptions::Uuid(value) => Some(value.clone()),
+                _ => None,
+            })
+            .expect("schema type point should use UUID id");
+
+        assert!(Uuid::parse_str(&point_id).is_ok());
         assert_eq!(
             payload_string(&point.payload, "type_id"),
             Some(schema_type.id)
@@ -506,6 +526,15 @@ mod tests {
             payload_string(&point.payload, "description"),
             Some("A human being".to_string())
         );
+    }
+
+    #[test]
+    fn maps_schema_type_id_to_deterministic_point_uuid() {
+        let type_id = "node.ai_agent";
+        let left = schema_type_point_uuid(type_id);
+        let right = schema_type_point_uuid(type_id);
+
+        assert_eq!(left, right);
     }
 
     #[test]
