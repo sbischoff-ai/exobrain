@@ -65,6 +65,15 @@ class KnowledgePageUpstreamError(Exception):
 
 
 class KnowledgeService:
+    _PAGE_DETAIL_EXCLUDED_PROPERTY_KEYS = {
+        "created_at",
+        "updated_at",
+        "visibility",
+        "user_id",
+        "type_id",
+        "id",
+    }
+
     def __init__(
         self,
         database: DatabaseServiceProtocol,
@@ -250,6 +259,11 @@ class KnowledgeService:
                     else None,
                 }
             )
+        properties = {
+            key: value
+            for key, value in reply.entity_properties.items()
+            if key not in self._PAGE_DETAIL_EXCLUDED_PROPERTY_KEYS
+        }
         return {
             "id": entity.id,
             "category_id": entity.type_id,
@@ -263,6 +277,7 @@ class KnowledgeService:
                 if entity.HasField("updated_at")
                 else "",
             },
+            "properties": properties,
             "links": links,
             "content_markdown": self._render_blocks_markdown(reply.blocks),
         }
