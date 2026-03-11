@@ -269,6 +269,9 @@ describe('root page', () => {
     const themeButton = await screen.findByRole('button', {
       name: 'Switch to purple-intelligence theme'
     });
+    const brandHeading = screen.getByRole('heading', { level: 1, name: 'DRVID' });
+    const baseFontFamily = getComputedStyle(brandHeading).fontFamily;
+    const baseFontSize = getComputedStyle(brandHeading).fontSize;
 
     expect(document.documentElement.getAttribute('data-theme')).toBe('gruvbox-dark');
 
@@ -279,6 +282,9 @@ describe('root page', () => {
       expect(window.localStorage.getItem('exobrain.assistant.theme')).toBe('purple-intelligence');
       expect(screen.getByRole('button', { name: 'Switch to gruvbox-dark theme' })).toBeInTheDocument();
     });
+
+    expect(getComputedStyle(brandHeading).fontFamily).toBe(baseFontFamily);
+    expect(getComputedStyle(brandHeading).fontSize).toBe(baseFontSize);
   });
 
   it('toggles header view mode button and persists workspace mode', async () => {
