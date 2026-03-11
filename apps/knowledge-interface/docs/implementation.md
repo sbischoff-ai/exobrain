@@ -19,7 +19,7 @@ This guide maps the `KnowledgeInterface` proto contract to the current Rust impl
 - Ports and adapters
   - `src/ports.rs` (repository/embedder traits)
   - `src/infrastructure/postgres.rs` (schema repository adapter)
-  - `src/infrastructure/memgraph.rs` + `src/infrastructure/legacy.rs` (graph repository/store logic)
+  - `src/infrastructure/memgraph.rs` (graph repository logic)
   - `src/infrastructure/qdrant.rs` (vector store adapter)
   - `src/infrastructure/embedding.rs` (embedder adapters)
 - Presentation helpers
@@ -159,7 +159,7 @@ This guide maps the `KnowledgeInterface` proto contract to the current Rust impl
 
 ## Startup/bootstrap requirements
 
-`main.rs` bootstraps runtime dependencies, constructs `KnowledgeApplication`, then calls `KnowledgeApplication::ensure_common_root_graph()` before starting tonic via `run_server`. Root graph seeding uses the same graph-delta ingestion path (including embeddings + repository writes) as normal `UpsertGraphDelta` behavior.
+`main.rs` bootstraps runtime dependencies, constructs `KnowledgeApplication`, then calls `KnowledgeApplication::ensure_common_root_graph()` before starting tonic via `run_server`. This is startup-only support logic (not an RPC handler) that enforces runtime preconditions for the RPC contract. Root graph seeding uses the same graph-delta ingestion path (including embeddings + repository writes) as normal `UpsertGraphDelta` behavior.
 
 ## Contract-driven development note
 

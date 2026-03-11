@@ -51,22 +51,32 @@ cd apps/knowledge-interface && ./scripts/verify.sh
 
 ## Service module layout
 
-`src/service/mod.rs` is the public application facade (`KnowledgeApplication`) and delegates feature logic to focused modules under `src/service/`:
+- `src/application/mod.rs` is the public application facade (`KnowledgeApplication`) and delegates feature logic to use-case modules under `src/application/use_cases/`.
+- `src/transport/grpc/mod.rs` contains tonic RPC handlers.
+- `src/transport/mapping/mod.rs` contains proto ↔ domain mapper functions.
+- `src/infrastructure/` holds concrete adapter implementations (`postgres.rs`, `memgraph.rs`, `qdrant.rs`, `embedding.rs`).
+- `src/ports.rs` defines repository/embedder traits consumed by `KnowledgeApplication`.
+- `src/presentation/upsert_delta_json_schema.rs` is a transport-facing helper for `GetUpsertGraphDeltaJsonSchema` payload generation.
 
-- `extraction_schema.rs` for extraction schema projection builders and sorting helpers.
-- `ingestion.rs` for graph-delta ingestion + schema/state validation routines.
-- `entity_context.rs` for entity-context query shaping.
-- `entity_listing.rs` for paginated list-by-type query normalization.
-- `candidate_search.rs` for candidate resolution query handling.
+### RPC layer map
 
-Presentation helpers under `src/presentation/` are limited to wire-contract outputs (currently `upsert_delta_json_schema.rs` for `GetUpsertGraphDeltaJsonSchema`). Prompt markdown rendering is intentionally out of scope for the current gRPC contract.
+| gRPC method | Transport handler | Application / use case | Port trait(s) | Infrastructure adapter(s) |
+| --- | --- | --- | --- | --- |
+| `GetSchema` | `src/transport/grpc/mod.rs::get_schema` | `src/application/mod.rs::KnowledgeApplication::get_schema` | `SchemaRepository` | `src/infrastructure/postgres.rs` |
+| `UpsertSchemaType` | `src/transport/grpc/mod.rs::upsert_schema_type` | `src/application/mod.rs::KnowledgeApplication::upsert_schema_type` | `SchemaRepository` | `src/infrastructure/postgres.rs` |
+| `UpsertGraphDelta` | `src/transport/grpc/mod.rs::upsert_graph_delta` | `KnowledgeApplication::upsert_graph_delta` + `src/application/use_cases/upsert_graph_delta.rs::upsert_graph_delta_internal` | `GraphRepository`, `SchemaRepository`, `Embedder` | `src/infrastructure/memgraph.rs`, `src/infrastructure/postgres.rs`, `src/infrastructure/embedding.rs`, `src/infrastructure/qdrant.rs` |
+| `GetEntityExtractionSchemaContext` / `GetEdgeExtractionSchemaContext` | `src/transport/grpc/mod.rs` context handlers | `KnowledgeApplication` extraction methods + `src/application/use_cases/extraction_schema.rs` | `SchemaRepository`, `GraphRepository` | `src/infrastructure/postgres.rs`, `src/infrastructure/memgraph.rs` |
+| `FindEntityCandidates` | `src/transport/grpc/mod.rs::find_entity_candidates` | `KnowledgeApplication::find_entity_candidates` + `src/application/use_cases/entity_search.rs` | `GraphRepository`, `Embedder` | `src/infrastructure/memgraph.rs`, `src/infrastructure/embedding.rs` |
+| `ListEntitiesByType` | `src/transport/grpc/mod.rs::list_entities_by_type` | `KnowledgeApplication::list_entities_by_type` + `src/application/use_cases/entity_listing.rs` | `GraphRepository` | `src/infrastructure/memgraph.rs` |
+| `GetEntityContext` | `src/transport/grpc/mod.rs::get_entity_context` | `KnowledgeApplication::get_entity_context` + `src/application/use_cases/entity_context.rs` | `GraphRepository` | `src/infrastructure/memgraph.rs` |
+| `GetUserInitGraph` | `src/transport/grpc/mod.rs::get_user_init_graph` | `KnowledgeApplication::get_user_init_graph` | `GraphRepository` (+ shared upsert path uses `SchemaRepository`/`Embedder`) | `src/infrastructure/memgraph.rs` (+ shared upsert dependencies above) |
 
 ## Domain typing boundaries
 
 Schema kind values are represented internally via `SchemaKind` (`Node`/`Edge`) and converted to/from wire/database strings only in:
 
-- `src/transport/mappers.rs` (proto boundary)
-- `src/adapters.rs` (database boundary)
+- `src/transport/mapping/mod.rs` (proto boundary)
+- `src/infrastructure/postgres.rs` (database boundary)
 
 High-risk IDs now have lightweight primitives (`TypeId`, `EntityId`, `UniverseId`) for service-level validation paths to reduce accidental ID mixups.
 
@@ -82,6 +92,8 @@ High-risk IDs now have lightweight primitives (`TypeId`, `EntityId`, `UniverseId
 ## Built-in graph bootstrapping
 
 On startup, the service checks whether the shared root graph exists in Memgraph and seeds it if missing. The seed is written through the same validated ingestion pipeline used by gRPC requests, including Qdrant projection updates.
+
+`KnowledgeApplication::ensure_common_root_graph` is startup-only support logic, not an RPC. It exists to satisfy runtime preconditions for the RPC contract (shared `universe.real_world` and `concept.exobrain` roots) before requests are served.
 
 Internal Memgraph timestamp triggers are ensured idempotently during startup by checking `SHOW TRIGGERS` and creating only missing triggers, so pre-existing triggers are treated as already-initialized state instead of a fatal error.
 Update triggers target Memgraph update-event payloads (`event.vertex` / `event.edge`) to avoid invalid property writes during node or edge updates.
