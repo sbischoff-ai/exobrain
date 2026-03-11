@@ -164,10 +164,10 @@ Example response:
 ## User config endpoints
 
 ### `GET /api/users/me/configs`
-Returns all effective user configs for the authenticated user, including each config key, config type (`boolean` or `choice`), allowed options for choice configs, current effective value, and default fallback metadata.
+Returns all effective user configs for the authenticated user, including each config key, config type (`boolean` or `choice`), allowed options for choice configs, current effective value, and default fallback metadata. Config definitions/options are loaded from Postgres and merged with per-user overrides.
 
 ### `PATCH /api/users/me/configs`
-Accepts one or more config updates in a single request and returns the full effective config list after validation and update application.
+Accepts one or more config updates in a single request and returns the full effective config list after validation and update application. Boolean updates must be strict `true`/`false`, choice updates must match configured options, and writes are applied atomically.
 
 ## Configuration
 
