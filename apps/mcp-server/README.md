@@ -11,6 +11,7 @@ Python service providing a minimal MCP runtime with strict tool contracts.
 - Splits tool registrations by category in adapter registry builders (`utility`, `web`, extensible to future categories).
 - Composes enabled tool categories and feature flags from settings in `app.main:create_tool_registry`.
 - Hosts migrated web-search adapter logic with provider clients hidden behind interfaces.
+- Formats `get_entity_context` markdown deterministically (entity summary, ordered context blocks, related entities) with compact size caps for tool-safe payloads.
 
 ## Endpoints and contracts
 
