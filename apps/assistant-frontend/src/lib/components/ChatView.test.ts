@@ -7,6 +7,21 @@ import ChatView from './ChatView.svelte';
 
 describe('ChatView', () => {
 
+
+  it('uses the shared chat bubble icon for send action', () => {
+    const { container } = render(ChatView, {
+      props: {
+        reference: '2026/02/19',
+        messages: []
+      }
+    });
+
+    const sendPath = container.querySelector('button[aria-label="Send message"] path');
+    expect(sendPath?.getAttribute('d')).toBe(
+      'M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-5.26l-3.92 3.36a1 1 0 0 1-1.65-.76V17H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm0 2v9h6.17a1 1 0 0 1 1 1v1.51l2.42-2.07a1 1 0 0 1 .65-.24H20V6H4z'
+    );
+  });
+
   it('renders assistant process info labels and toggles card stack', async () => {
     render(ChatView, {
       props: {
@@ -131,6 +146,8 @@ describe('ChatView', () => {
 
     const appCss = readFileSync(join(process.cwd(), 'src', 'app.css'), 'utf8');
     expect(appCss).toContain(".assistant-markdown [data-streamdown-mermaid] > [data-expanded='false'] [data-mermaid-svg]");
+    expect(appCss).toContain('.journal-item.today {');
+    expect(appCss).toContain('background: var(--accent);');
     expect(appCss).toContain('max-height: 75vh;');
     expect(appCss).toContain(".assistant-markdown [data-streamdown-mermaid] > [data-expanded='true']");
     expect(appCss).toContain('inset: 0.75rem;');

@@ -69,7 +69,7 @@
   ></textarea>
   <button type="submit" aria-label="Send message" {disabled} title={disabledTooltip}>
     <svg viewBox="0 0 24 24" role="img" aria-hidden="true">
-      <path d="M4 4h16v12H6.17L4 18.17V4zm2 2v7.34L7.34 12H18V6H6zm3 1h6v2H9V7zm0 3h4v2H9v-2z" />
+      <path d="M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-5.26l-3.92 3.36a1 1 0 0 1-1.65-.76V17H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm0 2v9h6.17a1 1 0 0 1 1 1v1.51l2.42-2.07a1 1 0 0 1 .65-.24H20V6H4z" />
     </svg>
   </button>
 </form>
