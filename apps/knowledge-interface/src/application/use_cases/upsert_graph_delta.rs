@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use anyhow::{anyhow, Result};
+use crate::application::errors::{ApplicationError, ApplicationResult};
 
 use crate::domain::{EmbeddedBlock, GraphDelta, SchemaKind};
 
@@ -16,7 +16,7 @@ use crate::application::{KnowledgeApplication, COMMON_UNIVERSE_ID};
 pub(crate) async fn upsert_graph_delta_internal(
     app: &KnowledgeApplication,
     mut delta: GraphDelta,
-) -> Result<()> {
+) -> ApplicationResult<()> {
     let inheritance = validate_delta_against_schema(app, &delta).await?;
 
     for entity in &mut delta.entities {
@@ -59,13 +59,15 @@ pub(crate) async fn upsert_graph_delta_internal(
 
     app.graph_repository
         .apply_delta_with_blocks(&delta, &blocks)
-        .await
+        .await?;
+
+    Ok(())
 }
 
 async fn validate_delta_against_schema(
     app: &KnowledgeApplication,
     delta: &GraphDelta,
-) -> Result<Vec<crate::domain::TypeInheritance>> {
+) -> ApplicationResult<Vec<crate::domain::TypeInheritance>> {
     let schema_types = app
         .schema_repository
         .get_by_kind(SchemaKind::Node)
@@ -85,22 +87,23 @@ async fn validate_delta_against_schema(
     let edge_rules = app.schema_repository.get_edge_endpoint_rules().await?;
 
     let mut node_type_by_id = HashMap::new();
-    let mut errors = vec![];
+    let mut validation_errors = vec![];
+    let mut precondition_errors = vec![];
 
     for universe in &delta.universes {
         if let Err(err) = validate_graph_id(&universe.id, "universe") {
-            errors.push(err);
+            validation_errors.push(err);
             continue;
         }
         if universe.name.trim().is_empty() {
-            errors.push(format!("universe {} name is required", universe.id));
+            validation_errors.push(format!("universe {} name is required", universe.id));
         }
         node_type_by_id.insert(universe.id.clone(), "node.universe".to_string());
     }
 
     for entity in &delta.entities {
         if let Err(err) = validate_graph_id(&entity.id, "entity") {
-            errors.push(err);
+            validation_errors.push(err);
             continue;
         }
         let node_type = entity.type_id.clone();
@@ -110,19 +113,19 @@ async fn validate_delta_against_schema(
                 && !delta.universes.iter().any(|u| &u.id == universe_id)
                 && universe_id != COMMON_UNIVERSE_ID
             {
-                errors.push(format!(
+                validation_errors.push(format!(
                     "entity {} references unknown universe {}",
                     entity.id, universe_id
                 ));
             }
         }
         if !schema_types.contains_key(&node_type) {
-            errors.push(format!(
+            validation_errors.push(format!(
                 "entity {} uses unknown schema type {}",
                 entity.id, node_type
             ));
         } else if !is_assignable(&node_type, "node.entity", &inheritance) {
-            errors.push(format!(
+            validation_errors.push(format!(
                 "entity {} type {} must descend from node.entity",
                 entity.id, node_type
             ));
@@ -133,25 +136,29 @@ async fn validate_delta_against_schema(
             &entity.properties,
             &properties,
             &inheritance,
-            &mut errors,
+            &mut validation_errors,
         );
-        validate_internal_timestamps_not_provided(&entity.id, &entity.properties, &mut errors);
+        validate_internal_timestamps_not_provided(
+            &entity.id,
+            &entity.properties,
+            &mut validation_errors,
+        );
     }
 
     for block in &delta.blocks {
         if let Err(err) = validate_graph_id(&block.id, "block") {
-            errors.push(err);
+            validation_errors.push(err);
             continue;
         }
         let node_type = block.type_id.clone();
         node_type_by_id.insert(block.id.clone(), node_type.clone());
         if !schema_types.contains_key(&node_type) {
-            errors.push(format!(
+            validation_errors.push(format!(
                 "block {} uses unknown schema type {}",
                 block.id, node_type
             ));
         } else if !is_assignable(&node_type, "node.block", &inheritance) {
-            errors.push(format!(
+            validation_errors.push(format!(
                 "block {} type {} must descend from node.block",
                 block.id, node_type
             ));
@@ -162,21 +169,25 @@ async fn validate_delta_against_schema(
             &block.properties,
             &properties,
             &inheritance,
-            &mut errors,
+            &mut validation_errors,
         );
-        validate_internal_timestamps_not_provided(&block.id, &block.properties, &mut errors);
+        validate_internal_timestamps_not_provided(
+            &block.id,
+            &block.properties,
+            &mut validation_errors,
+        );
     }
 
     for edge in &delta.edges {
         if let Err(err) = validate_graph_id(&edge.from_id, "edge.from_id") {
-            errors.push(err);
+            validation_errors.push(err);
         }
         if let Err(err) = validate_graph_id(&edge.to_id, "edge.to_id") {
-            errors.push(err);
+            validation_errors.push(err);
         }
         let edge_type_id = format!("edge.{}", edge.edge_type.to_lowercase());
         if !edge_types.contains_key(&edge_type_id) {
-            errors.push(format!(
+            validation_errors.push(format!(
                 "edge {}->{} references unknown edge type {}",
                 edge.from_id, edge.to_id, edge.edge_type
             ));
@@ -188,12 +199,12 @@ async fn validate_delta_against_schema(
             &edge.properties,
             &properties,
             &inheritance,
-            &mut errors,
+            &mut validation_errors,
         );
         validate_internal_timestamps_not_provided(
             &format!("{}:{}->{}", edge.edge_type, edge.from_id, edge.to_id),
             &edge.properties,
-            &mut errors,
+            &mut validation_errors,
         );
         if let (Some(from_type), Some(to_type)) = (
             node_type_by_id.get(&edge.from_id),
@@ -207,7 +218,7 @@ async fn validate_delta_against_schema(
                         && is_assignable(to_type, &rule.to_node_type_id, &inheritance)
                 });
             if !valid_rule {
-                errors.push(format!(
+                validation_errors.push(format!(
                     "edge {} ({}) violates schema endpoint rules for {} -> {}",
                     edge.edge_type, edge_type_id, from_type, to_type
                 ));
@@ -215,23 +226,30 @@ async fn validate_delta_against_schema(
         }
     }
 
-    enforce_graph_state_rules(app, delta, &mut errors).await?;
+    enforce_graph_state_rules(app, delta, &mut precondition_errors).await?;
 
-    if errors.is_empty() {
+    if validation_errors.is_empty() && precondition_errors.is_empty() {
         return Ok(inheritance);
     }
 
-    Err(anyhow!(
-        "graph delta validation failed:\n- {}",
-        errors.join("\n- ")
-    ))
+    if !validation_errors.is_empty() {
+        return Err(ApplicationError::validation(format!(
+            "graph delta validation failed:\n- {}",
+            validation_errors.join("\n- ")
+        )));
+    }
+
+    Err(ApplicationError::failed_precondition(format!(
+        "graph delta precondition failed:\n- {}",
+        precondition_errors.join("\n- ")
+    )))
 }
 
 async fn enforce_graph_state_rules(
     app: &KnowledgeApplication,
     delta: &GraphDelta,
     errors: &mut Vec<String>,
-) -> Result<()> {
+) -> ApplicationResult<()> {
     let universe_ids: HashSet<&str> = delta.universes.iter().map(|u| u.id.as_str()).collect();
     let mut incoming_by_node: HashMap<&str, usize> = HashMap::new();
     let mut outgoing_by_node: HashMap<&str, usize> = HashMap::new();

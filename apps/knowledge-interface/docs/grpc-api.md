@@ -161,6 +161,12 @@ This schema validates **request shape only**. Runtime semantic checks in ingesti
 
 Passing JSON Schema validation does not guarantee the delta is semantically valid against current graph state.
 
+`UpsertGraphDelta` error status mapping follows structured application errors:
+
+- `INVALID_ARGUMENT` for payload validation failures (for example required/format/schema/type violations).
+- `FAILED_PRECONDITION` for graph-state/cardinality violations that depend on existing state.
+- `INTERNAL` for unexpected backend/runtime faults.
+
 ### Minimal usage pattern
 
 1. Fetch schema via gRPC (`GetUpsertGraphDeltaJsonSchema`).

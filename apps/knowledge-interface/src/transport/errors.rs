@@ -1,19 +1,40 @@
-use anyhow::Error;
 use tonic::Status;
 use tracing::warn;
 
-pub fn map_ingest_error(error: Error) -> Status {
-    let message = error.to_string();
-    warn!(error = %message, "upsert graph delta failed");
+use crate::application::errors::ApplicationError;
 
-    if message.contains("validation failed")
-        || message.contains("is required")
-        || message.contains("must")
-        || message.contains("unknown schema type")
-        || message.contains("failed to upsert edge")
-    {
-        return Status::invalid_argument(message);
+pub fn map_application_error(error: ApplicationError) -> Status {
+    warn!(error = %error, "application request failed");
+
+    match error {
+        ApplicationError::Validation(message) => Status::invalid_argument(message),
+        ApplicationError::FailedPrecondition(message) => Status::failed_precondition(message),
+        ApplicationError::Internal(error) => Status::internal(error.to_string()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use tonic::Code;
+
+    use super::map_application_error;
+    use crate::application::errors::ApplicationError;
+
+    #[test]
+    fn maps_validation_error_to_invalid_argument() {
+        let status = map_application_error(ApplicationError::validation("bad input"));
+        assert_eq!(status.code(), Code::InvalidArgument);
     }
 
-    Status::internal(message)
+    #[test]
+    fn maps_precondition_error_to_failed_precondition() {
+        let status = map_application_error(ApplicationError::failed_precondition("state conflict"));
+        assert_eq!(status.code(), Code::FailedPrecondition);
+    }
+
+    #[test]
+    fn maps_internal_error_to_internal() {
+        let status = map_application_error(ApplicationError::from(anyhow::anyhow!("boom")));
+        assert_eq!(status.code(), Code::Internal);
+    }
 }

@@ -17,12 +17,14 @@ use crate::{
     ports::{Embedder, GraphRepository, SchemaRepository},
 };
 
+pub mod errors;
 pub(crate) mod graph_resolution;
 pub(crate) mod pagination;
 pub(crate) mod type_hierarchy;
 pub mod use_cases;
 pub(crate) mod validation;
 
+use self::errors::ApplicationResult;
 use self::validation::is_global_property_owner;
 
 pub(crate) use use_cases::extraction_schema::{
@@ -279,7 +281,9 @@ impl KnowledgeApplication {
             return Ok(());
         }
 
-        self.upsert_graph_delta(Self::common_root_delta()).await
+        self.upsert_graph_delta(Self::common_root_delta())
+            .await
+            .map_err(anyhow::Error::from)
     }
 
     pub async fn get_user_init_graph(
@@ -305,7 +309,8 @@ impl KnowledgeApplication {
             let delta = Self::user_init_delta(trimmed_user_id, trimmed_user_name);
             let node_ids = Self::user_init_graph_node_ids(&delta)?;
             self.apply_user_initialization_delta(trimmed_user_id, delta, &node_ids)
-                .await?;
+                .await
+                .map_err(anyhow::Error::from)?;
             return Ok(node_ids);
         }
 
@@ -496,25 +501,25 @@ impl KnowledgeApplication {
     pub async fn find_entity_candidates(
         &self,
         query: FindEntityCandidatesQuery,
-    ) -> Result<FindEntityCandidatesResult> {
+    ) -> ApplicationResult<FindEntityCandidatesResult> {
         use_cases::entity_search::find_entity_candidates(self, query).await
     }
 
     pub async fn list_entities_by_type(
         &self,
         query: ListEntitiesByTypeQuery,
-    ) -> Result<ListEntitiesByTypeResult> {
+    ) -> ApplicationResult<ListEntitiesByTypeResult> {
         use_cases::entity_listing::list_entities_by_type(self, query).await
     }
 
     pub async fn get_entity_context(
         &self,
         query: GetEntityContextQuery,
-    ) -> Result<GetEntityContextResult> {
+    ) -> ApplicationResult<GetEntityContextResult> {
         use_cases::entity_context::get_entity_context(self, query).await
     }
 
-    pub async fn upsert_graph_delta(&self, delta: GraphDelta) -> Result<()> {
+    pub async fn upsert_graph_delta(&self, delta: GraphDelta) -> ApplicationResult<()> {
         self.ensure_users_initialized_for_delta(&delta).await?;
         self.upsert_graph_delta_internal(delta).await
     }
@@ -524,18 +529,22 @@ impl KnowledgeApplication {
         user_id: &str,
         delta: GraphDelta,
         node_ids: &UserInitGraphNodeIds,
-    ) -> Result<()> {
+    ) -> ApplicationResult<()> {
         self.upsert_graph_delta_internal(delta).await?;
         self.graph_repository
             .mark_user_graph_initialized(user_id, node_ids)
-            .await
+            .await?;
+        Ok(())
     }
 
-    async fn upsert_graph_delta_internal(&self, delta: GraphDelta) -> Result<()> {
+    async fn upsert_graph_delta_internal(&self, delta: GraphDelta) -> ApplicationResult<()> {
         use_cases::upsert_graph_delta::upsert_graph_delta_internal(self, delta).await
     }
 
-    async fn ensure_users_initialized_for_delta(&self, delta: &GraphDelta) -> Result<()> {
+    async fn ensure_users_initialized_for_delta(
+        &self,
+        delta: &GraphDelta,
+    ) -> ApplicationResult<()> {
         let mut user_ids = HashSet::new();
 
         for universe in &delta.universes {
@@ -563,7 +572,8 @@ impl KnowledgeApplication {
                 // In implicit initialization flow, we deterministically reuse `user_id` as
                 // `user_name` when no richer user profile is available in the request.
                 let delta = Self::user_init_delta(&user_id, &user_id);
-                let node_ids = Self::user_init_graph_node_ids(&delta)?;
+                let node_ids =
+                    Self::user_init_graph_node_ids(&delta).map_err(anyhow::Error::from)?;
                 self.apply_user_initialization_delta(&user_id, delta, &node_ids)
                     .await?;
             }

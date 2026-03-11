@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use crate::application::errors::{ApplicationError, ApplicationResult};
 
 use crate::domain::{FindEntityCandidatesQuery, FindEntityCandidatesResult};
 
@@ -7,7 +7,7 @@ use crate::application::KnowledgeApplication;
 pub(crate) async fn find_entity_candidates(
     app: &KnowledgeApplication,
     mut query: FindEntityCandidatesQuery,
-) -> Result<FindEntityCandidatesResult> {
+) -> ApplicationResult<FindEntityCandidatesResult> {
     query.names = query
         .names
         .iter()
@@ -24,7 +24,7 @@ pub(crate) async fn find_entity_candidates(
 
     query.user_id = query.user_id.trim().to_string();
     if query.user_id.is_empty() {
-        return Err(anyhow!("user_id is required"));
+        return Err(ApplicationError::validation("user_id is required"));
     }
 
     query.short_description = query
@@ -34,8 +34,8 @@ pub(crate) async fn find_entity_candidates(
         .filter(|value| !value.is_empty());
 
     if query.names.is_empty() && query.short_description.is_none() {
-        return Err(anyhow!(
-            "at least one name or short_description is required"
+        return Err(ApplicationError::validation(
+            "at least one name or short_description is required",
         ));
     }
 

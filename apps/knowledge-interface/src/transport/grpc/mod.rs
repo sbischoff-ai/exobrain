@@ -15,7 +15,7 @@ use crate::presentation::upsert_delta_json_schema::{
     try_upsert_graph_delta_json_schema_string, UPSERT_GRAPH_DELTA_SCHEMA_ID,
 };
 
-use super::errors::map_ingest_error;
+use super::errors::map_application_error;
 use super::mapping::{
     to_domain_block_node, to_domain_entity_node, to_domain_find_entity_candidates_query,
     to_domain_get_entity_context_query, to_domain_graph_edge,
@@ -341,7 +341,7 @@ impl KnowledgeInterface for KnowledgeGrpcService {
             .app
             .find_entity_candidates(query)
             .await
-            .map_err(|e| Status::invalid_argument(e.to_string()))?;
+            .map_err(map_application_error)?;
 
         Ok(Response::new(FindEntityCandidatesReply {
             candidates: result
@@ -361,7 +361,7 @@ impl KnowledgeInterface for KnowledgeGrpcService {
             .app
             .list_entities_by_type(query)
             .await
-            .map_err(|e| Status::invalid_argument(e.to_string()))?;
+            .map_err(map_application_error)?;
 
         Ok(Response::new(to_proto_list_entities_by_type_reply(result)))
     }
@@ -375,7 +375,7 @@ impl KnowledgeInterface for KnowledgeGrpcService {
             .app
             .get_entity_context(query)
             .await
-            .map_err(|e| Status::invalid_argument(e.to_string()))?;
+            .map_err(map_application_error)?;
 
         Ok(Response::new(to_proto_get_entity_context_reply(result)))
     }
@@ -418,7 +418,7 @@ impl KnowledgeInterface for KnowledgeGrpcService {
                 edges: edges.clone(),
             })
             .await
-            .map_err(map_ingest_error)?;
+            .map_err(map_application_error)?;
 
         Ok(Response::new(UpsertGraphDeltaReply {
             entities_upserted: entities.len() as u32,
