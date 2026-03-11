@@ -32,7 +32,12 @@ def test_list_tools() -> None:
     assert response.status_code == 200
     body = response.json()
     assert "resolve_entities" in [tool["name"] for tool in body["tools"]]
-    assert [tool["name"] for tool in body["tools"]] == ["resolve_entities", "web_search", "web_fetch"]
+    assert [tool["name"] for tool in body["tools"]] == [
+        "resolve_entities",
+        "get_entity_context",
+        "web_search",
+        "web_fetch",
+    ]
     web_fetch = next(tool for tool in body["tools"] if tool["name"] == "web_fetch")
     assert web_fetch["inputSchema"]["properties"]["url"]["type"] == "string"
 

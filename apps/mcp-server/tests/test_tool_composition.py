@@ -5,7 +5,7 @@ from pydantic import Field
 from app.adapters.tool_adapters import ToolAdapterRegistry
 from app.adapters.tool_registry import ToolRegistration, ToolRegistry
 from app.adapters.web_tools import StaticWebSearchClient, WebFetchAdapter, WebSearchAdapter
-from app.contracts import ResolveEntitiesToolInput, ToolMetadata
+from app.contracts import GetEntityContextToolInput, ResolveEntitiesToolInput, ToolMetadata
 from app.contracts.base import StrictModel
 from app.main import create_tool_registry
 from app.services.tool_service import ToolService
@@ -61,7 +61,14 @@ def test_create_tool_registry_ignores_unknown_categories() -> None:
 def test_create_tool_registry_preserves_category_order_with_empty_categories() -> None:
     registry = create_tool_registry(_adapters(), _settings(ENABLED_TOOL_CATEGORIES="web,knowledge,utility", ENABLE_UTILITY_TOOLS=True))
 
-    assert [tool.name for tool in registry.registrations()] == ["web_search", "web_fetch", "resolve_entities", "echo", "add"]
+    assert [tool.name for tool in registry.registrations()] == [
+        "web_search",
+        "web_fetch",
+        "resolve_entities",
+        "get_entity_context",
+        "echo",
+        "add",
+    ]
 
 
 def test_create_tool_registry_includes_knowledge_by_default() -> None:
@@ -69,6 +76,7 @@ def test_create_tool_registry_includes_knowledge_by_default() -> None:
 
     assert [tool.name for tool in registry.registrations()] == [
         "resolve_entities",
+        "get_entity_context",
         "web_search",
         "web_fetch",
     ]
@@ -81,8 +89,8 @@ def test_create_tool_registry_includes_knowledge_when_flag_enabled() -> None:
     )
 
     registrations = registry.registrations()
-    assert [tool.name for tool in registrations] == ["resolve_entities"]
-    assert [tool.category for tool in registrations] == ["knowledge"]
+    assert [tool.name for tool in registrations] == ["resolve_entities", "get_entity_context"]
+    assert [tool.category for tool in registrations] == ["knowledge", "knowledge"]
 
 
 def test_create_tool_registry_excludes_knowledge_when_flag_disabled() -> None:
@@ -169,3 +177,88 @@ def test_invoke_resolve_entities_returns_deterministic_placeholders() -> None:
             },
         ]
     }
+
+
+class _FakeKnowledgeInterfaceClient:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    def get_entity_context(self, *, entity_id: str, user_id: str, max_block_level: int) -> dict[str, object]:
+        self.calls.append(
+            {
+                "entity_id": entity_id,
+                "user_id": user_id,
+                "max_block_level": max_block_level,
+            }
+        )
+        return {
+            "entity": {
+                "id": entity_id,
+                "name": "Ada Lovelace",
+                "type_id": "node.person",
+                "aliases": ["Ada"],
+            },
+            "blocks": [
+                {"text": "First programmer."},
+                {"text": "Collaborated with Charles Babbage."},
+            ],
+            "neighbors": [
+                {
+                    "edge_type": "COLLABORATED_WITH",
+                    "direction": "OUTGOING",
+                    "other_entity": {
+                        "id": "ent_babbage",
+                        "name": "Charles Babbage",
+                        "type_id": "node.person",
+                        "description": "Inventor and mathematician",
+                        "aliases": ["Babbage"],
+                    },
+                }
+            ],
+        }
+
+
+def test_invoke_get_entity_context_uses_default_depth_and_maps_output() -> None:
+    web_client = StaticWebSearchClient()
+    ki_client = _FakeKnowledgeInterfaceClient()
+    adapters = ToolAdapterRegistry(
+        web_search_adapter=WebSearchAdapter(client=web_client),
+        web_fetch_adapter=WebFetchAdapter(client=web_client),
+        knowledge_interface_client=ki_client,
+        knowledge_interface_user_id="user-123",
+    )
+
+    result = adapters.invoke_get_entity_context(GetEntityContextToolInput.model_validate({"entity_id": "ent_ada"}))
+
+    assert ki_client.calls == [
+        {
+            "entity_id": "ent_ada",
+            "user_id": "user-123",
+            "max_block_level": 3,
+        }
+    ]
+    assert result.model_dump() == {
+        "context_markdown": "## Ada Lovelace\n- Type: `node.person`\n- Aliases: Ada\n\n### Context\n- First programmer.\n- Collaborated with Charles Babbage.\n\n### Related\n- @ent_babbage: Charles Babbage (COLLABORATED_WITH)",
+        "related_entities": [
+            {
+                "entity_id": "ent_babbage",
+                "name": "Charles Babbage",
+                "aliases": ["Babbage"],
+                "entity_type": "node.person",
+                "description": "Inventor and mathematician",
+                "relationship_type": "COLLABORATED_WITH",
+                "relationship_direction": "outgoing",
+            }
+        ],
+    }
+
+
+def test_invoke_get_entity_context_requires_knowledge_interface_client() -> None:
+    adapters = _adapters()
+
+    try:
+        adapters.invoke_get_entity_context(GetEntityContextToolInput.model_validate({"entity_id": "ent_ada"}))
+    except RuntimeError as exc:
+        assert "knowledge_interface_client" in str(exc)
+    else:
+        raise AssertionError("Expected RuntimeError when knowledge interface client is missing")

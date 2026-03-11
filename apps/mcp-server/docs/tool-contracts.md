@@ -165,12 +165,12 @@ Description: Fetch markdown context for a canonical entity and return adjacent e
 **Input (`arguments`)**
 
 - `entity_id` (string, required): minimum length `1`
-- `depth` (integer | null, optional): range `0..32`; maps to knowledge `max_block_level`
+- `depth` (integer | null, optional): range `0..32`; maps to knowledge `max_block_level` (default `3` when omitted, and clamped to `32` before KI RPC)
 - `focus` (string | null, optional): maximum length `160`
 
 **Output (`result`)**
 
-- `context_markdown` (string)
+- `context_markdown` (string): compact markdown summary, including context snippets and `@entity_id` handles for related entities
 - `related_entities` (array)
   - `entity_id` (string)
   - `name` (string)

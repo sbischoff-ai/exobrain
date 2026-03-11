@@ -47,6 +47,7 @@ That document includes:
   - `web_search`
   - `web_fetch`
   - `resolve_entities`
+  - `get_entity_context`
 
 ### Canonical request/response examples
 
