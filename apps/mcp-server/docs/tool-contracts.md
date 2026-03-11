@@ -157,6 +157,15 @@ Description: Resolve input entities against the knowledge graph and create missi
 
 ---
 
+
+## Agent self-descriptive metadata contract
+
+Tool discovery metadata is a hard contract for autonomous agents that must choose and invoke tools without human help.
+
+- Every tool in `GET /mcp/tools` must include a non-empty, meaningful top-level `description`.
+- Critical arguments in `inputSchema.properties` must include field-level `description` text with enough context for safe use (at minimum for web tools and `resolve_entities`).
+- Descriptions should communicate intent and constraints (for example purpose, limits, freshness, or matching hints), not just restate field names.
+
 ## Notes on strictness and compatibility
 
 - All request/response models are strict (`extra="forbid"`), so unknown fields are rejected.
