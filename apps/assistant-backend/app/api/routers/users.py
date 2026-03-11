@@ -65,7 +65,7 @@ async def patch_me_configs(
     principal: UnifiedPrincipal = Depends(get_required_auth_context),
 ) -> UserConfigsResponse:
     config_service = get_container(request).resolve(UserConfigServiceProtocol)
-    updates = {entry.key: entry.value for entry in payload.updates}
+    updates = {entry.key: entry.value for entry in payload.normalized_updates()}
     try:
         configs = await config_service.update_configs(principal.user_id, updates)
     except (UnknownUserConfigError, InvalidUserConfigValueError) as exc:
