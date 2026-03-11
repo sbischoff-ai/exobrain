@@ -87,11 +87,16 @@ flowchart LR
 
 ## Qdrant projection contract
 
-Qdrant stores a projection of all `node.block` nodes.
+Qdrant stores projections for block content and schema type metadata:
 
-- point id = block id
-- payload includes `block_id`, `universe_id`, `root_entity_id`, `user_id`, `visibility`, `text`, `block_level`
-- updating a block rewrites the corresponding point (new embedding + payload)
+- `blocks` collection stores all `node.block` nodes
+  - point id = block id
+  - payload includes `block_id`, `universe_id`, `root_entity_id`, `user_id`, `visibility`, `text`, `block_level`
+  - updating a block rewrites the corresponding point (new embedding + payload)
+- `schema_node_types` and `schema_edge_types` store schema type embeddings
+  - point id = schema type id (`knowledge_graph_schema_types.id`)
+  - payload includes `type_id`, `kind`, `name`, `description`, `active`
+  - updating a schema type rewrites the existing point for that type id
 
 ## Transaction behavior
 
