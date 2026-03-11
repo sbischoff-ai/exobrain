@@ -114,7 +114,8 @@ async def test_mcp_client_works_against_real_mcp_server_testclient() -> None:
     sys.path.insert(0, str(mcp_server_root))
     try:
         mcp_main = importlib.import_module("app.main")
-        mcp_app = mcp_main.create_app()
+        mcp_settings = mcp_main.Settings.model_validate({"APP_ENV": "test", "WEB_SEARCH_PROVIDER": "static", "ENABLE_UTILITY_TOOLS": True})
+        mcp_app = mcp_main.create_app(mcp_settings)
     finally:
         sys.path.pop(0)
         for name in list(sys.modules):
