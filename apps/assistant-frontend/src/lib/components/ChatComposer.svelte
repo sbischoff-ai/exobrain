@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, tick } from 'svelte';
 
   export let disabled = false;
   export let disabledReason = '';
@@ -8,8 +8,27 @@
 
   let messageInput = '';
   let messageInputElement: HTMLTextAreaElement | null = null;
+  let previousDisabled = disabled;
 
   $: disabledTooltip = disabled && disabledReason ? disabledReason : undefined;
+
+  $: {
+    if (previousDisabled && !disabled) {
+      void focusMessageInput();
+    }
+
+    previousDisabled = disabled;
+  }
+
+  async function focusMessageInput(): Promise<void> {
+    await tick();
+
+    if (disabled) {
+      return;
+    }
+
+    messageInputElement?.focus();
+  }
 
   function handleSubmit(event: SubmitEvent): void {
     event.preventDefault();

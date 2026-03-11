@@ -56,6 +56,7 @@ cd apps/assistant-frontend && ./scripts/verify.sh
 
 - Message APIs are newest-first for pagination; client normalizes to chronological rendering.
 - Auto-scroll responds to all message updates, including streaming chunk updates.
+- Chat composer regains focus automatically when streaming completes and input is re-enabled.
 - Chat bubbles show per-message `hh:mm` timestamps sourced from message `created_at` values.
 - Logout clears `sessionStorage` snapshot state and returns users to intro gate.
 - User menu includes a configs section sourced from `GET /api/users/me/configs`, with choice fields rendered as dropdowns, boolean fields rendered as radio groups, and a `Save changes` action that is enabled only when values differ from backend-loaded state and shows a success notice after persistence.
