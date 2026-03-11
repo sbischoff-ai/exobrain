@@ -59,9 +59,7 @@ cd apps/knowledge-interface && ./scripts/verify.sh
 - `entity_listing.rs` for paginated list-by-type query normalization.
 - `candidate_search.rs` for candidate resolution query handling.
 
-Presentation renderers under `src/presentation/` format entity context into markdown prompts:
-
-- `entity_context_prompt.rs` for `GetEntityContextResult` markdown rendering with deterministic block trees.
+Presentation helpers under `src/presentation/` are limited to wire-contract outputs (currently `upsert_delta_json_schema.rs` for `GetUpsertGraphDeltaJsonSchema`). Prompt markdown rendering is intentionally out of scope for the current gRPC contract.
 
 ## Domain typing boundaries
 
