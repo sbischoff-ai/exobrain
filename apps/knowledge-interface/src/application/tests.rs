@@ -12,9 +12,10 @@ use crate::application::pagination::{
 use crate::{
     domain::{
         BlockNode, EdgeEndpointRule, EntityLexicalMatch, EntityNode, EntitySemanticHit,
-        ExistingBlockContext, ExtractionUniverse, FindEntityCandidatesQuery, GraphEdge,
-        NodeRelationshipCounts, PropertyValue, RawEntityCandidateData, TypeInheritance,
-        TypeProperty, UpsertSchemaTypePropertyInput, UserInitGraphNodeIds, Visibility,
+        ExistingBlockContext, ExtractionUniverse, FindEntityCandidatesQuery,
+        FindTypeCandidatesResult, GraphEdge, NodeRelationshipCounts, PropertyValue,
+        RawEntityCandidateData, TypeInheritance, TypeProperty, UpsertSchemaTypePropertyInput,
+        UserInitGraphNodeIds, Visibility,
     },
     ports::{Embedder, GraphRepository, SchemaRepository, TypeVectorRepository},
 };
@@ -584,6 +585,15 @@ impl TypeVectorRepository for CapturingTypeVectorRepository {
             .expect("type vector lock should not be poisoned")
             .push((schema_type.clone(), vector.to_vec()));
         Ok(())
+    }
+
+    async fn search_schema_type_vectors(
+        &self,
+        _kind: SchemaKind,
+        _vector: &[f32],
+        _limit: usize,
+    ) -> Result<FindTypeCandidatesResult> {
+        Ok(FindTypeCandidatesResult { candidates: vec![] })
     }
 
     async fn get_schema_type_ids_by_kind(&self, kind: SchemaKind) -> Result<HashSet<String>> {

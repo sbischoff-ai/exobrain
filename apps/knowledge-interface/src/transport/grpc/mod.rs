@@ -18,20 +18,22 @@ use crate::presentation::upsert_delta_json_schema::{
 use super::errors::map_application_error;
 use super::mapping::{
     to_domain_block_node, to_domain_entity_node, to_domain_find_entity_candidates_query,
-    to_domain_get_entity_context_query, to_domain_graph_edge,
+    to_domain_find_type_candidates_query, to_domain_get_entity_context_query, to_domain_graph_edge,
     to_domain_list_entities_by_type_query, to_domain_universe_node, to_proto_edge_endpoint_rule,
     to_proto_entity_candidate, to_proto_get_entity_context_reply,
-    to_proto_list_entities_by_type_reply, to_proto_schema_type, to_proto_type_inheritance,
-    to_proto_type_property,
+    to_proto_list_entities_by_type_reply, to_proto_schema_type, to_proto_type_candidate,
+    to_proto_type_inheritance, to_proto_type_property,
 };
 use super::proto::knowledge_interface_server::{KnowledgeInterface, KnowledgeInterfaceServer};
 use super::proto::{
-    ExtractionEdgeType, ExtractionEntityType, ExtractionUniverse, FindEntityCandidatesReply,
-    FindEntityCandidatesRequest, GetEdgeExtractionSchemaContextReply,
-    GetEdgeExtractionSchemaContextRequest, GetEntityContextReply, GetEntityContextRequest,
-    GetEntityExtractionSchemaContextReply, GetEntityExtractionSchemaContextRequest,
-    GetEntityTypePropertyContextReply, GetEntityTypePropertyContextRequest, GetSchemaReply,
-    GetSchemaRequest, GetUpsertGraphDeltaJsonSchemaReply, GetUpsertGraphDeltaJsonSchemaRequest,
+    ExtractionEdgeType, ExtractionEntityType, ExtractionUniverse, FindEdgeTypeCandidatesReply,
+    FindEdgeTypeCandidatesRequest, FindEntityCandidatesReply, FindEntityCandidatesRequest,
+    FindNodeTypeCandidatesReply, FindNodeTypeCandidatesRequest,
+    GetEdgeExtractionSchemaContextReply, GetEdgeExtractionSchemaContextRequest,
+    GetEntityContextReply, GetEntityContextRequest, GetEntityExtractionSchemaContextReply,
+    GetEntityExtractionSchemaContextRequest, GetEntityTypePropertyContextReply,
+    GetEntityTypePropertyContextRequest, GetSchemaReply, GetSchemaRequest,
+    GetUpsertGraphDeltaJsonSchemaReply, GetUpsertGraphDeltaJsonSchemaRequest,
     GetUserInitGraphReply, GetUserInitGraphRequest, HealthReply, HealthRequest,
     ListEntitiesByTypeReply, ListEntitiesByTypeRequest, UpsertGraphDeltaReply,
     UpsertGraphDeltaRequest, UpsertSchemaTypeReply, UpsertSchemaTypeRequest,
@@ -96,6 +98,21 @@ fn to_proto_extraction_edge_type(edge: ServiceExtractionEdgeType) -> ExtractionE
         source_entity_type_id: edge.source_entity_type_id,
         target_entity_type_id: edge.target_entity_type_id,
     }
+}
+
+fn normalize_type_candidate_request(
+    name: String,
+    description: String,
+    limit: Option<u32>,
+) -> Result<(String, String, Option<u32>), Status> {
+    let normalized_name = name.trim().to_lowercase();
+    let normalized_description = description.trim().to_string();
+
+    if normalized_name.is_empty() && normalized_description.is_empty() {
+        return Err(Status::invalid_argument("name or description is required"));
+    }
+
+    Ok((normalized_name, normalized_description, limit))
 }
 
 fn to_proto_extraction_universe(universe: ServiceExtractionUniverseContext) -> ExtractionUniverse {
@@ -344,6 +361,60 @@ impl KnowledgeInterface for KnowledgeGrpcService {
                 .candidates
                 .into_iter()
                 .map(to_proto_entity_candidate)
+                .collect(),
+        }))
+    }
+
+    async fn find_node_type_candidates(
+        &self,
+        request: Request<FindNodeTypeCandidatesRequest>,
+    ) -> Result<Response<FindNodeTypeCandidatesReply>, Status> {
+        let payload = request.into_inner();
+        let (name, description, limit) =
+            normalize_type_candidate_request(payload.name, payload.description, payload.limit)?;
+
+        let result = self
+            .app
+            .find_node_type_candidates(to_domain_find_type_candidates_query(
+                name,
+                description,
+                limit,
+            ))
+            .await
+            .map_err(map_application_error)?;
+
+        Ok(Response::new(FindNodeTypeCandidatesReply {
+            candidates: result
+                .candidates
+                .into_iter()
+                .map(to_proto_type_candidate)
+                .collect(),
+        }))
+    }
+
+    async fn find_edge_type_candidates(
+        &self,
+        request: Request<FindEdgeTypeCandidatesRequest>,
+    ) -> Result<Response<FindEdgeTypeCandidatesReply>, Status> {
+        let payload = request.into_inner();
+        let (name, description, limit) =
+            normalize_type_candidate_request(payload.name, payload.description, payload.limit)?;
+
+        let result = self
+            .app
+            .find_edge_type_candidates(to_domain_find_type_candidates_query(
+                name,
+                description,
+                limit,
+            ))
+            .await
+            .map_err(map_application_error)?;
+
+        Ok(Response::new(FindEdgeTypeCandidatesReply {
+            candidates: result
+                .candidates
+                .into_iter()
+                .map(to_proto_type_candidate)
                 .collect(),
         }))
     }

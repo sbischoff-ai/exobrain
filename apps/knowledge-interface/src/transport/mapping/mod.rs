@@ -5,9 +5,10 @@ use tonic::Status;
 
 use crate::domain::{
     BlockNode, EdgeEndpointRule, EntityCandidate, EntityNode, FindEntityCandidatesQuery,
-    GetEntityContextQuery, GetEntityContextResult, GraphEdge, ListEntitiesByTypeQuery,
-    ListEntitiesByTypeResult, NeighborDirection, PropertyScalar, PropertyValue, SchemaKind,
-    SchemaType, TypeInheritance, TypeProperty, TypedEntityListItem, UniverseNode, Visibility,
+    FindTypeCandidatesQuery, GetEntityContextQuery, GetEntityContextResult, GraphEdge,
+    ListEntitiesByTypeQuery, ListEntitiesByTypeResult, NeighborDirection, PropertyScalar,
+    PropertyValue, SchemaKind, SchemaType, TypeCandidate, TypeInheritance, TypeProperty,
+    TypedEntityListItem, UniverseNode, Visibility,
 };
 
 use super::proto;
@@ -127,6 +128,27 @@ pub(crate) fn to_domain_find_entity_candidates_query(
             .then_some(request.short_description),
         user_id: request.user_id,
         limit: request.limit.map(|value| value as usize),
+    }
+}
+
+pub(crate) fn to_domain_find_type_candidates_query(
+    name: String,
+    description: String,
+    limit: Option<u32>,
+) -> FindTypeCandidatesQuery {
+    FindTypeCandidatesQuery {
+        name,
+        description,
+        limit: limit.map(|value| value as usize),
+    }
+}
+
+pub(crate) fn to_proto_type_candidate(candidate: TypeCandidate) -> proto::TypeCandidate {
+    proto::TypeCandidate {
+        type_id: candidate.type_id,
+        name: candidate.name,
+        description: candidate.description,
+        score: candidate.score,
     }
 }
 

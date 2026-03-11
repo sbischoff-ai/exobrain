@@ -3,9 +3,10 @@ use crate::application::KnowledgeApplication;
 use crate::domain::{
     EdgeEndpointRule, FullSchema, SchemaKind, SchemaType, TypeInheritance, TypeProperty,
 };
-use crate::ports::{Embedder, GraphRepository, SchemaRepository};
+use crate::ports::{Embedder, GraphRepository, SchemaRepository, TypeVectorRepository};
 use crate::presentation::upsert_delta_json_schema::UPSERT_GRAPH_DELTA_SCHEMA_ID;
 use crate::transport::proto::{
+    FindEdgeTypeCandidatesRequest, FindNodeTypeCandidatesRequest,
     GetEdgeExtractionSchemaContextRequest, GetEntityExtractionSchemaContextRequest,
     GetEntityTypePropertyContextRequest, GetUpsertGraphDeltaJsonSchemaRequest, HealthRequest,
 };
@@ -255,6 +256,67 @@ fn make_service(schema: SchemaRepoFixture, graph: GraphRepoFixture) -> Knowledge
             Arc::new(graph),
             Arc::new(NoopEmbedder),
         )),
+    }
+}
+
+struct FixedEmbedder;
+
+#[async_trait]
+impl Embedder for FixedEmbedder {
+    async fn embed_texts(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
+        Ok(texts.iter().map(|_| vec![0.1_f32, 0.2_f32]).collect())
+    }
+}
+
+#[derive(Clone, Default)]
+struct TypeVectorRepoFixture;
+
+#[async_trait]
+impl TypeVectorRepository for TypeVectorRepoFixture {
+    async fn upsert_schema_type_vector(
+        &self,
+        _schema_type: &crate::domain::SchemaType,
+        _vector: &[f32],
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    async fn search_schema_type_vectors(
+        &self,
+        kind: crate::domain::SchemaKind,
+        _vector: &[f32],
+        limit: usize,
+    ) -> Result<crate::domain::FindTypeCandidatesResult> {
+        let candidates = match kind {
+            crate::domain::SchemaKind::Node => vec![crate::domain::TypeCandidate {
+                type_id: "node.person".to_string(),
+                name: "Person".to_string(),
+                description: "A human".to_string(),
+                score: 0.91,
+            }],
+            crate::domain::SchemaKind::Edge => vec![crate::domain::TypeCandidate {
+                type_id: "edge.related_to".to_string(),
+                name: "RELATED_TO".to_string(),
+                description: "Generic relationship".to_string(),
+                score: 0.88,
+            }],
+        };
+
+        Ok(crate::domain::FindTypeCandidatesResult {
+            candidates: candidates.into_iter().take(limit).collect(),
+        })
+    }
+}
+
+fn make_service_with_type_vectors(
+    schema: SchemaRepoFixture,
+    graph: GraphRepoFixture,
+) -> KnowledgeGrpcService {
+    KnowledgeGrpcService {
+        app: Arc::new(
+            KnowledgeApplication::new(Arc::new(schema), Arc::new(graph), Arc::new(FixedEmbedder))
+                .with_type_vector_repository(Arc::new(TypeVectorRepoFixture)),
+        ),
     }
 }
 
@@ -672,4 +734,38 @@ fn extraction_schema_algorithm_filters_inactive_types_and_rules() {
     );
 
     assert_eq!(entity_types.len(), 2);
+}
+
+#[tokio::test]
+async fn find_node_type_candidates_rejects_empty_inputs() {
+    let service =
+        make_service_with_type_vectors(SchemaRepoFixture::default(), GraphRepoFixture::default());
+    let err = service
+        .find_node_type_candidates(Request::new(FindNodeTypeCandidatesRequest {
+            name: "   ".to_string(),
+            description: "".to_string(),
+            limit: None,
+        }))
+        .await
+        .expect_err("empty input should fail");
+
+    assert_eq!(err.code(), Code::InvalidArgument);
+}
+
+#[tokio::test]
+async fn find_edge_type_candidates_returns_candidates() {
+    let service =
+        make_service_with_type_vectors(SchemaRepoFixture::default(), GraphRepoFixture::default());
+    let reply = service
+        .find_edge_type_candidates(Request::new(FindEdgeTypeCandidatesRequest {
+            name: " Related To ".to_string(),
+            description: " relationship ".to_string(),
+            limit: Some(10),
+        }))
+        .await
+        .expect("rpc should succeed")
+        .into_inner();
+
+    assert_eq!(reply.candidates.len(), 1);
+    assert_eq!(reply.candidates[0].type_id, "edge.related_to");
 }

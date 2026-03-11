@@ -4,10 +4,10 @@ use std::collections::HashSet;
 
 use crate::domain::{
     EdgeEndpointRule, EmbeddedBlock, ExistingBlockContext, ExtractionUniverse,
-    FindEntityCandidatesQuery, GetEntityContextQuery, GetEntityContextResult, GraphDelta,
-    ListEntitiesByTypeQuery, ListEntitiesByTypeResult, NodeRelationshipCounts,
-    RawEntityCandidateData, SchemaKind, SchemaType, TypeInheritance, TypeProperty,
-    UpsertSchemaTypePropertyInput, UserInitGraphNodeIds,
+    FindEntityCandidatesQuery, FindTypeCandidatesResult, GetEntityContextQuery,
+    GetEntityContextResult, GraphDelta, ListEntitiesByTypeQuery, ListEntitiesByTypeResult,
+    NodeRelationshipCounts, RawEntityCandidateData, SchemaKind, SchemaType, TypeInheritance,
+    TypeProperty, UpsertSchemaTypePropertyInput, UserInitGraphNodeIds,
 };
 
 #[async_trait]
@@ -90,6 +90,13 @@ pub trait TypeVectorRepository: Send + Sync {
         schema_type: &SchemaType,
         vector: &[f32],
     ) -> Result<()>;
+
+    async fn search_schema_type_vectors(
+        &self,
+        kind: SchemaKind,
+        vector: &[f32],
+        limit: usize,
+    ) -> Result<FindTypeCandidatesResult>;
 
     async fn get_schema_type_ids_by_kind(&self, _kind: SchemaKind) -> Result<HashSet<String>> {
         Ok(HashSet::new())

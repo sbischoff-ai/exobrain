@@ -67,6 +67,8 @@ cd apps/knowledge-interface && ./scripts/verify.sh
 | `UpsertGraphDelta` | `src/transport/grpc/mod.rs::upsert_graph_delta` | `KnowledgeApplication::upsert_graph_delta` + `src/application/use_cases/upsert_graph_delta.rs::upsert_graph_delta_internal` | `GraphRepository`, `SchemaRepository`, `Embedder` | `src/infrastructure/memgraph.rs`, `src/infrastructure/postgres.rs`, `src/infrastructure/embedding.rs`, `src/infrastructure/qdrant.rs` |
 | `GetEntityExtractionSchemaContext` / `GetEdgeExtractionSchemaContext` | `src/transport/grpc/mod.rs` context handlers | `KnowledgeApplication` extraction methods + `src/application/use_cases/extraction_schema.rs` | `SchemaRepository`, `GraphRepository` | `src/infrastructure/postgres.rs`, `src/infrastructure/memgraph.rs` |
 | `FindEntityCandidates` | `src/transport/grpc/mod.rs::find_entity_candidates` | `KnowledgeApplication::find_entity_candidates` + `src/application/use_cases/entity_search.rs` | `GraphRepository`, `Embedder` | `src/infrastructure/memgraph.rs`, `src/infrastructure/embedding.rs` |
+| `FindNodeTypeCandidates` | `src/transport/grpc/mod.rs::find_node_type_candidates` | `KnowledgeApplication::find_node_type_candidates` + `src/application/use_cases/type_search.rs` | `Embedder`, `TypeVectorRepository` | `src/infrastructure/qdrant.rs`, `src/infrastructure/embedding.rs` |
+| `FindEdgeTypeCandidates` | `src/transport/grpc/mod.rs::find_edge_type_candidates` | `KnowledgeApplication::find_edge_type_candidates` + `src/application/use_cases/type_search.rs` | `Embedder`, `TypeVectorRepository` | `src/infrastructure/qdrant.rs`, `src/infrastructure/embedding.rs` |
 | `ListEntitiesByType` | `src/transport/grpc/mod.rs::list_entities_by_type` | `KnowledgeApplication::list_entities_by_type` + `src/application/use_cases/entity_listing.rs` | `GraphRepository` | `src/infrastructure/memgraph.rs` |
 | `GetEntityContext` | `src/transport/grpc/mod.rs::get_entity_context` | `KnowledgeApplication::get_entity_context` + `src/application/use_cases/entity_context.rs` | `GraphRepository` | `src/infrastructure/memgraph.rs` |
 | `GetUserInitGraph` | `src/transport/grpc/mod.rs::get_user_init_graph` | `KnowledgeApplication::get_user_init_graph` | `GraphRepository` (+ shared upsert path uses `SchemaRepository`/`Embedder`) | `src/infrastructure/memgraph.rs` (+ shared upsert dependencies above) |
@@ -156,6 +158,11 @@ How to interpret scores:
 - Higher score means stronger overall confidence.
 - Candidates are sorted descending by score and capped by `limit`.
 
+
+## FindNodeTypeCandidates / FindEdgeTypeCandidates gRPC
+
+`FindNodeTypeCandidates` and `FindEdgeTypeCandidates` map non-canonical type hints to canonical schema types.
+Both RPCs take free-text `name` and `description` input (plus optional `limit`) and return ranked canonical matches (`type_id`, canonical `name`, canonical `description`, `score`).
 
 ## Choosing between GetSchema and extraction context RPCs
 

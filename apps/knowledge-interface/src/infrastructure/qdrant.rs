@@ -11,7 +11,9 @@ use qdrant_client::{
     Qdrant,
 };
 
-use crate::domain::{EmbeddedBlock, SchemaKind, SchemaType};
+use crate::domain::{
+    EmbeddedBlock, FindTypeCandidatesResult, SchemaKind, SchemaType, TypeCandidate,
+};
 use crate::ports::TypeVectorRepository;
 
 const QDRANT_VECTOR_SIZE: u64 = 3072;
@@ -360,6 +362,31 @@ impl TypeVectorRepository for QdrantTypeVectorStore {
         vector: &[f32],
     ) -> Result<()> {
         self.upsert_schema_type(schema_type, vector).await
+    }
+
+    async fn search_schema_type_vectors(
+        &self,
+        kind: SchemaKind,
+        vector: &[f32],
+        limit: usize,
+    ) -> Result<FindTypeCandidatesResult> {
+        let raw = match kind {
+            SchemaKind::Node => self.search_node_types(vector, limit as u64).await?,
+            SchemaKind::Edge => self.search_edge_types(vector, limit as u64).await?,
+        };
+
+        Ok(FindTypeCandidatesResult {
+            candidates: raw
+                .into_iter()
+                .map(|candidate| TypeCandidate {
+                    type_id: candidate.type_id,
+                    name: payload_string(&candidate.payload, "name").unwrap_or_default(),
+                    description: payload_string(&candidate.payload, "description")
+                        .unwrap_or_default(),
+                    score: f64::from(candidate.score),
+                })
+                .collect(),
+        })
     }
 
     async fn get_schema_type_ids_by_kind(&self, kind: SchemaKind) -> Result<HashSet<String>> {
