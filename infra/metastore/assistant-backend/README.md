@@ -6,6 +6,7 @@ This directory is dedicated to the Python assistant backend schema and seed data
 - `seeds/`: ordered development seed records (idempotent SQL):
   - `001_test_users.sql`
   - `002_test_conversations.sql`
+  - `003_user_configs.sql`
 
 ## Local (Docker Compose) setup
 
@@ -65,6 +66,7 @@ For native agent workflows, you can fully reset and reseed with:
 
 Recent migration note:
 - `004_fix_message_sequence_backfill.toml` backfills `messages.sequence` using per-conversation chronological ranking and removes the legacy `0` default to prevent new rows from inheriting invalid cursor values.
+- `007_user_configs.toml` adds data-driven user configuration definition/choice/value tables with JSONB value typing constraints for boolean/choice support.
 
 ## Migration validation
 

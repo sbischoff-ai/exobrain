@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from app.services.user_config_service import InvalidUserConfigValueError, UnknownUserConfigError, UserConfigService
@@ -9,64 +11,76 @@ class FakeDatabase:
     def __init__(self) -> None:
         self.definitions_rows = [
             {
+                "id": "00000000-0000-0000-0000-000000000101",
                 "key": "daily_digest_enabled",
                 "config_type": "boolean",
                 "description": "Enable daily digest reminders in assistant experiences",
-                "default_value": True,
+                "default_value": {"kind": "boolean", "value": True},
                 "option_value": None,
                 "option_label": None,
             },
             {
+                "id": "00000000-0000-0000-0000-000000000102",
                 "key": "answer_verbosity",
                 "config_type": "choice",
                 "description": "Preferred default answer detail level",
-                "default_value": "balanced",
+                "default_value": {"kind": "choice", "value": "balanced"},
                 "option_value": "concise",
                 "option_label": "Concise",
             },
             {
+                "id": "00000000-0000-0000-0000-000000000102",
                 "key": "answer_verbosity",
                 "config_type": "choice",
                 "description": "Preferred default answer detail level",
-                "default_value": "balanced",
+                "default_value": {"kind": "choice", "value": "balanced"},
                 "option_value": "balanced",
                 "option_label": "Balanced",
             },
             {
+                "id": "00000000-0000-0000-0000-000000000102",
                 "key": "answer_verbosity",
                 "config_type": "choice",
                 "description": "Preferred default answer detail level",
-                "default_value": "balanced",
+                "default_value": {"kind": "choice", "value": "balanced"},
                 "option_value": "detailed",
                 "option_label": "Detailed",
             },
         ]
-        self.overrides_by_user_id: dict[str, dict[str, str]] = {}
+        self.definition_id_by_key = {
+            "daily_digest_enabled": "00000000-0000-0000-0000-000000000101",
+            "answer_verbosity": "00000000-0000-0000-0000-000000000102",
+        }
+        self.key_by_definition_id = {value: key for key, value in self.definition_id_by_key.items()}
+        self.overrides_by_user_id: dict[str, dict[str, bool | str]] = {}
 
     async def fetch(self, query: str, *args: object) -> list[dict[str, object]]:
         if "FROM user_config_definitions" in query:
             return self.definitions_rows
-        if "FROM user_config_overrides" in query:
+        if "FROM user_config_values" in query:
             user_id = str(args[0])
             return [
-                {"config_key": key, "config_value": value}
+                {"key": key, "value": {"kind": "boolean", "value": value} if isinstance(value, bool) else {"kind": "choice", "value": value}}
                 for key, value in self.overrides_by_user_id.get(user_id, {}).items()
             ]
         raise AssertionError(f"unexpected fetch query: {query}")
 
     async def execute(self, query: str, *args: object) -> str:
-        assert "INSERT INTO user_config_overrides" in query
+        assert "INSERT INTO user_config_values" in query
         user_id = str(args[0])
-        keys = [str(key) for key in args[1]]
-        values = [str(value) for value in args[2]]
-        defaults = [str(default) for default in args[3]]
+        definition_ids = [str(definition_id) for definition_id in args[1]]
+        values = [json.loads(str(value_json)) for value_json in args[2]]
+        defaults = [json.loads(str(default_json)) for default_json in args[3]]
 
         overrides = self.overrides_by_user_id.setdefault(user_id, {})
-        for key, value, default in zip(keys, values, defaults, strict=True):
-            if value == default:
+        for definition_id, value, default in zip(definition_ids, values, defaults, strict=True):
+            key = self.key_by_definition_id[definition_id]
+            value_data = value["value"]
+            default_data = default["value"]
+            if value_data == default_data:
                 overrides.pop(key, None)
             else:
-                overrides[key] = value
+                overrides[key] = value_data
 
         if not overrides:
             self.overrides_by_user_id.pop(user_id, None)
