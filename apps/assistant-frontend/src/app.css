@@ -789,11 +789,6 @@ h1,h2,h3,h4,h5,h6,p { margin: 0; }
   font-family: 'Bricolage Grotesque', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
-:root[data-theme='purple-intelligence'] .brand h1 {
-  font-family: 'Newsreader', 'Iowan Old Style', 'Palatino Linotype', Palatino, serif;
-  text-shadow: 0 0 10px rgb(162 89 255 / 22%);
-}
-
 :root[data-theme='purple-intelligence'] .chat-input textarea {
   font-family: 'JetBrains Mono', 'Space Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace;
 }
