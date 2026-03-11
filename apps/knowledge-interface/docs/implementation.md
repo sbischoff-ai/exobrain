@@ -107,6 +107,10 @@ Current unit tests are colocated with modules:
 
 When extending logic, prefer adding tests beside the module under change unless shared fixtures justify extraction.
 
+## Presentation module scope
+
+`src/presentation/` is constrained to artifacts that are explicitly returned by the gRPC contract. Prompt-oriented markdown renderers are intentionally excluded from this crate's compiled module tree until/if the proto surface includes them.
+
 ## Universe and label semantics (current)
 
 - IDs are expected to be globally unique (not universe-scoped IDs).
