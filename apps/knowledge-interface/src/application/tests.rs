@@ -559,6 +559,8 @@ struct CapturingTypeVectorRepository {
     seen: Arc<Mutex<Vec<(SchemaType, Vec<f32>)>>>,
     fail_for_type_id: Option<String>,
     existing_by_kind: HashMap<String, HashSet<String>>,
+    node_candidates: Vec<crate::domain::TypeCandidate>,
+    edge_candidates: Vec<crate::domain::TypeCandidate>,
 }
 
 #[async_trait]
@@ -584,6 +586,22 @@ impl TypeVectorRepository for CapturingTypeVectorRepository {
             .expect("type vector lock should not be poisoned")
             .push((schema_type.clone(), vector.to_vec()));
         Ok(())
+    }
+
+    async fn search_node_type_candidates(
+        &self,
+        _vector: &[f32],
+        _limit: u64,
+    ) -> Result<Vec<crate::domain::TypeCandidate>> {
+        Ok(self.node_candidates.clone())
+    }
+
+    async fn search_edge_type_candidates(
+        &self,
+        _vector: &[f32],
+        _limit: u64,
+    ) -> Result<Vec<crate::domain::TypeCandidate>> {
+        Ok(self.edge_candidates.clone())
     }
 
     async fn get_schema_type_ids_by_kind(&self, kind: SchemaKind) -> Result<HashSet<String>> {
@@ -1117,6 +1135,8 @@ async fn upsert_schema_type_syncs_type_vector_with_active_payload_support() {
         seen: seen.clone(),
         fail_for_type_id: None,
         existing_by_kind: HashMap::new(),
+        node_candidates: Vec::new(),
+        edge_candidates: Vec::new(),
     }));
 
     let upserted = app
@@ -1156,6 +1176,8 @@ async fn upsert_schema_type_rolls_back_when_type_vector_sync_fails() {
         seen: Arc::new(Mutex::new(Vec::new())),
         fail_for_type_id: Some("node.person".to_string()),
         existing_by_kind: HashMap::new(),
+        node_candidates: Vec::new(),
+        edge_candidates: Vec::new(),
     }));
 
     let err = app
@@ -1197,6 +1219,8 @@ async fn sync_all_schema_type_vectors_backfills_when_out_of_sync() {
         seen: seen.clone(),
         fail_for_type_id: None,
         existing_by_kind: HashMap::new(),
+        node_candidates: Vec::new(),
+        edge_candidates: Vec::new(),
     }));
 
     app.sync_all_schema_type_vectors()
@@ -1255,6 +1279,8 @@ async fn sync_all_schema_type_vectors_skips_when_already_in_sync() {
         seen: seen.clone(),
         fail_for_type_id: None,
         existing_by_kind,
+        node_candidates: Vec::new(),
+        edge_candidates: Vec::new(),
     }));
 
     app.sync_all_schema_type_vectors()
@@ -3153,4 +3179,68 @@ fn sample_entity_context_result() -> GetEntityContextResult {
         }],
         neighbors: vec![],
     }
+}
+
+#[tokio::test]
+async fn find_node_type_candidates_normalizes_and_maps_results() {
+    let app = KnowledgeApplication::new(
+        Arc::new(FakeSchemaRepo::new()),
+        Arc::new(FakeGraphRepository { root_exists: false }),
+        Arc::new(FakeEmbedder),
+    )
+    .with_type_vector_repository(Arc::new(CapturingTypeVectorRepository {
+        seen: Arc::new(Mutex::new(Vec::new())),
+        fail_for_type_id: None,
+        existing_by_kind: HashMap::new(),
+        node_candidates: vec![crate::domain::TypeCandidate {
+            type_id: "node.person".to_string(),
+            name: "Person".to_string(),
+            description: "Human".to_string(),
+            score: 0.91,
+        }],
+        edge_candidates: Vec::new(),
+    }));
+
+    let result = app
+        .find_node_type_candidates(crate::domain::FindTypeCandidatesQuery {
+            name: " Person ".to_string(),
+            description: " Human being ".to_string(),
+            limit: Some(5),
+        })
+        .await
+        .expect("query should succeed");
+
+    assert_eq!(result.candidates.len(), 1);
+    assert_eq!(result.candidates[0].type_id, "node.person");
+}
+
+#[tokio::test]
+async fn find_edge_type_candidates_rejects_empty_name_and_description() {
+    let app = KnowledgeApplication::new(
+        Arc::new(FakeSchemaRepo::new()),
+        Arc::new(FakeGraphRepository { root_exists: false }),
+        Arc::new(FakeEmbedder),
+    )
+    .with_type_vector_repository(Arc::new(CapturingTypeVectorRepository {
+        seen: Arc::new(Mutex::new(Vec::new())),
+        fail_for_type_id: None,
+        existing_by_kind: HashMap::new(),
+        node_candidates: Vec::new(),
+        edge_candidates: Vec::new(),
+    }));
+
+    let error = app
+        .find_edge_type_candidates(crate::domain::FindTypeCandidatesQuery {
+            name: "  ".to_string(),
+            description: "\n".to_string(),
+            limit: None,
+        })
+        .await
+        .expect_err("query should fail");
+
+    assert!(matches!(error, ApplicationError::Validation(_)));
+    assert_eq!(
+        error.to_string(),
+        "at least one of name or description is required"
+    );
 }
