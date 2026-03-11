@@ -1,5 +1,5 @@
 import pytest
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 
 from app.adapters.tool_adapters import ToolAdapterRegistry
 from app.adapters.web_tools import StaticWebSearchClient, WebFetchAdapter, WebSearchAdapter
@@ -10,6 +10,7 @@ from app.contracts import (
     ResolveEntitiesToolSuccess,
     ToolErrorEnvelope,
     ToolInvocation,
+    ToolSuccessEnvelope,
     WebFetchToolOutput,
     WebSearchToolOutput,
 )
@@ -91,6 +92,21 @@ def test_resolve_entities_input_requires_non_empty_entities() -> None:
         ResolveEntitiesToolInput.model_validate({"entities": []})
 
 
+def test_resolve_entities_input_requires_entity_name_field() -> None:
+    with pytest.raises(ValidationError):
+        ResolveEntitiesToolInput.model_validate(
+            {
+                "entities": [
+                    {
+                        "type_hint": "person",
+                        "description_hint": "from sales",
+                        "expected_existence": "existing",
+                    }
+                ]
+            }
+        )
+
+
 def test_resolve_entities_input_rejects_invalid_entity_name() -> None:
     with pytest.raises(ValidationError):
         ResolveEntitiesToolInput.model_validate(
@@ -101,6 +117,20 @@ def test_resolve_entities_input_rejects_invalid_entity_name() -> None:
                         "type_hint": "person",
                         "description_hint": "from sales",
                         "expected_existence": "existing",
+                    }
+                ]
+            }
+        )
+
+
+def test_resolve_entities_input_rejects_invalid_expected_existence_flag() -> None:
+    with pytest.raises(ValidationError):
+        ResolveEntitiesToolInput.model_validate(
+            {
+                "entities": [
+                    {
+                        "name": "Alice",
+                        "expected_existence": "sometimes",
                     }
                 ]
             }
@@ -127,6 +157,44 @@ def test_resolve_entities_output_rejects_invalid_confidence() -> None:
         )
 
 
+def test_resolve_entities_output_rejects_negative_confidence() -> None:
+    with pytest.raises(ValidationError):
+        ResolveEntitiesToolOutput.model_validate(
+            {
+                "results": [
+                    {
+                        "entity_id": "e1",
+                        "name": "Alice",
+                        "aliases": ["A"],
+                        "entity_type": "person",
+                        "description": "example",
+                        "status": "matched",
+                        "confidence": -0.1,
+                        "newly_created": False,
+                    }
+                ]
+            }
+        )
+
+
+def test_resolve_entities_output_requires_canonical_fields() -> None:
+    with pytest.raises(ValidationError):
+        ResolveEntitiesToolOutput.model_validate(
+            {
+                "results": [
+                    {
+                        "entity_id": "e1",
+                        "name": "Alice",
+                        "aliases": ["A"],
+                        "status": "matched",
+                        "confidence": 0.9,
+                        "newly_created": False,
+                    }
+                ]
+            }
+        )
+
+
 def test_resolve_entities_success_envelope_validates_result_shape() -> None:
     with pytest.raises(ValidationError):
         ResolveEntitiesToolSuccess.model_validate(
@@ -136,3 +204,28 @@ def test_resolve_entities_success_envelope_validates_result_shape() -> None:
                 "result": {"results": [{"entity_id": "e1"}]},
             }
         )
+
+
+def test_tool_success_envelope_types_resolve_entities_result() -> None:
+    envelope = TypeAdapter(ToolSuccessEnvelope).validate_python(
+        {
+            "ok": True,
+            "name": "resolve_entities",
+            "result": {
+                "results": [
+                    {
+                        "entity_id": "e1",
+                        "name": "Alice",
+                        "aliases": [],
+                        "entity_type": "person",
+                        "description": "example",
+                        "status": "matched",
+                        "confidence": 0.5,
+                        "newly_created": False,
+                    }
+                ]
+            },
+        }
+    )
+
+    assert isinstance(envelope, ResolveEntitiesToolSuccess)

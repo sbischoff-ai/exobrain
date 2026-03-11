@@ -82,7 +82,20 @@ def test_create_tool_registry_includes_knowledge_when_flag_enabled() -> None:
         _settings(ENABLED_TOOL_CATEGORIES="knowledge", ENABLE_KNOWLEDGE_TOOLS=True),
     )
 
-    assert [tool.name for tool in registry.registrations()] == ["resolve_entities"]
+    registrations = registry.registrations()
+    assert [tool.name for tool in registrations] == ["resolve_entities"]
+    assert [tool.category for tool in registrations] == ["knowledge"]
+
+
+def test_create_tool_registry_excludes_knowledge_when_flag_disabled() -> None:
+    registry = create_tool_registry(
+        _adapters(),
+        _settings(ENABLED_TOOL_CATEGORIES="utility,knowledge", ENABLE_KNOWLEDGE_TOOLS=False),
+    )
+
+    registrations = registry.registrations()
+    assert [tool.name for tool in registrations] == ["echo", "add"]
+    assert all(tool.category != "knowledge" for tool in registrations)
 
 
 def test_new_category_tool_works_without_service_branching_changes() -> None:
