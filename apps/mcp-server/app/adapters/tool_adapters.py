@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.adapters.entity_context_markdown_formatter import render_entity_context_markdown
 from app.adapters.knowledge_interface_client import KnowledgeInterfaceClient
 from app.adapters.web_tools import WebFetchAdapter, WebSearchAdapter
 from app.contracts import (
@@ -81,7 +82,11 @@ class ToolAdapterRegistry:
         related_entities = _map_related_entities(response.get("neighbors"))
 
         return GetEntityContextToolOutput(
-            context_markdown=_build_context_markdown(response=response, related_entities=related_entities),
+            context_markdown=render_entity_context_markdown(
+                response=response,
+                related_entities=related_entities,
+                focus=args.focus,
+            ),
             related_entities=related_entities,
         )
 
@@ -127,39 +132,6 @@ def _clamp_max_block_level(depth: int | None) -> int:
     if depth is None:
         return _KI_DEFAULT_MAX_BLOCK_LEVEL
     return max(0, min(depth, _KI_MAX_BLOCK_LEVEL_CAP))
-
-
-def _build_context_markdown(*, response: dict[str, Any], related_entities: list[GetEntityContextRelatedEntityItem]) -> str:
-    entity = response.get("entity") if isinstance(response.get("entity"), dict) else {}
-    entity_name = _coerce_text(entity.get("name")) or _coerce_text(entity.get("id")) or "Entity"
-    entity_type = _coerce_text(entity.get("type_id")) or "unknown"
-
-    lines = [f"## {entity_name}", f"- Type: `{entity_type}`"]
-
-    aliases = _coerce_list(entity.get("aliases"))
-    if aliases:
-        lines.append(f"- Aliases: {', '.join(aliases)}")
-
-    blocks = response.get("blocks") if isinstance(response.get("blocks"), list) else []
-    block_snippets: list[str] = []
-    for block in blocks:
-        if not isinstance(block, dict):
-            continue
-        text = _coerce_text(block.get("text"))
-        if text:
-            block_snippets.append(" ".join(text.split()))
-
-    if block_snippets:
-        lines.append("\n### Context")
-        for snippet in block_snippets[:3]:
-            lines.append(f"- {snippet}")
-
-    if related_entities:
-        lines.append("\n### Related")
-        for related in related_entities[:5]:
-            lines.append(f"- @{related.entity_id}: {related.name} ({related.relationship_type})")
-
-    return "\n".join(lines)
 
 
 def _map_related_entities(raw_neighbors: Any) -> list[GetEntityContextRelatedEntityItem]:
