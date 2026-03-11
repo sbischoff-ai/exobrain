@@ -158,10 +158,10 @@ cd apps/mcp-server
 - `MCP_SERVER_HOST` (default: `0.0.0.0`)
 - `MCP_SERVER_PORT` (default: `8090`)
 - `WEB_SEARCH_PROVIDER` (`auto` | `static` | `tavily`, default: `auto`)
-- `ENABLED_TOOL_CATEGORIES` (comma-delimited, default: `utility,web`)
+- `ENABLED_TOOL_CATEGORIES` (comma-delimited, default: `utility,knowledge,web`)
 - `ENABLE_UTILITY_TOOLS` (default: `true`)
 - `ENABLE_WEB_TOOLS` (default: `true`)
-- `ENABLE_KNOWLEDGE_TOOLS` (default: `false`)
+- `ENABLE_KNOWLEDGE_TOOLS` (default: `true`)
 - `TAVILY_API_KEY` (required when provider resolves to `tavily`)
 - `TAVILY_BASE_URL` (default: `https://api.tavily.com`)
 

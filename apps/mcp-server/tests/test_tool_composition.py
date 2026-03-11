@@ -61,7 +61,19 @@ def test_create_tool_registry_ignores_unknown_categories() -> None:
 def test_create_tool_registry_preserves_category_order_with_empty_categories() -> None:
     registry = create_tool_registry(_adapters(), _settings(ENABLED_TOOL_CATEGORIES="web,knowledge,utility"))
 
-    assert [tool.name for tool in registry.registrations()] == ["web_search", "web_fetch", "echo", "add"]
+    assert [tool.name for tool in registry.registrations()] == ["web_search", "web_fetch", "resolve_entities", "echo", "add"]
+
+
+def test_create_tool_registry_includes_knowledge_by_default() -> None:
+    registry = create_tool_registry(_adapters(), _settings())
+
+    assert [tool.name for tool in registry.registrations()] == [
+        "echo",
+        "add",
+        "resolve_entities",
+        "web_search",
+        "web_fetch",
+    ]
 
 
 def test_create_tool_registry_includes_knowledge_when_flag_enabled() -> None:
