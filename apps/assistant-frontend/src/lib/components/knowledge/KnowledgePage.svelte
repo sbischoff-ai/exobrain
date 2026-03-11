@@ -60,6 +60,8 @@
       title: link.title,
       summary: link.summary
     } satisfies KnowledgeCategoryPageListItem)) ?? [];
+
+  $: propertyEntries = Object.entries(page?.properties ?? {});
 </script>
 
 <section class="knowledge-page" aria-label="Knowledge page detail">
@@ -84,6 +86,20 @@
           Created {formatTimestamp(page.created_at) || '—'} · Updated {formatTimestamp(page.updated_at) || '—'}
         </p>
       </header>
+
+      {#if propertyEntries.length > 0}
+        <section class="properties" aria-label="Page properties">
+          <h2>Properties</h2>
+          <dl>
+            {#each propertyEntries as [key, value] (key)}
+              <div class="property-row">
+                <dt>{key}</dt>
+                <dd>{value}</dd>
+              </div>
+            {/each}
+          </dl>
+        </section>
+      {/if}
 
       {#if page.content_markdown}
         <div class="assistant-markdown markdown-body">
@@ -149,6 +165,52 @@
     display: flex;
     flex-direction: column;
     gap: 0.65rem;
+  }
+
+  .properties {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    color: var(--explorer-meta-muted);
+    font-size: 0.8rem;
+  }
+
+  .properties dl {
+    margin: 0;
+    display: grid;
+    gap: 0.2rem;
+  }
+
+  .property-row {
+    display: grid;
+    grid-template-columns: minmax(7rem, 10rem) minmax(0, 1fr);
+    gap: 0.75rem;
+  }
+
+  .property-row dt,
+  .property-row dd {
+    margin: 0;
+    font-family: var(--font-family-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    white-space: pre-wrap;
+  }
+
+  .property-row dt {
+    color: var(--explorer-meta-muted);
+  }
+
+  .property-row dd {
+    color: var(--text);
+    opacity: 0.8;
+  }
+
+  @media (max-width: 48rem) {
+    .property-row {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0.1rem;
+    }
   }
 
   h2 {
