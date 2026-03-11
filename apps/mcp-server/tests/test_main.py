@@ -53,6 +53,7 @@ def test_list_tools_includes_agent_facing_input_descriptions() -> None:
         "web_search": [("search", "sources"), ("web", "external")],
         "web_fetch": [("fetch", "extract"), ("url", "page")],
         "resolve_entities": [("resolve", "matching"), ("entities", "entity")],
+        "get_entity_context": [("resolve_entities", "canonical"), ("related", "entity")],
     }.items():
         description = tools[tool_name]["description"]
         assert isinstance(description, str)
