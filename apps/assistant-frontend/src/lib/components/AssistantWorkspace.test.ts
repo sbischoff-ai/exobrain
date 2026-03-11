@@ -17,7 +17,7 @@ const baseProps = {
 
 describe('AssistantWorkspace', () => {
   it('updates mode toggle button tooltip/label and icon when mode changes', async () => {
-    const { rerender, container } = render(AssistantWorkspace, {
+    const { rerender } = render(AssistantWorkspace, {
       props: {
         ...baseProps,
         viewMode: 'chat'
@@ -26,13 +26,38 @@ describe('AssistantWorkspace', () => {
 
     const toKnowledge = screen.getByRole('button', { name: 'Switch to Knowledge Explorer' });
     expect(toKnowledge).toHaveAttribute('title', 'Switch to Knowledge Explorer');
-    expect(container.querySelector('.header-action-button path')?.getAttribute('d')).toContain('M6 3a3 3');
+    const toKnowledgeIcon = toKnowledge.querySelector('path');
+    expect(toKnowledgeIcon?.getAttribute('d')).toContain('M6 3a3 3');
 
     await rerender({ ...baseProps, viewMode: 'knowledge' });
 
     const toChat = screen.getByRole('button', { name: 'Switch to Journal Chat' });
     expect(toChat).toHaveAttribute('title', 'Switch to Journal Chat');
-    expect(container.querySelector('.header-action-button path')?.getAttribute('d')).toContain('M4 4h16');
+    const toChatIcon = toChat.querySelector('path');
+    expect(toChatIcon?.getAttribute('d')).toContain('M4 4h16');
+  });
+
+
+
+  it('renders theme toggle button label for current theme', async () => {
+    const { rerender } = render(AssistantWorkspace, {
+      props: {
+        ...baseProps,
+        theme: 'gruvbox-dark'
+      }
+    });
+
+    expect(screen.getByRole('button', { name: 'Switch to purple-intelligence theme' })).toHaveAttribute(
+      'title',
+      'Switch to purple-intelligence theme'
+    );
+
+    await rerender({ ...baseProps, theme: 'purple-intelligence' });
+
+    expect(screen.getByRole('button', { name: 'Switch to gruvbox-dark theme' })).toHaveAttribute(
+      'title',
+      'Switch to gruvbox-dark theme'
+    );
   });
 
   it('renders expected root view for each mode', async () => {
