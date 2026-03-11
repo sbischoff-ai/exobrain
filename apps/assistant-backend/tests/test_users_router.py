@@ -26,6 +26,7 @@ class FakeUserConfigService:
     def __init__(self) -> None:
         self.get_calls: list[str] = []
         self.update_calls: list[tuple[str, dict[str, bool | str]]] = []
+        self.raise_on_update: Exception | None = None
 
     async def get_effective_configs(self, user_id: str) -> list[UserConfigItem]:
         self.get_calls.append(user_id)
@@ -45,6 +46,8 @@ class FakeUserConfigService:
         ]
 
     async def update_configs(self, user_id: str, updates: dict[str, bool | str]) -> list[UserConfigItem]:
+        if self.raise_on_update is not None:
+            raise self.raise_on_update
         self.update_calls.append((user_id, updates))
         return [
             UserConfigItem(
@@ -151,6 +154,36 @@ async def test_patch_me_configs_accepts_single_update_payload() -> None:
 
     assert response.configs[0].key == "daily_digest_enabled"
     assert config_service.update_calls == [("u-1", {"daily_digest_enabled": False})]
+
+
+@pytest.mark.asyncio
+async def test_patch_me_configs_returns_400_for_invalid_choice() -> None:
+    principal = UnifiedPrincipal(user_id="u-1", email="a@example.com", display_name="A")
+    config_service = FakeUserConfigService()
+    config_service.raise_on_update = users_router.InvalidUserConfigValueError("answer_verbosity")
+    container = build_test_container({UserConfigServiceProtocol: config_service})
+    request = build_test_request(container)
+    payload = UserConfigsPatchRequest(update=UserConfigUpdate(key="answer_verbosity", value="invalid"))
+
+    with pytest.raises(HTTPException) as exc:
+        await users_router.patch_me_configs(payload=payload, request=request, principal=principal)
+
+    assert exc.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_patch_me_configs_returns_400_for_invalid_boolean() -> None:
+    principal = UnifiedPrincipal(user_id="u-1", email="a@example.com", display_name="A")
+    config_service = FakeUserConfigService()
+    config_service.raise_on_update = users_router.InvalidUserConfigValueError("daily_digest_enabled")
+    container = build_test_container({UserConfigServiceProtocol: config_service})
+    request = build_test_request(container)
+    payload = UserConfigsPatchRequest(update=UserConfigUpdate(key="daily_digest_enabled", value="not-a-boolean"))
+
+    with pytest.raises(HTTPException) as exc:
+        await users_router.patch_me_configs(payload=payload, request=request, principal=principal)
+
+    assert exc.value.status_code == 400
 
 
 def test_user_configs_patch_request_requires_update_or_updates() -> None:

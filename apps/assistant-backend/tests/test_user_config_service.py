@@ -9,6 +9,7 @@ from app.services.user_config_service import InvalidUserConfigValueError, Unknow
 
 class FakeDatabase:
     def __init__(self) -> None:
+        self.execute_calls: list[tuple[str, tuple[object, ...]]] = []
         self.definitions_rows = [
             {
                 "id": "00000000-0000-0000-0000-000000000101",
@@ -67,6 +68,7 @@ class FakeDatabase:
 
     async def execute(self, query: str, *args: object) -> str:
         assert "INSERT INTO user_config_values" in query
+        self.execute_calls.append((query, args))
         user_id = str(args[0])
         definition_ids = [str(definition_id) for definition_id in args[1]]
         values = [json.loads(str(value_json)) for value_json in args[2]]
@@ -102,8 +104,29 @@ async def test_get_effective_configs_returns_defaults_without_overrides() -> Non
 
 
 @pytest.mark.asyncio
+async def test_get_effective_configs_merges_defaults_with_existing_overrides() -> None:
+    database = FakeDatabase()
+    database.overrides_by_user_id["user-1"] = {
+        "daily_digest_enabled": False,
+        "answer_verbosity": "detailed",
+    }
+    service = UserConfigService(database)
+
+    configs = await service.get_effective_configs("user-1")
+    by_key = {item.key: item for item in configs}
+
+    assert by_key["daily_digest_enabled"].value is False
+    assert by_key["daily_digest_enabled"].default_value is True
+    assert by_key["daily_digest_enabled"].using_default is False
+    assert by_key["answer_verbosity"].value == "detailed"
+    assert by_key["answer_verbosity"].default_value == "balanced"
+    assert by_key["answer_verbosity"].using_default is False
+
+
+@pytest.mark.asyncio
 async def test_update_configs_persists_overrides_and_clears_default_value_override() -> None:
-    service = UserConfigService(FakeDatabase())
+    database = FakeDatabase()
+    service = UserConfigService(database)
 
     updated = await service.update_configs(
         "user-1",
@@ -123,6 +146,17 @@ async def test_update_configs_persists_overrides_and_clears_default_value_overri
     reset_by_key = {item.key: item for item in reset}
     assert reset_by_key["answer_verbosity"].value == "balanced"
     assert reset_by_key["answer_verbosity"].using_default is True
+    assert len(database.execute_calls) == 2
+
+    first_call_args = database.execute_calls[0][1]
+    assert first_call_args[0] == "user-1"
+    assert first_call_args[1] == [
+        "00000000-0000-0000-0000-000000000101",
+        "00000000-0000-0000-0000-000000000102",
+    ]
+
+    second_call_args = database.execute_calls[1][1]
+    assert second_call_args[1] == ["00000000-0000-0000-0000-000000000102"]
 
 
 @pytest.mark.asyncio
