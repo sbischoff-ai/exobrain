@@ -533,7 +533,7 @@ async fn get_entity_type_property_context_contract_table() {
             expected_code: Some(Code::InvalidArgument),
         },
         Case {
-            name: "schema backend errors map to invalid argument",
+            name: "schema backend errors map to internal",
             request: GetEntityTypePropertyContextRequest {
                 type_id: "node.person".to_string(),
                 include_inactive: None,
@@ -541,7 +541,7 @@ async fn get_entity_type_property_context_contract_table() {
                 user_id: None,
             },
             schema_fail: true,
-            expected_code: Some(Code::InvalidArgument),
+            expected_code: Some(Code::Internal),
         },
     ];
 

@@ -1,11 +1,10 @@
 use std::collections::HashMap;
 
-use anyhow::{anyhow, Result};
-
 use crate::domain::{
     EntityCandidate, FindEntityCandidatesQuery, FindEntityCandidatesResult, RawEntityCandidateData,
 };
 
+use crate::application::errors::{AppResult, ApplicationError};
 use crate::application::KnowledgeApplication;
 
 const LEXICAL_WEIGHT: f64 = 0.55;
@@ -14,7 +13,7 @@ const SEMANTIC_WEIGHT: f64 = 0.45;
 pub(crate) async fn find_entity_candidates(
     app: &KnowledgeApplication,
     mut query: FindEntityCandidatesQuery,
-) -> Result<FindEntityCandidatesResult> {
+) -> AppResult<FindEntityCandidatesResult> {
     query.names = query
         .names
         .iter()
@@ -31,7 +30,7 @@ pub(crate) async fn find_entity_candidates(
 
     query.user_id = query.user_id.trim().to_string();
     if query.user_id.is_empty() {
-        return Err(anyhow!("user_id is required"));
+        return Err(ApplicationError::validation("user_id is required"));
     }
 
     query.short_description = query
@@ -41,8 +40,8 @@ pub(crate) async fn find_entity_candidates(
         .filter(|value| !value.is_empty());
 
     if query.names.is_empty() && query.short_description.is_none() {
-        return Err(anyhow!(
-            "at least one name or short_description is required"
+        return Err(ApplicationError::validation(
+            "at least one name or short_description is required",
         ));
     }
 

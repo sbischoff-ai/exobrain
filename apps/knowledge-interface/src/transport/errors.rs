@@ -1,19 +1,45 @@
-use anyhow::Error;
 use tonic::Status;
 use tracing::warn;
 
-pub fn map_ingest_error(error: Error) -> Status {
-    let message = error.to_string();
-    warn!(error = %message, "upsert graph delta failed");
+use crate::application::errors::ApplicationError;
 
-    if message.contains("validation failed")
-        || message.contains("is required")
-        || message.contains("must")
-        || message.contains("unknown schema type")
-        || message.contains("failed to upsert edge")
-    {
-        return Status::invalid_argument(message);
+pub fn map_application_error(error: ApplicationError) -> Status {
+    match error {
+        ApplicationError::Validation(message) => Status::invalid_argument(message),
+        ApplicationError::FailedPrecondition(message) => Status::failed_precondition(message),
+        ApplicationError::Internal(source) => {
+            warn!(error = %source, "application request failed");
+            Status::internal("internal failure")
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use anyhow::anyhow;
+    use tonic::Code;
+
+    use super::map_application_error;
+    use crate::application::errors::ApplicationError;
+
+    #[test]
+    fn maps_validation_to_invalid_argument() {
+        let status = map_application_error(ApplicationError::validation("bad request"));
+        assert_eq!(status.code(), Code::InvalidArgument);
+        assert_eq!(status.message(), "bad request");
     }
 
-    Status::internal(message)
+    #[test]
+    fn maps_failed_precondition_variant() {
+        let status = map_application_error(ApplicationError::failed_precondition("missing state"));
+        assert_eq!(status.code(), Code::FailedPrecondition);
+        assert_eq!(status.message(), "missing state");
+    }
+
+    #[test]
+    fn maps_internal_to_sanitized_internal_status() {
+        let status = map_application_error(ApplicationError::from(anyhow!("db is down")));
+        assert_eq!(status.code(), Code::Internal);
+        assert_eq!(status.message(), "internal failure");
+    }
 }
