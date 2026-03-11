@@ -12,6 +12,7 @@
   let menuRoot: HTMLDivElement | undefined;
   let authError = '';
   let configError = '';
+  let configSuccess = '';
   let submitting = false;
   let loadingConfigs = false;
   let savingConfigs = false;
@@ -37,6 +38,7 @@
   function closeMenu(): void {
     menuOpen = false;
     configError = '';
+    configSuccess = '';
 
     if (!hasConfigChanges) {
       return;
@@ -56,6 +58,7 @@
 
     loadingConfigs = true;
     configError = '';
+    configSuccess = '';
     try {
       configs = await userConfigService.list();
       configValues = Object.fromEntries(configs.map((config) => [config.key, config.value]));
@@ -74,6 +77,7 @@
 
     savingConfigs = true;
     configError = '';
+    configSuccess = '';
     try {
       configs = await userConfigService.save(
         configs.map((config) => ({
@@ -83,6 +87,7 @@
       );
       configValues = Object.fromEntries(configs.map((config) => [config.key, config.value]));
       persistedConfigValues = { ...configValues };
+      configSuccess = 'Config changes saved.';
     } catch {
       configError = 'Could not save user configs.';
     } finally {
@@ -122,6 +127,7 @@
 
   function updateConfigValue(configKey: string, value: boolean | string): void {
     configValues = { ...configValues, [configKey]: value };
+    configSuccess = '';
     if (configKey === 'frontend.theme' && typeof value === 'string') {
       dispatch('themeChange', { theme: value });
     }
@@ -213,6 +219,9 @@
       {#if configError}
         <p class="menu-error">{configError}</p>
       {/if}
+      {#if configSuccess}
+        <p class="menu-success" role="status">{configSuccess}</p>
+      {/if}
     </div>
   {/if}
 </div>
@@ -288,4 +297,5 @@
   }
   .action-button:disabled { opacity: 0.6; cursor: not-allowed; }
   .menu-error { color: var(--error); margin-top: 0.55rem; font-size: 0.82rem; }
+  .menu-success { color: var(--text-label); margin-top: 0.55rem; font-size: 0.82rem; }
 </style>
