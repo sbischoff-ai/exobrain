@@ -56,7 +56,7 @@ This guide maps the `KnowledgeInterface` proto contract to the current Rust impl
   - `KnowledgeApplication::get_entity_extraction_schema_types`
   - `KnowledgeApplication::get_extraction_universes`
   - extraction assembly helper: `use_cases/extraction_schema.rs::build_extraction_entity_types_from_input`
-- **Response shape note:** returns entity type records only (no per-type edge expansion); edge options are provided by `GetEdgeExtractionSchemaContext`.
+- **Response shape note:** returns entity type records only (`type_id`, `name`, `description`, `inheritance_chain`) with no per-type edge expansion. Edge options are intentionally provided only by `GetEdgeExtractionSchemaContext`.
 - **Repository/client calls:**
   - `SchemaRepository::get_by_kind` (node)
   - `SchemaRepository::get_type_inheritance`
