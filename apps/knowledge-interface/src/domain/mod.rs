@@ -1,3 +1,7 @@
+use std::{fmt, str::FromStr};
+
+use uuid::Uuid;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SchemaKind {
     Node,
@@ -32,13 +36,53 @@ impl SchemaKind {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct TypeId(String);
 
-impl TypeId {
-    pub fn parse(value: &str) -> Result<Self, String> {
-        let trimmed = value.trim();
-        if trimmed.is_empty() {
-            return Err("type id is required".to_string());
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IdParseError {
+    kind: &'static str,
+    input: String,
+    reason: IdParseErrorReason,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum IdParseErrorReason {
+    Required,
+    InvalidUuid,
+}
+
+impl IdParseError {
+    fn required(kind: &'static str) -> Self {
+        Self {
+            kind,
+            input: String::new(),
+            reason: IdParseErrorReason::Required,
         }
-        Ok(Self(trimmed.to_string()))
+    }
+
+    fn invalid_uuid(kind: &'static str, input: &str) -> Self {
+        Self {
+            kind,
+            input: input.to_string(),
+            reason: IdParseErrorReason::InvalidUuid,
+        }
+    }
+}
+
+impl fmt::Display for IdParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.reason {
+            IdParseErrorReason::Required => write!(f, "{} id is required", self.kind),
+            IdParseErrorReason::InvalidUuid => {
+                write!(f, "{} id '{}' must be a valid UUID", self.kind, self.input)
+            }
+        }
+    }
+}
+
+impl std::error::Error for IdParseError {}
+
+impl TypeId {
+    pub fn parse(value: &str) -> Result<Self, IdParseError> {
+        value.parse()
     }
 
     pub fn as_str(&self) -> &str {
@@ -46,35 +90,113 @@ impl TypeId {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct EntityId(String);
+impl FromStr for TypeId {
+    type Err = IdParseError;
 
-impl EntityId {
-    pub fn parse(value: &str) -> Result<Self, String> {
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
         let trimmed = value.trim();
         if trimmed.is_empty() {
-            return Err("entity id is required".to_string());
-        }
-        if uuid::Uuid::parse_str(trimmed).is_err() {
-            return Err(format!("entity id '{}' must be a valid UUID", value));
+            return Err(IdParseError::required("type"));
         }
         Ok(Self(trimmed.to_string()))
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct UniverseId(String);
+impl TryFrom<&str> for TypeId {
+    type Error = IdParseError;
 
-impl UniverseId {
-    pub fn parse(value: &str) -> Result<Self, String> {
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        value.parse()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct EntityId(Uuid);
+
+impl EntityId {
+    pub fn parse(value: &str) -> Result<Self, IdParseError> {
+        value.parse()
+    }
+
+    pub fn as_uuid(&self) -> &Uuid {
+        &self.0
+    }
+
+    pub fn into_inner(self) -> Uuid {
+        self.0
+    }
+}
+
+impl FromStr for EntityId {
+    type Err = IdParseError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
         let trimmed = value.trim();
         if trimmed.is_empty() {
-            return Err("universe id is required".to_string());
+            return Err(IdParseError::required("entity"));
         }
-        if uuid::Uuid::parse_str(trimmed).is_err() {
-            return Err(format!("universe id '{}' must be a valid UUID", value));
+        let parsed =
+            Uuid::parse_str(trimmed).map_err(|_| IdParseError::invalid_uuid("entity", value))?;
+        Ok(Self(parsed))
+    }
+}
+
+impl TryFrom<&str> for EntityId {
+    type Error = IdParseError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        value.parse()
+    }
+}
+
+impl fmt::Display for EntityId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct UniverseId(Uuid);
+
+impl UniverseId {
+    pub fn parse(value: &str) -> Result<Self, IdParseError> {
+        value.parse()
+    }
+
+    pub fn as_uuid(&self) -> &Uuid {
+        &self.0
+    }
+
+    pub fn into_inner(self) -> Uuid {
+        self.0
+    }
+}
+
+impl FromStr for UniverseId {
+    type Err = IdParseError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            return Err(IdParseError::required("universe"));
         }
-        Ok(Self(trimmed.to_string()))
+        let parsed =
+            Uuid::parse_str(trimmed).map_err(|_| IdParseError::invalid_uuid("universe", value))?;
+        Ok(Self(parsed))
+    }
+}
+
+impl TryFrom<&str> for UniverseId {
+    type Error = IdParseError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        value.parse()
+    }
+}
+
+impl fmt::Display for UniverseId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
@@ -404,6 +526,8 @@ pub struct ListEntitiesByTypeResult {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use super::{EntityId, SchemaKind, TypeId, UniverseId};
 
     #[test]
@@ -413,20 +537,33 @@ mod tests {
     }
 
     #[test]
-    fn entity_id_parse_rejects_invalid_uuid() {
-        let err = EntityId::parse("not-a-uuid").expect_err("invalid entity id should fail");
-        assert!(err.contains("must be a valid UUID"));
+    fn entity_id_from_str_rejects_invalid_uuid() {
+        let err = EntityId::from_str("not-a-uuid").expect_err("invalid entity id should fail");
+        assert_eq!(
+            err.to_string(),
+            "entity id 'not-a-uuid' must be a valid UUID"
+        );
     }
 
     #[test]
-    fn universe_id_parse_rejects_empty() {
-        let err = UniverseId::parse("   ").expect_err("empty universe id should fail");
-        assert_eq!(err, "universe id is required");
+    fn universe_id_from_str_rejects_empty() {
+        let err = UniverseId::from_str("   ").expect_err("empty universe id should fail");
+        assert_eq!(err.to_string(), "universe id is required");
     }
 
     #[test]
-    fn type_id_parse_rejects_empty() {
-        let err = TypeId::parse("\n").expect_err("empty type id should fail");
-        assert_eq!(err, "type id is required");
+    fn type_id_from_str_rejects_empty() {
+        let err = TypeId::from_str("\n").expect_err("empty type id should fail");
+        assert_eq!(err.to_string(), "type id is required");
+    }
+
+    #[test]
+    fn entity_and_universe_ids_display_as_uuid() {
+        let raw = "11111111-1111-1111-1111-111111111111";
+        let entity = EntityId::from_str(raw).expect("entity id should parse");
+        let universe = UniverseId::from_str(raw).expect("universe id should parse");
+
+        assert_eq!(entity.to_string(), raw);
+        assert_eq!(universe.to_string(), raw);
     }
 }
