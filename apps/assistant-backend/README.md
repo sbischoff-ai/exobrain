@@ -135,7 +135,7 @@ Example response:
 ```
 
 ### `GET /api/knowledge/page/{page_id}`
-Returns page detail via `GetEntityContext`, including metadata, related links, and rendered markdown content.
+Returns page detail via `GetEntityContext`, including canonical metadata timestamps, filtered entity-type properties, related links, and rendered markdown content.
 
 Example response:
 
@@ -149,6 +149,10 @@ Example response:
     "created_at": "2026-02-19T09:00:00Z",
     "updated_at": "2026-02-19T10:00:00Z"
   },
+  "properties": {
+    "status": "in_progress",
+    "priority": "high"
+  },
   "links": [
     {
       "page_id": "entity-2",
@@ -159,6 +163,11 @@ Example response:
   "content_markdown": "Root\n\nChild"
 }
 ```
+
+Notes:
+
+- `properties` includes only entity-type-specific fields from upstream `entity_properties`; reserved/system keys (`created_at`, `updated_at`, `visibility`, `user_id`, `type_id`, `id`) are excluded.
+- `created_at` and `updated_at` are still surfaced under `metadata` for timestamp rendering.
 
 
 ## User config endpoints

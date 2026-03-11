@@ -86,7 +86,7 @@ Returns page summaries for a category from `ListEntitiesByType`.
 
 ## Endpoint: `GET /api/knowledge/page/{page_id}`
 
-Returns page detail from `GetEntityContext` (`max_block_level=2`).
+Returns page detail from `GetEntityContext` (`max_block_level=2`) with canonical timestamps in `metadata` and filtered entity-type properties in `properties`.
 
 ### 200 response
 
@@ -99,6 +99,10 @@ Returns page detail from `GetEntityContext` (`max_block_level=2`).
   "metadata": {
     "created_at": "2026-02-19T09:00:00Z",
     "updated_at": "2026-02-19T10:00:00Z"
+  },
+  "properties": {
+    "status": "in_progress",
+    "priority": "high"
   },
   "links": [
     {
@@ -116,6 +120,7 @@ Returns page detail from `GetEntityContext` (`max_block_level=2`).
 - `category_id` is the entity node type id from `GetEntityContext.entity.type_id`; clients can map it through `GET /api/knowledge/category` to resolve breadcrumb ancestry.
 - `summary` is sourced from the text of the direct `DESCRIBED_BY` block (root block at level 0).
 - `metadata` contains only canonical timestamps (`created_at`, `updated_at`).
+- `properties` contains entity-type-specific values from upstream `entity_properties`, excluding reserved/system keys (`created_at`, `updated_at`, `visibility`, `user_id`, `type_id`, `id`).
 - `links` are mapped from neighbor entities.
 - `content_markdown` renders level-0 blocks as paragraphs and level>=1 blocks as list items.
 
