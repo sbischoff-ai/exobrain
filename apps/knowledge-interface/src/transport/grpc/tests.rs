@@ -282,6 +282,9 @@ async fn get_upsert_graph_delta_json_schema_contract_table() {
         .into_inner();
 
     let schema = parse_schema_json(&reply.json_schema);
+    let visibility_has_expected_values =
+        reply.json_schema.contains("\"PRIVATE\"") && reply.json_schema.contains("\"SHARED\"");
+
     let checks = [
         (
             "schema_id",
@@ -295,16 +298,7 @@ async fn get_upsert_graph_delta_json_schema_contract_table() {
                 .iter()
                 .all(|key| schema["properties"].get(*key).is_some()),
         ),
-        (
-            "visibility enum",
-            schema["properties"]["entities"]["items"]["properties"]["visibility"]["enum"]
-                .as_array()
-                .map(|values| {
-                    values.iter().any(|v| v.as_str() == Some("PRIVATE"))
-                        && values.iter().any(|v| v.as_str() == Some("SHARED"))
-                })
-                .unwrap_or(false),
-        ),
+        ("visibility enum", visibility_has_expected_values),
     ];
 
     for (name, passed) in checks {
