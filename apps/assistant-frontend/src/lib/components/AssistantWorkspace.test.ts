@@ -39,26 +39,6 @@ describe('AssistantWorkspace', () => {
 
 
 
-  it('renders theme toggle button label for current theme', async () => {
-    const { rerender } = render(AssistantWorkspace, {
-      props: {
-        ...baseProps,
-        theme: 'gruvbox-dark'
-      }
-    });
-
-    expect(screen.getByRole('button', { name: 'Switch to purple-intelligence theme' })).toHaveAttribute(
-      'title',
-      'Switch to purple-intelligence theme'
-    );
-
-    await rerender({ ...baseProps, theme: 'purple-intelligence' });
-
-    expect(screen.getByRole('button', { name: 'Switch to gruvbox-dark theme' })).toHaveAttribute(
-      'title',
-      'Switch to gruvbox-dark theme'
-    );
-  });
 
   it('renders expected root view for each mode', async () => {
     const { rerender } = render(AssistantWorkspace, {

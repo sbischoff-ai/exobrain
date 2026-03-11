@@ -247,7 +247,7 @@ describe('root page', () => {
   });
 
 
-  it('toggles theme at runtime and persists local preference', async () => {
+  it('applies and previews theme from frontend.theme config', async () => {
     window.sessionStorage.setItem(
       'exobrain.assistant.session',
       JSON.stringify({
@@ -262,30 +262,65 @@ describe('root page', () => {
       .mockResolvedValueOnce(jsonResponse({ name: 'Test User', email: 'test.user@exobrain.local' }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19', message_count: 0 }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
-      .mockResolvedValueOnce(jsonResponse([{ reference: '2026/02/19' }]));
+      .mockResolvedValueOnce(jsonResponse([{ reference: '2026/02/19' }]))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          configs: [
+            {
+              key: 'frontend.theme',
+              name: 'Theme',
+              config_type: 'choice',
+              description: 'Select theme',
+              options: [
+                { value: 'gruvbox-dark', label: 'Gruvbox Dark' },
+                { value: 'purple-intelligence', label: 'Purple Intelligence' }
+              ],
+              value: 'purple-intelligence',
+              default_value: 'gruvbox-dark',
+              using_default: false
+            }
+          ]
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          configs: [
+            {
+              key: 'frontend.theme',
+              name: 'Theme',
+              config_type: 'choice',
+              description: 'Select theme',
+              options: [
+                { value: 'gruvbox-dark', label: 'Gruvbox Dark' },
+                { value: 'purple-intelligence', label: 'Purple Intelligence' }
+              ],
+              value: 'purple-intelligence',
+              default_value: 'gruvbox-dark',
+              using_default: false
+            }
+          ]
+        })
+      );
 
     render(Page);
 
-    const themeButton = await screen.findByRole('button', {
-      name: 'Switch to purple-intelligence theme'
+    await waitFor(() => {
+      expect(document.documentElement.getAttribute('data-theme')).toBe('purple-intelligence');
     });
-    const brandHeading = screen.getByRole('heading', { level: 1, name: 'DRVID' });
-    const baseFontFamily = getComputedStyle(brandHeading).fontFamily;
-    const baseFontSize = getComputedStyle(brandHeading).fontSize;
 
+    await fireEvent.click(screen.getByRole('button', { name: 'Open user menu' }));
+    const themeSelect = await screen.findByLabelText('Theme');
+
+    await fireEvent.change(themeSelect, { target: { value: 'gruvbox-dark' } });
     expect(document.documentElement.getAttribute('data-theme')).toBe('gruvbox-dark');
 
-    await fireEvent.click(themeButton);
+    await fireEvent.keyDown(window, { key: 'Escape' });
 
     await waitFor(() => {
       expect(document.documentElement.getAttribute('data-theme')).toBe('purple-intelligence');
-      expect(window.localStorage.getItem('exobrain.assistant.theme')).toBe('purple-intelligence');
-      expect(screen.getByRole('button', { name: 'Switch to gruvbox-dark theme' })).toBeInTheDocument();
     });
-
-    expect(getComputedStyle(brandHeading).fontFamily).toBe(baseFontFamily);
-    expect(getComputedStyle(brandHeading).fontSize).toBe(baseFontSize);
   });
+
 
   it('toggles header view mode button and persists workspace mode', async () => {
     window.sessionStorage.setItem(
@@ -303,6 +338,7 @@ describe('root page', () => {
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19', message_count: 0 }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
       .mockResolvedValueOnce(jsonResponse([{ reference: '2026/02/19' }]))
+      .mockResolvedValueOnce(jsonResponse({ configs: [] }))
       .mockResolvedValueOnce(
         jsonResponse({
           categories: [{ category_id: 'cat-1', display_name: 'Category 1', page_count: 1, sub_categories: [] }]
@@ -400,6 +436,7 @@ describe('root page', () => {
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19', message_count: 0 }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
       .mockResolvedValueOnce(jsonResponse([{ reference: '2026/02/19' }]))
+      .mockResolvedValueOnce(jsonResponse({ configs: [] }))
       .mockResolvedValueOnce(
         jsonResponse({
           categories: [{ category_id: 'cat-1', display_name: 'Category 1', page_count: 1, sub_categories: [] }]
@@ -501,6 +538,7 @@ describe('root page', () => {
       )
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
       .mockResolvedValueOnce(jsonResponse([{ reference: '2026/02/19' }]))
+      .mockResolvedValueOnce(jsonResponse({ configs: [] }))
       .mockResolvedValueOnce(jsonResponse({ job_id: 'job-123' }));
 
     render(Page);
@@ -578,6 +616,7 @@ describe('root page', () => {
       )
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
       .mockResolvedValueOnce(jsonResponse([{ reference: '2026/02/19' }]))
+      .mockResolvedValueOnce(jsonResponse({ configs: [] }))
       .mockResolvedValueOnce(jsonResponse({ job_id: 'job-123' }));
 
     render(Page);
@@ -626,6 +665,7 @@ describe('root page', () => {
       )
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
       .mockResolvedValueOnce(jsonResponse([{ reference: '2026/02/19' }]))
+      .mockResolvedValueOnce(jsonResponse({ configs: [] }))
       .mockResolvedValueOnce(jsonResponse({ job_id: 'job-123' }));
 
     render(Page);
@@ -674,6 +714,7 @@ describe('root page', () => {
       )
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
       .mockResolvedValueOnce(jsonResponse([{ reference: '2026/02/19' }]))
+      .mockResolvedValueOnce(jsonResponse({ configs: [] }))
       .mockResolvedValueOnce(jsonResponse({ job_id: 'job-logout' }))
       .mockResolvedValueOnce(jsonResponse({ configs: [] }))
       .mockResolvedValueOnce(jsonResponse({}, 204));
@@ -761,6 +802,7 @@ describe('root page', () => {
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19', message_count: 0 }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
       .mockResolvedValueOnce(jsonResponse([{ reference: '2026/02/19' }]))
+      .mockResolvedValueOnce(jsonResponse({ configs: [] }))
       .mockResolvedValueOnce(jsonResponse({ stream_id: 'stream-1' }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
       .mockResolvedValueOnce(jsonResponse([{ reference: '2026/02/19' }]));
@@ -808,6 +850,7 @@ describe('root page', () => {
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19', message_count: 0 }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
       .mockResolvedValueOnce(jsonResponse([{ reference: '2026/02/19' }]))
+      .mockResolvedValueOnce(jsonResponse({ configs: [] }))
       .mockResolvedValueOnce(jsonResponse({ stream_id: 'stream-1' }))
       .mockResolvedValueOnce(jsonResponse({ reference: '2026/02/19' }))
       .mockResolvedValueOnce(jsonResponse([{ reference: '2026/02/19' }]));
