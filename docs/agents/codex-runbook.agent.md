@@ -89,6 +89,10 @@ grpcurl -plaintext -d '{}' 127.0.0.1:50051 exobrain.knowledge.v1.KnowledgeInterf
 ./scripts/local/add-assistant-backend-memgraph-test-data-actuary.sh
 ```
 
+On startup, knowledge-interface performs schema vector reconciliation for `schema_node_types` and `schema_edge_types` before serving requests; after schema resets this can add startup time.
+
+If type/entity candidate RPCs return empty semantic candidates, first confirm startup completed and the relevant Qdrant collections (`blocks`, `schema_node_types`, `schema_edge_types`) are populated.
+
 If Memgraph is unavailable, `run-knowledge-interface-native.sh` fails fast with a targeted hint.
 
 ## Build/test loop
