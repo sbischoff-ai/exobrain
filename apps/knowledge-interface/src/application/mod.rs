@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
+#[cfg(test)]
 use anyhow::{anyhow, Result};
 
 #[cfg(test)]
@@ -17,12 +18,14 @@ use crate::{
     ports::{Embedder, GraphRepository, SchemaRepository},
 };
 
+pub(crate) mod errors;
 pub(crate) mod graph_resolution;
 pub(crate) mod pagination;
 pub(crate) mod type_hierarchy;
 pub mod use_cases;
 pub(crate) mod validation;
 
+use self::errors::{AppResult, ApplicationError};
 use self::validation::is_global_property_owner;
 
 pub(crate) use use_cases::extraction_schema::{
@@ -57,7 +60,7 @@ impl KnowledgeApplication {
         }
     }
 
-    pub async fn get_schema(&self) -> Result<FullSchema> {
+    pub async fn get_schema(&self) -> AppResult<FullSchema> {
         let node_types = self.schema_repository.get_by_kind(SchemaKind::Node).await?;
         let edge_types = self.schema_repository.get_by_kind(SchemaKind::Edge).await?;
         let inheritance = self.schema_repository.get_type_inheritance().await?;
@@ -125,7 +128,7 @@ impl KnowledgeApplication {
     pub async fn get_entity_extraction_schema_types(
         &self,
         options: ExtractionSchemaOptions,
-    ) -> Result<Vec<ExtractionEntityType>> {
+    ) -> AppResult<Vec<ExtractionEntityType>> {
         let node_types = self.schema_repository.get_by_kind(SchemaKind::Node).await?;
         let inheritance = self.schema_repository.get_type_inheritance().await?;
 
@@ -145,7 +148,7 @@ impl KnowledgeApplication {
         first_entity_type: &str,
         second_entity_type: &str,
         options: ExtractionSchemaOptions,
-    ) -> Result<Vec<ExtractionEdgeType>> {
+    ) -> AppResult<Vec<ExtractionEdgeType>> {
         let node_types = self.schema_repository.get_by_kind(SchemaKind::Node).await?;
         let edge_types = self.schema_repository.get_by_kind(SchemaKind::Edge).await?;
         let inheritance = self.schema_repository.get_type_inheritance().await?;
@@ -167,10 +170,10 @@ impl KnowledgeApplication {
     pub async fn get_extraction_universes(
         &self,
         user_id: &str,
-    ) -> Result<Vec<ExtractionUniverseContext>> {
+    ) -> AppResult<Vec<ExtractionUniverseContext>> {
         let trimmed_user_id = user_id.trim();
         if trimmed_user_id.is_empty() {
-            return Err(anyhow!("user_id is required"));
+            return Err(ApplicationError::validation("user_id is required"));
         }
 
         let mut universes = self
@@ -192,40 +195,49 @@ impl KnowledgeApplication {
         &self,
         type_id: &str,
         options: EntityTypePropertyContextOptions,
-    ) -> Result<EntityTypePropertyContext> {
+    ) -> AppResult<EntityTypePropertyContext> {
         let schema = self.get_schema().await?;
         build_entity_type_property_context(schema, type_id, options)
     }
 
-    pub async fn upsert_schema_type(&self, command: UpsertSchemaTypeCommand) -> Result<SchemaType> {
+    pub async fn upsert_schema_type(
+        &self,
+        command: UpsertSchemaTypeCommand,
+    ) -> AppResult<SchemaType> {
         let schema_type = command.schema_type;
 
-        let schema_kind = schema_type
-            .schema_kind()
-            .ok_or_else(|| anyhow!("schema kind must be one of: node, edge"))?;
+        let schema_kind = schema_type.schema_kind().ok_or_else(|| {
+            ApplicationError::validation("schema kind must be one of: node, edge")
+        })?;
 
         if matches!(schema_kind, SchemaKind::Edge) && command.parent_type_id.is_some() {
-            return Err(anyhow!("edge inheritance is out of scope"));
+            return Err(ApplicationError::failed_precondition(
+                "edge inheritance is out of scope",
+            ));
         }
 
         if matches!(schema_kind, SchemaKind::Node) {
             if schema_type.id == "node.entity" {
                 if command.parent_type_id.is_some() {
-                    return Err(anyhow!("node.entity cannot declare a parent"));
+                    return Err(ApplicationError::failed_precondition(
+                        "node.entity cannot declare a parent",
+                    ));
                 }
             } else {
                 let parent_type_id = command.parent_type_id.clone().ok_or_else(|| {
-                    anyhow!("node types (except node.entity) must declare parent_type_id")
+                    ApplicationError::validation(
+                        "node types (except node.entity) must declare parent_type_id",
+                    )
                 })?;
 
                 let parent_schema = self
                     .schema_repository
                     .get_schema_type(&parent_type_id)
                     .await?
-                    .ok_or_else(|| anyhow!("parent type does not exist"))?;
+                    .ok_or_else(|| ApplicationError::validation("parent type does not exist"))?;
 
                 if !matches!(parent_schema.schema_kind(), Some(SchemaKind::Node)) {
-                    return Err(anyhow!("parent type must be a node"));
+                    return Err(ApplicationError::validation("parent type must be a node"));
                 }
 
                 if !self
@@ -233,7 +245,9 @@ impl KnowledgeApplication {
                     .is_descendant_of_entity(&parent_type_id)
                     .await?
                 {
-                    return Err(anyhow!("node parent must descend from node.entity"));
+                    return Err(ApplicationError::validation(
+                        "node parent must descend from node.entity",
+                    ));
                 }
 
                 if let Some(existing_parent) = self
@@ -242,7 +256,9 @@ impl KnowledgeApplication {
                     .await?
                 {
                     if existing_parent != parent_type_id {
-                        return Err(anyhow!("a node type cannot have multiple parents"));
+                        return Err(ApplicationError::failed_precondition(
+                            "a node type cannot have multiple parents",
+                        ));
                     }
                 }
             }
@@ -252,10 +268,9 @@ impl KnowledgeApplication {
 
         if matches!(upserted.schema_kind(), Some(SchemaKind::Node)) && upserted.id != "node.entity"
         {
-            let parent = command
-                .parent_type_id
-                .as_ref()
-                .ok_or_else(|| anyhow!("parent_type_id required for node subtype"))?;
+            let parent = command.parent_type_id.as_ref().ok_or_else(|| {
+                ApplicationError::validation("parent_type_id required for node subtype")
+            })?;
             self.schema_repository
                 .upsert_inheritance(
                     &upserted.id,
@@ -274,7 +289,7 @@ impl KnowledgeApplication {
         Ok(upserted)
     }
 
-    pub async fn ensure_common_root_graph(&self) -> Result<()> {
+    pub async fn ensure_common_root_graph(&self) -> AppResult<()> {
         if self.graph_repository.common_root_graph_exists().await? {
             return Ok(());
         }
@@ -286,15 +301,15 @@ impl KnowledgeApplication {
         &self,
         user_id: &str,
         user_name: &str,
-    ) -> Result<UserInitGraphNodeIds> {
+    ) -> AppResult<UserInitGraphNodeIds> {
         let trimmed_user_id = user_id.trim();
         if trimmed_user_id.is_empty() {
-            return Err(anyhow!("user_id is required"));
+            return Err(ApplicationError::validation("user_id is required"));
         }
 
         let trimmed_user_name = user_name.trim();
         if trimmed_user_name.is_empty() {
-            return Err(anyhow!("user_name is required"));
+            return Err(ApplicationError::validation("user_name is required"));
         }
 
         if self
@@ -313,7 +328,9 @@ impl KnowledgeApplication {
             .graph_repository
             .get_user_init_graph_node_ids(trimmed_user_id)
             .await?
-            .ok_or_else(|| anyhow!("user graph marker missing node ids"))?;
+            .ok_or_else(|| {
+                ApplicationError::failed_precondition("user graph marker missing node ids")
+            })?;
 
         self.graph_repository
             .update_person_name(&node_ids.person_entity_id, trimmed_user_name)
@@ -473,19 +490,23 @@ impl KnowledgeApplication {
         }
     }
 
-    fn user_init_graph_node_ids(delta: &GraphDelta) -> Result<UserInitGraphNodeIds> {
+    fn user_init_graph_node_ids(delta: &GraphDelta) -> AppResult<UserInitGraphNodeIds> {
         let person_entity_id = delta
             .entities
             .iter()
             .find(|entity| entity.type_id == "node.person")
             .map(|entity| entity.id.clone())
-            .ok_or_else(|| anyhow!("missing person entity in user init delta"))?;
+            .ok_or_else(|| {
+                ApplicationError::failed_precondition("missing person entity in user init delta")
+            })?;
         let assistant_entity_id = delta
             .entities
             .iter()
             .find(|entity| entity.type_id == "node.ai_agent")
             .map(|entity| entity.id.clone())
-            .ok_or_else(|| anyhow!("missing assistant entity in user init delta"))?;
+            .ok_or_else(|| {
+                ApplicationError::failed_precondition("missing assistant entity in user init delta")
+            })?;
 
         Ok(UserInitGraphNodeIds {
             person_entity_id,
@@ -496,25 +517,25 @@ impl KnowledgeApplication {
     pub async fn find_entity_candidates(
         &self,
         query: FindEntityCandidatesQuery,
-    ) -> Result<FindEntityCandidatesResult> {
+    ) -> AppResult<FindEntityCandidatesResult> {
         use_cases::entity_search::find_entity_candidates(self, query).await
     }
 
     pub async fn list_entities_by_type(
         &self,
         query: ListEntitiesByTypeQuery,
-    ) -> Result<ListEntitiesByTypeResult> {
+    ) -> AppResult<ListEntitiesByTypeResult> {
         use_cases::entity_listing::list_entities_by_type(self, query).await
     }
 
     pub async fn get_entity_context(
         &self,
         query: GetEntityContextQuery,
-    ) -> Result<GetEntityContextResult> {
+    ) -> AppResult<GetEntityContextResult> {
         use_cases::entity_context::get_entity_context(self, query).await
     }
 
-    pub async fn upsert_graph_delta(&self, delta: GraphDelta) -> Result<()> {
+    pub async fn upsert_graph_delta(&self, delta: GraphDelta) -> AppResult<()> {
         self.ensure_users_initialized_for_delta(&delta).await?;
         self.upsert_graph_delta_internal(delta).await
     }
@@ -524,18 +545,19 @@ impl KnowledgeApplication {
         user_id: &str,
         delta: GraphDelta,
         node_ids: &UserInitGraphNodeIds,
-    ) -> Result<()> {
+    ) -> AppResult<()> {
         self.upsert_graph_delta_internal(delta).await?;
         self.graph_repository
             .mark_user_graph_initialized(user_id, node_ids)
             .await
+            .map_err(Into::into)
     }
 
-    async fn upsert_graph_delta_internal(&self, delta: GraphDelta) -> Result<()> {
+    async fn upsert_graph_delta_internal(&self, delta: GraphDelta) -> AppResult<()> {
         use_cases::upsert_graph_delta::upsert_graph_delta_internal(self, delta).await
     }
 
-    async fn ensure_users_initialized_for_delta(&self, delta: &GraphDelta) -> Result<()> {
+    async fn ensure_users_initialized_for_delta(&self, delta: &GraphDelta) -> AppResult<()> {
         let mut user_ids = HashSet::new();
 
         for universe in &delta.universes {

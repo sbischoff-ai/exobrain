@@ -1,9 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
-use anyhow::{anyhow, Result};
-
 use crate::domain::{EmbeddedBlock, GraphDelta, SchemaKind};
 
+use crate::application::errors::{AppResult, ApplicationError};
 use crate::application::graph_resolution::{
     block_levels_for_blocks, extract_text, resolve_block_universe_id, root_entity_ids_for_blocks,
 };
@@ -16,7 +15,7 @@ use crate::application::{KnowledgeApplication, COMMON_UNIVERSE_ID};
 pub(crate) async fn upsert_graph_delta_internal(
     app: &KnowledgeApplication,
     mut delta: GraphDelta,
-) -> Result<()> {
+) -> AppResult<()> {
     let inheritance = validate_delta_against_schema(app, &delta).await?;
 
     for entity in &mut delta.entities {
@@ -60,12 +59,13 @@ pub(crate) async fn upsert_graph_delta_internal(
     app.graph_repository
         .apply_delta_with_blocks(&delta, &blocks)
         .await
+        .map_err(Into::into)
 }
 
 async fn validate_delta_against_schema(
     app: &KnowledgeApplication,
     delta: &GraphDelta,
-) -> Result<Vec<crate::domain::TypeInheritance>> {
+) -> AppResult<Vec<crate::domain::TypeInheritance>> {
     let schema_types = app
         .schema_repository
         .get_by_kind(SchemaKind::Node)
@@ -221,17 +221,17 @@ async fn validate_delta_against_schema(
         return Ok(inheritance);
     }
 
-    Err(anyhow!(
+    Err(ApplicationError::validation(format!(
         "graph delta validation failed:\n- {}",
         errors.join("\n- ")
-    ))
+    )))
 }
 
 async fn enforce_graph_state_rules(
     app: &KnowledgeApplication,
     delta: &GraphDelta,
     errors: &mut Vec<String>,
-) -> Result<()> {
+) -> AppResult<()> {
     let universe_ids: HashSet<&str> = delta.universes.iter().map(|u| u.id.as_str()).collect();
     let mut incoming_by_node: HashMap<&str, usize> = HashMap::new();
     let mut outgoing_by_node: HashMap<&str, usize> = HashMap::new();

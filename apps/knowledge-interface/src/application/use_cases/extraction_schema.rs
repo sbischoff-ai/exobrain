@@ -1,7 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 
-use anyhow::{anyhow, Result};
-
+use crate::application::errors::{AppResult, ApplicationError};
 use crate::domain::{EdgeEndpointRule, FullSchema, SchemaKind, SchemaType, TypeInheritance};
 
 #[derive(Debug, Clone)]
@@ -212,10 +211,10 @@ pub(crate) fn build_entity_type_property_context(
     schema: FullSchema,
     type_id: &str,
     options: EntityTypePropertyContextOptions,
-) -> Result<EntityTypePropertyContext> {
+) -> AppResult<EntityTypePropertyContext> {
     let trimmed_type_id = type_id.trim();
     if trimmed_type_id.is_empty() {
-        return Err(anyhow!("type_id is required"));
+        return Err(ApplicationError::validation("type_id is required"));
     }
 
     let mut nodes_by_id = HashMap::new();
@@ -226,7 +225,7 @@ pub(crate) fn build_entity_type_property_context(
     }
 
     let Some(target) = nodes_by_id.get(trimmed_type_id) else {
-        return Err(anyhow!("unknown type_id"));
+        return Err(ApplicationError::validation("unknown type_id"));
     };
 
     let mut parent_by_child = HashMap::new();

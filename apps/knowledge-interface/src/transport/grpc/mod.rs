@@ -15,7 +15,7 @@ use crate::presentation::upsert_delta_json_schema::{
     try_upsert_graph_delta_json_schema_string, UPSERT_GRAPH_DELTA_SCHEMA_ID,
 };
 
-use super::errors::map_ingest_error;
+use super::errors::map_application_error;
 use super::mapping::{
     to_domain_block_node, to_domain_entity_node, to_domain_find_entity_candidates_query,
     to_domain_get_entity_context_query, to_domain_graph_edge,
@@ -121,11 +121,7 @@ impl KnowledgeInterface for KnowledgeGrpcService {
         &self,
         _request: Request<GetSchemaRequest>,
     ) -> Result<Response<GetSchemaReply>, Status> {
-        let schema = self
-            .app
-            .get_schema()
-            .await
-            .map_err(|e| Status::internal(e.to_string()))?;
+        let schema = self.app.get_schema().await.map_err(map_application_error)?;
 
         Ok(Response::new(GetSchemaReply {
             node_types: schema
@@ -189,12 +185,12 @@ impl KnowledgeInterface for KnowledgeGrpcService {
             .app
             .get_entity_extraction_schema_types(extraction_options_from_entity_request(&payload))
             .await
-            .map_err(|e| Status::internal(e.to_string()))?;
+            .map_err(map_application_error)?;
         let universes = self
             .app
             .get_extraction_universes(&payload.user_id)
             .await
-            .map_err(|e| Status::invalid_argument(e.to_string()))?;
+            .map_err(map_application_error)?;
 
         Ok(Response::new(GetEntityExtractionSchemaContextReply {
             entity_types: entity_types
@@ -230,7 +226,7 @@ impl KnowledgeInterface for KnowledgeGrpcService {
                 extraction_options_from_edge_request(&payload),
             )
             .await
-            .map_err(|e| Status::internal(e.to_string()))?;
+            .map_err(map_application_error)?;
 
         Ok(Response::new(GetEdgeExtractionSchemaContextReply {
             first_entity_type,
@@ -254,7 +250,7 @@ impl KnowledgeInterface for KnowledgeGrpcService {
                 entity_type_property_context_options_from_request(&payload),
             )
             .await
-            .map_err(|e| Status::invalid_argument(e.to_string()))?;
+            .map_err(map_application_error)?;
 
         Ok(Response::new(GetEntityTypePropertyContextReply {
             type_id: reply.type_id,
@@ -302,7 +298,7 @@ impl KnowledgeInterface for KnowledgeGrpcService {
                     .collect(),
             })
             .await
-            .map_err(|e| Status::invalid_argument(e.to_string()))?;
+            .map_err(map_application_error)?;
 
         Ok(Response::new(UpsertSchemaTypeReply {
             schema_type: Some(super::proto::SchemaType {
@@ -324,7 +320,7 @@ impl KnowledgeInterface for KnowledgeGrpcService {
             .app
             .get_user_init_graph(&payload.user_id, &payload.user_name)
             .await
-            .map_err(|e| Status::invalid_argument(e.to_string()))?;
+            .map_err(map_application_error)?;
 
         Ok(Response::new(GetUserInitGraphReply {
             person_entity_id: node_ids.person_entity_id,
@@ -341,7 +337,7 @@ impl KnowledgeInterface for KnowledgeGrpcService {
             .app
             .find_entity_candidates(query)
             .await
-            .map_err(|e| Status::invalid_argument(e.to_string()))?;
+            .map_err(map_application_error)?;
 
         Ok(Response::new(FindEntityCandidatesReply {
             candidates: result
@@ -361,7 +357,7 @@ impl KnowledgeInterface for KnowledgeGrpcService {
             .app
             .list_entities_by_type(query)
             .await
-            .map_err(|e| Status::invalid_argument(e.to_string()))?;
+            .map_err(map_application_error)?;
 
         Ok(Response::new(to_proto_list_entities_by_type_reply(result)))
     }
@@ -375,7 +371,7 @@ impl KnowledgeInterface for KnowledgeGrpcService {
             .app
             .get_entity_context(query)
             .await
-            .map_err(|e| Status::invalid_argument(e.to_string()))?;
+            .map_err(map_application_error)?;
 
         Ok(Response::new(to_proto_get_entity_context_reply(result)))
     }
@@ -418,7 +414,7 @@ impl KnowledgeInterface for KnowledgeGrpcService {
                 edges: edges.clone(),
             })
             .await
-            .map_err(map_ingest_error)?;
+            .map_err(map_application_error)?;
 
         Ok(Response::new(UpsertGraphDeltaReply {
             entities_upserted: entities.len() as u32,

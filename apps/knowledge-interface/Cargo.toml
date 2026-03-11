@@ -16,6 +16,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sqlx = { version = "0.8", default-features = false, features = ["postgres", "runtime-tokio-rustls"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+thiserror = "1"
 tonic = { version = "0.11", features = ["transport"] }
 tonic-reflection = "0.11"
 tracing = "0.1"

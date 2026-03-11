@@ -18,6 +18,17 @@ Validation is split into:
 
 This means block updates can rely on existing `DESCRIBED_BY`/`SUMMARIZES` parent edges already present in the graph; those edges do not need to be resubmitted unless they are changing.
 
+
+## Error status mapping
+
+Application-layer expected failures are returned as typed errors and mapped to gRPC statuses:
+
+- validation errors → `InvalidArgument`
+- graph/state precondition violations → `FailedPrecondition`
+- unexpected backend/runtime faults → `Internal`
+
+`Internal` responses are intentionally sanitized to `internal failure`.
+
 ## ID format requirements
 
 Client-provided IDs are **domain IDs**, not Memgraph-internal IDs.
