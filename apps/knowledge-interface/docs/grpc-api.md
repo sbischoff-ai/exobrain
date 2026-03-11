@@ -179,6 +179,8 @@ UpsertGraphDelta(upsert_payload)
 
 `GetEntityExtractionSchemaContext` returns a normalized, deterministic, LLM-focused view of entity extraction context only (universes + entity types, no edge expansions).
 
+`GetEntityExtractionSchemaContextReply` intentionally contains `ExtractionEntityType` only (without per-type edge lists). Edge selection is handled separately by `GetEdgeExtractionSchemaContext`.
+
 ### Full request schema
 
 ```proto
