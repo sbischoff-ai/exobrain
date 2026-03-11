@@ -231,4 +231,12 @@ impl SchemaRepository for PostgresSchemaRepository {
 
         Ok(())
     }
+    async fn delete_schema_type(&self, id: &str) -> Result<()> {
+        sqlx::query("DELETE FROM knowledge_graph_schema_types WHERE id = $1")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+
+        Ok(())
+    }
 }

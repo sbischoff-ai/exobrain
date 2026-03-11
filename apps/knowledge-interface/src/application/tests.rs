@@ -16,7 +16,7 @@ use crate::{
         NodeRelationshipCounts, PropertyValue, RawEntityCandidateData, TypeInheritance,
         TypeProperty, UpsertSchemaTypePropertyInput, UserInitGraphNodeIds, Visibility,
     },
-    ports::{Embedder, GraphRepository, SchemaRepository},
+    ports::{Embedder, GraphRepository, SchemaRepository, TypeVectorRepository},
 };
 
 fn build_extraction_entity_types_from_schema(
@@ -466,6 +466,12 @@ impl SchemaRepository for FakeSchemaRepo {
     ) -> Result<()> {
         Ok(())
     }
+
+    async fn delete_schema_type(&self, id: &str) -> Result<()> {
+        self.types.lock().expect("lock").remove(id);
+        self.parents.lock().expect("lock").remove(id);
+        Ok(())
+    }
 }
 
 struct FakeGraphRepository {
@@ -546,6 +552,37 @@ impl GraphRepository for FakeGraphRepository {
 
     async fn get_extraction_universes(&self, _user_id: &str) -> Result<Vec<ExtractionUniverse>> {
         Ok(Vec::new())
+    }
+}
+
+struct CapturingTypeVectorRepository {
+    seen: Arc<Mutex<Vec<(SchemaType, Vec<f32>)>>>,
+    fail_for_type_id: Option<String>,
+}
+
+#[async_trait]
+impl TypeVectorRepository for CapturingTypeVectorRepository {
+    async fn upsert_schema_type_vector(
+        &self,
+        schema_type: &SchemaType,
+        vector: &[f32],
+    ) -> Result<()> {
+        if self
+            .fail_for_type_id
+            .as_ref()
+            .is_some_and(|id| id == &schema_type.id)
+        {
+            return Err(anyhow!(
+                "forced type-vector upsert failure for {}",
+                schema_type.id
+            ));
+        }
+
+        self.seen
+            .lock()
+            .expect("type vector lock should not be poisoned")
+            .push((schema_type.clone(), vector.to_vec()));
+        Ok(())
     }
 }
 
@@ -1057,6 +1094,84 @@ async fn rejects_node_without_parent() {
         .expect_err("missing parent should fail");
 
     assert!(err.to_string().contains("must declare parent_type_id"));
+}
+
+#[tokio::test]
+async fn upsert_schema_type_syncs_type_vector_with_active_payload_support() {
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let app = KnowledgeApplication::new(
+        Arc::new(FakeSchemaRepo::new()),
+        Arc::new(FakeGraphRepository { root_exists: false }),
+        Arc::new(FakeEmbedder),
+    )
+    .with_type_vector_repository(Arc::new(CapturingTypeVectorRepository {
+        seen: seen.clone(),
+        fail_for_type_id: None,
+    }));
+
+    let upserted = app
+        .upsert_schema_type(UpsertSchemaTypeCommand {
+            schema_type: SchemaType {
+                id: "node.person".to_string(),
+                kind: "node".to_string(),
+                name: "Person".to_string(),
+                description: "A human being".to_string(),
+                active: false,
+            },
+            parent_type_id: Some("node.entity".to_string()),
+            properties: vec![],
+        })
+        .await
+        .expect("upsert should succeed");
+
+    assert!(!upserted.active);
+    let seen = seen
+        .lock()
+        .expect("type vector lock should not be poisoned");
+    assert_eq!(seen.len(), 1);
+    assert_eq!(seen[0].0.id, "node.person");
+    assert!(!seen[0].0.active);
+    assert_eq!(seen[0].1, vec![0.1, 0.2]);
+}
+
+#[tokio::test]
+async fn upsert_schema_type_rolls_back_when_type_vector_sync_fails() {
+    let repo = Arc::new(FakeSchemaRepo::new());
+    let app = KnowledgeApplication::new(
+        repo.clone(),
+        Arc::new(FakeGraphRepository { root_exists: false }),
+        Arc::new(FakeEmbedder),
+    )
+    .with_type_vector_repository(Arc::new(CapturingTypeVectorRepository {
+        seen: Arc::new(Mutex::new(Vec::new())),
+        fail_for_type_id: Some("node.person".to_string()),
+    }));
+
+    let err = app
+        .upsert_schema_type(UpsertSchemaTypeCommand {
+            schema_type: SchemaType {
+                id: "node.person".to_string(),
+                kind: "node".to_string(),
+                name: "Person".to_string(),
+                description: "A human being".to_string(),
+                active: true,
+            },
+            parent_type_id: Some("node.entity".to_string()),
+            properties: vec![],
+        })
+        .await
+        .expect_err("upsert should fail when type vector sync fails");
+
+    assert!(!err.to_string().is_empty());
+
+    let schema_type = repo
+        .get_schema_type("node.person")
+        .await
+        .expect("repo call should succeed");
+    assert!(
+        schema_type.is_none(),
+        "schema write should have been rolled back"
+    );
 }
 
 #[tokio::test]

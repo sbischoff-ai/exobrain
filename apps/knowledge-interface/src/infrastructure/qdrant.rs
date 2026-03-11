@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use anyhow::{Context, Result};
+use async_trait::async_trait;
 use qdrant_client::{
     qdrant::{
         value::Kind, Condition, CreateCollectionBuilder, DeletePointsBuilder, Distance, Filter,
@@ -11,6 +12,7 @@ use qdrant_client::{
 };
 
 use crate::domain::{EmbeddedBlock, SchemaKind, SchemaType};
+use crate::ports::TypeVectorRepository;
 
 const QDRANT_VECTOR_SIZE: u64 = 3072;
 pub(crate) const SCHEMA_NODE_TYPES_COLLECTION: &str = "schema_node_types";
@@ -350,6 +352,16 @@ pub(crate) fn render_schema_type_embedding_input(schema_type: &SchemaType) -> Re
     }
 }
 
+#[async_trait]
+impl TypeVectorRepository for QdrantTypeVectorStore {
+    async fn upsert_schema_type_vector(
+        &self,
+        schema_type: &SchemaType,
+        vector: &[f32],
+    ) -> Result<()> {
+        self.upsert_schema_type(schema_type, vector).await
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;

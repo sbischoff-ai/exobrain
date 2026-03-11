@@ -14,7 +14,7 @@ use infrastructure::{
     embedding::{MockEmbedder, OpenAiCompatibleEmbedder},
     memgraph::{MemgraphQdrantGraphRepository, Neo4jGraphStore},
     postgres::PostgresSchemaRepository,
-    qdrant::QdrantVectorStore,
+    qdrant::{QdrantTypeVectorStore, QdrantVectorStore},
 };
 use tracing_subscriber::EnvFilter;
 use transport::grpc::run_server;
@@ -33,6 +33,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         graph_store,
         vector_store,
     ));
+    let type_vector_repository = Arc::new(QdrantTypeVectorStore::new(&cfg.qdrant_addr)?);
 
     let embedder: Arc<dyn ports::Embedder> = if cfg.use_mock_embedder {
         Arc::new(MockEmbedder)
@@ -43,11 +44,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ))
     };
 
-    let app = Arc::new(KnowledgeApplication::new(
-        schema_repo,
-        graph_repository,
-        embedder,
-    ));
+    let app = Arc::new(
+        KnowledgeApplication::new(schema_repo, graph_repository, embedder)
+            .with_type_vector_repository(type_vector_repository),
+    );
 
     app.ensure_common_root_graph().await?;
     run_server(app, cfg.enable_reflection()).await

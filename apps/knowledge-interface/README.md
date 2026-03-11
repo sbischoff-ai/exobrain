@@ -5,7 +5,7 @@ Rust + tonic gRPC service for GraphRAG ingestion and canonical KG schema registr
 ## What this service is
 
 - Provides full schema introspection (`GetSchema`) and extraction-focused schema projections (`GetEntityExtractionSchemaContext`, `GetEdgeExtractionSchemaContext`).
-- Provides schema type upsert (`UpsertSchemaType`).
+- Provides schema type upsert (`UpsertSchemaType`) with type-vector sync to Qdrant collections by schema kind (`schema_node_types`/`schema_edge_types`).
 - Accepts schema-driven graph writes through `UpsertGraphDelta`.
 - Exposes `GetUserInitGraph` to seed a new user-scoped starter subgraph.
 - Exposes `GetEntityContext` to read an entity's typed context graph payload for grounded lookups during extraction/deduplication.
@@ -93,6 +93,8 @@ High-risk IDs now have lightweight primitives (`TypeId`, `EntityId`, `UniverseId
 
 On startup, the service checks whether the shared root graph exists in Memgraph and seeds it if missing. The seed is written through the same validated ingestion pipeline used by gRPC requests, including Qdrant projection updates.
 Qdrant uses separate collections for block embeddings (`blocks`) and schema type embeddings (`schema_node_types`, `schema_edge_types`), each configured with 3072-dimension cosine vectors.
+
+For `UpsertSchemaType`, the service embeds canonical type text (`entity type: ...` / `relationship type: ...`) via the same `Embedder` path used elsewhere, then upserts the vector to kind-specific Qdrant collections. Inactive schema types remain indexed with `active=false` payload for query-time filtering. If vector sync fails after DB upsert, the schema type DB write is rolled back and the request returns a contextual error.
 
 `KnowledgeApplication::ensure_common_root_graph` is startup-only support logic, not an RPC. It exists to satisfy runtime preconditions for the RPC contract (shared `universe.real_world` and `concept.exobrain` roots) before requests are served.
 

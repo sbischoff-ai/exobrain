@@ -15,7 +15,7 @@ use crate::{
         PropertyValue, SchemaKind, SchemaType, UniverseNode, UpsertSchemaTypeCommand,
         UserInitGraphNodeIds, Visibility,
     },
-    ports::{Embedder, GraphRepository, SchemaRepository},
+    ports::{Embedder, GraphRepository, SchemaRepository, TypeVectorRepository},
 };
 
 pub(crate) mod errors;
@@ -27,6 +27,7 @@ pub(crate) mod validation;
 
 use self::errors::{AppResult, ApplicationError};
 use self::validation::is_global_property_owner;
+use tracing::{error, info};
 
 pub(crate) use use_cases::extraction_schema::{
     build_entity_type_property_context, build_extraction_edge_types_from_input,
@@ -45,6 +46,7 @@ pub struct KnowledgeApplication {
     schema_repository: Arc<dyn SchemaRepository>,
     graph_repository: Arc<dyn GraphRepository>,
     embedder: Arc<dyn Embedder>,
+    type_vector_repository: Option<Arc<dyn TypeVectorRepository>>,
 }
 
 impl KnowledgeApplication {
@@ -57,7 +59,16 @@ impl KnowledgeApplication {
             schema_repository,
             graph_repository,
             embedder,
+            type_vector_repository: None,
         }
+    }
+
+    pub fn with_type_vector_repository(
+        mut self,
+        type_vector_repository: Arc<dyn TypeVectorRepository>,
+    ) -> Self {
+        self.type_vector_repository = Some(type_vector_repository);
+        self
     }
 
     pub async fn get_schema(&self) -> AppResult<FullSchema> {
@@ -264,7 +275,17 @@ impl KnowledgeApplication {
             }
         }
 
+        let previous_schema_type = self
+            .schema_repository
+            .get_schema_type(&schema_type.id)
+            .await?;
         let upserted = self.schema_repository.upsert(&schema_type).await?;
+
+        if let Err(sync_error) = self.sync_schema_type_vector(&upserted).await {
+            self.rollback_schema_type_write(&upserted, previous_schema_type.as_ref())
+                .await?;
+            return Err(sync_error);
+        }
 
         if matches!(upserted.schema_kind(), Some(SchemaKind::Node)) && upserted.id != "node.entity"
         {
@@ -287,6 +308,83 @@ impl KnowledgeApplication {
         }
 
         Ok(upserted)
+    }
+
+    async fn sync_schema_type_vector(&self, schema_type: &SchemaType) -> AppResult<()> {
+        let Some(type_vector_repository) = self.type_vector_repository.as_ref() else {
+            info!(
+                type_id = %schema_type.id,
+                kind = %schema_type.kind,
+                operation = "upsert",
+                "schema type vector sync skipped; repository not configured"
+            );
+            return Ok(());
+        };
+
+        let embedding_input =
+            crate::infrastructure::qdrant::render_schema_type_embedding_input(schema_type)?;
+
+        info!(
+            type_id = %schema_type.id,
+            kind = %schema_type.kind,
+            operation = "embed",
+            "embedding schema type text for vector sync"
+        );
+        let embeddings = self.embedder.embed_texts(&[embedding_input]).await?;
+        let vector = embeddings.into_iter().next().ok_or_else(|| {
+            ApplicationError::Internal(anyhow::anyhow!(
+                "embedder returned no vectors for schema type sync"
+            ))
+        })?;
+
+        info!(
+            type_id = %schema_type.id,
+            kind = %schema_type.kind,
+            operation = "upsert",
+            "upserting schema type vector"
+        );
+        type_vector_repository
+            .upsert_schema_type_vector(schema_type, &vector)
+            .await
+            .map_err(|error| {
+                error!(
+                    type_id = %schema_type.id,
+                    kind = %schema_type.kind,
+                    operation = "upsert",
+                    error = %error,
+                    "schema type vector upsert failed"
+                );
+                ApplicationError::Internal(anyhow::anyhow!(format!(
+                    "failed to sync vector for schema type {} (kind {}): {error}",
+                    schema_type.id, schema_type.kind
+                )))
+            })
+    }
+
+    async fn rollback_schema_type_write(
+        &self,
+        schema_type: &SchemaType,
+        previous_schema_type: Option<&SchemaType>,
+    ) -> AppResult<()> {
+        info!(
+            type_id = %schema_type.id,
+            kind = %schema_type.kind,
+            operation = "rollback",
+            "rolling back schema type write after vector sync failure"
+        );
+
+        match previous_schema_type {
+            Some(previous) => {
+                self.schema_repository.upsert(previous).await?;
+            }
+            None => {
+                self.schema_repository
+                    .delete_schema_type(&schema_type.id)
+                    .await?;
+            }
+        }
+
+        Ok(())
     }
 
     pub async fn ensure_common_root_graph(&self) -> AppResult<()> {
