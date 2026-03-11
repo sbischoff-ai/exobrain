@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/sve
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import KnowledgeExplorerView from './KnowledgeExplorerView.svelte';
+import KnowledgeExplorerViewEventHarness from './KnowledgeExplorerViewEventHarness.svelte';
 
 const serviceMocks = vi.hoisted(() => ({
   getCategoryTree: vi.fn(),
@@ -55,6 +56,27 @@ describe('KnowledgeExplorerView', () => {
 
     expect(getCategoryPages).toHaveBeenCalledWith('cat-a');
     expect(getCategoryPages).toHaveBeenCalledWith('cat-b');
+  });
+
+  it('emits only page navigation when clicking an overview page preview card', async () => {
+    getCategoryTree.mockResolvedValue({
+      categories: [{ id: 'cat-a', name: 'Category A', page_count: 1, children: [] }]
+    });
+    getCategoryPages.mockResolvedValue({ pages: [{ id: 'page-a1', title: 'A1', summary: 'alpha' }] });
+
+    render(KnowledgeExplorerViewEventHarness, {
+      props: {
+        explorerRoute: { type: 'overview' },
+        expandedCategories: {}
+      }
+    });
+
+    const pageCardTitle = await screen.findByText('A1');
+    await fireEvent.click(pageCardTitle);
+
+    expect(screen.getByTestId('emitted-routes')).toHaveTextContent(
+      JSON.stringify([{ type: 'page', id: 'page-a1' }])
+    );
   });
 
   it('renders category page breadcrumbs/tree and emits expansion updates', async () => {
