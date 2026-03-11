@@ -11,10 +11,10 @@ use crate::application::pagination::{
 
 use crate::{
     domain::{
-        BlockNode, EdgeEndpointRule, EntityCandidate, EntityNode, ExistingBlockContext,
-        ExtractionUniverse, FindEntityCandidatesQuery, GraphEdge, NodeRelationshipCounts,
-        PropertyValue, TypeInheritance, TypeProperty, UpsertSchemaTypePropertyInput,
-        UserInitGraphNodeIds, Visibility,
+        BlockNode, EdgeEndpointRule, EntityLexicalMatch, EntityNode, EntitySemanticHit,
+        ExistingBlockContext, ExtractionUniverse, FindEntityCandidatesQuery, GraphEdge,
+        NodeRelationshipCounts, PropertyValue, RawEntityCandidateData, TypeInheritance,
+        TypeProperty, UpsertSchemaTypePropertyInput, UserInitGraphNodeIds, Visibility,
     },
     ports::{Embedder, GraphRepository, SchemaRepository},
 };
@@ -526,8 +526,8 @@ impl GraphRepository for FakeGraphRepository {
         &self,
         _query: &FindEntityCandidatesQuery,
         _query_vector: Option<&[f32]>,
-    ) -> Result<Vec<EntityCandidate>> {
-        Ok(Vec::new())
+    ) -> Result<RawEntityCandidateData> {
+        Ok(RawEntityCandidateData::default())
     }
 
     async fn list_entities_by_type(
@@ -637,8 +637,8 @@ impl GraphRepository for CapturingGraphRepository {
         &self,
         _query: &FindEntityCandidatesQuery,
         _query_vector: Option<&[f32]>,
-    ) -> Result<Vec<EntityCandidate>> {
-        Ok(Vec::new())
+    ) -> Result<RawEntityCandidateData> {
+        Ok(RawEntityCandidateData::default())
     }
 
     async fn list_entities_by_type(
@@ -719,8 +719,8 @@ impl GraphRepository for CountingGraphRepository {
         &self,
         _query: &FindEntityCandidatesQuery,
         _query_vector: Option<&[f32]>,
-    ) -> Result<Vec<EntityCandidate>> {
-        Ok(Vec::new())
+    ) -> Result<RawEntityCandidateData> {
+        Ok(RawEntityCandidateData::default())
     }
 
     async fn list_entities_by_type(
@@ -822,8 +822,8 @@ impl GraphRepository for TrackingInitGraphRepository {
         &self,
         _query: &FindEntityCandidatesQuery,
         _query_vector: Option<&[f32]>,
-    ) -> Result<Vec<EntityCandidate>> {
-        Ok(Vec::new())
+    ) -> Result<RawEntityCandidateData> {
+        Ok(RawEntityCandidateData::default())
     }
 
     async fn list_entities_by_type(
@@ -1760,7 +1760,7 @@ async fn accepts_cross_user_scope_in_single_delta() {
 struct CandidateGraphRepository {
     seen_queries: Arc<Mutex<Vec<FindEntityCandidatesQuery>>>,
     seen_vectors: Arc<Mutex<Vec<Option<Vec<f32>>>>>,
-    candidates: Vec<EntityCandidate>,
+    candidates: RawEntityCandidateData,
 }
 
 #[async_trait]
@@ -1817,7 +1817,7 @@ impl GraphRepository for CandidateGraphRepository {
         &self,
         query: &FindEntityCandidatesQuery,
         query_vector: Option<&[f32]>,
-    ) -> Result<Vec<EntityCandidate>> {
+    ) -> Result<RawEntityCandidateData> {
         self.seen_queries
             .lock()
             .expect("lock should be available")
@@ -1875,24 +1875,31 @@ async fn find_entity_candidates_normalizes_embeds_sorts_and_limits() {
         Arc::new(CandidateGraphRepository {
             seen_queries: Arc::clone(&seen_queries),
             seen_vectors: Arc::clone(&seen_vectors),
-            candidates: vec![
-                EntityCandidate {
-                    id: "2".to_string(),
-                    name: "Beta".to_string(),
-                    described_by_text: None,
-                    score: 0.2,
-                    type_id: "node.person".to_string(),
-                    matched_tokens: vec!["beta".to_string()],
-                },
-                EntityCandidate {
-                    id: "1".to_string(),
+            candidates: RawEntityCandidateData {
+                lexical_matches: vec![
+                    EntityLexicalMatch {
+                        id: "2".to_string(),
+                        name: "Beta".to_string(),
+                        score: 0.2,
+                        type_id: "node.person".to_string(),
+                        matched_tokens: vec!["beta".to_string()],
+                    },
+                    EntityLexicalMatch {
+                        id: "1".to_string(),
+                        name: "Alpha".to_string(),
+                        score: 0.9,
+                        type_id: "node.person".to_string(),
+                        matched_tokens: vec!["alpha".to_string()],
+                    },
+                ],
+                semantic_hits: vec![EntitySemanticHit {
+                    entity_id: "1".to_string(),
                     name: "Alpha".to_string(),
-                    described_by_text: Some("alpha description".to_string()),
-                    score: 0.9,
                     type_id: "node.person".to_string(),
-                    matched_tokens: vec!["alpha".to_string()],
-                },
-            ],
+                    score: 0.2,
+                    described_by_text: Some("alpha description".to_string()),
+                }],
+            },
         }),
         Arc::new(TrackingEmbedder {
             seen_texts: Arc::clone(&seen_texts),
@@ -1942,7 +1949,7 @@ async fn find_entity_candidates_rejects_empty_payload() {
         Arc::new(CandidateGraphRepository {
             seen_queries: Arc::new(Mutex::new(Vec::new())),
             seen_vectors: Arc::new(Mutex::new(Vec::new())),
-            candidates: vec![],
+            candidates: RawEntityCandidateData::default(),
         }),
         Arc::new(TrackingEmbedder {
             seen_texts: Arc::new(Mutex::new(Vec::new())),
@@ -1973,7 +1980,7 @@ async fn find_entity_candidates_rejects_blank_user_id() {
         Arc::new(CandidateGraphRepository {
             seen_queries: Arc::new(Mutex::new(Vec::new())),
             seen_vectors: Arc::new(Mutex::new(Vec::new())),
-            candidates: vec![],
+            candidates: RawEntityCandidateData::default(),
         }),
         Arc::new(TrackingEmbedder {
             seen_texts: Arc::new(Mutex::new(Vec::new())),
@@ -2002,32 +2009,32 @@ async fn find_entity_candidates_orders_by_score_without_limit() {
         Arc::new(CandidateGraphRepository {
             seen_queries: Arc::new(Mutex::new(Vec::new())),
             seen_vectors: Arc::new(Mutex::new(Vec::new())),
-            candidates: vec![
-                EntityCandidate {
-                    id: "low".to_string(),
-                    name: "Low".to_string(),
-                    described_by_text: None,
-                    score: 0.1,
-                    type_id: "node.person".to_string(),
-                    matched_tokens: vec![],
-                },
-                EntityCandidate {
-                    id: "high".to_string(),
-                    name: "High".to_string(),
-                    described_by_text: None,
-                    score: 0.9,
-                    type_id: "node.person".to_string(),
-                    matched_tokens: vec![],
-                },
-                EntityCandidate {
-                    id: "mid".to_string(),
-                    name: "Mid".to_string(),
-                    described_by_text: None,
-                    score: 0.4,
-                    type_id: "node.person".to_string(),
-                    matched_tokens: vec![],
-                },
-            ],
+            candidates: RawEntityCandidateData {
+                lexical_matches: vec![
+                    EntityLexicalMatch {
+                        id: "low".to_string(),
+                        name: "Low".to_string(),
+                        score: 0.1,
+                        type_id: "node.person".to_string(),
+                        matched_tokens: vec![],
+                    },
+                    EntityLexicalMatch {
+                        id: "high".to_string(),
+                        name: "High".to_string(),
+                        score: 0.9,
+                        type_id: "node.person".to_string(),
+                        matched_tokens: vec![],
+                    },
+                    EntityLexicalMatch {
+                        id: "mid".to_string(),
+                        name: "Mid".to_string(),
+                        score: 0.4,
+                        type_id: "node.person".to_string(),
+                        matched_tokens: vec![],
+                    },
+                ],
+                semantic_hits: vec![],
+            },
         }),
         Arc::new(TrackingEmbedder {
             seen_texts: Arc::new(Mutex::new(Vec::new())),
@@ -2053,6 +2060,79 @@ async fn find_entity_candidates_orders_by_score_without_limit() {
             .map(|candidate| candidate.id)
             .collect::<Vec<_>>(),
         vec!["high".to_string(), "mid".to_string(), "low".to_string()]
+    );
+}
+
+#[tokio::test]
+async fn find_entity_candidates_combines_lexical_and_semantic_scores() {
+    let app = KnowledgeApplication::new(
+        Arc::new(FakeSchemaRepo::new()),
+        Arc::new(CandidateGraphRepository {
+            seen_queries: Arc::new(Mutex::new(Vec::new())),
+            seen_vectors: Arc::new(Mutex::new(Vec::new())),
+            candidates: RawEntityCandidateData {
+                lexical_matches: vec![
+                    EntityLexicalMatch {
+                        id: "lexical-only".to_string(),
+                        name: "Lexical".to_string(),
+                        score: 1.0,
+                        type_id: "node.person".to_string(),
+                        matched_tokens: vec!["lexical".to_string()],
+                    },
+                    EntityLexicalMatch {
+                        id: "blended".to_string(),
+                        name: "Blended".to_string(),
+                        score: 0.5,
+                        type_id: "node.person".to_string(),
+                        matched_tokens: vec!["blend".to_string()],
+                    },
+                ],
+                semantic_hits: vec![
+                    EntitySemanticHit {
+                        entity_id: "blended".to_string(),
+                        name: "Blended".to_string(),
+                        type_id: "node.person".to_string(),
+                        score: 1.0,
+                        described_by_text: Some("best match".to_string()),
+                    },
+                    EntitySemanticHit {
+                        entity_id: "semantic-only".to_string(),
+                        name: "Semantic".to_string(),
+                        type_id: "node.person".to_string(),
+                        score: 0.9,
+                        described_by_text: Some("semantic context".to_string()),
+                    },
+                ],
+            },
+        }),
+        Arc::new(TrackingEmbedder {
+            seen_texts: Arc::new(Mutex::new(Vec::new())),
+            vectors: vec![vec![0.7, 0.3]],
+        }),
+    );
+
+    let result = app
+        .find_entity_candidates(FindEntityCandidatesQuery {
+            names: vec!["blend".to_string()],
+            potential_type_ids: vec![],
+            short_description: Some("desc".to_string()),
+            user_id: "u-1".to_string(),
+            limit: None,
+        })
+        .await
+        .expect("query should succeed");
+
+    assert_eq!(
+        result
+            .candidates
+            .iter()
+            .map(|candidate| candidate.id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["blended", "lexical-only", "semantic-only"]
+    );
+    assert_eq!(
+        result.candidates[0].described_by_text.as_deref(),
+        Some("best match")
     );
 }
 
@@ -2115,8 +2195,8 @@ impl GraphRepository for ContextGraphRepository {
         &self,
         _query: &FindEntityCandidatesQuery,
         _query_vector: Option<&[f32]>,
-    ) -> Result<Vec<EntityCandidate>> {
-        Ok(Vec::new())
+    ) -> Result<RawEntityCandidateData> {
+        Ok(RawEntityCandidateData::default())
     }
 
     async fn list_entities_by_type(
@@ -2395,8 +2475,8 @@ impl GraphRepository for ListByTypeGraphRepository {
         &self,
         _query: &FindEntityCandidatesQuery,
         _query_vector: Option<&[f32]>,
-    ) -> Result<Vec<EntityCandidate>> {
-        Ok(Vec::new())
+    ) -> Result<RawEntityCandidateData> {
+        Ok(RawEntityCandidateData::default())
     }
 
     async fn list_entities_by_type(

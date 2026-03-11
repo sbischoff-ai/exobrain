@@ -2,10 +2,11 @@ use anyhow::Result;
 use async_trait::async_trait;
 
 use crate::domain::{
-    EdgeEndpointRule, EmbeddedBlock, EntityCandidate, ExistingBlockContext, ExtractionUniverse,
+    EdgeEndpointRule, EmbeddedBlock, ExistingBlockContext, ExtractionUniverse,
     FindEntityCandidatesQuery, GetEntityContextQuery, GetEntityContextResult, GraphDelta,
-    ListEntitiesByTypeQuery, ListEntitiesByTypeResult, NodeRelationshipCounts, SchemaKind,
-    SchemaType, TypeInheritance, TypeProperty, UpsertSchemaTypePropertyInput, UserInitGraphNodeIds,
+    ListEntitiesByTypeQuery, ListEntitiesByTypeResult, NodeRelationshipCounts,
+    RawEntityCandidateData, SchemaKind, SchemaType, TypeInheritance, TypeProperty,
+    UpsertSchemaTypePropertyInput, UserInitGraphNodeIds,
 };
 
 #[async_trait]
@@ -62,7 +63,7 @@ pub trait GraphRepository: Send + Sync {
         &self,
         query: &FindEntityCandidatesQuery,
         query_vector: Option<&[f32]>,
-    ) -> Result<Vec<EntityCandidate>>;
+    ) -> Result<RawEntityCandidateData>;
     async fn get_entity_context(
         &self,
         query: &GetEntityContextQuery,

@@ -210,7 +210,7 @@ impl GraphRepository for GraphRepoFixture {
         &self,
         _query: &crate::domain::FindEntityCandidatesQuery,
         _query_vector: Option<&[f32]>,
-    ) -> Result<Vec<crate::domain::EntityCandidate>> {
+    ) -> Result<crate::domain::RawEntityCandidateData> {
         Err(anyhow!("not implemented"))
     }
     async fn get_entity_context(
