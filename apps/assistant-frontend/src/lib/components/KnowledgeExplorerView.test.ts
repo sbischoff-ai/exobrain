@@ -214,6 +214,7 @@ describe('KnowledgeExplorerView', () => {
       title: 'Page Title',
       category_id: 'task',
       summary: null,
+      properties: { source: 'docs', owner: 'team-knowledge' },
       content_markdown: '## Body',
       created_at: '2026-01-02T03:04:05Z',
       updated_at: '2026-01-03T04:05:06Z',
@@ -231,11 +232,21 @@ describe('KnowledgeExplorerView', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Page Title' })).toBeInTheDocument();
       expect(screen.getByText('Created 2026/01/02 03:04 · Updated 2026/01/03 04:05')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Properties' })).toBeInTheDocument();
+      expect(screen.getByText('source')).toBeInTheDocument();
+      expect(screen.getByText('docs')).toBeInTheDocument();
       expect(screen.getByRole('heading', { name: 'Related pages' })).toBeInTheDocument();
       expect(screen.getByText('Linked Page')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Event' })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Task' })).toBeInTheDocument();
     });
+
+    const meta = screen.getByText('Created 2026/01/02 03:04 · Updated 2026/01/03 04:05');
+    const propertiesHeading = screen.getByRole('heading', { name: 'Properties' });
+    const markdownHeading = screen.getByRole('heading', { name: 'Body' });
+
+    expect(meta.compareDocumentPosition(propertiesHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(propertiesHeading.compareDocumentPosition(markdownHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     expect(getPage).toHaveBeenCalledWith('page-1');
   });
@@ -257,6 +268,7 @@ describe('KnowledgeExplorerView', () => {
       title: 'Child Page',
       category_id: 'child',
       summary: null,
+      properties: {},
       content_markdown: 'Body',
       created_at: null,
       updated_at: null,
@@ -307,6 +319,7 @@ describe('KnowledgeExplorerView', () => {
       title: 'Child Page',
       category_id: 'child',
       summary: null,
+      properties: {},
       content_markdown: 'Body',
       created_at: null,
       updated_at: null,
