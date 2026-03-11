@@ -23,7 +23,7 @@ def _tool_registry():
         web_search_adapter=WebSearchAdapter(client=web_client),
         web_fetch_adapter=WebFetchAdapter(client=web_client),
     )
-    settings = Settings.model_validate({"APP_ENV": "test", "WEB_SEARCH_PROVIDER": "static"})
+    settings = Settings.model_validate({"APP_ENV": "test", "WEB_SEARCH_PROVIDER": "static", "ENABLE_UTILITY_TOOLS": True})
     return create_tool_registry(adapters, settings)
 
 
