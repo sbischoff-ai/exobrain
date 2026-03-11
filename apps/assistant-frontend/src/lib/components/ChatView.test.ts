@@ -6,6 +6,32 @@ import { describe, expect, it, vi } from 'vitest';
 import ChatView from './ChatView.svelte';
 
 describe('ChatView', () => {
+  it('focuses chat input when composer becomes enabled after streaming', async () => {
+    const view = render(ChatView, {
+      props: {
+        reference: '2026/02/19',
+        messages: [],
+        inputDisabled: true,
+        streamingInProgress: true
+      }
+    });
+
+    const messageInput = view.container.querySelector('#message-input') as HTMLTextAreaElement;
+    expect(messageInput).toBeTruthy();
+    expect(messageInput.disabled).toBe(true);
+
+    await view.rerender({
+      reference: '2026/02/19',
+      messages: [],
+      inputDisabled: false,
+      streamingInProgress: false
+    });
+
+    await waitFor(() => {
+      expect(messageInput.disabled).toBe(false);
+      expect(document.activeElement).toBe(messageInput);
+    });
+  });
 
 
   it('uses the shared chat bubble icon for send action', () => {
