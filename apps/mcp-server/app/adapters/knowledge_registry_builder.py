@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from app.adapters.tool_adapters import ToolAdapterRegistry
 from app.adapters.tool_registry import ToolRegistration, input_parser, schema_metadata
-from app.contracts import ResolveEntitiesToolInput
+from app.contracts import GetEntityContextToolInput, ResolveEntitiesToolInput
 
 
 def build_knowledge_tool_registrations(adapters: ToolAdapterRegistry) -> list[ToolRegistration]:
@@ -21,5 +21,18 @@ def build_knowledge_tool_registrations(adapters: ToolAdapterRegistry) -> list[To
             handler=adapters.invoke_resolve_entities,
             feature_flag="enable_knowledge_tools",
             dependencies=("knowledge_interface_client",),
-        )
+        ),
+        ToolRegistration(
+            name="get_entity_context",
+            category="knowledge",
+            metadata_provider=schema_metadata(
+                "get_entity_context",
+                "Hydrate compact markdown context for a canonical entity_id and return related entity handles for follow-up retrieval.",
+                GetEntityContextToolInput,
+            ),
+            invocation_parser=input_parser(GetEntityContextToolInput),
+            handler=adapters.invoke_get_entity_context,
+            feature_flag="enable_knowledge_tools",
+            dependencies=("knowledge_interface_client",),
+        ),
     ]
