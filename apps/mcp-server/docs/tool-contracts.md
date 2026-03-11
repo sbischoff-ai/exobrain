@@ -158,6 +158,33 @@ Description: Resolve input entities against the knowledge graph and create missi
 ---
 
 
+### `get_entity_context`
+
+Description: Fetch markdown context for a canonical entity and return adjacent entities for graph-aware follow-up lookups.
+
+**Input (`arguments`)**
+
+- `entity_id` (string, required): minimum length `1`
+- `depth` (integer | null, optional): range `0..32`; maps to knowledge `max_block_level`
+- `focus` (string | null, optional): maximum length `160`
+
+**Output (`result`)**
+
+- `context_markdown` (string)
+- `related_entities` (array)
+  - `entity_id` (string)
+  - `name` (string)
+  - `aliases` (array of strings)
+  - `entity_type` (string)
+  - `description` (string)
+  - `relationship_type` (string)
+  - `relationship_direction` (enum)
+    - `"incoming"`
+    - `"outgoing"`
+
+---
+
+
 ## Agent self-descriptive metadata contract
 
 Tool discovery metadata is a hard contract for autonomous agents that must choose and invoke tools without human help.

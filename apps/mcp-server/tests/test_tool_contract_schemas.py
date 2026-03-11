@@ -5,6 +5,8 @@ from app.adapters.tool_adapters import ToolAdapterRegistry
 from app.adapters.web_tools import StaticWebSearchClient, WebFetchAdapter, WebSearchAdapter
 from app.contracts import (
     GenericToolSuccessEnvelope,
+    GetEntityContextToolInput,
+    GetEntityContextToolOutput,
     ResolveEntitiesToolInput,
     ResolveEntitiesToolOutput,
     ToolErrorEnvelope,
@@ -228,3 +230,52 @@ def test_tool_success_envelope_types_resolve_entities_result() -> None:
     )
 
     assert isinstance(envelope, GenericToolSuccessEnvelope)
+
+
+def test_get_entity_context_input_requires_non_empty_entity_id() -> None:
+    with pytest.raises(ValidationError):
+        GetEntityContextToolInput.model_validate({"entity_id": ""})
+
+
+def test_get_entity_context_input_rejects_out_of_range_depth() -> None:
+    with pytest.raises(ValidationError):
+        GetEntityContextToolInput.model_validate({"entity_id": "e1", "depth": 33})
+
+
+def test_get_entity_context_output_requires_related_entity_relationship_fields() -> None:
+    with pytest.raises(ValidationError):
+        GetEntityContextToolOutput.model_validate(
+            {
+                "context_markdown": "# Entity",
+                "related_entities": [
+                    {
+                        "entity_id": "e2",
+                        "name": "Alice",
+                        "aliases": [],
+                        "entity_type": "person",
+                        "description": "example",
+                    }
+                ],
+            }
+        )
+
+
+def test_get_entity_context_output_accepts_resolve_like_related_entity_shape() -> None:
+    payload = GetEntityContextToolOutput.model_validate(
+        {
+            "context_markdown": "# Entity",
+            "related_entities": [
+                {
+                    "entity_id": "e2",
+                    "name": "Alice",
+                    "aliases": ["A."],
+                    "entity_type": "person",
+                    "description": "example",
+                    "relationship_type": "WORKS_AT",
+                    "relationship_direction": "incoming",
+                }
+            ],
+        }
+    )
+
+    assert payload.related_entities[0].entity_id == "e2"
