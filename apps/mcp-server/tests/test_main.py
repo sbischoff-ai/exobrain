@@ -37,6 +37,28 @@ def test_list_tools() -> None:
     assert web_fetch["inputSchema"]["properties"]["url"]["type"] == "string"
 
 
+def test_list_tools_includes_agent_facing_input_descriptions() -> None:
+    response = client.get("/mcp/tools")
+
+    assert response.status_code == 200
+    tools = {tool["name"]: tool for tool in response.json()["tools"]}
+
+    web_search_properties = tools["web_search"]["inputSchema"]["properties"]
+    for field in ["query", "max_results", "recency_days", "include_domains", "exclude_domains"]:
+        assert web_search_properties[field]["description"]
+
+    web_fetch_properties = tools["web_fetch"]["inputSchema"]["properties"]
+    for field in ["url", "max_chars"]:
+        assert web_fetch_properties[field]["description"]
+
+    resolve_entities_schema = tools["resolve_entities"]["inputSchema"]
+    assert resolve_entities_schema["properties"]["entities"]["description"]
+
+    resolve_entity_item_properties = resolve_entities_schema["$defs"]["ResolveEntitiesInputItem"]["properties"]
+    for field in ["name", "type_hint", "description_hint", "expected_existence"]:
+        assert resolve_entity_item_properties[field]["description"]
+
+
 def test_list_tools_omits_resolve_entities_when_knowledge_disabled() -> None:
     disabled_client = TestClient(
         create_app(

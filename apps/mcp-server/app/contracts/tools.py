@@ -41,11 +41,34 @@ class AddToolOutput(StrictModel):
 
 
 class WebSearchToolInput(StrictModel):
-    query: str = Field(min_length=1)
-    max_results: int = Field(default=5, ge=1, le=10)
-    recency_days: int | None = Field(default=None, ge=1)
-    include_domains: list[str] | None = None
-    exclude_domains: list[str] | None = None
+    query: str = Field(
+        min_length=1,
+        description="Search phrase describing what information to find on the web.",
+        examples=["latest qdrant release notes"],
+    )
+    max_results: int = Field(
+        default=5,
+        ge=1,
+        le=10,
+        description="Maximum number of ranked results to return; use smaller values for focused lookups.",
+        examples=[5],
+    )
+    recency_days: int | None = Field(
+        default=None,
+        ge=1,
+        description="Optional freshness window in days; set to bias results toward recently published pages.",
+        examples=[30],
+    )
+    include_domains: list[str] | None = Field(
+        default=None,
+        description="Optional domain allowlist (hostnames only) to restrict search results.",
+        examples=[["docs.python.org", "fastapi.tiangolo.com"]],
+    )
+    exclude_domains: list[str] | None = Field(
+        default=None,
+        description="Optional domain blocklist (hostnames only) to filter out unwanted sources.",
+        examples=[["pinterest.com", "facebook.com"]],
+    )
 
 
 class WebSearchResultItem(StrictModel):
@@ -61,8 +84,18 @@ class WebSearchToolOutput(StrictModel):
 
 
 class WebFetchToolInput(StrictModel):
-    url: str = Field(min_length=1)
-    max_chars: int = Field(default=4000, ge=100, le=20000)
+    url: str = Field(
+        min_length=1,
+        description="Absolute HTTP(S) URL of the page to fetch and extract readable text from.",
+        examples=["https://example.com/blog/ai-updates"],
+    )
+    max_chars: int = Field(
+        default=4000,
+        ge=100,
+        le=20000,
+        description="Maximum number of characters to return from extracted content; increase for long-form pages.",
+        examples=[4000],
+    )
 
 
 class WebFetchToolOutput(StrictModel):
@@ -80,14 +113,36 @@ class ResolveEntityExpectedExistence(str, Enum):
 
 
 class ResolveEntitiesInputItem(StrictModel):
-    name: str = Field(min_length=1)
-    type_hint: str | None = Field(default=None, max_length=120)
-    description_hint: str | None = Field(default=None, max_length=300)
-    expected_existence: ResolveEntityExpectedExistence = ResolveEntityExpectedExistence.UNKNOWN
+    name: str = Field(
+        min_length=1,
+        description="Primary entity name exactly as mentioned in user context.",
+        examples=["OpenAI"],
+    )
+    type_hint: str | None = Field(
+        default=None,
+        max_length=120,
+        description="Optional short category hint (for example person, company, product) to improve matching.",
+        examples=["company"],
+    )
+    description_hint: str | None = Field(
+        default=None,
+        max_length=300,
+        description="Optional disambiguation details such as role, location, or timeframe.",
+        examples=["AI research organization based in San Francisco"],
+    )
+    expected_existence: ResolveEntityExpectedExistence = Field(
+        default=ResolveEntityExpectedExistence.UNKNOWN,
+        description="Whether this entity is expected to already exist in memory: new, existing, or unknown.",
+        examples=["existing"],
+    )
 
 
 class ResolveEntitiesToolInput(StrictModel):
-    entities: list[ResolveEntitiesInputItem] = Field(min_length=1)
+    entities: list[ResolveEntitiesInputItem] = Field(
+        min_length=1,
+        description="One or more entities to resolve, each with a name and optional disambiguation hints.",
+        examples=[[{"name": "Alice Johnson", "type_hint": "person", "expected_existence": "unknown"}]],
+    )
 
 
 class ResolveEntityMatchStatus(str, Enum):
