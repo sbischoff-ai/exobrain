@@ -65,3 +65,30 @@ async def test_build_mcp_tools_requires_canonical_input_schema_field() -> None:
 
     schema = tools[0].args_schema.model_json_schema()
     assert schema.get("properties") == {}
+
+
+@pytest.mark.asyncio
+async def test_build_mcp_tools_uses_schema_defaults_for_optional_args() -> None:
+    class _DefaultSchemaMCPClient(_StubMCPClient):
+        async def list_tools(self) -> list[dict[str, Any]]:
+            return [
+                {
+                    "name": "web_search",
+                    "description": "Search web via MCP",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "query": {"type": "string"},
+                            "max_results": {"type": "integer", "default": 5},
+                        },
+                        "required": ["query"],
+                    },
+                }
+            ]
+
+    client = _DefaultSchemaMCPClient()
+    tools = await build_mcp_tools(mcp_client=client)
+
+    await tools[0].ainvoke({"query": "langgraph"})
+
+    assert client.calls == [("web_search", {"query": "langgraph", "max_results": 5})]

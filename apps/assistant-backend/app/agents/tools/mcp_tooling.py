@@ -36,7 +36,8 @@ def _build_args_schema(tool_name: str, inputSchema: dict[str, Any]) -> type[Base
                 continue
             arg_type = _json_schema_type_to_python(schema.get("type") if isinstance(schema.get("type"), str) else None)
             description = str(schema.get("description") or "")
-            default = ... if arg_name in required_set else None
+            has_default = "default" in schema
+            default = ... if arg_name in required_set else schema.get("default") if has_default else None
             fields[arg_name] = (arg_type, Field(default=default, description=description))
 
     model_name = "".join(part.capitalize() for part in tool_name.replace("-", "_").split("_")) + "Args"
