@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from enum import Enum
 from typing import Any, Literal
 
 from pydantic import Field
@@ -72,6 +73,44 @@ class WebFetchToolOutput(StrictModel):
     content_truncated: bool
 
 
+class ResolveEntityExpectedExistence(str, Enum):
+    NEW = "new"
+    EXISTING = "existing"
+    UNKNOWN = "unknown"
+
+
+class ResolveEntitiesInputItem(StrictModel):
+    name: str = Field(min_length=1)
+    type_hint: str | None = Field(default=None, max_length=120)
+    description_hint: str | None = Field(default=None, max_length=300)
+    expected_existence: ResolveEntityExpectedExistence = ResolveEntityExpectedExistence.UNKNOWN
+
+
+class ResolveEntitiesToolInput(StrictModel):
+    entities: list[ResolveEntitiesInputItem] = Field(min_length=1)
+
+
+class ResolveEntityMatchStatus(str, Enum):
+    MATCHED = "matched"
+    CREATED = "created"
+    UNRESOLVED = "unresolved"
+
+
+class ResolveEntitiesOutputItem(StrictModel):
+    entity_id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    aliases: list[str]
+    entity_type: str = Field(min_length=1)
+    description: str
+    status: ResolveEntityMatchStatus
+    confidence: float = Field(ge=0.0, le=1.0)
+    newly_created: bool
+
+
+class ResolveEntitiesToolOutput(StrictModel):
+    results: list[ResolveEntitiesOutputItem]
+
+
 class ToolInvocation(StrictModel):
     name: str = Field(min_length=1)
     arguments: dict[str, Any]
@@ -111,6 +150,13 @@ class WebFetchToolSuccess(StrictModel):
     metadata: CorrelationMetadata | None = None
 
 
+class ResolveEntitiesToolSuccess(StrictModel):
+    ok: Literal[True] = True
+    name: Literal["resolve_entities"]
+    result: ResolveEntitiesToolOutput
+    metadata: CorrelationMetadata | None = None
+
+
 class GenericToolSuccessEnvelope(StrictModel):
     """Fallback success envelope for dynamically registered tools."""
 
@@ -127,6 +173,6 @@ class ToolErrorEnvelope(StrictModel):
     metadata: CorrelationMetadata | None = None
 
 
-KnownToolSuccess = EchoToolSuccess | AddToolSuccess | WebSearchToolSuccess | WebFetchToolSuccess
+KnownToolSuccess = EchoToolSuccess | AddToolSuccess | WebSearchToolSuccess | WebFetchToolSuccess | ResolveEntitiesToolSuccess
 ToolSuccessEnvelope = KnownToolSuccess | GenericToolSuccessEnvelope
 ToolResult = ToolSuccessEnvelope | ToolErrorEnvelope
