@@ -166,6 +166,59 @@ class ResolveEntitiesToolOutput(StrictModel):
     results: list[ResolveEntitiesOutputItem]
 
 
+class GetEntityContextToolInput(StrictModel):
+    entity_id: str = Field(
+        min_length=1,
+        description="Canonical entity identifier from resolve_entities used as the context lookup root.",
+        examples=["ent_openai"],
+    )
+    depth: int | None = Field(
+        default=None,
+        ge=0,
+        le=32,
+        description="Optional traversal depth bound for related evidence blocks; maps to knowledge max_block_level.",
+        examples=[5],
+    )
+    focus: str | None = Field(
+        default=None,
+        max_length=160,
+        description="Optional short focus prompt to guide LLM-based context condensing toward the current user intent.",
+        examples=["Open-source model releases and enterprise partnerships"],
+    )
+
+
+class RelationshipDirection(str, Enum):
+    INCOMING = "incoming"
+    OUTGOING = "outgoing"
+
+
+class GetEntityContextRelatedEntityItem(StrictModel):
+    entity_id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    aliases: list[str]
+    entity_type: str = Field(min_length=1)
+    description: str
+    relationship_type: str = Field(
+        min_length=1,
+        description="Knowledge-graph edge label that connects the requested entity to this related entity.",
+        examples=["WORKS_AT"],
+    )
+    relationship_direction: RelationshipDirection = Field(
+        description="Direction of the relationship relative to the requested entity.",
+        examples=["outgoing"],
+    )
+
+
+class GetEntityContextToolOutput(StrictModel):
+    context_markdown: str = Field(
+        description="Agent-ready markdown summary for the requested entity, including salient context extracted from memory.",
+        examples=["# OpenAI\n\nOpenAI is an AI research and deployment company..."],
+    )
+    related_entities: list[GetEntityContextRelatedEntityItem] = Field(
+        description="Nearby entities connected to the requested entity and suitable for follow-up get_entity_context calls.",
+    )
+
+
 class ToolInvocation(StrictModel):
     name: str = Field(min_length=1)
     arguments: dict[str, Any]
