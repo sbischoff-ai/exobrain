@@ -45,6 +45,7 @@ export interface KnowledgePageDetail {
   category_id: string | null;
   title: string;
   summary: string | null;
+  properties: Record<string, string>;
   content_markdown: string;
   created_at: string;
   updated_at: string;

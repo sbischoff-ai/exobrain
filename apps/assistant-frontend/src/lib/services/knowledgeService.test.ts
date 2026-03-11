@@ -93,6 +93,7 @@ describe('knowledgeService', () => {
           title: 'Entity One',
           category_id: 'node.child',
           summary: 'Root',
+          properties: { source: 'journal', owner: 'assistant' },
           metadata: {
             created_at: '2026-02-19T09:00:00Z',
             updated_at: '2026-02-19T10:00:00Z'
@@ -117,6 +118,7 @@ describe('knowledgeService', () => {
       category_id: 'node.child',
       title: 'Entity One',
       summary: 'Root',
+      properties: { source: 'journal', owner: 'assistant' },
       content_markdown: 'Root\\n\\nChild',
       created_at: '2026-02-19T09:00:00Z',
       updated_at: '2026-02-19T10:00:00Z',
@@ -131,6 +133,47 @@ describe('knowledgeService', () => {
   });
 
 
+
+
+  it('defaults properties to an empty object when payload is missing or malformed', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          id: 'entity-10',
+          title: 'Entity Ten',
+          properties: ['invalid'],
+          links: [],
+          content_markdown: 'Content'
+        }),
+        { status: 200 }
+      )
+    );
+
+    const invalidRecordResponse = await knowledgeService.getPage('entity-10');
+
+    expect(invalidRecordResponse.properties).toEqual({});
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          id: 'entity-11',
+          title: 'Entity Eleven',
+          properties: {
+            keep: 'yes',
+            dropNumber: 123,
+            dropObject: { nested: true }
+          },
+          links: [],
+          content_markdown: 'Content'
+        }),
+        { status: 200 }
+      )
+    );
+
+    const mixedRecordResponse = await knowledgeService.getPage('entity-11');
+
+    expect(mixedRecordResponse.properties).toEqual({ keep: 'yes' });
+  });
 
   it('normalizes object-shaped category breadcrumb paths', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
@@ -187,6 +230,7 @@ describe('knowledgeService', () => {
     expect(response.category_id).toBe('node.note');
     expect(response.created_at).toBe('2026-03-01T08:00:00Z');
     expect(response.updated_at).toBe('2026-03-01T09:00:00Z');
+    expect(response.properties).toEqual({});
   });
 
   it('posts enqueue request without journal_reference when omitted', async () => {

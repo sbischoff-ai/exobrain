@@ -29,6 +29,7 @@ interface BackendKnowledgePageDetailResponse {
   title?: unknown;
   summary?: unknown;
   metadata?: unknown;
+  properties?: unknown;
   links?: unknown;
   content_markdown?: unknown;
   category_breadcrumb?: unknown;
@@ -175,6 +176,23 @@ function normalizeCategoryBreadcrumb(value: unknown): KnowledgePageCategoryBread
   };
 }
 
+
+function normalizePageProperties(value: unknown): Record<string, string> {
+  if (!isRecord(value) || Array.isArray(value)) {
+    return {};
+  }
+
+  const normalized: Record<string, string> = {};
+
+  for (const [key, propertyValue] of Object.entries(value)) {
+    if (typeof propertyValue === 'string') {
+      normalized[key] = propertyValue;
+    }
+  }
+
+  return normalized;
+}
+
 function normalizePageDetail(value: BackendKnowledgePageDetailResponse): KnowledgePageDetail {
   const metadata = isRecord(value.metadata) ? value.metadata : {};
   const links = Array.isArray(value.links) ? value.links : [];
@@ -184,6 +202,7 @@ function normalizePageDetail(value: BackendKnowledgePageDetailResponse): Knowled
     category_id: typeof value.category_id === 'string' ? value.category_id : null,
     title: typeof value.title === 'string' ? value.title : '',
     summary: typeof value.summary === 'string' ? value.summary : null,
+    properties: normalizePageProperties(value.properties),
     content_markdown: typeof value.content_markdown === 'string' ? value.content_markdown : '',
     created_at: maybeTimestamp(metadata.created_at) || maybeTimestamp(value.created_at),
     updated_at: maybeTimestamp(metadata.updated_at) || maybeTimestamp(value.updated_at),
