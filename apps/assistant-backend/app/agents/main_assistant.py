@@ -12,6 +12,7 @@ from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
 from app.agents.base import ChatAgent
 from app.agents.tools.contracts import StreamEventMapper
+from app.agents.tools.mcp_tooling import mcp_access_token_context
 from app.services.chat_stream import ChatStreamEvent
 
 logger = logging.getLogger(__name__)
@@ -57,30 +58,37 @@ class MainAssistantAgent(ChatAgent):
             checkpointer_cm=checkpointer_cm,
         )
 
-    async def astream(self, message: str, conversation_id: str) -> AsyncIterator[ChatStreamEvent]:
+    async def astream(
+        self,
+        message: str,
+        conversation_id: str,
+        *,
+        access_token: str | None = None,
+    ) -> AsyncIterator[ChatStreamEvent]:
         logger.debug(
             "streaming response from main assistant",
             extra={"message_length": len(message), "conversation_id": conversation_id},
         )
         pending_mappers: dict[str, tuple[StreamEventMapper, dict[str, Any]]] = {}
-        async for mode, payload in self._compiled_agent.astream(
-            {"messages": [{"role": "user", "content": message}]},
-            stream_mode=["messages", "updates"],
-            config={"configurable": {"thread_id": conversation_id}},
-        ):
-            if mode == "messages":
-                chunk, metadata = payload
-                if metadata.get("langgraph_node") != "model":
+        with mcp_access_token_context(access_token):
+            async for mode, payload in self._compiled_agent.astream(
+                {"messages": [{"role": "user", "content": message}]},
+                stream_mode=["messages", "updates"],
+                config={"configurable": {"thread_id": conversation_id}},
+            ):
+                if mode == "messages":
+                    chunk, metadata = payload
+                    if metadata.get("langgraph_node") != "model":
+                        continue
+                    for text in self._extract_message_chunks(chunk):
+                        yield {"type": "message_chunk", "data": {"text": text}}
                     continue
-                for text in self._extract_message_chunks(chunk):
-                    yield {"type": "message_chunk", "data": {"text": text}}
-                continue
 
-            if mode != "updates":
-                continue
+                if mode != "updates":
+                    continue
 
-            for event in self._extract_update_events(payload, pending_mappers):
-                yield event
+                for event in self._extract_update_events(payload, pending_mappers):
+                    yield event
 
     def _extract_message_chunks(self, chunk: Any) -> list[str]:
         chunk_content = getattr(chunk, "content", chunk)

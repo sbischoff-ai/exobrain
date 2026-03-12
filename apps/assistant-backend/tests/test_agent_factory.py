@@ -15,10 +15,10 @@ class _FakeMCPClient:
     def __init__(self, tools: list[dict[str, Any]] | None = None) -> None:
         self._tools = tools or []
 
-    async def list_tools(self) -> list[dict[str, Any]]:
+    async def list_tools(self, *, access_token: str | None = None) -> list[dict[str, Any]]:  # noqa: ARG002
         return self._tools
 
-    async def invoke_tool(self, *, tool_name: str, arguments: dict[str, Any] | None = None) -> Any:  # noqa: ARG002
+    async def invoke_tool(self, *, tool_name: str, arguments: dict[str, Any] | None = None, access_token: str | None = None) -> Any:  # noqa: ARG002
         return {"tool": tool_name, "arguments": arguments or {}}
 
     async def close(self) -> None:

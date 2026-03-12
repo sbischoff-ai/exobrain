@@ -43,18 +43,25 @@ class MCPClient(MCPClientProtocol):
     async def close(self) -> None:
         return None
 
-    async def list_tools(self) -> list[dict[str, Any]]:
-        response = await self._call(path="/mcp/tools", method="GET")
+    async def list_tools(self, *, access_token: str | None = None) -> list[dict[str, Any]]:
+        response = await self._call(path="/mcp/tools", method="GET", access_token=access_token)
         tools = response.get("tools") if isinstance(response, dict) else None
         if not isinstance(tools, list):
             return []
         return [tool for tool in tools if isinstance(tool, dict)]
 
-    async def invoke_tool(self, *, tool_name: str, arguments: dict[str, Any] | None = None) -> Any:
+    async def invoke_tool(
+        self,
+        *,
+        tool_name: str,
+        arguments: dict[str, Any] | None = None,
+        access_token: str | None = None,
+    ) -> Any:
         response = await self._call(
             path="/mcp/tools/invoke",
             method="POST",
             payload={"name": tool_name, "arguments": arguments or {}},
+            access_token=access_token,
         )
         if not isinstance(response, dict):
             raise MCPClientError("mcp response must be a JSON object")
@@ -68,11 +75,18 @@ class MCPClient(MCPClientProtocol):
 
         return response.get("result")
 
-    async def _call(self, *, path: str, method: str, payload: dict[str, Any] | None = None) -> Any:
+    async def _call(
+        self,
+        *,
+        path: str,
+        method: str,
+        payload: dict[str, Any] | None = None,
+        access_token: str | None = None,
+    ) -> Any:
         for attempt in range(self._max_retries + 1):
             try:
                 response = await asyncio.wait_for(
-                    asyncio.to_thread(self._request_json, path, method, payload),
+                    asyncio.to_thread(self._request_json, path, method, payload, access_token),
                     timeout=self._request_timeout_seconds,
                 )
             except (asyncio.TimeoutError, TimeoutError, urllib.error.URLError, socket.timeout) as exc:
@@ -84,12 +98,22 @@ class MCPClient(MCPClientProtocol):
 
         raise MCPClientUnavailableError(f"mcp request failed for {method} {path}")
 
-    def _request_json(self, path: str, method: str, payload: dict[str, Any] | None) -> dict[str, Any]:
+    def _request_json(
+        self,
+        path: str,
+        method: str,
+        payload: dict[str, Any] | None,
+        access_token: str | None = None,
+    ) -> dict[str, Any]:
         data = json.dumps(payload).encode("utf-8") if payload is not None else None
+        headers = {"Content-Type": "application/json"}
+        if access_token:
+            headers["Authorization"] = f"Bearer {access_token}"
+
         request = urllib.request.Request(
             f"{self._base_url}{path}",
             data=data,
-            headers={"Content-Type": "application/json"},
+            headers=headers,
             method=method,
         )
 

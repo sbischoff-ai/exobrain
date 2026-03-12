@@ -30,6 +30,7 @@ class ChatService:
         principal: UnifiedPrincipal,
         message: str,
         client_message_id: str,
+        access_token: str | None = None,
     ) -> str:
         stream_id = str(uuid.uuid4())
         queue: asyncio.Queue[ChatStreamEvent | object] = asyncio.Queue()
@@ -66,6 +67,7 @@ class ChatService:
         principal: UnifiedPrincipal,
         message: str,
         client_message_id: str,
+        access_token: str | None = None,
     ) -> None:
         try:
             reference = self._journal_service.today_reference()
@@ -80,7 +82,11 @@ class ChatService:
 
             chunks: list[str] = []
             tool_calls: dict[str, dict[str, Any]] = {}
-            async for event in self._agent.astream(message=message, conversation_id=conversation_id):
+            async for event in self._agent.astream(
+                message=message,
+                conversation_id=conversation_id,
+                access_token=access_token,
+            ):
                 await queue.put(event)
                 if event["type"] == "message_chunk":
                     text = event["data"].get("text") if isinstance(event.get("data"), dict) else None

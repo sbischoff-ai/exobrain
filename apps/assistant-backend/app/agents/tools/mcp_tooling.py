@@ -1,11 +1,29 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Any
 
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field, create_model
 
 from app.services.contracts import MCPClientProtocol
+
+_MCP_ACCESS_TOKEN: ContextVar[str | None] = ContextVar("_MCP_ACCESS_TOKEN", default=None)
+
+
+def current_mcp_access_token() -> str | None:
+    return _MCP_ACCESS_TOKEN.get()
+
+
+@contextmanager
+def mcp_access_token_context(access_token: str | None) -> Iterator[None]:
+    token = _MCP_ACCESS_TOKEN.set(access_token)
+    try:
+        yield
+    finally:
+        _MCP_ACCESS_TOKEN.reset(token)
 
 
 def _json_schema_type_to_python(type_name: str | None) -> type[Any]:
@@ -56,7 +74,11 @@ async def build_mcp_tools(*, mcp_client: MCPClientProtocol) -> list[StructuredTo
         args_schema = _build_args_schema(tool_name, tool.get("inputSchema") if isinstance(tool.get("inputSchema"), dict) else {})
 
         async def _invoke_tool(*, _tool_name: str = tool_name, **kwargs: Any) -> Any:
-            return await mcp_client.invoke_tool(tool_name=_tool_name, arguments=kwargs)
+            return await mcp_client.invoke_tool(
+                tool_name=_tool_name,
+                arguments=kwargs,
+                access_token=current_mcp_access_token(),
+            )
 
         tools.append(
             StructuredTool.from_function(

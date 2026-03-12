@@ -1,4 +1,5 @@
 import logging
+from dataclasses import dataclass
 
 from fastapi import HTTPException, Request, status
 
@@ -8,6 +9,12 @@ from app.dependency_injection import get_container
 from app.services.contracts import AuthServiceProtocol
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class AuthContext:
+    principal: UnifiedPrincipal
+    access_token: str | None = None
 
 
 async def get_optional_auth_context(request: Request) -> UnifiedPrincipal | None:
@@ -37,3 +44,24 @@ async def get_required_auth_context(request: Request) -> UnifiedPrincipal:
     if principal is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required")
     return principal
+
+
+async def get_required_auth_context_with_token(request: Request) -> AuthContext:
+    container = get_container(request)
+    auth_service = container.resolve(AuthServiceProtocol)
+
+    auth_header = request.headers.get("authorization")
+    bearer_token: str | None = None
+    if auth_header and auth_header.lower().startswith("bearer "):
+        bearer_token = auth_header.split(" ", 1)[1]
+
+    principal = auth_service.principal_from_bearer(bearer_token)
+    if principal is not None:
+        return AuthContext(principal=principal, access_token=bearer_token)
+
+    settings = container.resolve(Settings)
+    session_id = request.cookies.get(settings.auth_cookie_name)
+    principal = await auth_service.principal_from_session(session_id)
+    if principal is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required")
+    return AuthContext(principal=principal, access_token=None)

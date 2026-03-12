@@ -5,13 +5,14 @@ from typing import Any
 import pytest
 
 from app.agents.tools import build_mcp_tools
+from app.agents.tools.mcp_tooling import mcp_access_token_context
 
 
 class _StubMCPClient:
     def __init__(self) -> None:
-        self.calls: list[tuple[str, dict[str, Any] | None]] = []
+        self.calls: list[tuple[str, dict[str, Any] | None, str | None]] = []
 
-    async def list_tools(self) -> list[dict[str, Any]]:
+    async def list_tools(self, *, access_token: str | None = None) -> list[dict[str, Any]]:  # noqa: ARG002
         return [
             {
                 "name": "web_search",
@@ -24,8 +25,14 @@ class _StubMCPClient:
             }
         ]
 
-    async def invoke_tool(self, *, tool_name: str, arguments: dict[str, Any] | None = None) -> Any:
-        self.calls.append((tool_name, arguments))
+    async def invoke_tool(
+        self,
+        *,
+        tool_name: str,
+        arguments: dict[str, Any] | None = None,
+        access_token: str | None = None,
+    ) -> Any:
+        self.calls.append((tool_name, arguments, access_token))
         return [{"url": "https://example.com"}]
 
     async def close(self) -> None:
@@ -42,13 +49,13 @@ async def test_build_mcp_tools_maps_to_langchain_tool_flow() -> None:
     result = await tools[0].ainvoke({"query": "langgraph", "max_results": 2})
 
     assert result == [{"url": "https://example.com"}]
-    assert client.calls == [("web_search", {"query": "langgraph", "max_results": 2})]
+    assert client.calls == [("web_search", {"query": "langgraph", "max_results": 2}, None)]
 
 
 @pytest.mark.asyncio
 async def test_build_mcp_tools_requires_canonical_input_schema_field() -> None:
     class _LegacySchemaMCPClient(_StubMCPClient):
-        async def list_tools(self) -> list[dict[str, Any]]:
+        async def list_tools(self, *, access_token: str | None = None) -> list[dict[str, Any]]:  # noqa: ARG002
             return [
                 {
                     "name": "web_search",
@@ -70,7 +77,7 @@ async def test_build_mcp_tools_requires_canonical_input_schema_field() -> None:
 @pytest.mark.asyncio
 async def test_build_mcp_tools_uses_schema_defaults_for_optional_args() -> None:
     class _DefaultSchemaMCPClient(_StubMCPClient):
-        async def list_tools(self) -> list[dict[str, Any]]:
+        async def list_tools(self, *, access_token: str | None = None) -> list[dict[str, Any]]:  # noqa: ARG002
             return [
                 {
                     "name": "web_search",
@@ -91,4 +98,20 @@ async def test_build_mcp_tools_uses_schema_defaults_for_optional_args() -> None:
 
     await tools[0].ainvoke({"query": "langgraph"})
 
-    assert client.calls == [("web_search", {"query": "langgraph", "max_results": 5})]
+    assert client.calls == [("web_search", {"query": "langgraph", "max_results": 5}, None)]
+
+
+@pytest.mark.asyncio
+async def test_build_mcp_tools_uses_stream_scoped_access_token() -> None:
+    client = _StubMCPClient()
+    tools = await build_mcp_tools(mcp_client=client)
+
+    with mcp_access_token_context("token-a"):
+        await tools[0].ainvoke({"query": "a", "max_results": 1})
+    with mcp_access_token_context("token-b"):
+        await tools[0].ainvoke({"query": "b", "max_results": 1})
+
+    assert client.calls == [
+        ("web_search", {"query": "a", "max_results": 1}, "token-a"),
+        ("web_search", {"query": "b", "max_results": 1}, "token-b"),
+    ]

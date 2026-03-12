@@ -49,7 +49,8 @@ async def test_build_mcp_tools_integrates_with_mcp_server_web_search() -> None:
         path: str,
         method: str,
         payload: dict[str, Any] | None,
-    ) -> dict[str, Any]:
+        access_token: str | None = None,
+    ) -> dict[str, Any]:  # noqa: ARG001
         response = test_client.request(method, path, json=payload)
         data = response.json()
         assert isinstance(data, dict)

@@ -11,7 +11,7 @@ class _StubMCPClient:
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict[str, Any] | None]] = []
 
-    async def list_tools(self) -> list[dict[str, Any]]:
+    async def list_tools(self, *, access_token: str | None = None) -> list[dict[str, Any]]:  # noqa: ARG002
         return [
             {
                 "name": "web_search",
@@ -38,7 +38,7 @@ class _StubMCPClient:
             },
         ]
 
-    async def invoke_tool(self, *, tool_name: str, arguments: dict[str, Any] | None = None) -> Any:
+    async def invoke_tool(self, *, tool_name: str, arguments: dict[str, Any] | None = None, access_token: str | None = None) -> Any:  # noqa: ARG002
         self.calls.append((tool_name, arguments))
         if tool_name == "web_search":
             return {"results": [{"url": "https://example.com"}]}
