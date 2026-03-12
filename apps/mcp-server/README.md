@@ -154,6 +154,7 @@ Category-specific builders live under `app/adapters/*_registry_builder.py` and a
 
 - one generic success envelope for all tools (built-in and dynamically registered)
   - `resolve_entities` currently returns deterministic placeholder resolution data in local/test flows (no external service dependency).
+  - `get_entity_context` maps `related_entities` to resolve-compatible fields (`entity_id`, `name`, `aliases`, `entity_type`, `description`) using KI `GetSchema` for type-name lookup with documented fallbacks when schema or descriptions are missing.
 - typed error envelopes for failures
 
 ## Local run

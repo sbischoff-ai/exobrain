@@ -13,7 +13,6 @@ from app.contracts import (
     GetEntityContextRelatedEntityItem,
     GetEntityContextToolInput,
     GetEntityContextToolOutput,
-    RelationshipDirection,
     ResolveEntitiesInputItem,
     ResolveEntitiesOutputItem,
     ResolveEntitiesToolInput,
@@ -79,7 +78,14 @@ class ToolAdapterRegistry:
             user_id=self._knowledge_interface_user_id,
             max_block_level=max_block_level,
         )
-        related_entities = _map_related_entities(response.get("neighbors"))
+        type_name_by_id = _build_entity_type_name_map(
+            self._knowledge_interface_client.get_schema(universe_id="wiki")
+        )
+        related_entities = _map_related_entities(
+            top_level_neighbors=response.get("neighbors"),
+            blocks=response.get("blocks"),
+            type_name_by_id=type_name_by_id,
+        )
 
         return GetEntityContextToolOutput(
             context_markdown=render_entity_context_markdown(
@@ -134,36 +140,95 @@ def _clamp_max_block_level(depth: int | None) -> int:
     return max(0, min(depth, _KI_MAX_BLOCK_LEVEL_CAP))
 
 
-def _map_related_entities(raw_neighbors: Any) -> list[GetEntityContextRelatedEntityItem]:
-    neighbors = raw_neighbors if isinstance(raw_neighbors, list) else []
-    related_entities: list[GetEntityContextRelatedEntityItem] = []
-    for neighbor in neighbors:
-        if not isinstance(neighbor, dict):
-            continue
+def _map_related_entities(
+    *,
+    top_level_neighbors: Any,
+    blocks: Any,
+    type_name_by_id: dict[str, str],
+) -> list[GetEntityContextRelatedEntityItem]:
+    related_entities_by_id: dict[str, GetEntityContextRelatedEntityItem] = {}
 
-        related = neighbor.get("other_entity") if isinstance(neighbor.get("other_entity"), dict) else {}
-        entity_id = _coerce_text(related.get("id"))
-        if not entity_id:
-            continue
-
-        direction_raw = _coerce_text(neighbor.get("direction"))
-        direction = RelationshipDirection.OUTGOING
-        if direction_raw and direction_raw.upper() == "INCOMING":
-            direction = RelationshipDirection.INCOMING
-
-        related_entities.append(
-            GetEntityContextRelatedEntityItem(
-                entity_id=entity_id,
-                name=_coerce_text(related.get("name")) or entity_id,
-                aliases=_coerce_list(related.get("aliases")),
-                entity_type=_coerce_text(related.get("type_id")) or "unknown",
-                description=_coerce_text(related.get("description")) or "",
-                relationship_type=_coerce_text(neighbor.get("edge_type")) or "RELATED_TO",
-                relationship_direction=direction,
-            )
+    for neighbor in _iter_neighbors(top_level_neighbors):
+        _upsert_related_entity(
+            related_entities_by_id,
+            neighbor=neighbor,
+            type_name_by_id=type_name_by_id,
         )
 
-    return related_entities
+    if isinstance(blocks, list):
+        for block in blocks:
+            if not isinstance(block, dict):
+                continue
+            for neighbor in _iter_neighbors(block.get("neighbors")):
+                _upsert_related_entity(
+                    related_entities_by_id,
+                    neighbor=neighbor,
+                    type_name_by_id=type_name_by_id,
+                )
+
+    return list(related_entities_by_id.values())
+
+
+def _iter_neighbors(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [neighbor for neighbor in value if isinstance(neighbor, dict)]
+
+
+def _upsert_related_entity(
+    related_entities_by_id: dict[str, GetEntityContextRelatedEntityItem],
+    *,
+    neighbor: dict[str, Any],
+    type_name_by_id: dict[str, str],
+) -> None:
+    related = neighbor.get("other_entity") if isinstance(neighbor.get("other_entity"), dict) else {}
+    entity_id = _coerce_text(related.get("id"))
+    if not entity_id:
+        return
+
+    type_id = _coerce_text(related.get("type_id"))
+    entity_type = type_name_by_id.get(type_id or "")
+    if entity_type is None:
+        # Fallback: preserve KI type_id when schema lookup misses or KI schema call omits the id.
+        entity_type = type_id or "unknown"
+
+    description = _coerce_text(related.get("description"))
+    if description is None:
+        # Fallback keeps output non-empty for resolve-compatible shape even when KI omits description.
+        description = f"Related entity {(_coerce_text(related.get('name')) or entity_id)}"
+
+    related_entities_by_id.setdefault(
+        entity_id,
+        GetEntityContextRelatedEntityItem(
+            entity_id=entity_id,
+            name=_coerce_text(related.get("name")) or entity_id,
+            aliases=_coerce_list(related.get("aliases")),
+            entity_type=entity_type,
+            description=description,
+        ),
+    )
+
+
+def _build_entity_type_name_map(raw_schema: Any) -> dict[str, str]:
+    if not isinstance(raw_schema, dict):
+        return {}
+
+    node_types = raw_schema.get("node_types")
+    if not isinstance(node_types, list):
+        return {}
+
+    mapping: dict[str, str] = {}
+    for node_type in node_types:
+        if not isinstance(node_type, dict):
+            continue
+        schema_type = node_type.get("type")
+        if not isinstance(schema_type, dict):
+            continue
+        type_id = _coerce_text(schema_type.get("id"))
+        type_name = _coerce_text(schema_type.get("name"))
+        if type_id and type_name:
+            mapping[type_id] = type_name
+    return mapping
 
 
 def _coerce_text(value: Any) -> str | None:
