@@ -259,12 +259,15 @@ describe('KnowledgeExplorerView', () => {
     const firstFragment = screen.getByText('First fragment from block one.');
     const secondFragment = screen.getByText('Second fragment from block one.');
     const thirdFragment = screen.getByText('Third fragment from block two.');
+    const allFragments = [firstFragment, secondFragment, thirdFragment];
 
     expect(meta.compareDocumentPosition(propertiesHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(propertiesHeading.compareDocumentPosition(markdownHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(markdownHeading.compareDocumentPosition(secondaryMarkdownHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(firstFragment.compareDocumentPosition(secondFragment) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(secondFragment.compareDocumentPosition(thirdFragment) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    allFragments.slice(0, -1).forEach((fragment, index) => {
+      const nextFragment = allFragments[index + 1];
+      expect(fragment.compareDocumentPosition(nextFragment) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
     expect(document.querySelectorAll('.content-block')).toHaveLength(2);
 
     expect(getPage).toHaveBeenCalledWith('page-1');

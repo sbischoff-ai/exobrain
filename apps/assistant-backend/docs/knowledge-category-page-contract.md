@@ -86,7 +86,7 @@ Returns page summaries for a category from `ListEntitiesByType`.
 
 ## Endpoint: `GET /api/knowledge/page/{page_id}`
 
-Returns page detail from `GetEntityContext` (`max_block_level=2`) with canonical timestamps in `metadata` and filtered entity-type properties in `properties`.
+Returns page detail from `GetEntityContext` (`max_block_level=2`) with canonical timestamps in `metadata`, filtered entity-type properties in `properties`, and ordered `content_blocks` (`block_id` + `markdown`).
 
 ### 200 response
 
