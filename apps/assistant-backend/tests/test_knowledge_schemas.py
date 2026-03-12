@@ -60,7 +60,10 @@ def test_page_detail_response_maps_aliases_and_content_blocks() -> None:
             },
             "properties": {"status": "active", "owner": "alice"},
             "links": [{"page_id": "page-8", "title": "Linked", "summary": "Neighbor"}],
-            "content_blocks": [{"block_id": "block-1", "markdown": "# Meaning"}],
+            "content_blocks": [
+                {"block_id": "block-1", "markdown": "# Meaning"},
+                {"block_id": "block-1-1", "markdown": "Supporting detail"},
+            ],
         }
     )
 
@@ -74,4 +77,6 @@ def test_page_detail_response_maps_aliases_and_content_blocks() -> None:
     assert response.links[0]["page_id"] == "page-8"
     assert response.content_blocks[0].block_id == "block-1"
     assert response.content_blocks[0].markdown == "# Meaning"
+    assert response.content_blocks[1].block_id == "block-1-1"
+    assert response.content_blocks[1].markdown == "Supporting detail"
     assert "entity" not in response.model_dump()

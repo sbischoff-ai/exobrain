@@ -533,7 +533,7 @@ async def test_list_category_pages_maps_compact_fields_and_pagination() -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_page_detail_maps_entity_neighbors_and_block_markdown() -> None:
+async def test_get_page_detail_maps_entity_neighbors_and_content_blocks() -> None:
     reply = knowledge_pb2.GetEntityContextReply(
         entity=knowledge_pb2.EntityContextCore(
             id="entity-1",
@@ -610,16 +610,21 @@ async def test_get_page_detail_maps_entity_neighbors_and_block_markdown() -> Non
 
 
 @pytest.mark.asyncio
-async def test_get_page_detail_maps_ordered_content_blocks() -> None:
+async def test_get_page_detail_preserves_depth_first_traversal_order_for_content_blocks() -> None:
     reply = knowledge_pb2.GetEntityContextReply(
-        entity=knowledge_pb2.EntityContextCore(id="entity-1", type_id="node.note", name="Entity One"),
+        entity=knowledge_pb2.EntityContextCore(
+            id="entity-1", type_id="node.note", name="Entity One"
+        ),
         entity_properties={
             "status": "draft",
             "id": "filtered-id",
         },
         blocks=[
-            knowledge_pb2.EntityContextBlock(id="b1", block_level=0, text="# Heading"),
-            knowledge_pb2.EntityContextBlock(id="b2", block_level=1, text="Bullet"),
+            knowledge_pb2.EntityContextBlock(id="b2", parent_block_id="b1", block_level=1, text="Child A"),
+            knowledge_pb2.EntityContextBlock(id="c1", parent_block_id="root", block_level=1, text="Child B"),
+            knowledge_pb2.EntityContextBlock(id="root", block_level=0, text="Root"),
+            knowledge_pb2.EntityContextBlock(id="b1", parent_block_id="root", block_level=1, text="Child A Parent"),
+            knowledge_pb2.EntityContextBlock(id="b2-1", parent_block_id="b2", block_level=2, text="Nested under Child A"),
         ],
     )
     service = KnowledgeService(
@@ -631,11 +636,14 @@ async def test_get_page_detail_maps_ordered_content_blocks() -> None:
 
     response = await service.get_page_detail(user_id="user-1", page_id="entity-1")
 
-    assert response["summary"] == "# Heading"
+    assert response["summary"] == "Root"
     assert response["properties"] == {"status": "draft"}
     assert response["content_blocks"] == [
-        {"block_id": "b1", "markdown": "# Heading"},
-        {"block_id": "b2", "markdown": "Bullet"},
+        {"block_id": "root", "markdown": "Root"},
+        {"block_id": "b1", "markdown": "Child A Parent"},
+        {"block_id": "b2", "markdown": "Child A"},
+        {"block_id": "b2-1", "markdown": "Nested under Child A"},
+        {"block_id": "c1", "markdown": "Child B"},
     ]
 
 
