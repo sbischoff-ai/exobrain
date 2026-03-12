@@ -178,6 +178,93 @@ Description: Fetch markdown context for a canonical entity and return adjacent e
   - `entity_type` (string): type name resolved via KI `GetSchema` (without setting optional `universe_id`) from neighbor `other_entity.type_id`; falls back to raw `type_id` (or `"unknown"`) when schema mapping is unavailable
   - `description` (string): from neighbor `other_entity.description`; falls back to concise `Related entity <name-or-id>` when omitted
 
+`related_entities` intentionally follows the `resolve_entities` result schema subset so agents can recursively fetch deeper context without shape conversion.
+
+#### Chaining pattern: `resolve_entities -> get_entity_context`
+
+Use `resolve_entities` to canonicalize user-provided entity names, then pass the resolved `entity_id` to `get_entity_context`.
+
+1. Call `resolve_entities` with user input.
+2. Select rows where `status` is `"matched"` or `"created"`.
+3. Call `get_entity_context` for each selected `entity_id`.
+4. Optionally recurse on returned `related_entities` (same field shape as resolve output subset).
+
+Example:
+
+`resolve_entities` request:
+
+```json
+{
+  "name": "resolve_entities",
+  "arguments": {
+    "entities": [
+      {
+        "name": "Ada Lovelace",
+        "type_hint": "person",
+        "expected_existence": "existing"
+      }
+    ]
+  }
+}
+```
+
+`resolve_entities` response excerpt:
+
+```json
+{
+  "ok": true,
+  "name": "resolve_entities",
+  "result": {
+    "results": [
+      {
+        "entity_id": "ent_ada_lovelace",
+        "name": "Ada Lovelace",
+        "aliases": ["Augusta Ada King"],
+        "entity_type": "person",
+        "description": "Early computing pioneer",
+        "status": "matched",
+        "confidence": 0.97,
+        "newly_created": false
+      }
+    ]
+  }
+}
+```
+
+`get_entity_context` request:
+
+```json
+{
+  "name": "get_entity_context",
+  "arguments": {
+    "entity_id": "ent_ada_lovelace",
+    "depth": 2,
+    "focus": "programming contributions"
+  }
+}
+```
+
+`get_entity_context` response excerpt:
+
+```json
+{
+  "ok": true,
+  "name": "get_entity_context",
+  "result": {
+    "context_markdown": "# Ada Lovelace\n...",
+    "related_entities": [
+      {
+        "entity_id": "ent_charles_babbage",
+        "name": "Charles Babbage",
+        "aliases": [],
+        "entity_type": "person",
+        "description": "Related entity Charles Babbage"
+      }
+    ]
+  }
+}
+```
+
 ---
 
 
