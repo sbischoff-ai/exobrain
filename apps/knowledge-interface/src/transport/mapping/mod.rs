@@ -255,6 +255,7 @@ fn to_proto_entity_context_neighbor(
             description: neighbor.other_entity.description,
             name: neighbor.other_entity.name,
             type_id: neighbor.other_entity.type_id,
+            aliases: neighbor.other_entity.aliases,
         }),
     }
 }
@@ -559,6 +560,7 @@ mod tests {
                         description: Some("Mathematician".to_string()),
                         name: Some("Grace".to_string()),
                         type_id: "node.person".to_string(),
+                        aliases: vec!["Amazing Grace".to_string()],
                     },
                 },
                 EntityContextNeighborItem {
@@ -570,6 +572,7 @@ mod tests {
                         description: None,
                         name: None,
                         type_id: "node.organization".to_string(),
+                        aliases: vec![],
                     },
                 },
             ],
@@ -610,6 +613,13 @@ mod tests {
                 .as_ref()
                 .map(|e| e.type_id.as_str()),
             Some("node.person")
+        );
+        assert_eq!(
+            reply.neighbors[0]
+                .other_entity
+                .as_ref()
+                .map(|e| e.aliases.clone()),
+            Some(vec!["Amazing Grace".to_string()])
         );
         assert_eq!(
             reply.neighbors[0].direction,

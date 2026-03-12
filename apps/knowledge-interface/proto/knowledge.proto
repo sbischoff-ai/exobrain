@@ -341,6 +341,7 @@ message EntityContextOtherEntity {
   optional string description = 2;
   optional string name = 3;
   string type_id = 4;
+  repeated string aliases = 5;
 }
 
 enum NeighborDirection {

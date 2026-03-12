@@ -485,6 +485,7 @@ pub struct EntityContextOtherEntity {
     pub description: Option<String>,
     pub name: Option<String>,
     pub type_id: String,
+    pub aliases: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
