@@ -47,7 +47,7 @@ def test_category_pages_list_response_preserves_pagination() -> None:
     assert response.knowledge_pages[0].id == "page-1"
 
 
-def test_page_detail_response_maps_aliases_and_context_markdown() -> None:
+def test_page_detail_response_maps_aliases_and_content_blocks() -> None:
     response = KnowledgePageDetailResponse.model_validate(
         {
             "id": "page-42",
@@ -60,7 +60,7 @@ def test_page_detail_response_maps_aliases_and_context_markdown() -> None:
             },
             "properties": {"status": "active", "owner": "alice"},
             "links": [{"page_id": "page-8", "title": "Linked", "summary": "Neighbor"}],
-            "content_markdown": "# Meaning",
+            "content_blocks": [{"block_id": "block-1", "markdown": "# Meaning"}],
         }
     )
 
@@ -72,5 +72,6 @@ def test_page_detail_response_maps_aliases_and_context_markdown() -> None:
     assert response.metadata.updated_at == "2026-02-01T00:00:00Z"
     assert response.properties == {"status": "active", "owner": "alice"}
     assert response.links[0]["page_id"] == "page-8"
-    assert response.content_markdown == "# Meaning"
+    assert response.content_blocks[0].block_id == "block-1"
+    assert response.content_blocks[0].markdown == "# Meaning"
     assert "entity" not in response.model_dump()

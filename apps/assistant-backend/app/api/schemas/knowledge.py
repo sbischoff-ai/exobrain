@@ -89,6 +89,14 @@ class KnowledgePageMetadata(BaseModel):
     updated_at: str = Field(..., description="Upstream entity last-update timestamp")
 
 
+class KnowledgePageContentBlock(BaseModel):
+    block_id: str = Field(..., description="Stable identifier for one entity content block")
+    markdown: str = Field(
+        ...,
+        description="Markdown for this single entity block; clients render each block independently",
+    )
+
+
 class KnowledgePageDetailResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -123,8 +131,7 @@ class KnowledgePageDetailResponse(BaseModel):
         default_factory=list,
         description="Mapped related pages from entity neighbors, deduplicated by page_id",
     )
-    content_markdown: str = Field(
-        ...,
-        validation_alias=AliasChoices("content_markdown", "prompt_context_markdown"),
-        description="Full markdown content to render for the page detail view",
+    content_blocks: list[KnowledgePageContentBlock] = Field(
+        default_factory=list,
+        description="Ordered entity content blocks, where each item is rendered independently by clients",
     )

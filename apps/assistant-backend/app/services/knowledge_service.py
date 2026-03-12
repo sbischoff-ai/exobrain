@@ -279,7 +279,7 @@ class KnowledgeService:
             },
             "properties": properties,
             "links": links,
-            "content_markdown": self._render_blocks_markdown(reply.blocks),
+            "content_blocks": self._map_content_blocks(reply.blocks),
         }
 
     async def enqueue_update_job(
@@ -374,7 +374,7 @@ class KnowledgeService:
             raise KnowledgeWatchError("failed to watch knowledge update job") from exc
 
     @staticmethod
-    def _render_blocks_markdown(blocks: Any) -> str:
+    def _map_content_blocks(blocks: Any) -> list[dict[str, str]]:
         grouped: dict[str | None, list[Any]] = defaultdict(list)
         for block in blocks:
             parent_block_id = (
@@ -384,17 +384,17 @@ class KnowledgeService:
         for siblings in grouped.values():
             siblings.sort(key=lambda block: (block.block_level, block.id))
 
-        markdown_blocks: list[str] = []
+        content_blocks: list[dict[str, str]] = []
 
-        def render(parent_id: str | None) -> None:
+        def walk(parent_id: str | None) -> None:
             for block in grouped.get(parent_id, []):
                 text = block.text if block.HasField("text") else ""
                 if text.strip():
-                    markdown_blocks.append(text.strip())
-                render(block.id)
+                    content_blocks.append({"block_id": block.id, "markdown": text.strip()})
+                walk(block.id)
 
-        render(None)
-        return "\n\n".join(markdown_blocks)
+        walk(None)
+        return content_blocks
 
     @staticmethod
     def _extract_summary_from_described_by_block(blocks: Any) -> str | None:
