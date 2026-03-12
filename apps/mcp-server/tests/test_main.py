@@ -4,12 +4,15 @@ from fastapi.testclient import TestClient
 from app.adapters.tool_adapters import ToolAdapterRegistry
 from app.adapters.web_tools import StaticWebSearchClient, WebFetchAdapter, WebSearchAdapter
 from app.main import app, create_app, create_tool_registry
+from app.services.auth_service import AuthService
 from app.services.tool_service import ToolService
 from app.settings import Settings
 from app.transport.http.routes import build_router
+from tests.auth_helpers import auth_headers
 
 
 client = TestClient(app)
+client.headers.update(auth_headers())
 
 
 class _StubKnowledgeInterfaceClient:
@@ -56,8 +59,15 @@ def _knowledge_client(client: object, *, raise_server_exceptions: bool = True) -
             Settings.model_validate({"APP_ENV": "test", "WEB_SEARCH_PROVIDER": "static"}),
         )
     )
-    app_instance.include_router(build_router(tool_service))
-    return TestClient(app_instance, raise_server_exceptions=raise_server_exceptions)
+    app_instance.include_router(
+        build_router(
+            tool_service,
+            AuthService(Settings.model_validate({"APP_ENV": "test", "WEB_SEARCH_PROVIDER": "static"})),
+        )
+    )
+    test_client = TestClient(app_instance, raise_server_exceptions=raise_server_exceptions)
+    test_client.headers.update(auth_headers())
+    return test_client
 
 
 utility_enabled_client = TestClient(
@@ -71,6 +81,18 @@ utility_enabled_client = TestClient(
         )
     )
 )
+utility_enabled_client.headers.update(auth_headers())
+
+unauthenticated_client = TestClient(
+    create_app(
+        Settings.model_validate(
+            {
+                "APP_ENV": "test",
+                "WEB_SEARCH_PROVIDER": "static",
+            }
+        )
+    )
+)
 
 
 def test_healthz() -> None:
@@ -78,6 +100,20 @@ def test_healthz() -> None:
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+def test_mcp_endpoints_require_authentication() -> None:
+    response = unauthenticated_client.get("/mcp/tools")
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "authentication required"}
+
+
+def test_mcp_endpoints_reject_invalid_bearer_token() -> None:
+    response = unauthenticated_client.get("/mcp/tools", headers={"Authorization": "Bearer invalid.token.value"})
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "invalid authentication token"}
 
 
 def test_list_tools() -> None:
@@ -163,6 +199,7 @@ def test_list_tools_omits_resolve_entities_when_knowledge_disabled() -> None:
             )
         )
     )
+    disabled_client.headers.update(auth_headers())
 
     response = disabled_client.get("/mcp/tools")
 

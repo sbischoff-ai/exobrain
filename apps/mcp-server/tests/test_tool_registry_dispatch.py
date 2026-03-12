@@ -5,8 +5,12 @@ from pydantic import Field
 from app.adapters.tool_registry import ToolRegistration, ToolRegistry
 from app.contracts import GenericToolSuccessEnvelope, ToolInvocation, ToolMetadata
 from app.contracts.base import StrictModel
+from app.services.auth_service import AuthService
+from app.services.request_context import get_current_user
 from app.services.tool_service import ToolService
+from app.settings import Settings
 from app.transport.http.routes import build_router
+from tests.auth_helpers import auth_headers
 
 
 class UpperToolInput(StrictModel):
@@ -33,8 +37,15 @@ def _build_test_client_with_upper_tool() -> TestClient:
     custom_registry = ToolRegistry(registrations=[*registry.registrations(), upper_registration])
 
     app = FastAPI()
-    app.include_router(build_router(ToolService(registry=custom_registry)))
-    return TestClient(app)
+    app.include_router(
+        build_router(
+            ToolService(registry=custom_registry),
+            AuthService(Settings.model_validate({"APP_ENV": "test", "WEB_SEARCH_PROVIDER": "static"})),
+        )
+    )
+    client = TestClient(app)
+    client.headers.update(auth_headers())
+    return client
 
 
 def test_registered_tool_appears_in_tools_endpoint() -> None:
@@ -84,3 +95,34 @@ def test_service_returns_generic_success_envelope_for_built_in_tool() -> None:
         "result": {"sum": 5},
         "metadata": None,
     }
+
+
+def test_tool_invocation_has_authenticated_user_context() -> None:
+    whoami_registration = ToolRegistration(
+        name="whoami",
+        category="custom",
+        metadata_provider=lambda: ToolMetadata(
+            name="whoami",
+            description="Return current user context.",
+            inputSchema={"type": "object"},
+        ),
+        invocation_parser=lambda payload: payload,
+        handler=lambda _args: {
+            "user_id": get_current_user().user_id if get_current_user() else None,
+            "name": get_current_user().name if get_current_user() else None,
+        },
+    )
+    app = FastAPI()
+    app.include_router(
+        build_router(
+            ToolService(registry=ToolRegistry(registrations=[whoami_registration])),
+            AuthService(Settings.model_validate({"APP_ENV": "test", "WEB_SEARCH_PROVIDER": "static"})),
+        )
+    )
+    client = TestClient(app)
+    client.headers.update(auth_headers(user_id="user-context", name="Context User"))
+
+    response = client.post("/mcp/tools/invoke", json={"name": "whoami", "arguments": {}})
+
+    assert response.status_code == 200
+    assert response.json()["result"] == {"user_id": "user-context", "name": "Context User"}
