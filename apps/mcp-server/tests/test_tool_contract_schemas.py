@@ -242,24 +242,6 @@ def test_get_entity_context_input_rejects_out_of_range_depth() -> None:
         GetEntityContextToolInput.model_validate({"entity_id": "e1", "depth": 33})
 
 
-def test_get_entity_context_output_requires_related_entity_relationship_fields() -> None:
-    with pytest.raises(ValidationError):
-        GetEntityContextToolOutput.model_validate(
-            {
-                "context_markdown": "# Entity",
-                "related_entities": [
-                    {
-                        "entity_id": "e2",
-                        "name": "Alice",
-                        "aliases": [],
-                        "entity_type": "person",
-                        "description": "example",
-                    }
-                ],
-            }
-        )
-
-
 def test_get_entity_context_output_accepts_resolve_like_related_entity_shape() -> None:
     payload = GetEntityContextToolOutput.model_validate(
         {
@@ -271,8 +253,6 @@ def test_get_entity_context_output_accepts_resolve_like_related_entity_shape() -
                     "aliases": ["A."],
                     "entity_type": "person",
                     "description": "example",
-                    "relationship_type": "WORKS_AT",
-                    "relationship_direction": "incoming",
                 }
             ],
         }

@@ -187,26 +187,12 @@ class GetEntityContextToolInput(StrictModel):
     )
 
 
-class RelationshipDirection(str, Enum):
-    INCOMING = "incoming"
-    OUTGOING = "outgoing"
-
-
 class GetEntityContextRelatedEntityItem(StrictModel):
     entity_id: str = Field(min_length=1)
     name: str = Field(min_length=1)
     aliases: list[str]
     entity_type: str = Field(min_length=1)
     description: str
-    relationship_type: str = Field(
-        min_length=1,
-        description="Knowledge-graph edge label that connects the requested entity to this related entity.",
-        examples=["WORKS_AT"],
-    )
-    relationship_direction: RelationshipDirection = Field(
-        description="Direction of the relationship relative to the requested entity.",
-        examples=["outgoing"],
-    )
 
 
 class GetEntityContextToolOutput(StrictModel):

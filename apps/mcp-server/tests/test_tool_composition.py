@@ -181,10 +181,20 @@ def test_invoke_resolve_entities_returns_deterministic_placeholders() -> None:
 
 class _FakeKnowledgeInterfaceClient:
     def __init__(self) -> None:
-        self.calls: list[dict[str, object]] = []
+        self.context_calls: list[dict[str, object]] = []
+        self.schema_calls: list[dict[str, object]] = []
+
+    def get_schema(self, *, universe_id: str | None = None) -> dict[str, object]:
+        self.schema_calls.append({"universe_id": universe_id})
+        return {
+            "node_types": [
+                {"type": {"id": "node.person", "name": "Person"}},
+                {"type": {"id": "node.organization", "name": "Organization"}},
+            ]
+        }
 
     def get_entity_context(self, *, entity_id: str, user_id: str, max_block_level: int) -> dict[str, object]:
-        self.calls.append(
+        self.context_calls.append(
             {
                 "entity_id": entity_id,
                 "user_id": user_id,
@@ -200,7 +210,31 @@ class _FakeKnowledgeInterfaceClient:
             },
             "blocks": [
                 {"text": "First programmer."},
-                {"text": "Collaborated with Charles Babbage."},
+                {
+                    "text": "Collaborated with Charles Babbage.",
+                    "neighbors": [
+                        {
+                            "edge_type": "COLLABORATED_WITH",
+                            "direction": "OUTGOING",
+                            "other_entity": {
+                                "id": "ent_babbage",
+                                "name": "Charles Babbage",
+                                "type_id": "node.person",
+                                "description": "Inventor and mathematician",
+                                "aliases": ["Babbage"],
+                            },
+                        },
+                        {
+                            "edge_type": "ASSOCIATED_WITH",
+                            "direction": "OUTGOING",
+                            "other_entity": {
+                                "id": "ent_analytical_engine",
+                                "name": "Analytical Engine",
+                                "type_id": "node.machine",
+                            },
+                        },
+                    ],
+                },
             ],
             "neighbors": [
                 {
@@ -230,25 +264,31 @@ def test_invoke_get_entity_context_uses_default_depth_and_maps_output() -> None:
 
     result = adapters.invoke_get_entity_context(GetEntityContextToolInput.model_validate({"entity_id": "ent_ada"}))
 
-    assert ki_client.calls == [
+    assert ki_client.context_calls == [
         {
             "entity_id": "ent_ada",
             "user_id": "user-123",
             "max_block_level": 3,
         }
     ]
+    assert ki_client.schema_calls == [{"universe_id": None}]
     assert result.model_dump() == {
-        "context_markdown": "## Ada Lovelace\n- Type: `node.person`\n- Aliases: Ada\n\n### Context\n- First programmer.\n- Collaborated with Charles Babbage.\n\n### Related\n- @ent_babbage: Charles Babbage (COLLABORATED_WITH)",
+        "context_markdown": "## Ada Lovelace\n- Type: `node.person`\n- Aliases: Ada\n\n### Context\n- First programmer.\n- Collaborated with Charles Babbage.\n\n### Related\n- @ent_analytical_engine: Analytical Engine\n- @ent_babbage: Charles Babbage",
         "related_entities": [
             {
                 "entity_id": "ent_babbage",
                 "name": "Charles Babbage",
                 "aliases": ["Babbage"],
-                "entity_type": "node.person",
+                "entity_type": "Person",
                 "description": "Inventor and mathematician",
-                "relationship_type": "COLLABORATED_WITH",
-                "relationship_direction": "outgoing",
-            }
+            },
+            {
+                "entity_id": "ent_analytical_engine",
+                "name": "Analytical Engine",
+                "aliases": [],
+                "entity_type": "node.machine",
+                "description": "Related entity Analytical Engine",
+            },
         ],
     }
 
