@@ -3,7 +3,7 @@ import logging
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 
-from app.api.dependencies.auth import get_required_auth_context
+from app.api.dependencies.auth import AuthContext, get_required_auth_context, get_required_auth_context_with_token
 from app.api.schemas.auth import UnifiedPrincipal
 from app.api.schemas.chat import ChatMessageRequest, ChatMessageStartResponse
 from app.dependency_injection import get_container
@@ -26,14 +26,15 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 async def message(
     payload: ChatMessageRequest,
     request: Request,
-    auth_context: UnifiedPrincipal = Depends(get_required_auth_context),
+    auth_context: AuthContext = Depends(get_required_auth_context_with_token),
 ) -> ChatMessageStartResponse:
-    logger.info("assistant chat request", extra={"user_name": auth_context.display_name})
+    logger.info("assistant chat request", extra={"user_name": auth_context.principal.display_name})
     chat_service = get_container(request).resolve(ChatServiceProtocol)
     stream_id = await chat_service.start_journal_stream(
-        principal=auth_context,
+        principal=auth_context.principal,
         message=payload.message,
         client_message_id=str(payload.client_message_id),
+        access_token=auth_context.access_token,
     )
     return ChatMessageStartResponse(stream_id=stream_id)
 

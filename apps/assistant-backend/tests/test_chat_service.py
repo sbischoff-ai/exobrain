@@ -16,10 +16,10 @@ class FakeChatAgent:
     def __init__(self, responses: list[list[dict[str, object]]]) -> None:
         self._responses = responses
         self._next_index = 0
-        self.calls: list[tuple[str, str]] = []
+        self.calls: list[tuple[str, str, str | None]] = []
 
-    async def astream(self, message: str, conversation_id: str) -> AsyncIterator[dict[str, object]]:
-        self.calls.append((message, conversation_id))
+    async def astream(self, message: str, conversation_id: str, *, access_token: str | None = None) -> AsyncIterator[dict[str, object]]:
+        self.calls.append((message, conversation_id, access_token))
         response = self._responses[self._next_index]
         if self._next_index < len(self._responses) - 1:
             self._next_index += 1
@@ -52,7 +52,7 @@ async def test_chat_service_stream_events_forwards_conversation_context(fake_dat
         {"type": "message_chunk", "data": {"text": "first"}},
         {"type": "done", "data": {"reason": "complete"}},
     ]
-    assert agent.calls == [("Prompt A", "conv-1")]
+    assert agent.calls == [("Prompt A", "conv-1", None)]
 
 
 @pytest.mark.asyncio
@@ -82,7 +82,7 @@ async def test_chat_service_stream_journal_message_persists_user_and_assistant(f
 
     assert len(fake_database_service.fetchrow_calls) >= 4
     assert any("INSERT INTO tool_calls" in query for query, _ in fake_database_service.fetchrow_calls)
-    assert agent.calls == [("hello", "conv-1")]
+    assert agent.calls == [("hello", "conv-1", None)]
 
 
 @pytest.mark.asyncio

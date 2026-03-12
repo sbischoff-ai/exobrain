@@ -240,6 +240,7 @@ class ChatServiceProtocol(Protocol):
         principal: UnifiedPrincipal,
         message: str,
         client_message_id: str,
+        access_token: str | None = None,
     ) -> str:
         """Start a new assistant stream and return stream id for SSE consumption."""
 
@@ -306,10 +307,16 @@ class MCPClientProtocol(Protocol):
     async def close(self) -> None:
         """Release open transport resources during shutdown."""
 
-    async def list_tools(self) -> list[dict[str, Any]]:
+    async def list_tools(self, *, access_token: str | None = None) -> list[dict[str, Any]]:
         """List MCP-exposed tools with names/descriptions/input schemas."""
 
-    async def invoke_tool(self, *, tool_name: str, arguments: dict[str, Any] | None = None) -> Any:
+    async def invoke_tool(
+        self,
+        *,
+        tool_name: str,
+        arguments: dict[str, Any] | None = None,
+        access_token: str | None = None,
+    ) -> Any:
         """Invoke one MCP tool by name and return structured result payload."""
 
 
