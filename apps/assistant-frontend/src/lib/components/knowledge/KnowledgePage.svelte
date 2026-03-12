@@ -173,6 +173,10 @@
     gap: 0.5rem;
     color: var(--explorer-meta-muted);
     font-size: 0.8rem;
+    border: 1px solid var(--explorer-card-border);
+    border-radius: 0.75rem;
+    background: var(--explorer-card-bg);
+    padding: 0.9rem;
   }
 
   .properties dl {
