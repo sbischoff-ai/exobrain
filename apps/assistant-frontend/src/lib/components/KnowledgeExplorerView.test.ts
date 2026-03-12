@@ -216,8 +216,16 @@ describe('KnowledgeExplorerView', () => {
       summary: null,
       properties: { source: 'docs', owner: 'team-knowledge' },
       content_blocks: [
-        { block_id: 'blk-1', markdown: '## Body' },
-        { block_id: 'blk-2', markdown: '### Secondary body' }
+        {
+          block_id: 'blk-1',
+          markdown: ['## Body', '', 'First fragment from block one.', '', 'Second fragment from block one.'].join(
+            '\n'
+          )
+        },
+        {
+          block_id: 'blk-2',
+          markdown: ['### Secondary body', '', 'Third fragment from block two.'].join('\n')
+        }
       ],
       created_at: '2026-01-02T03:04:05Z',
       updated_at: '2026-01-03T04:05:06Z',
@@ -248,10 +256,15 @@ describe('KnowledgeExplorerView', () => {
     const propertiesHeading = screen.getByRole('heading', { name: 'Properties' });
     const markdownHeading = screen.getByRole('heading', { name: 'Body' });
     const secondaryMarkdownHeading = screen.getByRole('heading', { name: 'Secondary body' });
+    const firstFragment = screen.getByText('First fragment from block one.');
+    const secondFragment = screen.getByText('Second fragment from block one.');
+    const thirdFragment = screen.getByText('Third fragment from block two.');
 
     expect(meta.compareDocumentPosition(propertiesHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(propertiesHeading.compareDocumentPosition(markdownHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(markdownHeading.compareDocumentPosition(secondaryMarkdownHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(firstFragment.compareDocumentPosition(secondFragment) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(secondFragment.compareDocumentPosition(thirdFragment) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(document.querySelectorAll('.content-block')).toHaveLength(2);
 
     expect(getPage).toHaveBeenCalledWith('page-1');
