@@ -160,7 +160,7 @@ Description: Resolve input entities against the knowledge graph and create missi
 
 ### `get_entity_context`
 
-Description: Fetch markdown context for a canonical entity and return adjacent entities for graph-aware follow-up lookups.
+Description: Fetch markdown context for a canonical entity and return adjacent entities for graph-aware follow-up lookups. Related entities are collected from top-level KI neighbors and block-level neighbors, then deduplicated by canonical neighbor entity id.
 
 **Input (`arguments`)**
 
@@ -171,16 +171,12 @@ Description: Fetch markdown context for a canonical entity and return adjacent e
 **Output (`result`)**
 
 - `context_markdown` (string): compact markdown summary, including context snippets and `@entity_id` handles for related entities
-- `related_entities` (array)
-  - `entity_id` (string)
-  - `name` (string)
-  - `aliases` (array of strings)
-  - `entity_type` (string)
-  - `description` (string)
-  - `relationship_type` (string)
-  - `relationship_direction` (enum)
-    - `"incoming"`
-    - `"outgoing"`
+- `related_entities` (array; resolve-compatible fields only)
+  - `entity_id` (string): from neighbor `other_entity.id`
+  - `name` (string): from neighbor `other_entity.name`
+  - `aliases` (array of strings): from neighbor `other_entity.aliases`
+  - `entity_type` (string): type name resolved via KI `GetSchema` (without setting optional `universe_id`) from neighbor `other_entity.type_id`; falls back to raw `type_id` (or `"unknown"`) when schema mapping is unavailable
+  - `description` (string): from neighbor `other_entity.description`; falls back to concise `Related entity <name-or-id>` when omitted
 
 ---
 

@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 from app.adapters.entity_context_markdown_formatter import MAX_MARKDOWN_CHARS, render_entity_context_markdown
-from app.contracts import GetEntityContextRelatedEntityItem, RelationshipDirection
+from app.contracts import GetEntityContextRelatedEntityItem
 
 
 def _related(
     *,
     entity_id: str,
     name: str,
-    relationship_type: str = "RELATED_TO",
 ) -> GetEntityContextRelatedEntityItem:
     return GetEntityContextRelatedEntityItem(
         entity_id=entity_id,
@@ -16,8 +15,6 @@ def _related(
         aliases=[],
         entity_type="node.person",
         description="",
-        relationship_type=relationship_type,
-        relationship_direction=RelationshipDirection.OUTGOING,
     )
 
 
@@ -51,8 +48,8 @@ def test_render_entity_context_markdown_orders_context_and_related_deterministic
         "- nested a text\n"
         "- z text\n\n"
         "### Related\n"
-        "- @ent_a: Alpha (RELATED_TO)\n"
-        "- @ent_b: Beta (RELATED_TO)"
+        "- @ent_a: Alpha\n"
+        "- @ent_b: Beta"
     )
 
 
@@ -75,7 +72,7 @@ def test_render_entity_context_markdown_enforces_compact_size_caps() -> None:
         ],
     }
     related_entities = [
-        _related(entity_id=f"ent_{index:02d}", name=f"Name {index}", relationship_type="LINKED_TO")
+        _related(entity_id=f"ent_{index:02d}", name=f"Name {index}")
         for index in range(20)
     ]
 

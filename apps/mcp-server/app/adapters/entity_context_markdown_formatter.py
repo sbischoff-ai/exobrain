@@ -102,12 +102,12 @@ def _build_neighbor_section(related_entities: list[GetEntityContextRelatedEntity
 
     sorted_related = sorted(
         related_entities,
-        key=lambda item: (item.entity_id.lower(), item.name.lower(), item.relationship_type.lower()),
+        key=lambda item: (item.entity_id.lower(), item.name.lower()),
     )
 
     lines = ["### Related"]
     for related in sorted_related[:_MAX_NEIGHBOR_ITEMS]:
-        line = f"- @{related.entity_id}: {related.name} ({related.relationship_type})"
+        line = f"- @{related.entity_id}: {related.name}"
         lines.append(_truncate_text(line, _MAX_LINE_CHARS))
 
     return "\n".join(lines)
