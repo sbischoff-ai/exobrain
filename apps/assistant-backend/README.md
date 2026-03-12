@@ -135,7 +135,7 @@ Example response:
 ```
 
 ### `GET /api/knowledge/page/{page_id}`
-Returns page detail via `GetEntityContext`, including canonical metadata timestamps, filtered entity-type properties, related links, and `content_blocks` (`block_id` + `markdown`) for ordered markdown rendering.
+Returns page detail via `GetEntityContext`, including canonical metadata timestamps, filtered entity-type properties, related links, and ordered `content_blocks` (`block_id` + `markdown`).
 
 Example response:
 
@@ -168,7 +168,7 @@ Notes:
 
 - `properties` includes only entity-type-specific fields from upstream `entity_properties`; reserved/system keys (`created_at`, `updated_at`, `visibility`, `user_id`, `type_id`, `id`) are excluded.
 - `created_at` and `updated_at` are still surfaced under `metadata` for timestamp rendering.
-- `content_blocks` preserves upstream block order; frontend renders each markdown block independently so existing visual output remains unchanged while supporting multi-block pages.
+- `content_blocks` preserves upstream block order; frontend renders each markdown block independently and in sequence so existing visual output remains unchanged while supporting multi-block pages.
 
 
 ## User config endpoints
