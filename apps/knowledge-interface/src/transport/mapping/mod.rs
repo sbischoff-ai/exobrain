@@ -254,6 +254,7 @@ fn to_proto_entity_context_neighbor(
             id: neighbor.other_entity.id,
             description: neighbor.other_entity.description,
             name: neighbor.other_entity.name,
+            type_id: neighbor.other_entity.type_id,
         }),
     }
 }
@@ -557,6 +558,7 @@ mod tests {
                         id: "e-2".to_string(),
                         description: Some("Mathematician".to_string()),
                         name: Some("Grace".to_string()),
+                        type_id: "node.person".to_string(),
                     },
                 },
                 EntityContextNeighborItem {
@@ -567,6 +569,7 @@ mod tests {
                         id: "e-3".to_string(),
                         description: None,
                         name: None,
+                        type_id: "node.organization".to_string(),
                     },
                 },
             ],
@@ -602,12 +605,26 @@ mod tests {
             Some("Grace")
         );
         assert_eq!(
+            reply.neighbors[0]
+                .other_entity
+                .as_ref()
+                .map(|e| e.type_id.as_str()),
+            Some("node.person")
+        );
+        assert_eq!(
             reply.neighbors[0].direction,
             proto::NeighborDirection::Outgoing as i32
         );
         assert_eq!(
             reply.neighbors[1].direction,
             proto::NeighborDirection::Incoming as i32
+        );
+        assert_eq!(
+            reply.neighbors[1]
+                .other_entity
+                .as_ref()
+                .map(|e| e.type_id.as_str()),
+            Some("node.organization")
         );
     }
 

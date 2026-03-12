@@ -3289,6 +3289,7 @@ fn sample_entity_context_result() -> GetEntityContextResult {
                     id: "entity-2".to_string(),
                     description: Some("neighbor".to_string()),
                     name: Some("Neighbor Entity".to_string()),
+                    type_id: "node.person".to_string(),
                 },
             }],
         }],

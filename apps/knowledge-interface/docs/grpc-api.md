@@ -527,7 +527,7 @@ message GetEntityContextReply {
 - `entity`: core fields (`id`, `type_id`, `user_id`, `visibility`) plus `name`, `aliases`, `created_at`, and `updated_at`.
 - `entity_properties`: additional flat scalar properties as string values (`{ "key": "value" }`) including all registered schema properties present on the entity (for example `email`, `lat`, `lon`) plus any other persisted scalar fields.
 - `blocks[]`: typed block entries (`id`, `type_id`, `block_level`) plus root-level `text`, `created_at`, `updated_at`, optional `parent_block_id`, additional `properties` (`map<string, string>`), and block-level `neighbors`.
-- `neighbors[]`: outgoing and incoming entity neighbors with edge metadata (`direction`, `edge_type`, `properties`) where `properties` is a flat `map<string, string>`, plus `other_entity` (`id`, optional `description`, optional `name`).
+- `neighbors[]`: outgoing and incoming entity neighbors with edge metadata (`direction`, `edge_type`, `properties`) where `properties` is a flat `map<string, string>`, plus `other_entity` (`id`, `type_id`, optional `description`, optional `name`).
 
 ### Block level semantics
 
@@ -542,7 +542,7 @@ message GetEntityContextReply {
 
 - `OUTGOING`: returned for `(entity)-[edge]->(other_entity)`.
 - `INCOMING`: returned for `(other_entity)-[edge]->(entity)`.
-- Results include both directions and preserve edge metadata (`edge_type`, `properties`) while resolving `other_entity.description` from that entity's `DESCRIBED_BY` block text when available. `other_entity.name` is also returned from the neighbor entity node when present. The same shape applies to block-level neighbors (`blocks[].neighbors[]`).
+- Results include both directions and preserve edge metadata (`edge_type`, `properties`) while resolving `other_entity.description` from that entity's `DESCRIBED_BY` block text when available. `other_entity.name` is also returned from the neighbor entity node when present, and `other_entity.type_id` is populated from the same node. The same shape applies to block-level neighbors (`blocks[].neighbors[]`).
 
 ### Access policy behavior
 
