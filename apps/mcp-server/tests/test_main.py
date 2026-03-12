@@ -1,11 +1,65 @@
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.adapters.web_tools import StaticWebSearchClient
-from app.main import app, create_app
+from app.adapters.tool_adapters import ToolAdapterRegistry
+from app.adapters.web_tools import StaticWebSearchClient, WebFetchAdapter, WebSearchAdapter
+from app.main import app, create_app, create_tool_registry
+from app.services.tool_service import ToolService
 from app.settings import Settings
+from app.transport.http.routes import build_router
 
 
 client = TestClient(app)
+
+
+class _StubKnowledgeInterfaceClient:
+    def get_schema(self, *, universe_id: str | None = None) -> dict[str, object]:
+        return {"node_types": [{"type": {"id": "node.person", "name": "Person"}}]}
+
+    def get_entity_context(self, *, entity_id: str, user_id: str, max_block_level: int) -> dict[str, object]:
+        return {
+            "entity": {"id": entity_id, "name": "Ada Lovelace", "type_id": "node.person", "aliases": ["Ada"]},
+            "blocks": [{"text": "First programmer."}],
+            "neighbors": [
+                {
+                    "other_entity": {
+                        "id": "ent_babbage",
+                        "name": "Charles Babbage",
+                        "type_id": "node.person",
+                        "description": "Inventor",
+                        "aliases": ["Babbage"],
+                    }
+                }
+            ],
+        }
+
+
+class _FailingKnowledgeInterfaceClient:
+    def get_schema(self, *, universe_id: str | None = None) -> dict[str, object]:
+        return {"node_types": []}
+
+    def get_entity_context(self, *, entity_id: str, user_id: str, max_block_level: int) -> dict[str, object]:
+        raise RuntimeError("ki unavailable")
+
+
+def _knowledge_client(client: object, *, raise_server_exceptions: bool = True) -> TestClient:
+    app_instance = FastAPI()
+    adapters = ToolAdapterRegistry(
+        web_search_adapter=WebSearchAdapter(client=StaticWebSearchClient()),
+        web_fetch_adapter=WebFetchAdapter(client=StaticWebSearchClient()),
+        knowledge_interface_client=client,
+        knowledge_interface_user_id="user-123",
+    )
+    tool_service = ToolService(
+        registry=create_tool_registry(
+            adapters,
+            Settings.model_validate({"APP_ENV": "test", "WEB_SEARCH_PROVIDER": "static"}),
+        )
+    )
+    app_instance.include_router(build_router(tool_service))
+    return TestClient(app_instance, raise_server_exceptions=raise_server_exceptions)
+
+
 utility_enabled_client = TestClient(
     create_app(
         Settings.model_validate(
@@ -244,3 +298,54 @@ def test_invoke_resolve_entities_tool_returns_placeholder_envelope_shape() -> No
         "confidence",
         "newly_created",
     }
+
+
+def test_list_tools_includes_get_entity_context_descriptive_metadata() -> None:
+    response = client.get("/mcp/tools")
+
+    assert response.status_code == 200
+    tools = {tool["name"]: tool for tool in response.json()["tools"]}
+    assert "get_entity_context" in tools
+    metadata = tools["get_entity_context"]
+    assert "canonical" in metadata["description"].lower()
+    assert "related" in metadata["description"].lower()
+    assert metadata["inputSchema"]["required"] == ["entity_id"]
+
+
+def test_invoke_get_entity_context_returns_success_envelope_shape() -> None:
+    ki_client = _knowledge_client(_StubKnowledgeInterfaceClient())
+
+    response = ki_client.post(
+        "/mcp/tools/invoke",
+        json={"name": "get_entity_context", "arguments": {"entity_id": "ent_ada"}},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "ok": True,
+        "name": "get_entity_context",
+        "result": {
+            "context_markdown": "## Ada Lovelace\n- Type: `node.person`\n- Aliases: Ada\n\n### Context\n- First programmer.\n\n### Related\n- @ent_babbage: Charles Babbage",
+            "related_entities": [
+                {
+                    "entity_id": "ent_babbage",
+                    "name": "Charles Babbage",
+                    "aliases": ["Babbage"],
+                    "entity_type": "Person",
+                    "description": "Inventor",
+                }
+            ],
+        },
+        "metadata": None,
+    }
+
+
+def test_invoke_get_entity_context_returns_500_when_ki_client_errors() -> None:
+    ki_client = _knowledge_client(_FailingKnowledgeInterfaceClient(), raise_server_exceptions=False)
+
+    response = ki_client.post(
+        "/mcp/tools/invoke",
+        json={"name": "get_entity_context", "arguments": {"entity_id": "ent_ada"}},
+    )
+
+    assert response.status_code == 500

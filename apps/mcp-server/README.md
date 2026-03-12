@@ -175,6 +175,8 @@ cd apps/mcp-server
 ./scripts/verify.sh
 ```
 
+Test coverage for knowledge tools (`resolve_entities`, `get_entity_context`) uses local fake/stub Knowledge Interface clients in unit and HTTP tests so verification does not depend on live gRPC services.
+
 ## Configuration
 
 - `APP_ENV` (default: `local`)
