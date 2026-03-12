@@ -271,7 +271,7 @@ def test_invoke_get_entity_context_uses_default_depth_and_maps_output() -> None:
             "max_block_level": 3,
         }
     ]
-    assert ki_client.schema_calls == [{"universe_id": "wiki"}]
+    assert ki_client.schema_calls == [{"universe_id": ""}]
     assert result.model_dump() == {
         "context_markdown": "## Ada Lovelace\n- Type: `node.person`\n- Aliases: Ada\n\n### Context\n- First programmer.\n- Collaborated with Charles Babbage.\n\n### Related\n- @ent_analytical_engine: Analytical Engine\n- @ent_babbage: Charles Babbage",
         "related_entities": [

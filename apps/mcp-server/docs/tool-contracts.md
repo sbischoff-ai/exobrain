@@ -175,7 +175,7 @@ Description: Fetch markdown context for a canonical entity and return adjacent e
   - `entity_id` (string): from neighbor `other_entity.id`
   - `name` (string): from neighbor `other_entity.name`
   - `aliases` (array of strings): from neighbor `other_entity.aliases`
-  - `entity_type` (string): type name resolved via KI `GetSchema` from neighbor `other_entity.type_id`; falls back to raw `type_id` (or `"unknown"`) when schema mapping is unavailable
+  - `entity_type` (string): type name resolved via KI `GetSchema` (blank optional `universe_id`) from neighbor `other_entity.type_id`; falls back to raw `type_id` (or `"unknown"`) when schema mapping is unavailable
   - `description` (string): from neighbor `other_entity.description`; falls back to concise `Related entity <name-or-id>` when omitted
 
 ---

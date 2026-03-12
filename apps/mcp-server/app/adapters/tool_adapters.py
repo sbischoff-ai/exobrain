@@ -79,7 +79,7 @@ class ToolAdapterRegistry:
             max_block_level=max_block_level,
         )
         type_name_by_id = _build_entity_type_name_map(
-            self._knowledge_interface_client.get_schema(universe_id="wiki")
+            self._knowledge_interface_client.get_schema(universe_id="")
         )
         related_entities = _map_related_entities(
             top_level_neighbors=response.get("neighbors"),
