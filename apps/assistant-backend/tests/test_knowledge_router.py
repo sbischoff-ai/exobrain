@@ -115,7 +115,7 @@ class FakeKnowledgeService:
             "links": [
                 {"page_id": "entity-2", "title": "Entity Two", "summary": "Linked"}
             ],
-            "content_blocks": [{"block_id": "b1", "markdown": "Root"}, {"block_id": "b2", "markdown": "Child"}],
+            "content_blocks": [{"block_id": "root", "markdown": "Root"}, {"block_id": "child-1", "markdown": "Child"}, {"block_id": "child-1-1", "markdown": "Grandchild"}],
         }
         response.update(self.page_detail_response_overrides)
         return response
@@ -543,8 +543,9 @@ def test_api_knowledge_page_returns_mapped_payload() -> None:
     assert payload["summary"] == "Root"
     assert "entity" not in payload
     assert payload["content_blocks"] == [
-        {"block_id": "b1", "markdown": "Root"},
-        {"block_id": "b2", "markdown": "Child"},
+        {"block_id": "root", "markdown": "Root"},
+        {"block_id": "child-1", "markdown": "Child"},
+        {"block_id": "child-1-1", "markdown": "Grandchild"},
     ]
     assert service.page_detail_calls == [{"user_id": "user-1", "page_id": "entity-1"}]
 
