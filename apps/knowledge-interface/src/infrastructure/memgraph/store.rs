@@ -446,6 +446,9 @@ impl Neo4jGraphStore {
                     .context("missing block_neighbor.other_entity_id")?,
                 description: row.get("other_entity_description").ok(),
                 name: row.get("other_entity_name").ok(),
+                type_id: row
+                    .get("other_entity_type_id")
+                    .context("missing block_neighbor.other_entity_type_id")?,
             };
 
             let item = EntityContextNeighborItem {
@@ -503,6 +506,9 @@ impl Neo4jGraphStore {
                         .context("missing neighbor.other_entity_id")?,
                     description: row.get("other_entity_description").ok(),
                     name: row.get("other_entity_name").ok(),
+                    type_id: row
+                        .get("other_entity_type_id")
+                        .context("missing neighbor.other_entity_type_id")?,
                 },
             });
         }
@@ -581,7 +587,8 @@ fn build_get_entity_context_block_neighbors_query() -> String {
                 properties(r) AS edge_props,
                 other.id AS other_entity_id,
                 described_by.text AS other_entity_description,
-                other.name AS other_entity_name
+                other.name AS other_entity_name,
+                other.type_id AS other_entity_type_id
          UNION ALL
          MATCH (e:Entity {{id: $entity_id}})-[:DESCRIBED_BY]->(root:Block)
          WHERE {entity_access} AND {root_access}
@@ -597,7 +604,8 @@ fn build_get_entity_context_block_neighbors_query() -> String {
                 properties(r) AS edge_props,
                 other.id AS other_entity_id,
                 described_by.text AS other_entity_description,
-                other.name AS other_entity_name
+                other.name AS other_entity_name,
+                other.type_id AS other_entity_type_id
          ORDER BY block_id ASC, direction ASC, edge_type ASC, other_entity_id ASC",
         entity_access = memgraph_user_or_shared_access_clause("e"),
         root_access = memgraph_user_or_shared_access_clause("root"),
@@ -621,7 +629,8 @@ fn build_get_entity_context_neighbors_query() -> String {
                 properties(r) AS edge_props,
                 other.id AS other_entity_id,
                 described_by.text AS other_entity_description,
-                other.name AS other_entity_name
+                other.name AS other_entity_name,
+                other.type_id AS other_entity_type_id
          UNION ALL
          MATCH (e:Entity {{id: $entity_id}})
          WHERE {entity_access}
@@ -634,7 +643,8 @@ fn build_get_entity_context_neighbors_query() -> String {
                 properties(r) AS edge_props,
                 other.id AS other_entity_id,
                 described_by.text AS other_entity_description,
-                other.name AS other_entity_name
+                other.name AS other_entity_name,
+                other.type_id AS other_entity_type_id
          ORDER BY direction ASC, edge_type ASC, other_entity_id ASC",
         entity_access = memgraph_user_or_shared_access_clause("e"),
         other_access = memgraph_user_or_shared_access_clause("other"),
