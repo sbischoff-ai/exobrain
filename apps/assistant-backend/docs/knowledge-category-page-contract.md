@@ -111,7 +111,7 @@ Returns page detail from `GetEntityContext` (`max_block_level=2`) with canonical
       "summary": "Linked summary"
     }
   ],
-  "content_markdown": "Root\n\n- Child"
+  "content_blocks": [{"block_id": "b1", "markdown": "Root"}, {"block_id": "b2", "markdown": "Child"}]
 }
 ```
 
@@ -122,7 +122,7 @@ Returns page detail from `GetEntityContext` (`max_block_level=2`) with canonical
 - `metadata` contains only canonical timestamps (`created_at`, `updated_at`).
 - `properties` contains entity-type-specific values from upstream `entity_properties`, excluding reserved/system keys (`created_at`, `updated_at`, `visibility`, `user_id`, `type_id`, `id`).
 - `links` are mapped from neighbor entities.
-- `content_markdown` renders level-0 blocks as paragraphs and level>=1 blocks as list items.
+- `content_blocks` is an ordered list of entity blocks; clients render each block independently.
 
 ### Error mapping
 

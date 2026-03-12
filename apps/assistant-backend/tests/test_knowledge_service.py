@@ -601,12 +601,16 @@ async def test_get_page_detail_maps_entity_neighbors_and_block_markdown() -> Non
     assert response["links"] == [
         {"page_id": "entity-2", "title": "Entity Two", "summary": "Linked summary"}
     ]
-    assert response["content_markdown"] == "Summary\n\nRoot\n\nChild"
+    assert response["content_blocks"] == [
+        {"block_id": "block-0", "markdown": "Summary"},
+        {"block_id": "block-1", "markdown": "Root"},
+        {"block_id": "block-1-1", "markdown": "Child"},
+    ]
 
 
 
 @pytest.mark.asyncio
-async def test_get_page_detail_renders_level_zero_as_paragraph_and_nested_as_list() -> None:
+async def test_get_page_detail_maps_ordered_content_blocks() -> None:
     reply = knowledge_pb2.GetEntityContextReply(
         entity=knowledge_pb2.EntityContextCore(id="entity-1", type_id="node.note", name="Entity One"),
         entity_properties={
@@ -629,7 +633,10 @@ async def test_get_page_detail_renders_level_zero_as_paragraph_and_nested_as_lis
 
     assert response["summary"] == "# Heading"
     assert response["properties"] == {"status": "draft"}
-    assert response["content_markdown"] == "# Heading\n\nBullet"
+    assert response["content_blocks"] == [
+        {"block_id": "b1", "markdown": "# Heading"},
+        {"block_id": "b2", "markdown": "Bullet"},
+    ]
 
 
 @pytest.mark.asyncio
@@ -972,4 +979,7 @@ async def test_get_page_detail_maps_metadata_links_and_content() -> None:
     assert response["links"] == [
         {"page_id": "entity-2", "title": "Entity Two", "summary": "Related page"}
     ]
-    assert response["content_markdown"] == "Summary\n\nRoot"
+    assert response["content_blocks"] == [
+        {"block_id": "b0", "markdown": "Summary"},
+        {"block_id": "b1", "markdown": "Root"},
+    ]

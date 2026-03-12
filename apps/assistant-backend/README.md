@@ -160,7 +160,7 @@ Example response:
       "summary": "Linked summary"
     }
   ],
-  "content_markdown": "Root\n\nChild"
+  "content_blocks": [{"block_id": "b1", "markdown": "Root"}, {"block_id": "b2", "markdown": "Child"}]
 }
 ```
 
