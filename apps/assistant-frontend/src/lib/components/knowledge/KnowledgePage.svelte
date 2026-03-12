@@ -62,6 +62,7 @@
     } satisfies KnowledgeCategoryPageListItem)) ?? [];
 
   $: propertyEntries = Object.entries(page?.properties ?? {});
+  $: contentMarkdown = page?.content_blocks.map((block) => block.markdown).join('\n\n') ?? '';
 </script>
 
 <section class="knowledge-page" aria-label="Knowledge page detail">
@@ -101,10 +102,10 @@
         </section>
       {/if}
 
-      {#if page.content_markdown}
+      {#if contentMarkdown}
         <div class="assistant-markdown markdown-body">
           <Streamdown
-            content={page.content_markdown}
+            content={contentMarkdown}
             theme={streamdownTheme}
             shikiTheme="gruvbox-dark-medium"
             shikiThemes={{ 'gruvbox-dark-medium': gruvboxDarkMedium }}

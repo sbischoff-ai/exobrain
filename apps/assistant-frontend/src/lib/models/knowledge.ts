@@ -40,13 +40,18 @@ export interface KnowledgePageCategoryBreadcrumb {
   path: KnowledgePageCategoryBreadcrumbItem[];
 }
 
+export interface KnowledgePageContentBlock {
+  block_id: string;
+  markdown: string;
+}
+
 export interface KnowledgePageDetail {
   id: string;
   category_id: string | null;
   title: string;
   summary: string | null;
   properties: Record<string, string>;
-  content_markdown: string;
+  content_blocks: KnowledgePageContentBlock[];
   created_at: string;
   updated_at: string;
   links: KnowledgePageLink[];

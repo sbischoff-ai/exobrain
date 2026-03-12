@@ -3,6 +3,7 @@ import type {
   KnowledgeCategoryPagesResponse,
   KnowledgeCategoryTreeResponse,
   KnowledgePageCategoryBreadcrumb,
+  KnowledgePageContentBlock,
   KnowledgePageDetail,
   KnowledgePageLink,
   KnowledgeUpdateDoneEvent,
@@ -31,7 +32,7 @@ interface BackendKnowledgePageDetailResponse {
   metadata?: unknown;
   properties?: unknown;
   links?: unknown;
-  content_markdown?: unknown;
+  content_blocks?: unknown;
   category_breadcrumb?: unknown;
   category_id?: unknown;
   created_at?: unknown;
@@ -177,6 +178,24 @@ function normalizeCategoryBreadcrumb(value: unknown): KnowledgePageCategoryBread
 }
 
 
+
+function normalizePageContentBlock(value: unknown): KnowledgePageContentBlock | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const blockId = typeof value.block_id === 'string' ? value.block_id : null;
+  const markdown = typeof value.markdown === 'string' ? value.markdown : null;
+  if (!blockId || markdown === null) {
+    return null;
+  }
+
+  return {
+    block_id: blockId,
+    markdown
+  };
+}
+
 function normalizePageProperties(value: unknown): Record<string, string> {
   if (!isRecord(value) || Array.isArray(value)) {
     return {};
@@ -203,7 +222,11 @@ function normalizePageDetail(value: BackendKnowledgePageDetailResponse): Knowled
     title: typeof value.title === 'string' ? value.title : '',
     summary: typeof value.summary === 'string' ? value.summary : null,
     properties: normalizePageProperties(value.properties),
-    content_markdown: typeof value.content_markdown === 'string' ? value.content_markdown : '',
+    content_blocks: Array.isArray(value.content_blocks)
+      ? value.content_blocks
+          .map(normalizePageContentBlock)
+          .filter((block): block is KnowledgePageContentBlock => block !== null)
+      : [],
     created_at: maybeTimestamp(metadata.created_at) || maybeTimestamp(value.created_at),
     updated_at: maybeTimestamp(metadata.updated_at) || maybeTimestamp(value.updated_at),
     links: links.map(normalizePageLink).filter((link): link is KnowledgePageLink => link !== null),

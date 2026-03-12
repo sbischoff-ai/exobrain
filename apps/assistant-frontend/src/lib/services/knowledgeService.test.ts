@@ -99,7 +99,7 @@ describe('knowledgeService', () => {
             updated_at: '2026-02-19T10:00:00Z'
           },
           links: [{ page_id: 'entity-2', title: 'Entity Two', summary: 'Linked' }],
-          content_markdown: 'Root\\n\\nChild',
+          content_blocks: [{ block_id: 'blk-1', markdown: 'Root\\n\\nChild' }],
           category_breadcrumb: [
             { category_id: 'node.root', display_name: 'Root' },
             { category_id: 'node.child', display_name: 'Child' }
@@ -119,7 +119,7 @@ describe('knowledgeService', () => {
       title: 'Entity One',
       summary: 'Root',
       properties: { source: 'journal', owner: 'assistant' },
-      content_markdown: 'Root\\n\\nChild',
+      content_blocks: [{ block_id: 'blk-1', markdown: 'Root\\n\\nChild' }],
       created_at: '2026-02-19T09:00:00Z',
       updated_at: '2026-02-19T10:00:00Z',
       links: [{ page_id: 'entity-2', title: 'Entity Two', summary: 'Linked' }],
@@ -132,8 +132,48 @@ describe('knowledgeService', () => {
     });
   });
 
+  it('normalizes content blocks and discards malformed entries', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          id: 'entity-12',
+          title: 'Entity Twelve',
+          links: [],
+          content_blocks: [
+            { block_id: 'blk-1', markdown: 'One' },
+            { block_id: 'blk-2', markdown: 'Two' },
+            { block_id: 3, markdown: 'Bad id' },
+            { block_id: 'blk-4', markdown: 4 },
+            null
+          ]
+        }),
+        { status: 200 }
+      )
+    );
 
+    const responseWithMixedBlocks = await knowledgeService.getPage('entity-12');
 
+    expect(responseWithMixedBlocks.content_blocks).toEqual([
+      { block_id: 'blk-1', markdown: 'One' },
+      { block_id: 'blk-2', markdown: 'Two' }
+    ]);
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          id: 'entity-13',
+          title: 'Entity Thirteen',
+          links: [],
+          content_blocks: 'invalid'
+        }),
+        { status: 200 }
+      )
+    );
+
+    const responseWithInvalidBlocks = await knowledgeService.getPage('entity-13');
+
+    expect(responseWithInvalidBlocks.content_blocks).toEqual([]);
+  });
 
   it('defaults properties to an empty object when payload is missing or malformed', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
@@ -143,7 +183,7 @@ describe('knowledgeService', () => {
           title: 'Entity Ten',
           properties: ['invalid'],
           links: [],
-          content_markdown: 'Content'
+          content_blocks: [{ block_id: 'blk-1', markdown: 'Content' }]
         }),
         { status: 200 }
       )
@@ -164,7 +204,7 @@ describe('knowledgeService', () => {
             dropObject: { nested: true }
           },
           links: [],
-          content_markdown: 'Content'
+          content_blocks: [{ block_id: 'blk-1', markdown: 'Content' }]
         }),
         { status: 200 }
       )
@@ -186,7 +226,7 @@ describe('knowledgeService', () => {
             updated_at: '2026-03-01T09:00:00Z'
           },
           links: [],
-          content_markdown: 'Content',
+          content_blocks: [{ block_id: 'blk-1', markdown: 'Content' }],
           category_id: 'node.task',
           category_breadcrumb: {
             path: [
@@ -217,7 +257,7 @@ describe('knowledgeService', () => {
           created_at: '2026-03-01T08:00:00Z',
           updated_at: '2026-03-01T09:00:00Z',
           links: [],
-          content_markdown: 'Content',
+          content_blocks: [{ block_id: 'blk-1', markdown: 'Content' }],
           category_id: 'node.note',
           category_breadcrumb: []
         }),
