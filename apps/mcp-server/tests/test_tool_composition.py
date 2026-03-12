@@ -104,6 +104,18 @@ def test_create_tool_registry_excludes_knowledge_when_flag_disabled() -> None:
     assert all(tool.category != "knowledge" for tool in registrations)
 
 
+
+
+def test_create_tool_registry_marks_get_entity_context_as_knowledge() -> None:
+    registry = create_tool_registry(
+        _adapters(),
+        _settings(ENABLED_TOOL_CATEGORIES="knowledge", ENABLE_KNOWLEDGE_TOOLS=True),
+    )
+
+    tool_by_name = {tool.name: tool for tool in registry.registrations()}
+    assert "get_entity_context" in tool_by_name
+    assert tool_by_name["get_entity_context"].category == "knowledge"
+
 def test_new_category_tool_works_without_service_branching_changes() -> None:
     reverse_registration = ToolRegistration(
         name="reverse",
@@ -264,6 +276,7 @@ def test_invoke_get_entity_context_uses_default_depth_and_maps_output() -> None:
 
     result = adapters.invoke_get_entity_context(GetEntityContextToolInput.model_validate({"entity_id": "ent_ada"}))
 
+    assert [entity.entity_id for entity in result.related_entities] == ["ent_babbage", "ent_analytical_engine"]
     assert ki_client.context_calls == [
         {
             "entity_id": "ent_ada",
@@ -292,6 +305,46 @@ def test_invoke_get_entity_context_uses_default_depth_and_maps_output() -> None:
         ],
     }
 
+
+
+
+def test_invoke_get_entity_context_maps_ki_response_deterministically() -> None:
+    web_client = StaticWebSearchClient()
+    ki_client = _FakeKnowledgeInterfaceClient()
+    adapters = ToolAdapterRegistry(
+        web_search_adapter=WebSearchAdapter(client=web_client),
+        web_fetch_adapter=WebFetchAdapter(client=web_client),
+        knowledge_interface_client=ki_client,
+        knowledge_interface_user_id="user-123",
+    )
+
+    result = adapters.invoke_get_entity_context(
+        GetEntityContextToolInput.model_validate({"entity_id": "ent_ada", "depth": 4, "focus": "collaboration"})
+    )
+
+    assert ki_client.context_calls[-1] == {
+        "entity_id": "ent_ada",
+        "user_id": "user-123",
+        "max_block_level": 4,
+    }
+    assert result.context_markdown.startswith("## Ada Lovelace")
+    assert result.context_markdown.endswith("- @ent_babbage: Charles Babbage")
+    assert result.model_dump()["related_entities"] == [
+        {
+            "entity_id": "ent_babbage",
+            "name": "Charles Babbage",
+            "aliases": ["Babbage"],
+            "entity_type": "Person",
+            "description": "Inventor and mathematician",
+        },
+        {
+            "entity_id": "ent_analytical_engine",
+            "name": "Analytical Engine",
+            "aliases": [],
+            "entity_type": "node.machine",
+            "description": "Related entity Analytical Engine",
+        },
+    ]
 
 def test_invoke_get_entity_context_requires_knowledge_interface_client() -> None:
     adapters = _adapters()
