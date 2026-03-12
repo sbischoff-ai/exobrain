@@ -5,7 +5,7 @@ from pydantic import Field
 from app.adapters.tool_adapters import ToolAdapterRegistry
 from app.adapters.tool_registry import ToolRegistration, ToolRegistry
 from app.adapters.web_tools import StaticWebSearchClient, WebFetchAdapter, WebSearchAdapter
-from app.contracts import GetEntityContextToolInput, ResolveEntitiesToolInput, ToolMetadata
+from app.contracts import GetEntityContextToolInput, ResolveEntitiesToolInput, ToolExecutionContext, ToolMetadata
 from app.contracts.base import StrictModel
 from app.main import create_tool_registry
 from app.services.auth_service import AuthService
@@ -128,7 +128,7 @@ def test_new_category_tool_works_without_service_branching_changes() -> None:
             inputSchema=ReverseToolInput.model_json_schema(),
         ),
         invocation_parser=ReverseToolInput.model_validate,
-        handler=lambda args: ReverseToolOutput(text=args.text[::-1]),
+        handler=lambda args, _context: ReverseToolOutput(text=args.text[::-1]),
     )
     app = FastAPI()
     app.include_router(
@@ -170,7 +170,8 @@ def test_invoke_resolve_entities_returns_deterministic_placeholders() -> None:
                     },
                 ]
             }
-        )
+        ),
+        ToolExecutionContext(user_id="context-user", name="Context User"),
     )
 
     assert result.model_dump() == {
@@ -279,16 +280,18 @@ def test_invoke_get_entity_context_uses_default_depth_and_maps_output() -> None:
         web_search_adapter=WebSearchAdapter(client=web_client),
         web_fetch_adapter=WebFetchAdapter(client=web_client),
         knowledge_interface_client=ki_client,
-        knowledge_interface_user_id="user-123",
     )
 
-    result = adapters.invoke_get_entity_context(GetEntityContextToolInput.model_validate({"entity_id": "ent_ada"}))
+    result = adapters.invoke_get_entity_context(
+        GetEntityContextToolInput.model_validate({"entity_id": "ent_ada"}),
+        ToolExecutionContext(user_id="context-user", name="Context User"),
+    )
 
     assert [entity.entity_id for entity in result.related_entities] == ["ent_babbage", "ent_analytical_engine"]
     assert ki_client.context_calls == [
         {
             "entity_id": "ent_ada",
-            "user_id": "user-123",
+            "user_id": "context-user",
             "max_block_level": 3,
         }
     ]
@@ -323,16 +326,16 @@ def test_invoke_get_entity_context_maps_ki_response_deterministically() -> None:
         web_search_adapter=WebSearchAdapter(client=web_client),
         web_fetch_adapter=WebFetchAdapter(client=web_client),
         knowledge_interface_client=ki_client,
-        knowledge_interface_user_id="user-123",
     )
 
     result = adapters.invoke_get_entity_context(
-        GetEntityContextToolInput.model_validate({"entity_id": "ent_ada", "depth": 4, "focus": "collaboration"})
+        GetEntityContextToolInput.model_validate({"entity_id": "ent_ada", "depth": 4, "focus": "collaboration"}),
+        ToolExecutionContext(user_id="context-user", name="Context User"),
     )
 
     assert ki_client.context_calls[-1] == {
         "entity_id": "ent_ada",
-        "user_id": "user-123",
+        "user_id": "context-user",
         "max_block_level": 4,
     }
     assert result.context_markdown.startswith("## Ada Lovelace")
@@ -358,7 +361,10 @@ def test_invoke_get_entity_context_requires_knowledge_interface_client() -> None
     adapters = _adapters()
 
     try:
-        adapters.invoke_get_entity_context(GetEntityContextToolInput.model_validate({"entity_id": "ent_ada"}))
+        adapters.invoke_get_entity_context(
+            GetEntityContextToolInput.model_validate({"entity_id": "ent_ada"}),
+            ToolExecutionContext(user_id="context-user", name="Context User"),
+        )
     except RuntimeError as exc:
         assert "knowledge_interface_client" in str(exc)
     else:

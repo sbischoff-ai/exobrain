@@ -19,6 +19,7 @@ from app.contracts import (
     ResolveEntitiesToolOutput,
     ResolveEntityExpectedExistence,
     ResolveEntityMatchStatus,
+    ToolExecutionContext,
     WebFetchToolInput,
     WebFetchToolOutput,
     WebSearchToolInput,
@@ -36,20 +37,18 @@ class ToolAdapterRegistry:
         web_search_adapter: WebSearchAdapter,
         web_fetch_adapter: WebFetchAdapter,
         knowledge_interface_client: KnowledgeInterfaceClient | None = None,
-        knowledge_interface_user_id: str = "mcp-server",
     ):
         self._web_search_adapter = web_search_adapter
         self._web_fetch_adapter = web_fetch_adapter
         self._knowledge_interface_client = knowledge_interface_client
-        self._knowledge_interface_user_id = knowledge_interface_user_id
 
-    def invoke_echo(self, args: EchoToolInput) -> EchoToolOutput:
+    def invoke_echo(self, args: EchoToolInput, _context: ToolExecutionContext) -> EchoToolOutput:
         return EchoToolOutput(text=args.text)
 
-    def invoke_add(self, args: AddToolInput) -> AddToolOutput:
+    def invoke_add(self, args: AddToolInput, _context: ToolExecutionContext) -> AddToolOutput:
         return AddToolOutput(sum=args.a + args.b)
 
-    def invoke_web_search(self, args: WebSearchToolInput) -> WebSearchToolOutput:
+    def invoke_web_search(self, args: WebSearchToolInput, _context: ToolExecutionContext) -> WebSearchToolOutput:
         return WebSearchToolOutput(
             results=self._web_search_adapter.web_search(
                 query=args.query,
@@ -60,7 +59,7 @@ class ToolAdapterRegistry:
             )
         )
 
-    def invoke_web_fetch(self, args: WebFetchToolInput) -> WebFetchToolOutput:
+    def invoke_web_fetch(self, args: WebFetchToolInput, _context: ToolExecutionContext) -> WebFetchToolOutput:
         return WebFetchToolOutput.model_validate(
             self._web_fetch_adapter.web_fetch(
                 url=args.url,
@@ -68,14 +67,14 @@ class ToolAdapterRegistry:
             )
         )
 
-    def invoke_get_entity_context(self, args: GetEntityContextToolInput) -> GetEntityContextToolOutput:
+    def invoke_get_entity_context(self, args: GetEntityContextToolInput, context: ToolExecutionContext) -> GetEntityContextToolOutput:
         if self._knowledge_interface_client is None:
             raise RuntimeError("knowledge_interface_client is required for get_entity_context")
 
         max_block_level = _clamp_max_block_level(args.depth)
         response = self._knowledge_interface_client.get_entity_context(
             entity_id=args.entity_id,
-            user_id=self._knowledge_interface_user_id,
+            user_id=context.user_id,
             max_block_level=max_block_level,
         )
         type_name_by_id = _build_entity_type_name_map(
@@ -96,7 +95,7 @@ class ToolAdapterRegistry:
             related_entities=related_entities,
         )
 
-    def invoke_resolve_entities(self, args: ResolveEntitiesToolInput) -> ResolveEntitiesToolOutput:
+    def invoke_resolve_entities(self, args: ResolveEntitiesToolInput, _context: ToolExecutionContext) -> ResolveEntitiesToolOutput:
         # TODO: replace this placeholder once Knowledge Interface entity resolution is wired in.
         def _normalize_name(entity: ResolveEntitiesInputItem) -> str:
             return " ".join(entity.name.split())

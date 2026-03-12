@@ -7,6 +7,7 @@ from app.contracts import (
     ListToolsResponse,
     ToolError,
     ToolErrorEnvelope,
+    ToolExecutionContext,
     ToolInvocation,
     ToolResult,
 )
@@ -19,7 +20,7 @@ class ToolService:
     def list_tools(self) -> ListToolsResponse:
         return ListToolsResponse(tools=self._registry.list_tools())
 
-    def invoke_tool(self, invocation: ToolInvocation) -> ToolResult:
+    def invoke_tool(self, invocation: ToolInvocation, context: ToolExecutionContext) -> ToolResult:
         registration = self._registry.get(invocation.name)
         if registration is None:
             return ToolErrorEnvelope(
@@ -30,7 +31,7 @@ class ToolService:
 
         parsed_arguments = registration.parse_arguments(invocation.arguments)
         try:
-            result = registration.handler(parsed_arguments)
+            result = registration.handler(parsed_arguments, context)
             return GenericToolSuccessEnvelope(name=registration.name, result=result, metadata=invocation.metadata)
         except WebToolError as exc:
             if registration.error_code is None:
