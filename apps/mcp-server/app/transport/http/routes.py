@@ -8,7 +8,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi import Request
 from pydantic import ValidationError
 
-from app.contracts import HealthResponse, ListToolsResponse, ToolInvocation, ToolResult
+from app.contracts import HealthResponse, ListToolsResponse, ToolExecutionContext, ToolInvocation, ToolResult
 from app.services.auth_service import AuthService, AuthenticatedUser
 from app.services.request_context import reset_current_user, set_current_user
 from app.services.tool_service import ToolService
@@ -44,7 +44,10 @@ def build_router(tool_service: ToolService, auth_service: AuthService) -> APIRou
     ) -> ToolResult:
         try:
             with with_authenticated_user(user):
-                return tool_service.invoke_tool(invocation)
+                return tool_service.invoke_tool(
+                    invocation,
+                    ToolExecutionContext(user_id=user.user_id, name=user.name),
+                )
         except ValidationError as exc:
             raise RequestValidationError(exc.errors()) from exc
 

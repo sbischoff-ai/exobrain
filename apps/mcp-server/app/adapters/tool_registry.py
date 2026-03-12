@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from app.contracts import ToolMetadata
+from app.contracts import ToolExecutionContext, ToolMetadata
 
 
 @dataclass(frozen=True)
@@ -20,7 +20,7 @@ class ToolRegistration:
     category: str
     metadata_provider: Callable[[], ToolMetadata]
     invocation_parser: Callable[[dict[str, Any]], Any]
-    handler: Callable[[Any], Any]
+    handler: Callable[[Any, ToolExecutionContext], Any]
     error_code: str | None = None
     feature_flag: str | None = None
     dependencies: tuple[str, ...] = ()

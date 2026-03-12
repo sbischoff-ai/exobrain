@@ -50,8 +50,7 @@ def _knowledge_client(client: object, *, raise_server_exceptions: bool = True) -
     adapters = ToolAdapterRegistry(
         web_search_adapter=WebSearchAdapter(client=StaticWebSearchClient()),
         web_fetch_adapter=WebFetchAdapter(client=StaticWebSearchClient()),
-        knowledge_interface_client=client,
-        knowledge_interface_user_id="user-123",
+        knowledge_interface_client=client
     )
     tool_service = ToolService(
         registry=create_tool_registry(

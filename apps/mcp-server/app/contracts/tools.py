@@ -211,6 +211,11 @@ class ToolInvocation(StrictModel):
     metadata: CorrelationMetadata | None = None
 
 
+class ToolExecutionContext(StrictModel):
+    user_id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+
+
 class ToolError(StrictModel):
     code: str
     message: str

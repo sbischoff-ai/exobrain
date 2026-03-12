@@ -17,7 +17,7 @@ def build_utility_tool_registrations(adapters: ToolAdapterRegistry) -> list[Tool
                 EchoToolInput,
             ),
             invocation_parser=input_parser(EchoToolInput),
-            handler=adapters.invoke_echo,
+            handler=lambda args, context: adapters.invoke_echo(args, context),
             feature_flag="enable_utility_tools",
         ),
         ToolRegistration(
@@ -30,7 +30,7 @@ def build_utility_tool_registrations(adapters: ToolAdapterRegistry) -> list[Tool
                 AddToolInput,
             ),
             invocation_parser=input_parser(AddToolInput),
-            handler=adapters.invoke_add,
+            handler=lambda args, context: adapters.invoke_add(args, context),
             feature_flag="enable_utility_tools",
         ),
     ]

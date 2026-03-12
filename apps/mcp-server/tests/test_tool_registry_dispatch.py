@@ -3,10 +3,9 @@ from fastapi.testclient import TestClient
 from pydantic import Field
 
 from app.adapters.tool_registry import ToolRegistration, ToolRegistry
-from app.contracts import GenericToolSuccessEnvelope, ToolInvocation, ToolMetadata
+from app.contracts import GenericToolSuccessEnvelope, ToolExecutionContext, ToolInvocation, ToolMetadata
 from app.contracts.base import StrictModel
 from app.services.auth_service import AuthService
-from app.services.request_context import get_current_user
 from app.services.tool_service import ToolService
 from app.settings import Settings
 from app.transport.http.routes import build_router
@@ -32,7 +31,7 @@ def _build_test_client_with_upper_tool() -> TestClient:
             inputSchema=UpperToolInput.model_json_schema(),
         ),
         invocation_parser=UpperToolInput.model_validate,
-        handler=lambda args: UpperToolOutput(text=args.text.upper()),
+        handler=lambda args, _context: UpperToolOutput(text=args.text.upper()),
     )
     custom_registry = ToolRegistry(registrations=[*registry.registrations(), upper_registration])
 
@@ -82,11 +81,14 @@ def test_service_returns_generic_success_envelope_for_built_in_tool() -> None:
             inputSchema={"type": "object"},
         ),
         invocation_parser=lambda payload: payload,
-        handler=lambda args: {"sum": args["a"] + args["b"]},
+        handler=lambda args, _context: {"sum": args["a"] + args["b"]},
     )
     service = ToolService(registry=ToolRegistry(registrations=[add_registration]))
 
-    result = service.invoke_tool(ToolInvocation(name="add", arguments={"a": 2, "b": 3}))
+    result = service.invoke_tool(
+        ToolInvocation(name="add", arguments={"a": 2, "b": 3}),
+        ToolExecutionContext(user_id="user-1", name="User One"),
+    )
 
     assert isinstance(result, GenericToolSuccessEnvelope)
     assert result.model_dump() == {
@@ -107,10 +109,7 @@ def test_tool_invocation_has_authenticated_user_context() -> None:
             inputSchema={"type": "object"},
         ),
         invocation_parser=lambda payload: payload,
-        handler=lambda _args: {
-            "user_id": get_current_user().user_id if get_current_user() else None,
-            "name": get_current_user().name if get_current_user() else None,
-        },
+        handler=lambda _args, context: {"user_id": context.user_id, "name": context.name},
     )
     app = FastAPI()
     app.include_router(

@@ -146,7 +146,8 @@ Canonical MCP HTTP contract types are defined in `apps/mcp-server/app/contracts/
 - `category`
 - `metadata_provider` (description + JSON schema)
 - `invocation_parser` (per-tool Pydantic validation)
-- `handler` function
+- `handler` function (`handler(args, context)`)
+- invocation `context` is typed (`ToolExecutionContext`) and currently carries authenticated `user_id` and `name`
 - optional `feature_flag` settings gate
 - optional `dependencies` declaration for external/runtime requirements
 
