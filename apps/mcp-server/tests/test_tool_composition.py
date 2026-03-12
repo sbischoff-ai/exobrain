@@ -8,9 +8,11 @@ from app.adapters.web_tools import StaticWebSearchClient, WebFetchAdapter, WebSe
 from app.contracts import GetEntityContextToolInput, ResolveEntitiesToolInput, ToolMetadata
 from app.contracts.base import StrictModel
 from app.main import create_tool_registry
+from app.services.auth_service import AuthService
 from app.services.tool_service import ToolService
 from app.settings import Settings
 from app.transport.http.routes import build_router
+from tests.auth_helpers import auth_headers
 
 
 class ReverseToolInput(StrictModel):
@@ -129,8 +131,14 @@ def test_new_category_tool_works_without_service_branching_changes() -> None:
         handler=lambda args: ReverseToolOutput(text=args.text[::-1]),
     )
     app = FastAPI()
-    app.include_router(build_router(ToolService(registry=ToolRegistry(registrations=[reverse_registration]))))
+    app.include_router(
+        build_router(
+            ToolService(registry=ToolRegistry(registrations=[reverse_registration])),
+            AuthService(_settings()),
+        )
+    )
     client = TestClient(app)
+    client.headers.update(auth_headers())
 
     response = client.post("/mcp/tools/invoke", json={"name": "reverse", "arguments": {"text": "hello"}})
 

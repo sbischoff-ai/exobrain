@@ -11,6 +11,7 @@ from app.adapters.tool_registry import ToolRegistration, ToolRegistry
 from app.adapters.utility_registry_builder import build_utility_tool_registrations
 from app.adapters.web_registry_builder import build_web_tool_registrations
 from app.adapters.web_tools import StaticWebSearchClient, WebFetchAdapter, WebSearchAdapter
+from app.services.auth_service import AuthService
 from app.services.tool_service import ToolService
 from app.settings import Settings, get_settings
 from app.transport.http.routes import build_router
@@ -68,7 +69,8 @@ def create_app(app_settings: Settings | None = None) -> FastAPI:
     web_fetch_adapter = WebFetchAdapter(client=web_client)
     adapters = ToolAdapterRegistry(web_search_adapter=web_search_adapter, web_fetch_adapter=web_fetch_adapter)
     tool_service = ToolService(registry=create_tool_registry(adapters, resolved_settings))
-    app.include_router(build_router(tool_service))
+    auth_service = AuthService(resolved_settings)
+    app.include_router(build_router(tool_service, auth_service))
 
     return app
 

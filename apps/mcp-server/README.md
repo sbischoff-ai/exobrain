@@ -21,9 +21,11 @@ The runtime exposes an HTTP REST transport for MCP tool operations. It does **no
   - Readiness check endpoint.
   - Response: `{ "status": "ok" }`
 - `GET /mcp/tools`
+  - Requires `Authorization: Bearer <access-token>`.
   - Lists available tools and their input JSON schemas in `inputSchema` (camelCase).
   - Includes knowledge tools (`resolve_entities`, `get_entity_context`) when the `knowledge` category is enabled and `ENABLE_KNOWLEDGE_TOOLS=true`.
 - `POST /mcp/tools/invoke`
+  - Requires `Authorization: Bearer <access-token>`.
   - Invokes a single tool with a typed invocation envelope:
     - `name`: tool identifier
     - `arguments`: tool-specific payload
@@ -183,6 +185,12 @@ Test coverage for knowledge tools (`resolve_entities`, `get_entity_context`) use
 - `LOG_LEVEL` (optional)
 - `MCP_SERVER_HOST` (default: `0.0.0.0`)
 - `MCP_SERVER_PORT` (default: `8090`)
+- `AUTH_JWT_SECRET` (default: `dev-secret-change-me`)
+- `AUTH_JWT_ALGORITHM` (default: `HS256`)
+- `AUTH_SESSION_INTROSPECTION_ENABLED` (default: `false`)
+- `AUTH_SESSION_HEADER_NAME` (default: `x-session-id`)
+- `AUTH_SESSION_REDIS_URL` (default: `redis://localhost:16379/0`)
+- `AUTH_SESSION_REDIS_KEY_PREFIX` (default: `assistant:sessions`)
 - `WEB_SEARCH_PROVIDER` (`auto` | `static` | `tavily`, default: `auto`)
 - `ENABLED_TOOL_CATEGORIES` (comma-delimited, default: `utility,knowledge,web`)
 - `ENABLE_UTILITY_TOOLS` (default: `false`)
