@@ -215,7 +215,10 @@ describe('KnowledgeExplorerView', () => {
       category_id: 'task',
       summary: null,
       properties: { source: 'docs', owner: 'team-knowledge' },
-      content_blocks: [{ block_id: 'blk-1', markdown: '## Body' }],
+      content_blocks: [
+        { block_id: 'blk-1', markdown: '## Body' },
+        { block_id: 'blk-2', markdown: '### Secondary body' }
+      ],
       created_at: '2026-01-02T03:04:05Z',
       updated_at: '2026-01-03T04:05:06Z',
       links: [{ page_id: 'linked-1', title: 'Linked Page', summary: 'see also' }],
@@ -244,9 +247,12 @@ describe('KnowledgeExplorerView', () => {
     const meta = screen.getByText('Created 2026/01/02 03:04 · Updated 2026/01/03 04:05');
     const propertiesHeading = screen.getByRole('heading', { name: 'Properties' });
     const markdownHeading = screen.getByRole('heading', { name: 'Body' });
+    const secondaryMarkdownHeading = screen.getByRole('heading', { name: 'Secondary body' });
 
     expect(meta.compareDocumentPosition(propertiesHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(propertiesHeading.compareDocumentPosition(markdownHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(markdownHeading.compareDocumentPosition(secondaryMarkdownHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(document.querySelectorAll('.content-block')).toHaveLength(2);
 
     expect(getPage).toHaveBeenCalledWith('page-1');
   });

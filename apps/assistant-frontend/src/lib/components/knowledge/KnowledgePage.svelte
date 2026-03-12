@@ -62,7 +62,7 @@
     } satisfies KnowledgeCategoryPageListItem)) ?? [];
 
   $: propertyEntries = Object.entries(page?.properties ?? {});
-  $: contentMarkdown = page?.content_blocks.map((block) => block.markdown).join('\n\n') ?? '';
+  $: contentBlocks = page?.content_blocks ?? [];
 </script>
 
 <section class="knowledge-page" aria-label="Knowledge page detail">
@@ -102,16 +102,18 @@
         </section>
       {/if}
 
-      {#if contentMarkdown}
-        <div class="assistant-markdown markdown-body">
-          <Streamdown
-            content={contentMarkdown}
-            theme={streamdownTheme}
-            shikiTheme="gruvbox-dark-medium"
-            shikiThemes={{ 'gruvbox-dark-medium': gruvboxDarkMedium }}
-            components={{ code: StreamdownCode, math: StreamdownMath, mermaid: StreamdownMermaid }}
-          />
-        </div>
+      {#if contentBlocks.length > 0}
+        {#each contentBlocks as block (block.block_id)}
+          <div class="assistant-markdown markdown-body content-block">
+            <Streamdown
+              content={block.markdown}
+              theme={streamdownTheme}
+              shikiTheme="gruvbox-dark-medium"
+              shikiThemes={{ 'gruvbox-dark-medium': gruvboxDarkMedium }}
+              components={{ code: StreamdownCode, math: StreamdownMath, mermaid: StreamdownMermaid }}
+            />
+          </div>
+        {/each}
       {:else}
         <p class="empty">No content available for this page.</p>
       {/if}
