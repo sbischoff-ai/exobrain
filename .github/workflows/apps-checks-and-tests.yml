@@ -2,9 +2,6 @@ name: Apps checks and tests
 
 on:
   pull_request:
-    paths:
-      - 'apps/**'
-      - '.github/workflows/apps-checks-and-tests.yml'
   push:
     branches:
       - main
@@ -13,49 +10,7 @@ on:
       - '.github/workflows/apps-checks-and-tests.yml'
 
 jobs:
-  detect-changes:
-    runs-on: ubuntu-latest
-    outputs:
-      assistant-backend: ${{ steps.filter.outputs.assistant-backend }}
-      model-provider: ${{ steps.filter.outputs.model-provider }}
-      job-orchestrator: ${{ steps.filter.outputs.job-orchestrator }}
-      mcp-server: ${{ steps.filter.outputs.mcp-server }}
-      assistant-frontend: ${{ steps.filter.outputs.assistant-frontend }}
-      knowledge-interface: ${{ steps.filter.outputs.knowledge-interface }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
-        id: filter
-        with:
-          filters: |
-            assistant-backend:
-              - 'apps/assistant-backend/**'
-              - '!apps/assistant-backend/**/*.md'
-              - '!apps/assistant-backend/docs/**'
-            model-provider:
-              - 'apps/model-provider/**'
-              - '!apps/model-provider/**/*.md'
-              - '!apps/model-provider/docs/**'
-            job-orchestrator:
-              - 'apps/job-orchestrator/**'
-              - '!apps/job-orchestrator/**/*.md'
-              - '!apps/job-orchestrator/docs/**'
-            mcp-server:
-              - 'apps/mcp-server/**'
-              - '!apps/mcp-server/**/*.md'
-              - '!apps/mcp-server/docs/**'
-            assistant-frontend:
-              - 'apps/assistant-frontend/**'
-              - '!apps/assistant-frontend/**/*.md'
-              - '!apps/assistant-frontend/docs/**'
-            knowledge-interface:
-              - 'apps/knowledge-interface/**'
-              - '!apps/knowledge-interface/**/*.md'
-              - '!apps/knowledge-interface/docs/**'
-
   assistant-backend:
-    needs: detect-changes
-    if: ${{ needs.detect-changes.outputs.assistant-backend == 'true' }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -72,8 +27,6 @@ jobs:
         run: ./scripts/verify.sh
 
   model-provider:
-    needs: detect-changes
-    if: ${{ needs.detect-changes.outputs.model-provider == 'true' }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -90,8 +43,6 @@ jobs:
         run: ./scripts/verify.sh
 
   job-orchestrator:
-    needs: detect-changes
-    if: ${{ needs.detect-changes.outputs.job-orchestrator == 'true' }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -108,8 +59,6 @@ jobs:
         run: ./scripts/verify.sh
 
   mcp-server:
-    needs: detect-changes
-    if: ${{ needs.detect-changes.outputs.mcp-server == 'true' }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -126,8 +75,6 @@ jobs:
         run: ./scripts/verify.sh
 
   assistant-frontend:
-    needs: detect-changes
-    if: ${{ needs.detect-changes.outputs.assistant-frontend == 'true' }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -145,8 +92,6 @@ jobs:
         run: ./scripts/verify.sh
 
   knowledge-interface:
-    needs: detect-changes
-    if: ${{ needs.detect-changes.outputs.knowledge-interface == 'true' }}
     runs-on: ubuntu-latest
     defaults:
       run:
