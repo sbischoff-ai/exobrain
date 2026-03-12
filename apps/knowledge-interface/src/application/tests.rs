@@ -3290,6 +3290,7 @@ fn sample_entity_context_result() -> GetEntityContextResult {
                     description: Some("neighbor".to_string()),
                     name: Some("Neighbor Entity".to_string()),
                     type_id: "node.person".to_string(),
+                    aliases: vec![],
                 },
             }],
         }],
