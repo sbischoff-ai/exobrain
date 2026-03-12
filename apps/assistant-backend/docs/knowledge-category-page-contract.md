@@ -122,7 +122,7 @@ Returns page detail from `GetEntityContext` (`max_block_level=2`) with canonical
 - `metadata` contains only canonical timestamps (`created_at`, `updated_at`).
 - `properties` contains entity-type-specific values from upstream `entity_properties`, excluding reserved/system keys (`created_at`, `updated_at`, `visibility`, `user_id`, `type_id`, `id`).
 - `links` are mapped from neighbor entities.
-- `content_blocks` is an ordered list of entity blocks; clients render each block independently.
+- `content_blocks` is an ordered list of entity blocks (`block_id` + `markdown`); clients render each block independently in payload order to preserve prior page visual output.
 
 ### Error mapping
 
