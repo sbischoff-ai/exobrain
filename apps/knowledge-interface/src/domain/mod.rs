@@ -81,10 +81,6 @@ impl fmt::Display for IdParseError {
 impl std::error::Error for IdParseError {}
 
 impl TypeId {
-    pub fn parse(value: &str) -> Result<Self, IdParseError> {
-        value.parse()
-    }
-
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -112,20 +108,6 @@ impl TryFrom<&str> for TypeId {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct EntityId(Uuid);
-
-impl EntityId {
-    pub fn parse(value: &str) -> Result<Self, IdParseError> {
-        value.parse()
-    }
-
-    pub fn as_uuid(&self) -> &Uuid {
-        &self.0
-    }
-
-    pub fn into_inner(self) -> Uuid {
-        self.0
-    }
-}
 
 impl FromStr for EntityId {
     type Err = IdParseError;
@@ -157,20 +139,6 @@ impl fmt::Display for EntityId {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct UniverseId(Uuid);
-
-impl UniverseId {
-    pub fn parse(value: &str) -> Result<Self, IdParseError> {
-        value.parse()
-    }
-
-    pub fn as_uuid(&self) -> &Uuid {
-        &self.0
-    }
-
-    pub fn into_inner(self) -> Uuid {
-        self.0
-    }
-}
 
 impl FromStr for UniverseId {
     type Err = IdParseError;
