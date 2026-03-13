@@ -449,10 +449,7 @@ impl Neo4jGraphStore {
                 type_id: row
                     .get("other_entity_type_id")
                     .context("missing block_neighbor.other_entity_type_id")?,
-                aliases: parse_alias_payload(
-                    &row.get::<String>("other_entity_aliases")
-                        .unwrap_or_default(),
-                ),
+                aliases: read_aliases_from_row(&row, "other_entity_aliases"),
             };
 
             let item = EntityContextNeighborItem {
@@ -513,10 +510,7 @@ impl Neo4jGraphStore {
                     type_id: row
                         .get("other_entity_type_id")
                         .context("missing neighbor.other_entity_type_id")?,
-                    aliases: parse_alias_payload(
-                        &row.get::<String>("other_entity_aliases")
-                            .unwrap_or_default(),
-                    ),
+                    aliases: read_aliases_from_row(&row, "other_entity_aliases"),
                 },
             });
         }
@@ -597,7 +591,7 @@ fn build_get_entity_context_block_neighbors_query() -> String {
                 described_by.text AS other_entity_description,
                 other.name AS other_entity_name,
                 other.type_id AS other_entity_type_id,
-                toString(other.aliases) AS other_entity_aliases
+                other.aliases AS other_entity_aliases
          UNION ALL
          MATCH (e:Entity {{id: $entity_id}})-[:DESCRIBED_BY]->(root:Block)
          WHERE {entity_access} AND {root_access}
@@ -615,7 +609,7 @@ fn build_get_entity_context_block_neighbors_query() -> String {
                 described_by.text AS other_entity_description,
                 other.name AS other_entity_name,
                 other.type_id AS other_entity_type_id,
-                toString(other.aliases) AS other_entity_aliases
+                other.aliases AS other_entity_aliases
          ORDER BY block_id ASC, direction ASC, edge_type ASC, other_entity_id ASC",
         entity_access = memgraph_user_or_shared_access_clause("e"),
         root_access = memgraph_user_or_shared_access_clause("root"),
@@ -641,7 +635,7 @@ fn build_get_entity_context_neighbors_query() -> String {
                 described_by.text AS other_entity_description,
                 other.name AS other_entity_name,
                 other.type_id AS other_entity_type_id,
-                toString(other.aliases) AS other_entity_aliases
+                other.aliases AS other_entity_aliases
          UNION ALL
          MATCH (e:Entity {{id: $entity_id}})
          WHERE {entity_access}
@@ -656,7 +650,7 @@ fn build_get_entity_context_neighbors_query() -> String {
                 described_by.text AS other_entity_description,
                 other.name AS other_entity_name,
                 other.type_id AS other_entity_type_id,
-                toString(other.aliases) AS other_entity_aliases
+                other.aliases AS other_entity_aliases
          ORDER BY direction ASC, edge_type ASC, other_entity_id ASC",
         entity_access = memgraph_user_or_shared_access_clause("e"),
         other_access = memgraph_user_or_shared_access_clause("other"),
@@ -723,6 +717,14 @@ fn parse_neighbor_direction(direction: &str) -> Result<NeighborDirection> {
         "INCOMING" => Ok(NeighborDirection::Incoming),
         _ => anyhow::bail!("invalid neighbor direction: {direction}"),
     }
+}
+
+fn read_aliases_from_row(row: &neo4rs::Row, key: &str) -> Vec<String> {
+    if let Ok(values) = row.get::<Vec<String>>(key) {
+        return values;
+    }
+
+    parse_alias_payload(&row.get::<String>(key).unwrap_or_default())
 }
 
 fn parse_block_level(block_level: i64) -> Result<u32> {
@@ -892,4 +894,22 @@ fn validate_edge_type(edge_type: &str) -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        build_get_entity_context_block_neighbors_query, build_get_entity_context_neighbors_query,
+    };
+
+    #[test]
+    fn entity_context_neighbor_queries_keep_aliases_as_list_values() {
+        let block_query = build_get_entity_context_block_neighbors_query();
+        let neighbor_query = build_get_entity_context_neighbors_query();
+
+        assert!(block_query.contains("other.aliases AS other_entity_aliases"));
+        assert!(neighbor_query.contains("other.aliases AS other_entity_aliases"));
+        assert!(!block_query.contains("toString(other.aliases)"));
+        assert!(!neighbor_query.contains("toString(other.aliases)"));
+    }
 }
