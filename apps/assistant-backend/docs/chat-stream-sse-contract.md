@@ -104,6 +104,7 @@ Emitted exactly once as terminal completion signal.
 
 - Tool-call IDs originate from model tool calls (`tool_call.id`).
 - Backend tracks active tool mappers keyed by `tool_call_id` and emits responses/errors with the same ID.
+- Tool execution failures (for example MCP invocation exceptions) are surfaced via LangGraph `ToolMessage.status == "error"` and emitted as SSE `event: error` with the original `tool_call_id`.
 
 ### Frontend mapping behavior
 

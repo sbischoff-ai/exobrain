@@ -26,6 +26,10 @@ class MCPClientUnavailableError(MCPClientError):
     """Raised when MCP server is unavailable or times out."""
 
 
+class MCPClientUnauthorizedError(MCPClientError):
+    """Raised when MCP server rejects authentication/authorization."""
+
+
 class MCPClient(MCPClientProtocol):
     """REST HTTP client for MCP tool listing and invocation."""
 
@@ -66,7 +70,11 @@ class MCPClient(MCPClientProtocol):
         if not isinstance(response, dict):
             raise MCPClientError("mcp response must be a JSON object")
 
-        if response.get("ok") is False:
+        ok = response.get("ok") if "ok" in response else None
+        if not isinstance(ok, bool):
+            raise MCPClientError("mcp response envelope invalid: expected boolean 'ok'")
+
+        if ok is False:
             error = response.get("error")
             message = "mcp request failed"
             if isinstance(error, dict) and error.get("message"):
@@ -131,8 +139,12 @@ class MCPClient(MCPClientProtocol):
 
         if status == 404:
             raise MCPClientNotFoundError("mcp endpoint not found")
+        if status in {401, 403}:
+            raise MCPClientUnauthorizedError("mcp request unauthorized")
         if status in {400, 422}:
             raise MCPClientInvalidArgumentError("mcp request arguments are invalid")
         if status >= 500:
             raise MCPClientUnavailableError("mcp server unavailable")
+        if status < 200 or status >= 300:
+            raise MCPClientError(f"mcp request failed with unexpected status {status}")
         return parsed

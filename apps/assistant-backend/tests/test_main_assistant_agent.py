@@ -186,3 +186,61 @@ def test_extract_update_events_ignores_tool_results_without_matching_call() -> N
     )
 
     assert events == []
+
+
+class FakeCompiledAgentWithToolError:
+    async def astream(self, *_args, **_kwargs) -> AsyncIterator[tuple[str, object]]:
+        yield "updates", {
+            "model": {
+                "messages": [
+                    type(
+                        "ModelMsg",
+                        (),
+                        {
+                            "tool_calls": [
+                                {
+                                    "id": "tc-err-1",
+                                    "name": "web_search",
+                                    "args": {"query": "failing query"},
+                                }
+                            ]
+                        },
+                    )()
+                ]
+            }
+        }
+        yield "updates", {
+            "tools": {
+                "messages": [
+                    _ToolMessage(tool_call_id="tc-err-1", content="upstream 401", status="error")
+                ]
+            }
+        }
+
+
+@pytest.mark.asyncio
+async def test_astream_emits_error_event_for_failed_tool_with_tool_call_id() -> None:
+    agent = MainAssistantAgent(
+        compiled_agent=FakeCompiledAgentWithToolError(),
+        tool_event_mappers={"web_search": WebSearchStreamMapper()},
+    )
+
+    events = [chunk async for chunk in agent.astream(message="hi", conversation_id="conv-1")]
+
+    assert events == [
+        {
+            "type": "tool_call",
+            "data": {
+                "tool_call_id": "tc-err-1",
+                "title": "Web search",
+                "description": "Searching the web for failing query",
+            },
+        },
+        {
+            "type": "error",
+            "data": {
+                "tool_call_id": "tc-err-1",
+                "message": "Couldn't complete web search for failing query: upstream 401",
+            },
+        },
+    ]
