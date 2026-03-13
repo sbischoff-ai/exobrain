@@ -23,6 +23,19 @@ class AuthService:
     def __init__(self, settings: Settings):
         self._settings = settings
 
+    def optional_user(self, request: Request) -> AuthenticatedUser | None:
+        auth_header = request.headers.get("authorization")
+        if not auth_header:
+            return None
+        if not auth_header.lower().startswith("bearer "):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid authentication token")
+
+        token = auth_header.split(" ", 1)[1].strip()
+        if not token:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required")
+
+        return self._user_from_token(token)
+
     def require_user(self, request: Request) -> AuthenticatedUser:
         auth_header = request.headers.get("authorization")
         if not auth_header or not auth_header.lower().startswith("bearer "):
@@ -32,6 +45,9 @@ class AuthService:
         if not token:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required")
 
+        return self._user_from_token(token)
+
+    def _user_from_token(self, token: str) -> AuthenticatedUser:
         payload = self._decode_jwt_hs256(token)
         user_id = str(payload.get("sub") or payload.get("user_id") or "").strip()
         name = str(payload.get("name") or payload.get("display_name") or payload.get("email") or "").strip()

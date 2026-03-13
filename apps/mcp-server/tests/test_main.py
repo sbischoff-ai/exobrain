@@ -101,11 +101,11 @@ def test_healthz() -> None:
     assert response.json() == {"status": "ok"}
 
 
-def test_mcp_endpoints_require_authentication() -> None:
+def test_mcp_tools_endpoint_allows_anonymous_access() -> None:
     response = unauthenticated_client.get("/mcp/tools")
 
-    assert response.status_code == 401
-    assert response.json() == {"detail": "authentication required"}
+    assert response.status_code == 200
+    assert "tools" in response.json()
 
 
 def test_mcp_endpoints_reject_invalid_bearer_token() -> None:
@@ -113,6 +113,13 @@ def test_mcp_endpoints_reject_invalid_bearer_token() -> None:
 
     assert response.status_code == 401
     assert response.json() == {"detail": "invalid authentication token"}
+
+
+def test_mcp_invoke_endpoint_requires_authentication() -> None:
+    response = unauthenticated_client.post("/mcp/tools/invoke", json={"name": "web_search", "arguments": {"query": "x"}})
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "authentication required"}
 
 
 def test_list_tools() -> None:
