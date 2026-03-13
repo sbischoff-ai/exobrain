@@ -9,7 +9,12 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from app.services.mcp_client import MCPClient, MCPClientUnavailableError
+from app.services.mcp_client import (
+    MCPClient,
+    MCPClientError,
+    MCPClientUnauthorizedError,
+    MCPClientUnavailableError,
+)
 from tests.mcp_server_auth import build_mcp_test_access_token
 
 
@@ -31,6 +36,27 @@ async def test_mcp_client_invokes_tool_successfully(monkeypatch: pytest.MonkeyPa
     assert captured["payload"] == {"name": "web_search", "arguments": {"query": "hello"}}
     assert result == {"content": "ok"}
     assert captured["access_token"] is None
+
+
+
+
+@pytest.mark.asyncio
+async def test_mcp_client_invoke_tool_raises_when_ok_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _fake_request_json(
+        self: MCPClient,
+        path: str,
+        method: str,
+        payload: dict[str, Any] | None,
+        access_token: str | None = None,
+    ) -> dict[str, Any]:  # noqa: ARG001
+        return {"result": {"content": "ok"}}
+
+    monkeypatch.setattr(MCPClient, "_request_json", _fake_request_json)
+
+    client = MCPClient(base_url="http://localhost:8001", request_timeout_seconds=0.1)
+
+    with pytest.raises(MCPClientError, match="expected boolean 'ok'"):
+        await client.invoke_tool(tool_name="web_search", arguments={"query": "hello"})
 
 
 @pytest.mark.asyncio
@@ -210,3 +236,28 @@ async def test_mcp_client_works_against_real_mcp_server_testclient() -> None:
 
     result = await mcp_client.invoke_tool(tool_name="add", arguments={"a": 2, "b": 3})
     assert result == {"sum": 5}
+
+
+def test_mcp_client_request_json_raises_unauthorized_for_401(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _UnauthorizedError(urllib.error.HTTPError):
+        def __init__(self) -> None:
+            super().__init__(
+                url="http://localhost:8001/mcp/tools",
+                code=401,
+                msg="Unauthorized",
+                hdrs=None,
+                fp=None,
+            )
+
+        def read(self) -> bytes:
+            return b'{"detail":"unauthorized"}'
+
+    def _fake_urlopen(request, timeout):  # noqa: ANN001,ARG001
+        raise _UnauthorizedError()
+
+    monkeypatch.setattr("urllib.request.urlopen", _fake_urlopen)
+
+    client = MCPClient(base_url="http://localhost:8001", request_timeout_seconds=0.1)
+
+    with pytest.raises(MCPClientUnauthorizedError):
+        client._request_json("/mcp/tools", "GET", None, "bad-token")
