@@ -29,12 +29,15 @@ def build_router(tool_service: ToolService, auth_service: AuthService) -> APIRou
     def require_auth(request: Request) -> AuthenticatedUser:
         return auth_service.require_user(request)
 
+    def optional_auth(request: Request) -> AuthenticatedUser | None:
+        return auth_service.optional_user(request)
+
     @router.get("/healthz", response_model=HealthResponse)
     async def healthz() -> HealthResponse:
         return HealthResponse(status="ok")
 
     @router.get("/mcp/tools", response_model=ListToolsResponse)
-    async def list_tools(_user: AuthenticatedUser = Depends(require_auth)) -> ListToolsResponse:
+    async def list_tools(_user: AuthenticatedUser | None = Depends(optional_auth)) -> ListToolsResponse:
         return tool_service.list_tools()
 
     @router.post("/mcp/tools/invoke", response_model=ToolResult)
