@@ -161,6 +161,7 @@ Description: Resolve input entities against the knowledge graph and create missi
 ### `get_entity_context`
 
 Description: Fetch markdown context for a canonical entity and return adjacent entities for graph-aware follow-up lookups. Related entities are collected from top-level KI neighbors and block-level neighbors, then deduplicated by canonical neighbor entity id.
+Execution scope: runs under the authenticated MCP caller and forwards the caller `user_id` (from bearer token auth context) to KI for user-scoped retrieval.
 
 **Input (`arguments`)**
 

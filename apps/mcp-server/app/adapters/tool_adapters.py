@@ -72,9 +72,10 @@ class ToolAdapterRegistry:
             raise RuntimeError("knowledge_interface_client is required for get_entity_context")
 
         max_block_level = _clamp_max_block_level(args.depth)
+        authenticated_user_id = context.user_id
         response = self._knowledge_interface_client.get_entity_context(
             entity_id=args.entity_id,
-            user_id=context.user_id,
+            user_id=authenticated_user_id,
             max_block_level=max_block_level,
         )
         type_name_by_id = _build_entity_type_name_map(
