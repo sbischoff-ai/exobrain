@@ -16,6 +16,7 @@ from app.services.mcp_client import (
     MCPClientNotFoundError,
     MCPClientUnavailableError,
 )
+from tests.mcp_server_auth import build_mcp_test_access_token
 
 
 def _build_mcp_server_test_client() -> TestClient:
@@ -39,6 +40,7 @@ def _build_mcp_server_test_client() -> TestClient:
     return TestClient(mcp_app)
 
 
+
 @pytest.mark.asyncio
 async def test_build_mcp_tools_integrates_with_mcp_server_web_search() -> None:
     test_client = _build_mcp_server_test_client()
@@ -51,7 +53,8 @@ async def test_build_mcp_tools_integrates_with_mcp_server_web_search() -> None:
         payload: dict[str, Any] | None,
         access_token: str | None = None,
     ) -> dict[str, Any]:  # noqa: ARG001
-        response = test_client.request(method, path, json=payload)
+        headers = {"Authorization": f"Bearer {access_token or build_mcp_test_access_token()}"}
+        response = test_client.request(method, path, json=payload, headers=headers)
         data = response.json()
         assert isinstance(data, dict)
 
