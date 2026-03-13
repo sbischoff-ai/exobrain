@@ -43,8 +43,8 @@ class MCPClient(MCPClientProtocol):
     async def close(self) -> None:
         return None
 
-    async def list_tools(self, *, access_token: str | None = None) -> list[dict[str, Any]]:
-        response = await self._call(path="/mcp/tools", method="GET", access_token=access_token)
+    async def list_tools(self, *, access_token: str | None = None, session_id: str | None = None) -> list[dict[str, Any]]:
+        response = await self._call(path="/mcp/tools", method="GET", access_token=access_token, session_id=session_id)
         tools = response.get("tools") if isinstance(response, dict) else None
         if not isinstance(tools, list):
             return []
@@ -56,12 +56,14 @@ class MCPClient(MCPClientProtocol):
         tool_name: str,
         arguments: dict[str, Any] | None = None,
         access_token: str | None = None,
+        session_id: str | None = None,
     ) -> Any:
         response = await self._call(
             path="/mcp/tools/invoke",
             method="POST",
             payload={"name": tool_name, "arguments": arguments or {}},
             access_token=access_token,
+            session_id=session_id,
         )
         if not isinstance(response, dict):
             raise MCPClientError("mcp response must be a JSON object")
@@ -82,11 +84,12 @@ class MCPClient(MCPClientProtocol):
         method: str,
         payload: dict[str, Any] | None = None,
         access_token: str | None = None,
+        session_id: str | None = None,
     ) -> Any:
         for attempt in range(self._max_retries + 1):
             try:
                 response = await asyncio.wait_for(
-                    asyncio.to_thread(self._request_json, path, method, payload, access_token),
+                    asyncio.to_thread(self._request_json, path, method, payload, access_token, session_id),
                     timeout=self._request_timeout_seconds,
                 )
             except (asyncio.TimeoutError, TimeoutError, urllib.error.URLError, socket.timeout) as exc:
@@ -104,11 +107,14 @@ class MCPClient(MCPClientProtocol):
         method: str,
         payload: dict[str, Any] | None,
         access_token: str | None = None,
+        session_id: str | None = None,
     ) -> dict[str, Any]:
         data = json.dumps(payload).encode("utf-8") if payload is not None else None
         headers = {"Content-Type": "application/json"}
         if access_token:
             headers["Authorization"] = f"Bearer {access_token}"
+        elif session_id:
+            headers["x-session-id"] = session_id
 
         request = urllib.request.Request(
             f"{self._base_url}{path}",

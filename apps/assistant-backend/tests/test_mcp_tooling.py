@@ -5,14 +5,14 @@ from typing import Any
 import pytest
 
 from app.agents.tools import build_mcp_tools
-from app.agents.tools.mcp_tooling import mcp_access_token_context
+from app.agents.tools.mcp_tooling import mcp_auth_context
 
 
 class _StubMCPClient:
     def __init__(self) -> None:
-        self.calls: list[tuple[str, dict[str, Any] | None, str | None]] = []
+        self.calls: list[tuple[str, dict[str, Any] | None, str | None, str | None]] = []
 
-    async def list_tools(self, *, access_token: str | None = None) -> list[dict[str, Any]]:  # noqa: ARG002
+    async def list_tools(self, *, access_token: str | None = None, session_id: str | None = None) -> list[dict[str, Any]]:  # noqa: ARG002
         return [
             {
                 "name": "web_search",
@@ -31,8 +31,9 @@ class _StubMCPClient:
         tool_name: str,
         arguments: dict[str, Any] | None = None,
         access_token: str | None = None,
+        session_id: str | None = None,
     ) -> Any:
-        self.calls.append((tool_name, arguments, access_token))
+        self.calls.append((tool_name, arguments, access_token, session_id))
         return [{"url": "https://example.com"}]
 
     async def close(self) -> None:
@@ -49,13 +50,13 @@ async def test_build_mcp_tools_maps_to_langchain_tool_flow() -> None:
     result = await tools[0].ainvoke({"query": "langgraph", "max_results": 2})
 
     assert result == [{"url": "https://example.com"}]
-    assert client.calls == [("web_search", {"query": "langgraph", "max_results": 2}, None)]
+    assert client.calls == [("web_search", {"query": "langgraph", "max_results": 2}, None, None)]
 
 
 @pytest.mark.asyncio
 async def test_build_mcp_tools_requires_canonical_input_schema_field() -> None:
     class _LegacySchemaMCPClient(_StubMCPClient):
-        async def list_tools(self, *, access_token: str | None = None) -> list[dict[str, Any]]:  # noqa: ARG002
+        async def list_tools(self, *, access_token: str | None = None, session_id: str | None = None) -> list[dict[str, Any]]:  # noqa: ARG002
             return [
                 {
                     "name": "web_search",
@@ -77,7 +78,7 @@ async def test_build_mcp_tools_requires_canonical_input_schema_field() -> None:
 @pytest.mark.asyncio
 async def test_build_mcp_tools_uses_schema_defaults_for_optional_args() -> None:
     class _DefaultSchemaMCPClient(_StubMCPClient):
-        async def list_tools(self, *, access_token: str | None = None) -> list[dict[str, Any]]:  # noqa: ARG002
+        async def list_tools(self, *, access_token: str | None = None, session_id: str | None = None) -> list[dict[str, Any]]:  # noqa: ARG002
             return [
                 {
                     "name": "web_search",
@@ -98,20 +99,31 @@ async def test_build_mcp_tools_uses_schema_defaults_for_optional_args() -> None:
 
     await tools[0].ainvoke({"query": "langgraph"})
 
-    assert client.calls == [("web_search", {"query": "langgraph", "max_results": 5}, None)]
+    assert client.calls == [("web_search", {"query": "langgraph", "max_results": 5}, None, None)]
 
 
 @pytest.mark.asyncio
-async def test_build_mcp_tools_uses_stream_scoped_access_token() -> None:
+async def test_build_mcp_tools_uses_stream_scoped_auth_context() -> None:
     client = _StubMCPClient()
     tools = await build_mcp_tools(mcp_client=client)
 
-    with mcp_access_token_context("token-a"):
+    with mcp_auth_context(access_token="token-a", session_id=None):
         await tools[0].ainvoke({"query": "a", "max_results": 1})
-    with mcp_access_token_context("token-b"):
+    with mcp_auth_context(access_token="token-b", session_id=None):
         await tools[0].ainvoke({"query": "b", "max_results": 1})
 
     assert client.calls == [
-        ("web_search", {"query": "a", "max_results": 1}, "token-a"),
-        ("web_search", {"query": "b", "max_results": 1}, "token-b"),
+        ("web_search", {"query": "a", "max_results": 1}, "token-a", None),
+        ("web_search", {"query": "b", "max_results": 1}, "token-b", None),
     ]
+
+
+@pytest.mark.asyncio
+async def test_build_mcp_tools_uses_session_id_when_no_access_token() -> None:
+    client = _StubMCPClient()
+    tools = await build_mcp_tools(mcp_client=client)
+
+    with mcp_auth_context(access_token=None, session_id="session-42"):
+        await tools[0].ainvoke({"query": "a", "max_results": 1})
+
+    assert client.calls == [("web_search", {"query": "a", "max_results": 1}, None, "session-42")]

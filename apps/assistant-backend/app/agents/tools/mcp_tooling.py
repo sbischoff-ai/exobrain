@@ -11,19 +11,26 @@ from pydantic import BaseModel, Field, create_model
 from app.services.contracts import MCPClientProtocol
 
 _MCP_ACCESS_TOKEN: ContextVar[str | None] = ContextVar("_MCP_ACCESS_TOKEN", default=None)
+_MCP_SESSION_ID: ContextVar[str | None] = ContextVar("_MCP_SESSION_ID", default=None)
 
 
 def current_mcp_access_token() -> str | None:
     return _MCP_ACCESS_TOKEN.get()
 
 
+def current_mcp_session_id() -> str | None:
+    return _MCP_SESSION_ID.get()
+
+
 @contextmanager
-def mcp_access_token_context(access_token: str | None) -> Iterator[None]:
-    token = _MCP_ACCESS_TOKEN.set(access_token)
+def mcp_auth_context(*, access_token: str | None, session_id: str | None) -> Iterator[None]:
+    access_token_token = _MCP_ACCESS_TOKEN.set(access_token)
+    session_id_token = _MCP_SESSION_ID.set(session_id)
     try:
         yield
     finally:
-        _MCP_ACCESS_TOKEN.reset(token)
+        _MCP_SESSION_ID.reset(session_id_token)
+        _MCP_ACCESS_TOKEN.reset(access_token_token)
 
 
 def _json_schema_type_to_python(type_name: str | None) -> type[Any]:
@@ -78,6 +85,7 @@ async def build_mcp_tools(*, mcp_client: MCPClientProtocol) -> list[StructuredTo
                 tool_name=_tool_name,
                 arguments=kwargs,
                 access_token=current_mcp_access_token(),
+                session_id=current_mcp_session_id(),
             )
 
         tools.append(

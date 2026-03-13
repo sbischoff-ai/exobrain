@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 class AuthContext:
     principal: UnifiedPrincipal
     access_token: str | None = None
+    session_id: str | None = None
 
 
 async def get_optional_auth_context(request: Request) -> UnifiedPrincipal | None:
@@ -57,11 +58,11 @@ async def get_required_auth_context_with_token(request: Request) -> AuthContext:
 
     principal = auth_service.principal_from_bearer(bearer_token)
     if principal is not None:
-        return AuthContext(principal=principal, access_token=bearer_token)
+        return AuthContext(principal=principal, access_token=bearer_token, session_id=None)
 
     settings = container.resolve(Settings)
     session_id = request.cookies.get(settings.auth_cookie_name)
     principal = await auth_service.principal_from_session(session_id)
     if principal is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required")
-    return AuthContext(principal=principal, access_token=None)
+    return AuthContext(principal=principal, access_token=None, session_id=session_id)

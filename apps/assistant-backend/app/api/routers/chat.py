@@ -35,6 +35,7 @@ async def message(
         message=payload.message,
         client_message_id=str(payload.client_message_id),
         access_token=auth_context.access_token,
+        session_id=auth_context.session_id,
     )
     return ChatMessageStartResponse(stream_id=stream_id)
 

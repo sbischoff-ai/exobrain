@@ -111,6 +111,7 @@ async def test_required_auth_context_with_token_returns_bearer_token() -> None:
 
     assert resolved.principal == bearer
     assert resolved.access_token == "stream-token"
+    assert resolved.session_id is None
 
 
 @pytest.mark.asyncio
@@ -127,3 +128,4 @@ async def test_required_auth_context_with_token_uses_session_without_token() -> 
 
     assert resolved.principal == session
     assert resolved.access_token is None
+    assert resolved.session_id == "session-xyz"

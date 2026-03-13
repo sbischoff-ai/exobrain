@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+import pytest
 from fastapi.testclient import TestClient
 
 from app.adapters.tool_adapters import ToolAdapterRegistry
@@ -392,3 +393,67 @@ def test_invoke_get_entity_context_returns_500_when_ki_client_errors() -> None:
     )
 
     assert response.status_code == 500
+
+
+@pytest.fixture
+def session_introspection_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    fake_store = {"assistant:sessions:session:sess-123": "session-user-123"}
+
+    class _FakeRedis:
+        def get(self, key: str) -> str | None:
+            return fake_store.get(key)
+
+    monkeypatch.setattr("app.services.auth_service.Redis.from_url", lambda *args, **kwargs: _FakeRedis())
+
+    return TestClient(
+        create_app(
+            Settings.model_validate(
+                {
+                    "APP_ENV": "test",
+                    "WEB_SEARCH_PROVIDER": "static",
+                    "AUTH_SESSION_INTROSPECTION_ENABLED": True,
+                    "AUTH_SESSION_REDIS_KEY_PREFIX": "assistant:sessions",
+                    "ENABLE_UTILITY_TOOLS": True,
+                }
+            )
+        )
+    )
+
+
+def test_mcp_invoke_accepts_valid_session_header(session_introspection_client: TestClient) -> None:
+    response = session_introspection_client.post(
+        "/mcp/tools/invoke",
+        json={"name": "echo", "arguments": {"text": "hello"}},
+        headers={"x-session-id": "sess-123"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+
+
+def test_mcp_invoke_rejects_missing_or_invalid_session_header(session_introspection_client: TestClient) -> None:
+    missing = session_introspection_client.post(
+        "/mcp/tools/invoke",
+        json={"name": "echo", "arguments": {"text": "hello"}},
+    )
+    invalid = session_introspection_client.post(
+        "/mcp/tools/invoke",
+        json={"name": "echo", "arguments": {"text": "hello"}},
+        headers={"x-session-id": "unknown"},
+    )
+
+    assert missing.status_code == 401
+    assert missing.json() == {"detail": "authentication required"}
+    assert invalid.status_code == 401
+    assert invalid.json() == {"detail": "invalid authentication token"}
+
+
+def test_mcp_bearer_token_still_takes_precedence_over_session_header(session_introspection_client: TestClient) -> None:
+    response = session_introspection_client.post(
+        "/mcp/tools/invoke",
+        json={"name": "echo", "arguments": {"text": "hello"}},
+        headers={"authorization": "Bearer invalid.token.value", "x-session-id": "sess-123"},
+    )
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "invalid authentication token"}

@@ -12,5 +12,6 @@ class ChatAgent(Protocol):
         conversation_id: str,
         *,
         access_token: str | None = None,
+        session_id: str | None = None,
     ) -> AsyncIterator[ChatStreamEvent]:
         """Stream assistant events for a user message within a conversation."""

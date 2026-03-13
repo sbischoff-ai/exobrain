@@ -5,10 +5,12 @@ import binascii
 import hmac
 import json
 from dataclasses import dataclass
+from functools import cached_property
 from datetime import UTC, datetime
 from hashlib import sha256
 
 from fastapi import HTTPException, Request, status
+from redis import Redis
 
 from app.settings import Settings
 
@@ -25,8 +27,21 @@ class AuthService:
 
     def optional_user(self, request: Request) -> AuthenticatedUser | None:
         auth_header = request.headers.get("authorization")
-        if not auth_header:
-            return None
+        if auth_header:
+            return self._user_from_authorization(auth_header)
+        return self._user_from_session_header(request)
+
+    def require_user(self, request: Request) -> AuthenticatedUser:
+        auth_header = request.headers.get("authorization")
+        if auth_header:
+            return self._user_from_authorization(auth_header)
+
+        user = self._user_from_session_header(request)
+        if user is None:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required")
+        return user
+
+    def _user_from_authorization(self, auth_header: str) -> AuthenticatedUser:
         if not auth_header.lower().startswith("bearer "):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid authentication token")
 
@@ -36,16 +51,34 @@ class AuthService:
 
         return self._user_from_token(token)
 
-    def require_user(self, request: Request) -> AuthenticatedUser:
-        auth_header = request.headers.get("authorization")
-        if not auth_header or not auth_header.lower().startswith("bearer "):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required")
+    def _user_from_session_header(self, request: Request) -> AuthenticatedUser | None:
+        if not self._settings.auth_session_introspection_enabled:
+            return None
 
-        token = auth_header.split(" ", 1)[1].strip()
-        if not token:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required")
+        session_header = self._settings.auth_session_header_name.strip().lower()
+        if not session_header:
+            return None
+        session_id = request.headers.get(session_header)
+        if not session_id:
+            return None
 
-        return self._user_from_token(token)
+        user_id = self._redis.get(self._session_key(session_id.strip()))
+        if not user_id:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid authentication token")
+
+        resolved_user_id = str(user_id).strip()
+        if not resolved_user_id:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid authentication token")
+
+        return AuthenticatedUser(user_id=resolved_user_id, name=f"User {resolved_user_id}")
+
+    @cached_property
+    def _redis(self) -> Redis:
+        return Redis.from_url(self._settings.auth_session_redis_url, decode_responses=True)
+
+    def _session_key(self, session_id: str) -> str:
+        prefix = self._settings.auth_session_redis_key_prefix.strip(":")
+        return f"{prefix}:session:{session_id}"
 
     def _user_from_token(self, token: str) -> AuthenticatedUser:
         payload = self._decode_jwt_hs256(token)
@@ -56,7 +89,6 @@ class AuthService:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid authentication token")
 
         return AuthenticatedUser(user_id=user_id, name=name)
-
     def _decode_jwt_hs256(self, token: str) -> dict[str, object]:
         if self._settings.auth_jwt_algorithm.upper() != "HS256":
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="unsupported auth algorithm")

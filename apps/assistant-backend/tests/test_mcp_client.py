@@ -17,8 +17,15 @@ from tests.mcp_server_auth import build_mcp_test_access_token
 async def test_mcp_client_invokes_tool_successfully(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, Any] = {}
 
-    def _fake_request_json(self: MCPClient, path: str, method: str, payload: dict[str, Any] | None, access_token: str | None = None) -> dict[str, Any]:
-        captured.update({"path": path, "method": method, "payload": payload, "access_token": access_token})
+    def _fake_request_json(
+        self: MCPClient,
+        path: str,
+        method: str,
+        payload: dict[str, Any] | None,
+        access_token: str | None = None,
+        session_id: str | None = None,
+    ) -> dict[str, Any]:
+        captured.update({"path": path, "method": method, "payload": payload, "access_token": access_token, "session_id": session_id})
         return {"ok": True, "name": "web_search", "result": {"content": "ok"}, "metadata": None}
 
     monkeypatch.setattr(MCPClient, "_request_json", _fake_request_json)
@@ -43,6 +50,7 @@ async def test_mcp_client_retries_timeout_and_raises_unavailable(monkeypatch: py
         method: str,
         payload: dict[str, Any] | None,
         access_token: str | None = None,
+        session_id: str | None = None,
     ) -> dict[str, Any]:  # noqa: ARG001
         nonlocal attempts
         attempts += 1
@@ -66,6 +74,7 @@ async def test_mcp_client_handles_async_timeout(monkeypatch: pytest.MonkeyPatch)
         method: str,
         payload: dict[str, Any] | None,
         access_token: str | None = None,
+        session_id: str | None = None,
     ) -> dict[str, Any]:  # noqa: ARG001
         import time
 
@@ -88,6 +97,7 @@ async def test_mcp_client_list_tools_uses_canonical_input_schema_field(monkeypat
         method: str,
         payload: dict[str, Any] | None,
         access_token: str | None = None,
+        session_id: str | None = None,
     ) -> dict[str, Any]:  # noqa: ARG001
         return {
             "tools": [
@@ -121,8 +131,9 @@ async def test_mcp_client_adds_authorization_header_when_access_token_present(mo
         method: str,
         payload: dict[str, Any] | None,
         access_token: str | None = None,
+        session_id: str | None = None,
     ) -> dict[str, Any]:
-        captured.update({"path": path, "method": method, "payload": payload, "access_token": access_token})
+        captured.update({"path": path, "method": method, "payload": payload, "access_token": access_token, "session_id": session_id})
         return {"tools": []}
 
     monkeypatch.setattr(MCPClient, "_request_json", _fake_request_json)
@@ -159,10 +170,40 @@ def test_mcp_client_request_json_sets_authorization_header(monkeypatch: pytest.M
     monkeypatch.setattr("urllib.request.urlopen", _fake_urlopen)
 
     client = MCPClient(base_url="http://localhost:8001", request_timeout_seconds=0.1)
-    result = client._request_json("/mcp/tools", "GET", None, "abc")
+    result = client._request_json("/mcp/tools", "GET", None, "abc", None)
 
     assert result == {"tools": []}
     assert captured_headers["Authorization"] == "Bearer abc"
+
+
+def test_mcp_client_request_json_sets_session_header_without_bearer(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured_headers: dict[str, str] = {}
+
+    class _FakeResponse:
+        status = 200
+
+        def read(self) -> bytes:
+            return b'{"tools": []}'
+
+        def __enter__(self) -> _FakeResponse:
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    def _fake_urlopen(request, timeout):  # noqa: ANN001,ARG001
+        nonlocal captured_headers
+        captured_headers = dict(request.headers.items())
+        return _FakeResponse()
+
+    monkeypatch.setattr("urllib.request.urlopen", _fake_urlopen)
+
+    client = MCPClient(base_url="http://localhost:8001", request_timeout_seconds=0.1)
+    result = client._request_json("/mcp/tools", "GET", None, None, "session-xyz")
+
+    assert result == {"tools": []}
+    assert captured_headers["X-session-id"] == "session-xyz"
+    assert "Authorization" not in captured_headers
 
 @pytest.mark.asyncio
 async def test_mcp_client_works_against_real_mcp_server_testclient() -> None:
@@ -192,8 +233,15 @@ async def test_mcp_client_works_against_real_mcp_server_testclient() -> None:
         method: str,
         payload: dict[str, Any] | None,
         access_token: str | None = None,
+        session_id: str | None = None,
     ) -> dict[str, Any]:
-        headers = {"Authorization": f"Bearer {access_token or build_mcp_test_access_token()}"}
+        headers: dict[str, str] = {}
+        if access_token:
+            headers["Authorization"] = f"Bearer {access_token}"
+        elif session_id:
+            headers["x-session-id"] = session_id
+        else:
+            headers["Authorization"] = f"Bearer {build_mcp_test_access_token()}"
         response = client.request(method, path, json=payload, headers=headers)
         response.raise_for_status()
         data = response.json()

@@ -31,6 +31,7 @@ class ChatService:
         message: str,
         client_message_id: str,
         access_token: str | None = None,
+        session_id: str | None = None,
     ) -> str:
         stream_id = str(uuid.uuid4())
         queue: asyncio.Queue[ChatStreamEvent | object] = asyncio.Queue()
@@ -68,6 +69,7 @@ class ChatService:
         message: str,
         client_message_id: str,
         access_token: str | None = None,
+        session_id: str | None = None,
     ) -> None:
         try:
             reference = self._journal_service.today_reference()
@@ -86,6 +88,7 @@ class ChatService:
                 message=message,
                 conversation_id=conversation_id,
                 access_token=access_token,
+                session_id=session_id,
             ):
                 await queue.put(event)
                 if event["type"] == "message_chunk":
