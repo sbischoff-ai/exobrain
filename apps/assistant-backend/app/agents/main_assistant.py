@@ -12,7 +12,7 @@ from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
 from app.agents.base import ChatAgent
 from app.agents.tools.contracts import StreamEventMapper
-from app.agents.tools.mcp_tooling import mcp_access_token_context
+from app.agents.tools.mcp_tooling import mcp_auth_context
 from app.services.chat_stream import ChatStreamEvent
 
 logger = logging.getLogger(__name__)
@@ -64,13 +64,14 @@ class MainAssistantAgent(ChatAgent):
         conversation_id: str,
         *,
         access_token: str | None = None,
+        session_id: str | None = None,
     ) -> AsyncIterator[ChatStreamEvent]:
         logger.debug(
             "streaming response from main assistant",
             extra={"message_length": len(message), "conversation_id": conversation_id},
         )
         pending_mappers: dict[str, tuple[StreamEventMapper, dict[str, Any]]] = {}
-        with mcp_access_token_context(access_token):
+        with mcp_auth_context(access_token=access_token, session_id=session_id):
             async for mode, payload in self._compiled_agent.astream(
                 {"messages": [{"role": "user", "content": message}]},
                 stream_mode=["messages", "updates"],

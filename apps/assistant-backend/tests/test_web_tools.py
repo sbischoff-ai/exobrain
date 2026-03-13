@@ -9,9 +9,9 @@ from app.agents.tools import build_mcp_tools
 
 class _StubMCPClient:
     def __init__(self) -> None:
-        self.calls: list[tuple[str, dict[str, Any] | None]] = []
+        self.calls: list[tuple[str, dict[str, Any] | None, str | None, str | None]] = []
 
-    async def list_tools(self, *, access_token: str | None = None) -> list[dict[str, Any]]:  # noqa: ARG002
+    async def list_tools(self, *, access_token: str | None = None, session_id: str | None = None) -> list[dict[str, Any]]:  # noqa: ARG002
         return [
             {
                 "name": "web_search",
@@ -38,8 +38,15 @@ class _StubMCPClient:
             },
         ]
 
-    async def invoke_tool(self, *, tool_name: str, arguments: dict[str, Any] | None = None, access_token: str | None = None) -> Any:  # noqa: ARG002
-        self.calls.append((tool_name, arguments))
+    async def invoke_tool(
+        self,
+        *,
+        tool_name: str,
+        arguments: dict[str, Any] | None = None,
+        access_token: str | None = None,
+        session_id: str | None = None,
+    ) -> Any:
+        self.calls.append((tool_name, arguments, access_token, session_id))
         if tool_name == "web_search":
             return {"results": [{"url": "https://example.com"}]}
         return {"url": arguments["url"] if arguments else "", "content_text": "Example"}
@@ -73,6 +80,6 @@ async def test_web_tools_invoke_through_mcp_client() -> None:
     assert search_result == {"results": [{"url": "https://example.com"}]}
     assert fetch_result == {"url": "https://example.com/post", "content_text": "Example"}
     assert client.calls == [
-        ("web_search", {"query": "langchain", "max_results": 2}),
-        ("web_fetch", {"url": "https://example.com/post"}),
+        ("web_search", {"query": "langchain", "max_results": 2}, None, None),
+        ("web_fetch", {"url": "https://example.com/post"}, None, None),
     ]

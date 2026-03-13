@@ -25,7 +25,8 @@ The runtime exposes an HTTP REST transport for MCP tool operations. It does **no
   - Lists available tools and their input JSON schemas in `inputSchema` (camelCase).
   - Includes knowledge tools (`resolve_entities`, `get_entity_context`) when the `knowledge` category is enabled and `ENABLE_KNOWLEDGE_TOOLS=true`.
 - `POST /mcp/tools/invoke`
-  - Requires `Authorization: Bearer <access-token>`.
+  - Requires authentication via either `Authorization: Bearer <access-token>` or (when session introspection is enabled) a session header.
+  - Bearer tokens always take precedence when both bearer and session headers are present.
   - Invokes a single tool with a typed invocation envelope:
     - `name`: tool identifier
     - `arguments`: tool-specific payload
@@ -51,6 +52,17 @@ That document includes:
   - `web_fetch`
   - `resolve_entities`
   - `get_entity_context`
+
+
+### Session introspection auth path
+
+When `AUTH_SESSION_INTROSPECTION_ENABLED=true`, MCP auth supports session-based introspection as a fallback when a bearer token is not present:
+
+1. Read session id from the header named by `AUTH_SESSION_HEADER_NAME` (default `x-session-id`).
+2. Resolve user id from Redis key `{AUTH_SESSION_REDIS_KEY_PREFIX}:session:{session_id}` in `AUTH_SESSION_REDIS_URL`.
+3. Authenticate as that user id. The authenticated display name falls back to `User {user_id}` when no name is available from session storage.
+
+If the configured session header is missing, auth fails with `401 authentication required`. If present but not found in Redis (or empty), auth fails with `401 invalid authentication token`.
 
 ### Canonical request/response examples
 
