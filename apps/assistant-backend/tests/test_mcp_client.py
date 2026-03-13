@@ -10,6 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.services.mcp_client import MCPClient, MCPClientUnavailableError
+from tests.mcp_server_auth import build_mcp_test_access_token
 
 
 @pytest.mark.asyncio
@@ -191,8 +192,9 @@ async def test_mcp_client_works_against_real_mcp_server_testclient() -> None:
         method: str,
         payload: dict[str, Any] | None,
         access_token: str | None = None,
-    ) -> dict[str, Any]:  # noqa: ARG001
-        response = client.request(method, path, json=payload)
+    ) -> dict[str, Any]:
+        headers = {"Authorization": f"Bearer {access_token or build_mcp_test_access_token()}"}
+        response = client.request(method, path, json=payload, headers=headers)
         response.raise_for_status()
         data = response.json()
         assert isinstance(data, dict)
