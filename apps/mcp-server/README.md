@@ -159,6 +159,7 @@ Category-specific builders live under `app/adapters/*_registry_builder.py` and a
   - `resolve_entities` currently returns deterministic placeholder resolution data in local/test flows (no external service dependency).
   - `get_entity_context` depends on the Knowledge Interface (KI) service for non-placeholder behavior; without KI connectivity, runtime behavior is limited to error/fallback paths rather than graph-backed context retrieval.
   - `get_entity_context` maps `related_entities` to resolve-compatible fields (`entity_id`, `name`, `aliases`, `entity_type`, `description`) using KI `GetSchema` (without setting optional `universe_id`) for type-name lookup with documented fallbacks when schema or descriptions are missing.
+  - `get_entity_context` executes in the authenticated caller scope and forwards `ToolExecutionContext.user_id` (resolved from the bearer auth token) to KI `get_entity_context` as `user_id`.
   - `resolve_entities -> get_entity_context` is the expected chaining pattern for canonical-id-first context expansion, and `related_entities` can be fed back into `get_entity_context` for recursive fetch workflows.
 - typed error envelopes for failures
 

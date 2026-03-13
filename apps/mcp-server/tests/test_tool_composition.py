@@ -369,3 +369,33 @@ def test_invoke_get_entity_context_requires_knowledge_interface_client() -> None
         assert "knowledge_interface_client" in str(exc)
     else:
         raise AssertionError("Expected RuntimeError when knowledge interface client is missing")
+
+
+def test_invoke_get_entity_context_uses_authenticated_user_id_from_auth_token() -> None:
+    ki_client = _FakeKnowledgeInterfaceClient()
+    app = FastAPI()
+    app.include_router(
+        build_router(
+            ToolService(
+                registry=create_tool_registry(
+                    ToolAdapterRegistry(
+                        web_search_adapter=WebSearchAdapter(client=StaticWebSearchClient()),
+                        web_fetch_adapter=WebFetchAdapter(client=StaticWebSearchClient()),
+                        knowledge_interface_client=ki_client,
+                    ),
+                    _settings(ENABLED_TOOL_CATEGORIES="knowledge", ENABLE_KNOWLEDGE_TOOLS=True),
+                )
+            ),
+            AuthService(_settings()),
+        )
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/mcp/tools/invoke",
+        headers=auth_headers(user_id="auth-token-user-789", name="Authenticated User"),
+        json={"name": "get_entity_context", "arguments": {"entity_id": "ent_ada"}},
+    )
+
+    assert response.status_code == 200
+    assert ki_client.context_calls[-1]["user_id"] == "auth-token-user-789"
