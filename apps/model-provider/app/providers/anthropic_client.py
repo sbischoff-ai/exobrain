@@ -373,6 +373,7 @@ class AnthropicProviderClient(ProviderClient):
 
     async def native_chat_stream(self, request: NativeChatRequest) -> AsyncIterator[StreamFrame]:
         payload = self._native_to_messages_payload(request)
+        tool_call_index = 0
         try:
             async with self._semaphore:
                 async with self._client.messages.stream(**payload) as stream:
@@ -385,11 +386,14 @@ class AnthropicProviderClient(ProviderClient):
                         elif event_type == "content_block_stop" and getattr(event, "content_block", None):
                             block = event.content_block
                             if getattr(block, "type", "") == "tool_use":
+                                yielded_index = getattr(event, "index", tool_call_index)
                                 yield ToolCallFrame(
                                     id=getattr(block, "id", f"call_{uuid.uuid4().hex}"),
                                     name=getattr(block, "name", "tool"),
+                                    index=int(yielded_index),
                                     arguments=getattr(block, "input", {}) or {},
                                 )
+                                tool_call_index = max(tool_call_index + 1, int(yielded_index) + 1)
                         elif event_type == "message_delta":
                             stop_reason = getattr(getattr(event, "delta", None), "stop_reason", None)
                             if stop_reason:
