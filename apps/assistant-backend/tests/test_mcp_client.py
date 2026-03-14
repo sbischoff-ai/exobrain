@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import json
 import sys
 import urllib.error
 from pathlib import Path
@@ -8,6 +9,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import BaseModel
 
 from app.services.mcp_client import (
     MCPClient,
@@ -17,6 +19,10 @@ from app.services.mcp_client import (
     MCPClientUnavailableError,
 )
 from tests.mcp_server_auth import build_mcp_test_access_token
+
+
+class _EntityModel(BaseModel):
+    name: str
 
 
 @pytest.mark.asyncio
@@ -232,6 +238,45 @@ def test_mcp_client_request_json_sets_session_header_without_bearer(monkeypatch:
     assert result == {"tools": []}
     assert captured_headers["X-session-id"] == "session-xyz"
     assert "Authorization" not in captured_headers
+
+
+def test_mcp_client_request_json_serializes_pydantic_models(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured_payload: dict[str, Any] = {}
+
+    class _FakeResponse:
+        status = 200
+
+        def read(self) -> bytes:
+            return b'{"ok": true, "result": []}'
+
+        def __enter__(self) -> _FakeResponse:
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    def _fake_urlopen(request, timeout):  # noqa: ANN001,ARG001
+        nonlocal captured_payload
+        assert request.data is not None
+        captured_payload = json.loads(request.data.decode("utf-8"))
+        return _FakeResponse()
+
+    monkeypatch.setattr("urllib.request.urlopen", _fake_urlopen)
+
+    client = MCPClient(base_url="http://localhost:8001", request_timeout_seconds=0.1)
+    result = client._request_json(
+        "/mcp/tools/invoke",
+        "POST",
+        {"name": "resolve_entities", "arguments": {"entities": [_EntityModel(name="Dan Hanly")]}},
+        None,
+        "session-xyz",
+    )
+
+    assert result == {"ok": True, "result": []}
+    assert captured_payload == {
+        "name": "resolve_entities",
+        "arguments": {"entities": [{"name": "Dan Hanly"}]},
+    }
 
 @pytest.mark.asyncio
 async def test_mcp_client_works_against_real_mcp_server_testclient() -> None:

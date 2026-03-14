@@ -6,7 +6,10 @@ import logging
 import socket
 import urllib.error
 import urllib.request
+from collections.abc import Mapping, Sequence
 from typing import Any
+
+from pydantic import BaseModel
 
 from app.services.contracts import MCPClientProtocol
 
@@ -138,7 +141,8 @@ class MCPClient(MCPClientProtocol):
         access_token: str | None = None,
         session_id: str | None = None,
     ) -> dict[str, Any]:
-        data = json.dumps(payload).encode("utf-8") if payload is not None else None
+        normalized_payload = _to_json_compatible(payload) if payload is not None else None
+        data = json.dumps(normalized_payload).encode("utf-8") if normalized_payload is not None else None
         headers = {"Content-Type": "application/json"}
         if access_token:
             headers["Authorization"] = f"Bearer {access_token}"
@@ -222,3 +226,16 @@ class MCPClient(MCPClientProtocol):
                 return f"{base_message}: {detail_message}"
 
         return base_message
+
+
+def _to_json_compatible(value: Any) -> Any:
+    if isinstance(value, BaseModel):
+        return value.model_dump(mode="json")
+
+    if isinstance(value, Mapping):
+        return {str(key): _to_json_compatible(item) for key, item in value.items()}
+
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return [_to_json_compatible(item) for item in value]
+
+    return value
