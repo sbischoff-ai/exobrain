@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from app.services.mcp_client import (
     MCPClient,
     MCPClientError,
+    MCPClientInvalidArgumentError,
     MCPClientUnauthorizedError,
     MCPClientUnavailableError,
 )
@@ -252,7 +253,7 @@ async def test_mcp_client_works_against_real_mcp_server_testclient() -> None:
         sys.modules.update(saved_modules)
     client = TestClient(mcp_app)
 
-    mcp_client = MCPClient(base_url="http://testserver", request_timeout_seconds=0.2, max_retries=0)
+    mcp_client = MCPClient(base_url="http://testserver", request_timeout_seconds=5.0, max_retries=0)
 
     def _testclient_request_json(
         self: MCPClient,
@@ -310,3 +311,61 @@ def test_mcp_client_request_json_raises_unauthorized_for_401(monkeypatch: pytest
 
     with pytest.raises(MCPClientUnauthorizedError):
         client._request_json("/mcp/tools", "GET", None, "bad-token")
+
+
+def test_mcp_client_request_json_propagates_validation_detail_for_422(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _ValidationError(urllib.error.HTTPError):
+        def __init__(self) -> None:
+            super().__init__(
+                url="http://localhost:8001/mcp/tools/invoke",
+                code=422,
+                msg="Unprocessable Entity",
+                hdrs=None,
+                fp=None,
+            )
+
+        def read(self) -> bytes:
+            return (
+                b'{"detail":[{"type":"missing","loc":["body","arguments","query"],"msg":"Field required"}]}'
+            )
+
+    def _fake_urlopen(request, timeout):  # noqa: ANN001,ARG001
+        raise _ValidationError()
+
+    monkeypatch.setattr("urllib.request.urlopen", _fake_urlopen)
+
+    client = MCPClient(base_url="http://localhost:8001", request_timeout_seconds=0.1)
+
+    with pytest.raises(MCPClientInvalidArgumentError, match=r"body.arguments.query: Field required"):
+        client._request_json("/mcp/tools/invoke", "POST", {"name": "web_search", "arguments": {}})
+
+
+@pytest.mark.asyncio
+async def test_mcp_client_invoke_tool_logs_tool_context_on_request_error(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    async def _fake_call(
+        self: MCPClient,
+        *,
+        path: str,
+        method: str,
+        payload: dict[str, Any] | None = None,
+        access_token: str | None = None,
+        session_id: str | None = None,
+    ) -> Any:  # noqa: ARG001
+        raise MCPClientInvalidArgumentError("invalid query")
+
+    monkeypatch.setattr(MCPClient, "_call", _fake_call)
+
+    client = MCPClient(base_url="http://localhost:8001", request_timeout_seconds=0.1)
+
+    with caplog.at_level("ERROR"):
+        with pytest.raises(MCPClientInvalidArgumentError):
+            await client.invoke_tool(tool_name="web_search", arguments={"query": ""})
+
+    assert any(
+        record.message == "mcp invoke_tool request failed"
+        and getattr(record, "tool_name", None) == "web_search"
+        and getattr(record, "path", None) == "/mcp/tools/invoke"
+        for record in caplog.records
+    )

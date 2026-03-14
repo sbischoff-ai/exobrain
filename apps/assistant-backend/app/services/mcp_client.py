@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import socket
 import urllib.error
 import urllib.request
 from typing import Any
 
 from app.services.contracts import MCPClientProtocol
+
+logger = logging.getLogger(__name__)
 
 
 class MCPClientError(Exception):
@@ -62,18 +65,32 @@ class MCPClient(MCPClientProtocol):
         access_token: str | None = None,
         session_id: str | None = None,
     ) -> Any:
-        response = await self._call(
-            path="/mcp/tools/invoke",
-            method="POST",
-            payload={"name": tool_name, "arguments": arguments or {}},
-            access_token=access_token,
-            session_id=session_id,
-        )
+        tool_path = "/mcp/tools/invoke"
+        try:
+            response = await self._call(
+                path=tool_path,
+                method="POST",
+                payload={"name": tool_name, "arguments": arguments or {}},
+                access_token=access_token,
+                session_id=session_id,
+            )
+        except MCPClientError:
+            logger.exception("mcp invoke_tool request failed", extra={"tool_name": tool_name, "path": tool_path})
+            raise
+
         if not isinstance(response, dict):
+            logger.error(
+                "mcp invoke_tool received invalid response",
+                extra={"tool_name": tool_name, "path": tool_path, "response_type": type(response).__name__},
+            )
             raise MCPClientError("mcp response must be a JSON object")
 
         ok = response.get("ok") if "ok" in response else None
         if not isinstance(ok, bool):
+            logger.error(
+                "mcp invoke_tool response envelope invalid",
+                extra={"tool_name": tool_name, "path": tool_path},
+            )
             raise MCPClientError("mcp response envelope invalid: expected boolean 'ok'")
 
         if ok is False:
@@ -81,6 +98,10 @@ class MCPClient(MCPClientProtocol):
             message = "mcp request failed"
             if isinstance(error, dict) and error.get("message"):
                 message = str(error["message"])
+            logger.error(
+                "mcp invoke_tool returned error response",
+                extra={"tool_name": tool_name, "path": tool_path, "error_message": message},
+            )
             raise MCPClientError(message)
 
         return response.get("result")
@@ -148,9 +169,56 @@ class MCPClient(MCPClientProtocol):
         if status in {401, 403}:
             raise MCPClientUnauthorizedError("mcp request unauthorized")
         if status in {400, 422}:
-            raise MCPClientInvalidArgumentError("mcp request arguments are invalid")
+            raise MCPClientInvalidArgumentError(self._build_invalid_argument_message(parsed))
         if status >= 500:
             raise MCPClientUnavailableError("mcp server unavailable")
         if status < 200 or status >= 300:
             raise MCPClientError(f"mcp request failed with unexpected status {status}")
         return parsed
+
+    @staticmethod
+    def _build_invalid_argument_message(parsed: dict[str, Any]) -> str:
+        base_message = "mcp request arguments are invalid"
+        detail = parsed.get("detail")
+        if detail is None:
+            return base_message
+
+        if isinstance(detail, str):
+            cleaned = detail.strip()
+            if cleaned:
+                return f"{base_message}: {cleaned}"
+            return base_message
+
+        if isinstance(detail, list):
+            entries: list[str] = []
+            for item in detail:
+                if isinstance(item, str):
+                    cleaned_item = item.strip()
+                    if cleaned_item:
+                        entries.append(cleaned_item)
+                    continue
+
+                if not isinstance(item, dict):
+                    continue
+                item_message = item.get("msg") or item.get("message")
+                if not item_message:
+                    continue
+                loc = item.get("loc")
+                if isinstance(loc, list):
+                    loc_label = ".".join(str(part) for part in loc)
+                else:
+                    loc_label = ""
+                if loc_label:
+                    entries.append(f"{loc_label}: {item_message}")
+                else:
+                    entries.append(str(item_message))
+
+            if entries:
+                return f"{base_message}: {'; '.join(entries)}"
+
+        if isinstance(detail, dict):
+            detail_message = detail.get("message") or detail.get("msg")
+            if detail_message:
+                return f"{base_message}: {detail_message}"
+
+        return base_message
