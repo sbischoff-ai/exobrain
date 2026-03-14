@@ -224,6 +224,48 @@ class FakeAnthropicMessages:
         )
 
 
+class FakeAnthropicStream:
+    def __init__(self, events: list[SimpleNamespace]):
+        self._events = events
+
+    async def __aenter__(self) -> "FakeAnthropicStream":
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        return None
+
+    def __aiter__(self):
+        async def _gen():
+            for event in self._events:
+                yield event
+
+        return _gen()
+
+
+class FakeAnthropicMessagesWithStream(FakeAnthropicMessages):
+    def stream(self, **kwargs):
+        self.last_stream = kwargs
+        return FakeAnthropicStream(
+            [
+                SimpleNamespace(
+                    type="content_block_stop",
+                    index=0,
+                    content_block=SimpleNamespace(type="tool_use", id="call_1", name="resolve_entities", input={"q": "a"}),
+                ),
+                SimpleNamespace(
+                    type="content_block_stop",
+                    index=1,
+                    content_block=SimpleNamespace(type="tool_use", id="call_2", name="web_search", input={"q": "b"}),
+                ),
+                SimpleNamespace(type="message_delta", delta=SimpleNamespace(stop_reason="tool_use")),
+                SimpleNamespace(
+                    type="message_stop",
+                    message=SimpleNamespace(usage=SimpleNamespace(input_tokens=10, output_tokens=4)),
+                ),
+            ]
+        )
+
+
 @pytest.mark.asyncio
 async def test_anthropic_provider_native_preserves_tool_use_content() -> None:
     messages = FakeAnthropicMessages()
@@ -262,6 +304,25 @@ async def test_anthropic_provider_native_preserves_tool_use_content() -> None:
         }
     )
     assert projected["choices"][0]["message"]["tool_calls"][0]["function"]["name"] == "lookup"
+
+
+@pytest.mark.asyncio
+async def test_anthropic_provider_stream_preserves_distinct_tool_call_indices() -> None:
+    messages = FakeAnthropicMessagesWithStream()
+    fake_client = SimpleNamespace(messages=messages)
+    client = AnthropicProviderClient(api_key="x", client=fake_client)
+
+    request = NativeChatRequest(
+        model="claude-sonnet-4-6",
+        messages=[{"role": "user", "content": [{"type": "text", "text": "hi"}]}],
+    )
+
+    frames = [frame async for frame in client.native_chat_stream(request)]
+    tool_frames = [frame for frame in frames if frame.type == "tool_call"]
+
+    assert [frame.id for frame in tool_frames] == ["call_1", "call_2"]
+    assert [frame.name for frame in tool_frames] == ["resolve_entities", "web_search"]
+    assert [frame.index for frame in tool_frames] == [0, 1]
 
 
 @pytest.mark.asyncio
