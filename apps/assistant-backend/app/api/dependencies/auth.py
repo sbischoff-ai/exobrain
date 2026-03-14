@@ -65,4 +65,7 @@ async def get_required_auth_context_with_token(request: Request) -> AuthContext:
     principal = await auth_service.principal_from_session(session_id)
     if principal is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required")
-    return AuthContext(principal=principal, access_token=None, session_id=session_id)
+    # Session-authenticated browser clients do not send bearer tokens on each request.
+    # Mint a short-lived access token so downstream MCP calls can authorize consistently.
+    session_access_token = auth_service.issue_access_token(principal)
+    return AuthContext(principal=principal, access_token=session_access_token, session_id=session_id)

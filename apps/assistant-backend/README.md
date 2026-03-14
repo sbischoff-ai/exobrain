@@ -6,7 +6,7 @@ Knowledge update stream contract: [`docs/knowledge-update-sse-contract.md`](docs
 
 Knowledge category/page contract: [`docs/knowledge-category-page-contract.md`](docs/knowledge-category-page-contract.md).
 
-Chat/MCP auth propagation: when `/api/chat/message` is authenticated via bearer token, that same token is threaded through the chat stream lifecycle and sent to MCP tool calls as `Authorization: Bearer <token>`. For session-authenticated requests without a bearer token, the backend now forwards the session id to MCP as `x-session-id`.
+Chat/MCP auth propagation: when `/api/chat/message` is authenticated via bearer token, that same token is threaded through the chat stream lifecycle and sent to MCP tool calls as `Authorization: Bearer <token>`. For session-authenticated requests without a bearer token, the backend mints a short-lived access token from the authenticated principal and sends it as `Authorization: Bearer <token>` for MCP tool calls.
 
 ## What this service is
 

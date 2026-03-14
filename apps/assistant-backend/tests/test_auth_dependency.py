@@ -26,6 +26,7 @@ class FakeAuthService:
         self.session_principal = session_principal
         self.bearer_tokens_seen: list[str | None] = []
         self.session_ids_seen: list[str | None] = []
+        self.issued_access_tokens: list[UnifiedPrincipal] = []
 
     def principal_from_bearer(self, token: str | None) -> UnifiedPrincipal | None:
         self.bearer_tokens_seen.append(token)
@@ -34,6 +35,10 @@ class FakeAuthService:
     async def principal_from_session(self, session_id: str | None) -> UnifiedPrincipal | None:
         self.session_ids_seen.append(session_id)
         return self.session_principal
+
+    def issue_access_token(self, principal: UnifiedPrincipal) -> str:
+        self.issued_access_tokens.append(principal)
+        return f"issued-token-for-{principal.user_id}"
 
 
 @pytest.mark.asyncio
@@ -127,5 +132,6 @@ async def test_required_auth_context_with_token_uses_session_without_token() -> 
     resolved = await get_required_auth_context_with_token(request)
 
     assert resolved.principal == session
-    assert resolved.access_token is None
+    assert resolved.access_token == "issued-token-for-2"
     assert resolved.session_id == "session-xyz"
+    assert auth_service.issued_access_tokens == [session]
