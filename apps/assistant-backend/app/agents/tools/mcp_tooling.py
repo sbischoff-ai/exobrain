@@ -54,9 +54,30 @@ def _json_schema_to_annotation(
     tool_name: str,
     schema: dict[str, Any] | None,
     path: tuple[str, ...],
+    root_schema: dict[str, Any],
+    seen_refs: set[str] | None = None,
 ) -> Any:
     if not isinstance(schema, dict):
         return Any
+
+    ref = schema.get("$ref")
+    if isinstance(ref, str):
+        if seen_refs is None:
+            seen_refs = set()
+        if ref in seen_refs:
+            return Any
+
+        resolved = _resolve_json_schema_ref(root_schema, ref)
+        if resolved is not None:
+            merged_schema = dict(resolved)
+            merged_schema.update({key: value for key, value in schema.items() if key != "$ref"})
+            return _json_schema_to_annotation(
+                tool_name=tool_name,
+                schema=merged_schema,
+                path=path,
+                root_schema=root_schema,
+                seen_refs={*seen_refs, ref},
+            )
 
     enum_values = schema.get("enum")
     if isinstance(enum_values, list) and enum_values:
@@ -96,6 +117,8 @@ def _json_schema_to_annotation(
                             tool_name=tool_name,
                             schema=prop_schema,
                             path=path + (prop_name,),
+                            root_schema=root_schema,
+                            seen_refs=seen_refs,
                         )
                         description = str(prop_schema.get("description") or "")
                         has_default = "default" in prop_schema
@@ -118,6 +141,8 @@ def _json_schema_to_annotation(
                     tool_name=tool_name,
                     schema=schema.get("items") if isinstance(schema.get("items"), dict) else None,
                     path=path + ("item",),
+                    root_schema=root_schema,
+                    seen_refs=seen_refs,
                 )
                 annotations.append(list[item_annotation])
                 continue
@@ -137,6 +162,21 @@ def _json_schema_to_annotation(
     return annotation
 
 
+def _resolve_json_schema_ref(root_schema: dict[str, Any], ref: str) -> dict[str, Any] | None:
+    if not ref.startswith("#/"):
+        return None
+
+    current: Any = root_schema
+    for segment in ref[2:].split("/"):
+        key = segment.replace("~1", "/").replace("~0", "~")
+        if isinstance(current, dict) and key in current:
+            current = current[key]
+            continue
+        return None
+
+    return current if isinstance(current, dict) else None
+
+
 def _build_args_schema(tool_name: str, inputSchema: dict[str, Any]) -> type[BaseModel]:
     properties = inputSchema.get("properties") if isinstance(inputSchema, dict) else None
     required = inputSchema.get("required") if isinstance(inputSchema, dict) else None
@@ -147,7 +187,12 @@ def _build_args_schema(tool_name: str, inputSchema: dict[str, Any]) -> type[Base
         for arg_name, schema in properties.items():
             if not isinstance(schema, dict):
                 continue
-            arg_type = _json_schema_to_annotation(tool_name=tool_name, schema=schema, path=(arg_name,))
+            arg_type = _json_schema_to_annotation(
+                tool_name=tool_name,
+                schema=schema,
+                path=(arg_name,),
+                root_schema=inputSchema,
+            )
             description = str(schema.get("description") or "")
             has_default = "default" in schema
             default = ... if arg_name in required_set else schema.get("default") if has_default else None
