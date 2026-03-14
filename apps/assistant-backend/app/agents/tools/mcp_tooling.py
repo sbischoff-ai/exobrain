@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Any
+from typing import Any, Literal
 
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field, create_model
@@ -49,6 +49,94 @@ def _json_schema_type_to_python(type_name: str | None) -> type[Any]:
     return Any
 
 
+def _json_schema_to_annotation(
+    *,
+    tool_name: str,
+    schema: dict[str, Any] | None,
+    path: tuple[str, ...],
+) -> Any:
+    if not isinstance(schema, dict):
+        return Any
+
+    enum_values = schema.get("enum")
+    if isinstance(enum_values, list) and enum_values:
+        annotation: Any = Literal.__getitem__(tuple(enum_values))
+    else:
+        raw_type = schema.get("type")
+        nullable = False
+        type_names: list[str] = []
+
+        if isinstance(raw_type, str):
+            type_names = [raw_type]
+        elif isinstance(raw_type, list):
+            type_names = [type_name for type_name in raw_type if isinstance(type_name, str)]
+
+        if "null" in type_names:
+            nullable = True
+            type_names = [type_name for type_name in type_names if type_name != "null"]
+
+        if not type_names:
+            if "properties" in schema:
+                type_names = ["object"]
+            elif "items" in schema:
+                type_names = ["array"]
+
+        annotations: list[Any] = []
+        for type_name in type_names:
+            if type_name == "object":
+                properties = schema.get("properties")
+                required = schema.get("required")
+                if isinstance(properties, dict):
+                    required_set = set(required) if isinstance(required, list) else set()
+                    fields: dict[str, tuple[Any, Any]] = {}
+                    for prop_name, prop_schema in properties.items():
+                        if not isinstance(prop_schema, dict):
+                            continue
+                        prop_annotation = _json_schema_to_annotation(
+                            tool_name=tool_name,
+                            schema=prop_schema,
+                            path=path + (prop_name,),
+                        )
+                        description = str(prop_schema.get("description") or "")
+                        has_default = "default" in prop_schema
+                        default = ... if prop_name in required_set else prop_schema.get("default") if has_default else None
+                        fields[prop_name] = (prop_annotation, Field(default=default, description=description))
+
+                    model_name = (
+                        "".join(part.capitalize() for part in tool_name.replace("-", "_").split("_"))
+                        + ""
+                        + "".join(part.capitalize() for part in path)
+                        + "Model"
+                    )
+                    annotations.append(create_model(model_name, **fields))
+                    continue
+                annotations.append(dict[str, Any])
+                continue
+
+            if type_name == "array":
+                item_annotation = _json_schema_to_annotation(
+                    tool_name=tool_name,
+                    schema=schema.get("items") if isinstance(schema.get("items"), dict) else None,
+                    path=path + ("item",),
+                )
+                annotations.append(list[item_annotation])
+                continue
+
+            annotations.append(_json_schema_type_to_python(type_name))
+
+        if not annotations:
+            annotation = Any
+        else:
+            annotation = annotations[0]
+            for next_annotation in annotations[1:]:
+                annotation = annotation | next_annotation
+
+        if nullable:
+            annotation = annotation | None
+
+    return annotation
+
+
 def _build_args_schema(tool_name: str, inputSchema: dict[str, Any]) -> type[BaseModel]:
     properties = inputSchema.get("properties") if isinstance(inputSchema, dict) else None
     required = inputSchema.get("required") if isinstance(inputSchema, dict) else None
@@ -59,7 +147,7 @@ def _build_args_schema(tool_name: str, inputSchema: dict[str, Any]) -> type[Base
         for arg_name, schema in properties.items():
             if not isinstance(schema, dict):
                 continue
-            arg_type = _json_schema_type_to_python(schema.get("type") if isinstance(schema.get("type"), str) else None)
+            arg_type = _json_schema_to_annotation(tool_name=tool_name, schema=schema, path=(arg_name,))
             description = str(schema.get("description") or "")
             has_default = "default" in schema
             default = ... if arg_name in required_set else schema.get("default") if has_default else None
