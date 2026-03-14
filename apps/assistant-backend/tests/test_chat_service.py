@@ -56,6 +56,30 @@ async def test_chat_service_stream_events_forwards_conversation_context(fake_dat
 
 
 @pytest.mark.asyncio
+async def test_chat_service_threads_auth_context_to_agent(fake_database_service, fake_journal_cache, test_settings) -> None:
+    agent = FakeChatAgent(responses=[[{"type": "message_chunk", "data": {"text": "auth"}}]])
+    journal_service = JournalService(
+        conversation_service=ConversationService(database=fake_database_service),  # type: ignore[arg-type]
+        cache=fake_journal_cache,  # type: ignore[arg-type]
+        settings=test_settings,
+    )
+    service = ChatService(agent=agent, journal_service=journal_service)
+
+    principal = UnifiedPrincipal(user_id="user-9", email="auth@example.com", display_name="Auth")
+    stream_id = await service.start_journal_stream(
+        principal=principal,
+        message="Prompt B",
+        client_message_id="00000000-0000-0000-0000-000000000011",
+        access_token="token-123",
+        session_id="session-123",
+    )
+
+    _ = [event async for event in service.stream_events(stream_id)]
+
+    assert agent.calls == [("Prompt B", "conv-1", "token-123", "session-123")]
+
+
+@pytest.mark.asyncio
 async def test_chat_service_stream_journal_message_persists_user_and_assistant(fake_database_service, fake_journal_cache, test_settings) -> None:
     agent = FakeChatAgent(
         responses=[[

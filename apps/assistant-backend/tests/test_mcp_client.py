@@ -55,6 +55,7 @@ async def test_mcp_client_invoke_tool_raises_when_ok_missing(monkeypatch: pytest
         method: str,
         payload: dict[str, Any] | None,
         access_token: str | None = None,
+        session_id: str | None = None,
     ) -> dict[str, Any]:  # noqa: ARG001
         return {"result": {"content": "ok"}}
 

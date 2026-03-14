@@ -43,6 +43,8 @@ class ChatService:
                 principal=principal,
                 message=message,
                 client_message_id=client_message_id,
+                access_token=access_token,
+                session_id=session_id,
             )
         )
         return stream_id
