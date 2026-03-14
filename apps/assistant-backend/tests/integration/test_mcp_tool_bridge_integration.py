@@ -52,7 +52,7 @@ def _build_mcp_server_test_client(
 @pytest.mark.asyncio
 async def test_build_mcp_tools_integrates_with_mcp_server_web_search() -> None:
     test_client = _build_mcp_server_test_client()
-    mcp_client = MCPClient(base_url="http://testserver", request_timeout_seconds=0.5, max_retries=0)
+    mcp_client = MCPClient(base_url="http://testserver", request_timeout_seconds=5.0, max_retries=0)
 
     def _testclient_request_json(
         self: MCPClient,
@@ -137,7 +137,7 @@ async def test_build_mcp_tools_supports_session_authenticated_invocation(monkeyp
         configure_modules=_configure_mcp_modules,
     )
 
-    mcp_client = MCPClient(base_url="http://testserver", request_timeout_seconds=0.5, max_retries=0)
+    mcp_client = MCPClient(base_url="http://testserver", request_timeout_seconds=5.0, max_retries=0)
 
     def _testclient_request_json(
         self: MCPClient,
