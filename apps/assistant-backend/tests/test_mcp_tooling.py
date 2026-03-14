@@ -190,6 +190,55 @@ async def test_build_mcp_tools_keeps_nested_required_fields_in_schema() -> None:
     assert "contact" in profile_schema.get("required", [])
     assert "email" in contact_schema.get("required", [])
 
+
+
+@pytest.mark.asyncio
+async def test_build_mcp_tools_resolves_json_schema_refs_in_nested_items() -> None:
+    class _RefSchemaMCPClient(_StubMCPClient):
+        async def list_tools(self, *, access_token: str | None = None, session_id: str | None = None) -> list[dict[str, Any]]:  # noqa: ARG002
+            return [
+                {
+                    "name": "resolve_entities",
+                    "description": "Resolve entities via MCP",
+                    "inputSchema": {
+                        "type": "object",
+                        "$defs": {
+                            "ResolveEntity": {
+                                "type": "object",
+                                "properties": {
+                                    "name": {"type": "string"},
+                                    "type_hint": {"type": "string"},
+                                    "description_hint": {"type": "string"},
+                                },
+                                "required": ["name"],
+                            }
+                        },
+                        "properties": {
+                            "entities": {
+                                "type": "array",
+                                "items": {"$ref": "#/$defs/ResolveEntity"},
+                            }
+                        },
+                        "required": ["entities"],
+                    },
+                }
+            ]
+
+    tools = await build_mcp_tools(mcp_client=_RefSchemaMCPClient())
+
+    schema = tools[0].args_schema.model_json_schema()
+    entities_schema = schema["properties"]["entities"]
+
+    item_ref = entities_schema["items"]["$ref"].split("/")[-1]
+    item_schema = schema["$defs"][item_ref]
+
+    assert entities_schema["type"] == "array"
+    assert item_schema["type"] == "object"
+    assert "name" in item_schema["properties"]
+    assert "type_hint" in item_schema["properties"]
+    assert "description_hint" in item_schema["properties"]
+    assert "name" in item_schema.get("required", [])
+
 @pytest.mark.asyncio
 async def test_build_mcp_tools_uses_stream_scoped_auth_context() -> None:
     client = _StubMCPClient()
