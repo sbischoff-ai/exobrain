@@ -10,6 +10,7 @@ from app.services.grpc import job_orchestrator_pb2, knowledge_pb2
 from app.services.knowledge_interface_client import (
     KnowledgeInterfaceClientAccessDeniedError,
     KnowledgeInterfaceClientError,
+    KnowledgeInterfaceClientInvalidArgumentError,
     KnowledgeInterfaceClientNotFoundError,
     KnowledgeInterfaceClientUnavailableError,
 )
@@ -21,6 +22,7 @@ from app.services.knowledge_service import (
     KnowledgeJobNotFoundError,
     KnowledgeNoPendingMessagesError,
     KnowledgePageAccessDeniedError,
+    KnowledgePageInvalidBlockError,
     KnowledgePageNotFoundError,
     KnowledgePageUnavailableError,
     KnowledgePageUpstreamError,
@@ -60,6 +62,7 @@ class FakeKnowledgeInterfaceClient:
         )
         self.entity_context_error = entity_context_error
         self.calls: list[dict[str, object]] = []
+        self.upsert_graph_delta_error: Exception | None = None
 
     async def get_schema(self, *, universe_id: str) -> knowledge_pb2.GetSchemaReply:
         self.calls.append({"method": "get_schema", "universe_id": universe_id})
@@ -103,10 +106,32 @@ class FakeKnowledgeInterfaceClient:
             raise self.entity_context_error
         return self.entity_context_reply
 
+    async def upsert_graph_delta(
+        self,
+        *,
+        entities: list[knowledge_pb2.EntityNode],
+        blocks: list[knowledge_pb2.BlockNode],
+        edges: list[knowledge_pb2.GraphEdge],
+        universes: list[knowledge_pb2.UniverseNode] | None = None,
+    ) -> knowledge_pb2.UpsertGraphDeltaReply:
+        self.calls.append(
+            {
+                "method": "upsert_graph_delta",
+                "entities": entities,
+                "blocks": blocks,
+                "edges": edges,
+                "universes": universes,
+            }
+        )
+        if self.upsert_graph_delta_error is not None:
+            raise self.upsert_graph_delta_error
+        return knowledge_pb2.UpsertGraphDeltaReply()
+
 
 class FakeJobPublisher:
     def __init__(self) -> None:
         self.calls: list[dict[str, object]] = []
+        self.upsert_graph_delta_error: Exception | None = None
         self.watch_calls: list[dict[str, object]] = []
 
     async def enqueue_job(
@@ -991,3 +1016,91 @@ async def test_get_page_detail_maps_metadata_links_and_content() -> None:
         {"block_id": "b0", "markdown": "Summary"},
         {"block_id": "b1", "markdown": "Root"},
     ]
+
+
+@pytest.mark.asyncio
+async def test_update_page_blocks_upserts_block_text_for_user() -> None:
+    client = FakeKnowledgeInterfaceClient()
+    service = KnowledgeService(
+        database=FakeDatabase([]),
+        job_publisher=FakeJobPublisher(),
+        knowledge_interface_client=client,
+        settings=Settings(),
+    )
+
+    response = await service.update_page_blocks(
+        user_id="user-1",
+        page_id="page-1",
+        content_blocks=[
+            {"block_id": "b-1", "markdown_content": "# Updated"},
+            {"block_id": "b-2", "markdown_content": "Body"},
+        ],
+    )
+
+    assert response == {
+        "page_id": "page-1",
+        "updated_block_ids": ["b-1", "b-2"],
+        "updated_block_count": 2,
+        "status": "updated",
+    }
+    upsert_call = client.calls[-1]
+    assert upsert_call["method"] == "upsert_graph_delta"
+    assert upsert_call["entities"] == []
+    assert upsert_call["edges"] == []
+    assert upsert_call["universes"] is None
+    assert [block.id for block in upsert_call["blocks"]] == ["b-1", "b-2"]
+    assert [block.user_id for block in upsert_call["blocks"]] == ["user-1", "user-1"]
+    assert [block.properties[0].key for block in upsert_call["blocks"]] == ["text", "text"]
+    assert [block.properties[0].string_value for block in upsert_call["blocks"]] == [
+        "# Updated",
+        "Body",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_update_page_blocks_rejects_blank_block_ids() -> None:
+    service = KnowledgeService(
+        database=FakeDatabase([]),
+        job_publisher=FakeJobPublisher(),
+        knowledge_interface_client=FakeKnowledgeInterfaceClient(),
+        settings=Settings(),
+    )
+
+    with pytest.raises(KnowledgePageInvalidBlockError):
+        await service.update_page_blocks(
+            user_id="user-1",
+            page_id="page-1",
+            content_blocks=[{"block_id": "   ", "markdown_content": "Body"}],
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("upstream_error", "expected_exception"),
+    [
+        (KnowledgeInterfaceClientInvalidArgumentError("bad"), KnowledgePageInvalidBlockError),
+        (KnowledgeInterfaceClientNotFoundError("missing"), KnowledgePageNotFoundError),
+        (KnowledgeInterfaceClientAccessDeniedError("denied"), KnowledgePageAccessDeniedError),
+        (KnowledgeInterfaceClientUnavailableError("down"), KnowledgePageUnavailableError),
+        (KnowledgeInterfaceClientError("boom"), KnowledgePageUpstreamError),
+    ],
+)
+async def test_update_page_blocks_maps_upstream_errors(
+    upstream_error: Exception,
+    expected_exception: type[Exception],
+) -> None:
+    client = FakeKnowledgeInterfaceClient()
+    client.upsert_graph_delta_error = upstream_error
+    service = KnowledgeService(
+        database=FakeDatabase([]),
+        job_publisher=FakeJobPublisher(),
+        knowledge_interface_client=client,
+        settings=Settings(),
+    )
+
+    with pytest.raises(expected_exception):
+        await service.update_page_blocks(
+            user_id="user-1",
+            page_id="page-1",
+            content_blocks=[{"block_id": "b-1", "markdown_content": "Body"}],
+        )

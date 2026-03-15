@@ -9,6 +9,7 @@ This document defines the backend HTTP contract for browsing knowledge categorie
 - `GET /api/knowledge/category`
 - `GET /api/knowledge/category/{category_id}/pages`
 - `GET /api/knowledge/page/{page_id}`
+- `PATCH /api/knowledge/page/{page_id}`
 
 All endpoints require authenticated user context.
 
@@ -130,6 +131,41 @@ Returns page detail from `GetEntityContext` (`max_block_level=2`) with canonical
 - `403`: access denied
 - `503`: upstream unavailable/timed out
 - `502`: other upstream failures
+
+
+## Endpoint: `PATCH /api/knowledge/page/{page_id}`
+
+Updates existing page blocks using `UpsertGraphDelta` block upserts.
+
+### Request body
+
+```json
+{
+  "content_blocks": [
+    {"block_id": "b1", "markdown_content": "# Updated"},
+    {"block_id": "b2", "markdown_content": "Body"}
+  ]
+}
+```
+
+### 200 response
+
+```json
+{
+  "page_id": "entity-1",
+  "updated_block_ids": ["b1", "b2"],
+  "updated_block_count": 2,
+  "status": "updated"
+}
+```
+
+### Error mapping
+
+- `400`: invalid payload or invalid block ids (`INVALID_ARGUMENT`)
+- `404`: page missing (`NOT_FOUND`)
+- `403`: access denied (`PERMISSION_DENIED`, `UNAUTHENTICATED`)
+- `503`: upstream unavailable/timed out (`UNAVAILABLE`, `DEADLINE_EXCEEDED`)
+- `502`: all other upstream failures
 
 ## References
 

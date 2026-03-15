@@ -22,6 +22,7 @@ from app.services.knowledge_service import (
     KnowledgeJobNotFoundError,
     KnowledgeNoPendingMessagesError,
     KnowledgePageAccessDeniedError,
+    KnowledgePageInvalidBlockError,
     KnowledgePageNotFoundError,
     KnowledgePageUnavailableError,
     KnowledgePageUpstreamError,
@@ -43,6 +44,8 @@ class FakeKnowledgeService:
         self.page_detail_calls: list[dict[str, object]] = []
         self.page_detail_error: Exception | None = None
         self.page_detail_response_overrides: dict[str, object] = {}
+        self.page_update_calls: list[dict[str, object]] = []
+        self.page_update_error: Exception | None = None
 
 
     async def list_wiki_category_tree(self, *, universe_id: str) -> list[dict[str, object]]:
@@ -119,6 +122,30 @@ class FakeKnowledgeService:
         }
         response.update(self.page_detail_response_overrides)
         return response
+
+    async def update_page_blocks(
+        self,
+        *,
+        user_id: str,
+        page_id: str,
+        content_blocks: list[dict[str, str]],
+    ) -> dict[str, object]:
+        self.page_update_calls.append(
+            {
+                "user_id": user_id,
+                "page_id": page_id,
+                "content_blocks": content_blocks,
+            }
+        )
+        if self.page_update_error is not None:
+            raise self.page_update_error
+        block_ids = [item["block_id"] for item in content_blocks]
+        return {
+            "page_id": page_id,
+            "updated_block_ids": block_ids,
+            "updated_block_count": len(block_ids),
+            "status": "updated",
+        }
 
     async def enqueue_update_job(
         self, *, user_id: str, journal_reference: str | None = None
@@ -686,6 +713,152 @@ def test_api_knowledge_category_pages_requires_auth() -> None:
     assert response.status_code == 401
     assert response.json() == {"detail": "authentication required"}
     assert service.category_pages_calls == []
+
+
+def test_api_update_knowledge_page_blocks_returns_update_summary() -> None:
+    principal = UnifiedPrincipal(
+        user_id="user-1", email="u@example.com", display_name="User"
+    )
+    service = FakeKnowledgeService()
+    container = build_test_container({KnowledgeServiceProtocol: service})
+
+    app = FastAPI()
+
+    @app.middleware("http")
+    async def attach_container(request, call_next):
+        request.app.state.container = container
+        return await call_next(request)
+
+    app.dependency_overrides[get_required_auth_context] = lambda: principal
+    app.include_router(knowledge_router.router, prefix="/api")
+
+    with TestClient(app) as client:
+        response = client.patch(
+            "/api/knowledge/page/entity-1",
+            json={
+                "content_blocks": [
+                    {"block_id": "b-1", "markdown_content": "# Updated"},
+                    {"block_id": "b-2", "markdown_content": "Body"},
+                ]
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "page_id": "entity-1",
+        "updated_block_ids": ["b-1", "b-2"],
+        "updated_block_count": 2,
+        "status": "updated",
+    }
+    assert service.page_update_calls == [
+        {
+            "user_id": "user-1",
+            "page_id": "entity-1",
+            "content_blocks": [
+                {"block_id": "b-1", "markdown_content": "# Updated"},
+                {"block_id": "b-2", "markdown_content": "Body"},
+            ],
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    ("error", "expected_status", "expected_detail"),
+    [
+        (
+            KnowledgePageInvalidBlockError("invalid"),
+            400,
+            "invalid knowledge page block update request",
+        ),
+        (KnowledgePageNotFoundError("missing"), 404, "knowledge page not found"),
+        (KnowledgePageAccessDeniedError("denied"), 403, "knowledge page access denied"),
+        (KnowledgePageUnavailableError("down"), 503, "knowledge page unavailable"),
+        (KnowledgePageUpstreamError("failed"), 502, "knowledge page upstream failure"),
+    ],
+)
+def test_api_update_knowledge_page_maps_errors(
+    error: Exception, expected_status: int, expected_detail: str
+) -> None:
+    principal = UnifiedPrincipal(
+        user_id="user-1", email="u@example.com", display_name="User"
+    )
+    service = FakeKnowledgeService()
+    service.page_update_error = error
+    container = build_test_container({KnowledgeServiceProtocol: service})
+
+    app = FastAPI()
+
+    @app.middleware("http")
+    async def attach_container(request, call_next):
+        request.app.state.container = container
+        return await call_next(request)
+
+    app.dependency_overrides[get_required_auth_context] = lambda: principal
+    app.include_router(knowledge_router.router, prefix="/api")
+
+    with TestClient(app) as client:
+        response = client.patch(
+            "/api/knowledge/page/entity-1",
+            json={"content_blocks": [{"block_id": "b-1", "markdown_content": "Updated"}]},
+        )
+
+    assert response.status_code == expected_status
+    assert response.json() == {"detail": expected_detail}
+
+
+def test_api_update_knowledge_page_validates_payload() -> None:
+    principal = UnifiedPrincipal(
+        user_id="user-1", email="u@example.com", display_name="User"
+    )
+    service = FakeKnowledgeService()
+    container = build_test_container({KnowledgeServiceProtocol: service})
+
+    app = FastAPI()
+
+    @app.middleware("http")
+    async def attach_container(request, call_next):
+        request.app.state.container = container
+        return await call_next(request)
+
+    app.dependency_overrides[get_required_auth_context] = lambda: principal
+    app.include_router(knowledge_router.router, prefix="/api")
+
+    with TestClient(app) as client:
+        response = client.patch(
+            "/api/knowledge/page/entity-1",
+            json={"content_blocks": []},
+        )
+
+    assert response.status_code == 422
+    assert service.page_update_calls == []
+
+
+def test_api_update_knowledge_page_requires_auth() -> None:
+    service = FakeKnowledgeService()
+    container = build_test_container({KnowledgeServiceProtocol: service})
+
+    app = FastAPI()
+
+    @app.middleware("http")
+    async def attach_container(request, call_next):
+        request.app.state.container = container
+        return await call_next(request)
+
+    async def deny_auth() -> UnifiedPrincipal:
+        raise HTTPException(status_code=401, detail="authentication required")
+
+    app.dependency_overrides[get_required_auth_context] = deny_auth
+    app.include_router(knowledge_router.router, prefix="/api")
+
+    with TestClient(app) as client:
+        response = client.patch(
+            "/api/knowledge/page/entity-1",
+            json={"content_blocks": [{"block_id": "b-1", "markdown_content": "Updated"}]},
+        )
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "authentication required"}
+    assert service.page_update_calls == []
 
 
 def test_api_knowledge_page_requires_auth() -> None:

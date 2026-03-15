@@ -1,6 +1,8 @@
 from app.api.schemas.knowledge import (
     KnowledgeCategoryPageListItem,
     KnowledgeCategoryPagesListResponse,
+    KnowledgePageBlocksUpdateRequest,
+    KnowledgePageBlocksUpdateResponse,
     KnowledgePageDetailResponse,
 )
 
@@ -80,3 +82,29 @@ def test_page_detail_response_maps_aliases_and_content_blocks() -> None:
     assert response.content_blocks[1].block_id == "block-1-1"
     assert response.content_blocks[1].markdown == "Supporting detail"
     assert "entity" not in response.model_dump()
+
+
+
+def test_page_blocks_update_request_requires_non_empty_block_list() -> None:
+    request = KnowledgePageBlocksUpdateRequest.model_validate(
+        {
+            "content_blocks": [
+                {"block_id": "b-1", "markdown_content": "# Updated"},
+            ]
+        }
+    )
+
+    assert request.content_blocks[0].block_id == "b-1"
+    assert request.content_blocks[0].markdown_content == "# Updated"
+
+
+def test_page_blocks_update_response_defaults_status() -> None:
+    response = KnowledgePageBlocksUpdateResponse.model_validate(
+        {
+            "page_id": "page-1",
+            "updated_block_ids": ["b-1"],
+            "updated_block_count": 1,
+        }
+    )
+
+    assert response.status == "updated"

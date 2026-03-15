@@ -35,6 +35,7 @@ class _FakeStub:
         self.get_schema_requests = []
         self.list_entities_requests = []
         self.entity_context_requests = []
+        self.upsert_graph_delta_requests = []
 
     async def GetSchema(self, request, timeout=None):  # noqa: N802
         self.get_schema_requests.append((request, timeout))
@@ -47,6 +48,10 @@ class _FakeStub:
     async def GetEntityContext(self, request, timeout=None):  # noqa: N802
         self.entity_context_requests.append((request, timeout))
         return SimpleNamespace(entity=SimpleNamespace(id=request.entity_id), blocks=[])
+
+    async def UpsertGraphDelta(self, request, timeout=None):  # noqa: N802
+        self.upsert_graph_delta_requests.append((request, timeout))
+        return SimpleNamespace()
 
 
 @pytest.mark.asyncio
@@ -94,6 +99,11 @@ async def test_client_calls_list_entities_and_entity_context(monkeypatch: pytest
         page_token="abc",
     )
     context_reply = await client.get_entity_context(entity_id="entity-1", user_id="user-1", max_block_level=2)
+    await client.upsert_graph_delta(
+        entities=[],
+        blocks=[],
+        edges=[],
+    )
 
     assert entities_reply.entities[0].id == "entity-1"
     list_request, list_timeout = created_stubs[0].list_entities_requests[0]
@@ -107,6 +117,12 @@ async def test_client_calls_list_entities_and_entity_context(monkeypatch: pytest
     assert context_reply.entity.id == "entity-1"
     assert context_request.max_block_level == 2
     assert context_timeout == 5.0
+
+    upsert_request, upsert_timeout = created_stubs[0].upsert_graph_delta_requests[0]
+    assert list(upsert_request.entities) == []
+    assert list(upsert_request.blocks) == []
+    assert list(upsert_request.edges) == []
+    assert upsert_timeout == 5.0
 
 
 @pytest.mark.asyncio

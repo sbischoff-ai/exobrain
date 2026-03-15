@@ -301,6 +301,16 @@ class KnowledgeInterfaceClientProtocol(Protocol):
     ) -> knowledge_pb2.GetEntityContextReply:
         """Fetch context graph details for one entity id."""
 
+    async def upsert_graph_delta(
+        self,
+        *,
+        entities: list[knowledge_pb2.EntityNode],
+        blocks: list[knowledge_pb2.BlockNode],
+        edges: list[knowledge_pb2.GraphEdge],
+        universes: list[knowledge_pb2.UniverseNode] | None = None,
+    ) -> knowledge_pb2.UpsertGraphDeltaReply:
+        """Upsert graph delta records for entity/block/edge updates."""
+
 
 class MCPClientProtocol(Protocol):
     """MCP tool client contract for assistant agent tool discovery/invocation."""
@@ -340,6 +350,15 @@ class KnowledgeServiceProtocol(Protocol):
 
     async def get_page_detail(self, *, user_id: str, page_id: str) -> dict[str, Any]:
         """Return detailed page content and link metadata for one page id."""
+
+    async def update_page_blocks(
+        self,
+        *,
+        user_id: str,
+        page_id: str,
+        content_blocks: list[dict[str, str]],
+    ) -> dict[str, Any]:
+        """Update existing page block markdown for one page id."""
 
     async def enqueue_update_job(self, *, user_id: str, journal_reference: str | None = None) -> str:
         """Queue one or more knowledge update jobs from uncommitted journal messages."""

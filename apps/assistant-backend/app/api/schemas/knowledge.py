@@ -135,3 +135,40 @@ class KnowledgePageDetailResponse(BaseModel):
         default_factory=list,
         description="Ordered entity content blocks, where each item is rendered independently by clients",
     )
+
+
+class KnowledgePageBlockUpdateItem(BaseModel):
+    block_id: str = Field(
+        ...,
+        min_length=1,
+        description="Existing block identifier to update",
+    )
+    markdown_content: str = Field(
+        ...,
+        description="Replacement markdown body for the block",
+    )
+
+
+class KnowledgePageBlocksUpdateRequest(BaseModel):
+    content_blocks: list[KnowledgePageBlockUpdateItem] = Field(
+        ...,
+        min_length=1,
+        description="Ordered list of page block updates",
+    )
+
+
+class KnowledgePageBlocksUpdateResponse(BaseModel):
+    page_id: str = Field(..., description="Knowledge page identifier that was updated")
+    updated_block_ids: list[str] = Field(
+        default_factory=list,
+        description="Block ids accepted for update",
+    )
+    updated_block_count: int = Field(
+        ...,
+        ge=0,
+        description="Number of updated blocks",
+    )
+    status: str = Field(
+        default="updated",
+        description="Simple completion status",
+    )
