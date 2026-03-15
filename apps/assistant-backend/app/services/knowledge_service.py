@@ -10,10 +10,11 @@ from app.services.contracts import (
     KnowledgeInterfaceClientProtocol,
     KnowledgeJobStatusSSEPayload,
 )
-from app.services.grpc import job_orchestrator_pb2
+from app.services.grpc import job_orchestrator_pb2, knowledge_pb2
 from app.services.knowledge_interface_client import (
     KnowledgeInterfaceClientAccessDeniedError,
     KnowledgeInterfaceClientError,
+    KnowledgeInterfaceClientInvalidArgumentError,
     KnowledgeInterfaceClientNotFoundError,
     KnowledgeInterfaceClientUnavailableError,
 )
@@ -62,6 +63,10 @@ class KnowledgePageUnavailableError(Exception):
 
 class KnowledgePageUpstreamError(Exception):
     """Raised when page lookup fails due to upstream service errors."""
+
+
+class KnowledgePageInvalidBlockError(Exception):
+    """Raised when one or more page block updates are invalid."""
 
 
 class KnowledgeService:
@@ -280,6 +285,57 @@ class KnowledgeService:
             "properties": properties,
             "links": links,
             "content_blocks": self._map_content_blocks(reply.blocks),
+        }
+
+    async def update_page_blocks(
+        self,
+        *,
+        user_id: str,
+        page_id: str,
+        content_blocks: list[dict[str, str]],
+    ) -> dict[str, Any]:
+        block_ids = [item["block_id"].strip() for item in content_blocks]
+        if any(not block_id for block_id in block_ids):
+            raise KnowledgePageInvalidBlockError("invalid knowledge page block id")
+
+        block_updates = [
+            knowledge_pb2.BlockNode(
+                id=block_id,
+                type_id="node.block",
+                properties=[
+                    knowledge_pb2.PropertyValue(
+                        key="text",
+                        string_value=item["markdown_content"],
+                    )
+                ],
+                user_id=user_id,
+                visibility=knowledge_pb2.PRIVATE,
+            )
+            for block_id, item in zip(block_ids, content_blocks)
+        ]
+
+        try:
+            await self._knowledge_interface_client.upsert_graph_delta(
+                entities=[],
+                blocks=block_updates,
+                edges=[],
+            )
+        except KnowledgeInterfaceClientInvalidArgumentError as exc:
+            raise KnowledgePageInvalidBlockError("invalid knowledge page block update") from exc
+        except KnowledgeInterfaceClientNotFoundError as exc:
+            raise KnowledgePageNotFoundError("knowledge page not found") from exc
+        except KnowledgeInterfaceClientAccessDeniedError as exc:
+            raise KnowledgePageAccessDeniedError("knowledge page access denied") from exc
+        except KnowledgeInterfaceClientUnavailableError as exc:
+            raise KnowledgePageUnavailableError("knowledge page unavailable") from exc
+        except KnowledgeInterfaceClientError as exc:
+            raise KnowledgePageUpstreamError("knowledge page upstream failure") from exc
+
+        return {
+            "page_id": page_id,
+            "updated_block_ids": block_ids,
+            "updated_block_count": len(block_ids),
+            "status": "updated",
         }
 
     async def enqueue_update_job(

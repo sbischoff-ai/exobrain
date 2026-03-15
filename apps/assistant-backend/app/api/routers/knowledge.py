@@ -8,6 +8,8 @@ from app.api.schemas.auth import UnifiedPrincipal
 from app.api.schemas.knowledge import (
     KnowledgeCategoryTreeResponse,
     KnowledgeCategoryPagesListResponse,
+    KnowledgePageBlocksUpdateRequest,
+    KnowledgePageBlocksUpdateResponse,
     KnowledgePageDetailResponse,
     KnowledgeUpdateRequest,
     KnowledgeUpdateResponse,
@@ -25,6 +27,7 @@ from app.services.knowledge_service import (
     KnowledgeJobNotFoundError,
     KnowledgeNoPendingMessagesError,
     KnowledgePageAccessDeniedError,
+    KnowledgePageInvalidBlockError,
     KnowledgePageNotFoundError,
     KnowledgePageUnavailableError,
     KnowledgePageUpstreamError,
@@ -264,3 +267,57 @@ async def get_knowledge_page(
         ) from exc
 
     return KnowledgePageDetailResponse.model_validate(payload)
+
+
+@router.patch(
+    "/page/{page_id}",
+    response_model=KnowledgePageBlocksUpdateResponse,
+    summary="Update knowledge page blocks",
+    description="Updates markdown content for one or more existing blocks in a knowledge page.",
+    responses={
+        400: {"description": "Invalid payload or block identifiers"},
+        403: {"description": "Requested page is inaccessible for the caller"},
+        404: {"description": "Requested page does not exist"},
+        503: {"description": "knowledge-interface unavailable or timed out"},
+        502: {"description": "Unexpected upstream failure from knowledge-interface"},
+    },
+)
+async def update_knowledge_page(
+    page_id: str,
+    payload: KnowledgePageBlocksUpdateRequest,
+    request: Request,
+    auth_context: UnifiedPrincipal = Depends(get_required_auth_context),
+) -> KnowledgePageBlocksUpdateResponse:
+    service = get_container(request).resolve(KnowledgeServiceProtocol)
+
+    try:
+        response = await service.update_page_blocks(
+            user_id=auth_context.user_id,
+            page_id=page_id,
+            content_blocks=[item.model_dump() for item in payload.content_blocks],
+        )
+    except KnowledgePageInvalidBlockError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="invalid knowledge page block update request",
+        ) from exc
+    except KnowledgePageNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="knowledge page not found"
+        ) from exc
+    except KnowledgePageAccessDeniedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="knowledge page access denied"
+        ) from exc
+    except KnowledgePageUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="knowledge page unavailable",
+        ) from exc
+    except KnowledgePageUpstreamError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="knowledge page upstream failure",
+        ) from exc
+
+    return KnowledgePageBlocksUpdateResponse.model_validate(response)

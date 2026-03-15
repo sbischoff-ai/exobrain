@@ -83,6 +83,26 @@ class KnowledgeInterfaceClient(KnowledgeInterfaceClientProtocol):
             error_context="get entity context",
         )
 
+    async def upsert_graph_delta(
+        self,
+        *,
+        entities: list[knowledge_pb2.EntityNode],
+        blocks: list[knowledge_pb2.BlockNode],
+        edges: list[knowledge_pb2.GraphEdge],
+        universes: list[knowledge_pb2.UniverseNode] | None = None,
+    ) -> knowledge_pb2.UpsertGraphDeltaReply:
+        request = knowledge_pb2.UpsertGraphDeltaRequest(
+            entities=entities,
+            blocks=blocks,
+            edges=edges,
+            universes=universes or [],
+        )
+        return await self._call(
+            self._get_or_create_stub().UpsertGraphDelta,
+            request,
+            error_context="upsert graph delta",
+        )
+
     async def _call(self, rpc, request, *, error_context: str):
         try:
             return await rpc(request, timeout=self._connect_timeout_seconds)

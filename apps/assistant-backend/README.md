@@ -1,6 +1,6 @@
 # Exobrain Assistant Backend
 
-FastAPI service for auth, chat orchestration, journal APIs, and knowledge-base update workflows. Includes `/api/knowledge/update` to enqueue updates, `/api/knowledge/update/{job_id}/watch` to stream lifecycle events via SSE from job-orchestrator, `/api/knowledge/category/{category_id}/pages` for category page listings backed by `ListEntitiesByType`, and `/api/knowledge/page/{page_id}` for page detail backed by `GetEntityContext`.
+FastAPI service for auth, chat orchestration, journal APIs, and knowledge-base update workflows. Includes `/api/knowledge/update` to enqueue updates, `/api/knowledge/update/{job_id}/watch` to stream lifecycle events via SSE from job-orchestrator, `/api/knowledge/category/{category_id}/pages` for category page listings backed by `ListEntitiesByType`, and `/api/knowledge/page/{page_id}` for page detail backed by `GetEntityContext`, plus `PATCH /api/knowledge/page/{page_id}` for block markdown updates via `UpsertGraphDelta`.
 
 Knowledge update stream contract: [`docs/knowledge-update-sse-contract.md`](docs/knowledge-update-sse-contract.md).
 
@@ -172,6 +172,32 @@ Notes:
 - `created_at` and `updated_at` are still surfaced under `metadata` for timestamp rendering.
 - `content_blocks` preserves upstream block order; frontend renders each markdown block independently and in sequence so existing visual output remains unchanged while supporting multi-block pages.
 
+### `PATCH /api/knowledge/page/{page_id}`
+Updates existing page `content_blocks` markdown using `UpsertGraphDelta` block upserts.
+
+Request:
+
+```json
+{
+  "content_blocks": [
+    {"block_id": "b1", "markdown_content": "# Updated"},
+    {"block_id": "b2", "markdown_content": "Body"}
+  ]
+}
+```
+
+Response:
+
+```json
+{
+  "page_id": "entity-1",
+  "updated_block_ids": ["b1", "b2"],
+  "updated_block_count": 2,
+  "status": "updated"
+}
+```
+
+Error mapping: `400` invalid payload/block ids, `403` access denied, `404` page missing, `503` upstream unavailable/timeouts, `502` unexpected upstream failures.
 
 ## User config endpoints
 
