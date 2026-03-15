@@ -173,7 +173,7 @@ Notes:
 - `content_blocks` preserves upstream block order; frontend renders each markdown block independently and in sequence so existing visual output remains unchanged while supporting multi-block pages.
 
 ### `PATCH /api/knowledge/page/{page_id}`
-Patches existing page `content_blocks` markdown via `GetEntityContext` + `UpsertGraphDelta` block upserts. The service validates each requested `block_id` against the page context and preserves non-text block fields (`id`, `type_id`, non-text properties, `user_id`, `visibility`).
+Patches existing page `content_blocks` markdown via `GetEntityContext` + `UpsertGraphDelta` block upserts. The service validates each requested `block_id` against the page context and updates only each block's `text` property, so legacy/non-text properties are not revalidated during text edits.
 
 Request:
 
@@ -289,6 +289,7 @@ Core runtime vars:
 - `POST /api/knowledge/update` returns `409` when there are no uncommitted messages in scope, `503` when orchestrator is unavailable, and `502` for other enqueue failures.
 - `GET /api/knowledge/category/{category_id}/pages` accepts `page_size` and `page_token`, and maps upstream `INVALID_ARGUMENT` to `400`, `UNAVAILABLE/DEADLINE_EXCEEDED` to `503`, and other upstream failures to `502`.
 - `GET /api/knowledge/page/{page_id}` calls `GetEntityContext` with `max_block_level=2`, maps `NOT_FOUND` to `404`, `PERMISSION_DENIED/UNAUTHENTICATED` to `403`, `UNAVAILABLE/DEADLINE_EXCEEDED` to `503`, and other upstream failures to `502`.
+- `PATCH /api/knowledge/page/{page_id}` validates block ids against `GetEntityContext` with `max_block_level=2` (matching page-detail depth) before `UpsertGraphDelta`.
 - `EXOBRAIN_QDRANT_URL`, `EXOBRAIN_MEMGRAPH_URL` (knowledge dependencies)
 - `KNOWLEDGE_UPDATE_MAX_TOKENS` (max tokens per knowledge-update job payload, default `8000`)
 - `RESHAPE_SCHEMA_QUERY` (migration introspection)

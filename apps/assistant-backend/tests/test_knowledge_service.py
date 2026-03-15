@@ -1090,8 +1090,8 @@ async def test_patch_page_content_blocks_upserts_block_text_and_preserves_block_
     ]
     first_props = {prop.key: prop.string_value for prop in upsert_call["blocks"][0].properties}
     second_props = {prop.key: prop.string_value for prop in upsert_call["blocks"][1].properties}
-    assert first_props == {"lang": "en", "theme": "dark", "text": "# Updated"}
-    assert second_props == {"kind": "body", "text": "Body"}
+    assert first_props == {"text": "# Updated"}
+    assert second_props == {"text": "Body"}
 
 
 @pytest.mark.asyncio
@@ -1141,7 +1141,7 @@ async def test_patch_page_content_blocks_upserts_only_requested_blocks() -> None
     updated_properties = {
         prop.key: prop.string_value for prop in upsert_call["blocks"][0].properties
     }
-    assert updated_properties == {"text": "Updated body", "kind": "body"}
+    assert updated_properties == {"text": "Updated body"}
 
 
 @pytest.mark.asyncio

@@ -328,11 +328,11 @@ class KnowledgeService:
         block_updates: list[knowledge_pb2.BlockNode] = []
         for block_id, item in zip(block_ids, content_blocks):
             source_block = blocks_by_id[block_id]
-            source_properties = dict(source_block.properties)
-            source_properties["text"] = item["markdown_content"]
             updated_properties = [
-                knowledge_pb2.PropertyValue(key=key, string_value=value)
-                for key, value in source_properties.items()
+                knowledge_pb2.PropertyValue(
+                    key="text",
+                    string_value=item["markdown_content"],
+                )
             ]
             block_updates.append(
                 knowledge_pb2.BlockNode(

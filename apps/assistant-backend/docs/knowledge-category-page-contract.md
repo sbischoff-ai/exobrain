@@ -135,7 +135,7 @@ Returns page detail from `GetEntityContext` (`max_block_level=2`) with canonical
 
 ## Endpoint: `PATCH /api/knowledge/page/{page_id}`
 
-Updates existing page blocks using `UpsertGraphDelta` block upserts.
+Updates existing page blocks using `UpsertGraphDelta` block upserts. Block id validation uses `GetEntityContext` with `max_block_level=2` (same depth as page detail), and each upsert updates only block `text`.
 
 ### Request body
 
