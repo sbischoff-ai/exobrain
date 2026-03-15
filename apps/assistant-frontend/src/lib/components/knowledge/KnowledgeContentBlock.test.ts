@@ -46,6 +46,28 @@ describe('KnowledgeContentBlock', () => {
     const editor = screen.getByRole('textbox', { name: 'Markdown editor' });
     expect(editor.tagName).toBe('TEXTAREA');
     expect(editor).toHaveValue('# Title\n\n- item one\n- item two');
+    expect(screen.getByRole('button', { name: 'Save changes' })).toHaveAttribute('type', 'button');
     expect(screen.queryByRole('heading', { name: 'Title' })).not.toBeInTheDocument();
+  });
+
+  it('saves local markdown draft on Save changes and exits edit mode', async () => {
+    render(KnowledgeContentBlock, {
+      props: {
+        blockId: 'block-4',
+        markdown: '# Original\n\nInitial body'
+      }
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Edit block' }));
+
+    const editor = screen.getByRole('textbox', { name: 'Markdown editor' });
+    await fireEvent.input(editor, { target: { value: '# Updated\n\nEdited body' } });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(screen.queryByRole('textbox', { name: 'Markdown editor' })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Updated' })).toBeInTheDocument();
+    expect(screen.getByText('Edited body')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Original' })).not.toBeInTheDocument();
   });
 });
