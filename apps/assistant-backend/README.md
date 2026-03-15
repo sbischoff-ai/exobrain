@@ -173,7 +173,7 @@ Notes:
 - `content_blocks` preserves upstream block order; frontend renders each markdown block independently and in sequence so existing visual output remains unchanged while supporting multi-block pages.
 
 ### `PATCH /api/knowledge/page/{page_id}`
-Updates existing page `content_blocks` markdown using `UpsertGraphDelta` block upserts.
+Patches existing page `content_blocks` markdown via `GetEntityContext` + `UpsertGraphDelta` block upserts. The service validates each requested `block_id` against the page context and preserves non-text block fields (`id`, `type_id`, non-text properties, `user_id`, `visibility`).
 
 Request:
 
@@ -197,7 +197,7 @@ Response:
 }
 ```
 
-Error mapping: `400` invalid payload/block ids, `403` access denied, `404` page missing, `503` upstream unavailable/timeouts, `502` unexpected upstream failures.
+Error mapping: `400` invalid payload/block ids, `403` access denied, `404` page missing, `503` upstream unavailable/timeouts, `502` upstream failures (including block patch failures).
 
 ## User config endpoints
 

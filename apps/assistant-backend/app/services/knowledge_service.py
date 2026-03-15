@@ -69,6 +69,10 @@ class KnowledgePageInvalidBlockError(Exception):
     """Raised when one or more page block updates are invalid."""
 
 
+class KnowledgePageBlockPatchFailedError(Exception):
+    """Raised when one or more page blocks cannot be patched."""
+
+
 class KnowledgeService:
     _PAGE_DETAIL_EXCLUDED_PROPERTY_KEYS = {
         "created_at",
@@ -287,7 +291,7 @@ class KnowledgeService:
             "content_blocks": self._map_content_blocks(reply.blocks),
         }
 
-    async def update_page_blocks(
+    async def patch_page_content_blocks(
         self,
         *,
         user_id: str,
@@ -298,30 +302,12 @@ class KnowledgeService:
         if any(not block_id for block_id in block_ids):
             raise KnowledgePageInvalidBlockError("invalid knowledge page block id")
 
-        block_updates = [
-            knowledge_pb2.BlockNode(
-                id=block_id,
-                type_id="node.block",
-                properties=[
-                    knowledge_pb2.PropertyValue(
-                        key="text",
-                        string_value=item["markdown_content"],
-                    )
-                ],
-                user_id=user_id,
-                visibility=knowledge_pb2.PRIVATE,
-            )
-            for block_id, item in zip(block_ids, content_blocks)
-        ]
-
         try:
-            await self._knowledge_interface_client.upsert_graph_delta(
-                entities=[],
-                blocks=block_updates,
-                edges=[],
+            context = await self._knowledge_interface_client.get_entity_context(
+                entity_id=page_id,
+                user_id=user_id,
+                max_block_level=2,
             )
-        except KnowledgeInterfaceClientInvalidArgumentError as exc:
-            raise KnowledgePageInvalidBlockError("invalid knowledge page block update") from exc
         except KnowledgeInterfaceClientNotFoundError as exc:
             raise KnowledgePageNotFoundError("knowledge page not found") from exc
         except KnowledgeInterfaceClientAccessDeniedError as exc:
@@ -330,6 +316,50 @@ class KnowledgeService:
             raise KnowledgePageUnavailableError("knowledge page unavailable") from exc
         except KnowledgeInterfaceClientError as exc:
             raise KnowledgePageUpstreamError("knowledge page upstream failure") from exc
+
+        blocks_by_id = {block.id: block for block in context.blocks}
+        missing_block_ids = [block_id for block_id in block_ids if block_id not in blocks_by_id]
+        if missing_block_ids:
+            missing_ids = ", ".join(missing_block_ids)
+            raise KnowledgePageInvalidBlockError(
+                f"invalid knowledge page block ids for page '{page_id}': {missing_ids}"
+            )
+
+        block_updates: list[knowledge_pb2.BlockNode] = []
+        for block_id, item in zip(block_ids, content_blocks):
+            source_block = blocks_by_id[block_id]
+            source_properties = dict(source_block.properties)
+            source_properties["text"] = item["markdown_content"]
+            updated_properties = [
+                knowledge_pb2.PropertyValue(key=key, string_value=value)
+                for key, value in source_properties.items()
+            ]
+            block_updates.append(
+                knowledge_pb2.BlockNode(
+                    id=source_block.id,
+                    type_id=source_block.type_id,
+                    properties=updated_properties,
+                    user_id=context.entity.user_id,
+                    visibility=context.entity.visibility,
+                )
+            )
+
+        try:
+            await self._knowledge_interface_client.upsert_graph_delta(
+                entities=[],
+                blocks=block_updates,
+                edges=[],
+            )
+        except KnowledgeInterfaceClientInvalidArgumentError as exc:
+            raise KnowledgePageInvalidBlockError("invalid knowledge page block patch") from exc
+        except KnowledgeInterfaceClientNotFoundError as exc:
+            raise KnowledgePageNotFoundError("knowledge page not found") from exc
+        except KnowledgeInterfaceClientAccessDeniedError as exc:
+            raise KnowledgePageAccessDeniedError("knowledge page access denied") from exc
+        except KnowledgeInterfaceClientUnavailableError as exc:
+            raise KnowledgePageUnavailableError("knowledge page unavailable") from exc
+        except KnowledgeInterfaceClientError as exc:
+            raise KnowledgePageBlockPatchFailedError("knowledge page block patch failed") from exc
 
         return {
             "page_id": page_id,

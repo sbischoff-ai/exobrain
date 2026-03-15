@@ -27,7 +27,7 @@ class KnowledgeInterfaceClientInvalidArgumentError(KnowledgeInterfaceClientError
 
 
 class KnowledgeInterfaceClient(KnowledgeInterfaceClientProtocol):
-    """gRPC client for read APIs exposed by knowledge-interface."""
+    """gRPC client for read/write APIs exposed by knowledge-interface."""
 
     def __init__(self, grpc_target: str, connect_timeout_seconds: float = 5.0) -> None:
         self._grpc_target = grpc_target
