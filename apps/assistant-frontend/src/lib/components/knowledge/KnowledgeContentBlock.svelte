@@ -8,6 +8,13 @@
   export let blockId: string;
   export let markdown: string;
 
+  let isEditing = false;
+  let draftMarkdown = markdown;
+
+  $: if (!isEditing) {
+    draftMarkdown = markdown;
+  }
+
   const streamdownTheme = {
     h1: { base: 'exo-md-heading' },
     h2: { base: 'exo-md-heading' },
@@ -38,18 +45,27 @@
 </script>
 
 <div class="assistant-markdown markdown-body content-block" data-block-id={blockId}>
-  <button class="edit-block-button" type="button" aria-label="Edit block">
+  <button class="edit-block-button" type="button" aria-label="Edit block" on:click={() => (isEditing = true)}>
     <svg viewBox="0 0 24 24" role="img" aria-hidden="true" focusable="false">
       <path d="M3 17.25V21h3.75L17.8 9.94l-3.75-3.75L3 17.25Zm17.71-10.04a1.004 1.004 0 0 0 0-1.42l-2.5-2.5a1.004 1.004 0 0 0-1.42 0l-1.96 1.96 3.75 3.75 2.13-1.79Z" />
     </svg>
   </button>
-  <Streamdown
-    content={markdown}
-    theme={streamdownTheme}
-    shikiTheme="gruvbox-dark-medium"
-    shikiThemes={{ 'gruvbox-dark-medium': gruvboxDarkMedium }}
-    components={{ code: StreamdownCode, math: StreamdownMath, mermaid: StreamdownMermaid }}
-  />
+  {#if isEditing}
+    <textarea
+      class="markdown-editor"
+      aria-label="Markdown editor"
+      bind:value={draftMarkdown}
+      spellcheck="false"
+    ></textarea>
+  {:else}
+    <Streamdown
+      content={markdown}
+      theme={streamdownTheme}
+      shikiTheme="gruvbox-dark-medium"
+      shikiThemes={{ 'gruvbox-dark-medium': gruvboxDarkMedium }}
+      components={{ code: StreamdownCode, math: StreamdownMath, mermaid: StreamdownMermaid }}
+    />
+  {/if}
 </div>
 
 <style>
@@ -87,5 +103,29 @@
   .content-block:focus-within .edit-block-button {
     opacity: 1;
     pointer-events: auto;
+  }
+
+  .markdown-editor {
+    width: 100%;
+    min-height: 10rem;
+    padding: var(--space-3, 0.75rem);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md, 0.5rem);
+    background: var(--surface-elevated, var(--surface));
+    color: inherit;
+    font: inherit;
+    font-family: var(
+      --font-family-mono,
+      ui-monospace,
+      SFMono-Regular,
+      Menlo,
+      Monaco,
+      Consolas,
+      'Liberation Mono',
+      'Courier New',
+      monospace
+    );
+    white-space: pre;
+    resize: vertical;
   }
 </style>

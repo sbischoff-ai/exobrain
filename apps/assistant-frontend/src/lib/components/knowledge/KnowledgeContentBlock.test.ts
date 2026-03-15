@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen } from '@testing-library/svelte';
 import { describe, expect, it } from 'vitest';
 
 import KnowledgeContentBlock from './KnowledgeContentBlock.svelte';
@@ -31,4 +31,21 @@ describe('KnowledgeContentBlock', () => {
     expect(button).toHaveAttribute('type', 'button');
   });
 
+  it('enters edit mode with a multiline markdown editor initialized from markdown', async () => {
+    render(KnowledgeContentBlock, {
+      props: {
+        blockId: 'block-3',
+        markdown: '# Title\n\n- item one\n- item two'
+      }
+    });
+
+    expect(screen.getByRole('heading', { name: 'Title' })).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Edit block' }));
+
+    const editor = screen.getByRole('textbox', { name: 'Markdown editor' });
+    expect(editor.tagName).toBe('TEXTAREA');
+    expect(editor).toHaveValue('# Title\n\n- item one\n- item two');
+    expect(screen.queryByRole('heading', { name: 'Title' })).not.toBeInTheDocument();
+  });
 });
