@@ -18,4 +18,17 @@ describe('KnowledgeContentBlock', () => {
     expect(block).toHaveClass('assistant-markdown', 'markdown-body', 'content-block');
     expect(screen.getByText('Content fragment')).toBeInTheDocument();
   });
+
+  it('renders an accessible edit button with button type', () => {
+    render(KnowledgeContentBlock, {
+      props: {
+        blockId: 'block-2',
+        markdown: 'Content fragment'
+      }
+    });
+
+    const button = screen.getByRole('button', { name: 'Edit block' });
+    expect(button).toHaveAttribute('type', 'button');
+  });
+
 });
