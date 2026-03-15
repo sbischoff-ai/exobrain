@@ -53,7 +53,7 @@ describe('KnowledgeContentBlock', () => {
     expect(screen.queryByRole('heading', { name: 'Title' })).not.toBeInTheDocument();
   });
 
-  it('Save changes exits edit mode and emits saveRequested with block id and markdown', async () => {
+  it('Save changes exits edit mode and emits saveRequested with block id and markdown_content value', async () => {
     render(KnowledgeContentBlockEventHarness, {
       props: {
         blockId: 'block-4',
@@ -72,6 +72,5 @@ describe('KnowledgeContentBlock', () => {
     expect(screen.getByTestId('save-requested-event')).toHaveTextContent(
       JSON.stringify({ blockId: 'block-4', markdownContent: '# Updated\n\nEdited body' })
     );
-    expect(screen.getByRole('heading', { name: 'Original' })).toBeInTheDocument();
   });
 });

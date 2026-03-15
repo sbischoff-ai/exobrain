@@ -197,7 +197,7 @@ Response:
 }
 ```
 
-Error mapping: `400` invalid payload/block ids, `403` access denied, `404` page missing, `503` upstream unavailable/timeouts, `502` upstream failures (including block patch failures).
+Error mapping: `400` invalid payload/block ids, `403` access denied, `404` page missing, `503` upstream unavailable/timeouts, `502` upstream failures (including block patch failures). Frontends should keep existing rendered markdown until a `200` response and restore prior markdown plus error feedback when patching fails.
 
 ## User config endpoints
 
