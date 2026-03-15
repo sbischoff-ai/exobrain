@@ -11,8 +11,8 @@
   let isEditing = false;
   let draftMarkdown = markdown;
 
-  $: if (!isEditing) {
-    draftMarkdown = markdown;
+  function saveChanges(): void {
+    isEditing = false;
   }
 
   const streamdownTheme = {
@@ -51,15 +51,18 @@
     </svg>
   </button>
   {#if isEditing}
-    <textarea
-      class="markdown-editor"
-      aria-label="Markdown editor"
-      bind:value={draftMarkdown}
-      spellcheck="false"
-    ></textarea>
+    <div class="editor-area">
+      <textarea
+        class="markdown-editor"
+        aria-label="Markdown editor"
+        bind:value={draftMarkdown}
+        spellcheck="false"
+      ></textarea>
+      <button class="save-changes-button" type="button" on:click={saveChanges}>Save changes</button>
+    </div>
   {:else}
     <Streamdown
-      content={markdown}
+      content={draftMarkdown}
       theme={streamdownTheme}
       shikiTheme="gruvbox-dark-medium"
       shikiThemes={{ 'gruvbox-dark-medium': gruvboxDarkMedium }}
@@ -127,5 +130,22 @@
     );
     white-space: pre;
     resize: vertical;
+  }
+
+  .editor-area {
+    position: relative;
+  }
+
+  .save-changes-button {
+    position: absolute;
+    right: var(--space-2, 0.5rem);
+    bottom: var(--space-2, 0.5rem);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md, 0.5rem);
+    padding: var(--space-1, 0.25rem) var(--space-2, 0.5rem);
+    background: var(--surface-elevated, var(--surface));
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
   }
 </style>
