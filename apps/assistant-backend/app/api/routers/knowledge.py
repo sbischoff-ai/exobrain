@@ -27,6 +27,7 @@ from app.services.knowledge_service import (
     KnowledgeJobNotFoundError,
     KnowledgeNoPendingMessagesError,
     KnowledgePageAccessDeniedError,
+    KnowledgePageBlockPatchFailedError,
     KnowledgePageInvalidBlockError,
     KnowledgePageNotFoundError,
     KnowledgePageUnavailableError,
@@ -291,7 +292,7 @@ async def update_knowledge_page(
     service = get_container(request).resolve(KnowledgeServiceProtocol)
 
     try:
-        response = await service.update_page_blocks(
+        response = await service.patch_page_content_blocks(
             user_id=auth_context.user_id,
             page_id=page_id,
             content_blocks=[item.model_dump() for item in payload.content_blocks],
@@ -318,6 +319,11 @@ async def update_knowledge_page(
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="knowledge page upstream failure",
+        ) from exc
+    except KnowledgePageBlockPatchFailedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="knowledge page block patch failed",
         ) from exc
 
     return KnowledgePageBlocksUpdateResponse.model_validate(response)

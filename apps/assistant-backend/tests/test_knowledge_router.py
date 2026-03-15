@@ -22,6 +22,7 @@ from app.services.knowledge_service import (
     KnowledgeJobNotFoundError,
     KnowledgeNoPendingMessagesError,
     KnowledgePageAccessDeniedError,
+    KnowledgePageBlockPatchFailedError,
     KnowledgePageInvalidBlockError,
     KnowledgePageNotFoundError,
     KnowledgePageUnavailableError,
@@ -123,7 +124,7 @@ class FakeKnowledgeService:
         response.update(self.page_detail_response_overrides)
         return response
 
-    async def update_page_blocks(
+    async def patch_page_content_blocks(
         self,
         *,
         user_id: str,
@@ -774,6 +775,7 @@ def test_api_update_knowledge_page_blocks_returns_update_summary() -> None:
         (KnowledgePageAccessDeniedError("denied"), 403, "knowledge page access denied"),
         (KnowledgePageUnavailableError("down"), 503, "knowledge page unavailable"),
         (KnowledgePageUpstreamError("failed"), 502, "knowledge page upstream failure"),
+        (KnowledgePageBlockPatchFailedError("failed"), 502, "knowledge page block patch failed"),
     ],
 )
 def test_api_update_knowledge_page_maps_errors(
