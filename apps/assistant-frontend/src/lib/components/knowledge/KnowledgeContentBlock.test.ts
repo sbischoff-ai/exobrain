@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/svelte';
 import { describe, expect, it } from 'vitest';
 
 import KnowledgeContentBlock from './KnowledgeContentBlock.svelte';
+import KnowledgeContentBlockEventHarness from './KnowledgeContentBlockEventHarness.svelte';
 
 describe('KnowledgeContentBlock', () => {
   it('renders markdown in view mode by default', async () => {
@@ -52,8 +53,8 @@ describe('KnowledgeContentBlock', () => {
     expect(screen.queryByRole('heading', { name: 'Title' })).not.toBeInTheDocument();
   });
 
-  it('Save changes exits edit mode and renders the updated local markdown without API calls', async () => {
-    render(KnowledgeContentBlock, {
+  it('Save changes exits edit mode and emits saveRequested with block id and markdown', async () => {
+    render(KnowledgeContentBlockEventHarness, {
       props: {
         blockId: 'block-4',
         markdown: '# Original\n\nInitial body'
@@ -68,8 +69,9 @@ describe('KnowledgeContentBlock', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
     expect(screen.queryByRole('textbox', { name: 'Markdown editor' })).not.toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Updated' })).toBeInTheDocument();
-    expect(screen.getByText('Edited body')).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Original' })).not.toBeInTheDocument();
+    expect(screen.getByTestId('save-requested-event')).toHaveTextContent(
+      JSON.stringify({ blockId: 'block-4', markdownContent: '# Updated\n\nEdited body' })
+    );
+    expect(screen.getByRole('heading', { name: 'Original' })).toBeInTheDocument();
   });
 });

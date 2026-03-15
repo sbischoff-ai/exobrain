@@ -45,6 +45,22 @@ export interface KnowledgePageContentBlock {
   markdown: string;
 }
 
+export interface KnowledgePagePatchContentBlock {
+  block_id: string;
+  markdown_content: string;
+}
+
+export interface KnowledgePagePatchRequest {
+  content_blocks: KnowledgePagePatchContentBlock[];
+}
+
+export interface KnowledgePagePatchResponse {
+  page_id: string;
+  updated_block_ids: string[];
+  updated_block_count: number;
+  status: string;
+}
+
 export interface KnowledgePageDetail {
   id: string;
   category_id: string | null;
