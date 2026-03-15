@@ -269,6 +269,7 @@ describe('KnowledgeExplorerView', () => {
       expect(fragment.compareDocumentPosition(nextFragment) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
     expect(document.querySelectorAll('.content-block')).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: 'Edit block' })).toHaveLength(2);
 
     expect(getPage).toHaveBeenCalledWith('page-1');
   });
