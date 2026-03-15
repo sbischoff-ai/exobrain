@@ -178,7 +178,7 @@
     font-size: 0.8rem;
     border: 1px solid var(--explorer-card-border);
     border-radius: 0.75rem;
-    background: var(--explorer-card-bg);
+    background: var(--explorer-page-properties-bg, var(--explorer-card-bg));
     padding: 0.9rem;
   }
 
