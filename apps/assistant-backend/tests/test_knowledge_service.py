@@ -1095,6 +1095,56 @@ async def test_patch_page_content_blocks_upserts_block_text_and_preserves_block_
 
 
 @pytest.mark.asyncio
+async def test_patch_page_content_blocks_upserts_only_requested_blocks() -> None:
+    context_reply = knowledge_pb2.GetEntityContextReply(
+        entity=knowledge_pb2.EntityContextCore(
+            id="page-1",
+            type_id="node.page",
+            user_id="owner-1",
+            visibility=knowledge_pb2.PRIVATE,
+        ),
+        blocks=[
+            knowledge_pb2.EntityContextBlock(
+                id="b-1",
+                type_id="node.block.heading",
+                properties={"text": "Old heading", "lang": "en"},
+            ),
+            knowledge_pb2.EntityContextBlock(
+                id="b-2",
+                type_id="node.block.paragraph",
+                properties={"text": "Old body", "kind": "body"},
+            ),
+            knowledge_pb2.EntityContextBlock(
+                id="b-3",
+                type_id="node.block.callout",
+                properties={"text": "Do not touch", "style": "info"},
+            ),
+        ],
+    )
+    client = FakeKnowledgeInterfaceClient(entity_context_reply=context_reply)
+    service = KnowledgeService(
+        database=FakeDatabase([]),
+        job_publisher=FakeJobPublisher(),
+        knowledge_interface_client=client,
+        settings=Settings(),
+    )
+
+    response = await service.patch_page_content_blocks(
+        user_id="user-1",
+        page_id="page-1",
+        content_blocks=[{"block_id": "b-2", "markdown_content": "Updated body"}],
+    )
+
+    assert response["updated_block_ids"] == ["b-2"]
+    upsert_call = client.calls[-1]
+    assert [block.id for block in upsert_call["blocks"]] == ["b-2"]
+    updated_properties = {
+        prop.key: prop.string_value for prop in upsert_call["blocks"][0].properties
+    }
+    assert updated_properties == {"text": "Updated body", "kind": "body"}
+
+
+@pytest.mark.asyncio
 async def test_patch_page_content_blocks_rejects_missing_block_ids() -> None:
     context_reply = knowledge_pb2.GetEntityContextReply(
         entity=knowledge_pb2.EntityContextCore(user_id="owner-1", visibility=knowledge_pb2.PRIVATE),
@@ -1107,12 +1157,19 @@ async def test_patch_page_content_blocks_rejects_missing_block_ids() -> None:
         settings=Settings(),
     )
 
-    with pytest.raises(KnowledgePageInvalidBlockError, match="b-2"):
+    with pytest.raises(KnowledgePageInvalidBlockError) as exc_info:
         await service.patch_page_content_blocks(
             user_id="user-1",
             page_id="page-1",
-            content_blocks=[{"block_id": "b-2", "markdown_content": "Body"}],
+            content_blocks=[
+                {"block_id": "b-2", "markdown_content": "Body"},
+                {"block_id": "b-3", "markdown_content": "Body 2"},
+            ],
         )
+
+    assert "page 'page-1'" in str(exc_info.value)
+    assert "b-2" in str(exc_info.value)
+    assert "b-3" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
@@ -1158,6 +1215,43 @@ async def test_patch_page_content_blocks_maps_upstream_errors(
         database=FakeDatabase([]),
         job_publisher=FakeJobPublisher(),
         knowledge_interface_client=client,
+        settings=Settings(),
+    )
+
+    with pytest.raises(expected_exception):
+        await service.patch_page_content_blocks(
+            user_id="user-1",
+            page_id="page-1",
+            content_blocks=[{"block_id": "b-1", "markdown_content": "Body"}],
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("context_error", "expected_exception"),
+    [
+        (KnowledgeInterfaceClientNotFoundError("missing"), KnowledgePageNotFoundError),
+        (
+            KnowledgeInterfaceClientAccessDeniedError("denied"),
+            KnowledgePageAccessDeniedError,
+        ),
+        (
+            KnowledgeInterfaceClientUnavailableError("unavailable"),
+            KnowledgePageUnavailableError,
+        ),
+        (KnowledgeInterfaceClientError("failed"), KnowledgePageUpstreamError),
+    ],
+)
+async def test_patch_page_content_blocks_maps_context_lookup_errors(
+    context_error: Exception,
+    expected_exception: type[Exception],
+) -> None:
+    service = KnowledgeService(
+        database=FakeDatabase([]),
+        job_publisher=FakeJobPublisher(),
+        knowledge_interface_client=FakeKnowledgeInterfaceClient(
+            entity_context_error=context_error
+        ),
         settings=Settings(),
     )
 
