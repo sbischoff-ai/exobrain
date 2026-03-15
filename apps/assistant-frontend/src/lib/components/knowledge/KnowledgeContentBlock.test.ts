@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import KnowledgeContentBlock from './KnowledgeContentBlock.svelte';
 
 describe('KnowledgeContentBlock', () => {
-  it('renders markdown in a styled content block wrapper', async () => {
+  it('renders markdown in view mode by default', async () => {
     const { container } = render(KnowledgeContentBlock, {
       props: {
         blockId: 'block-1',
@@ -17,6 +17,7 @@ describe('KnowledgeContentBlock', () => {
     const block = container.querySelector('[data-block-id="block-1"]');
     expect(block).toHaveClass('assistant-markdown', 'markdown-body', 'content-block');
     expect(screen.getByText('Content fragment')).toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: 'Markdown editor' })).not.toBeInTheDocument();
   });
 
   it('renders an accessible edit button with button type', () => {
@@ -31,7 +32,7 @@ describe('KnowledgeContentBlock', () => {
     expect(button).toHaveAttribute('type', 'button');
   });
 
-  it('enters edit mode with a multiline markdown editor initialized from markdown', async () => {
+  it('clicking edit enters edit mode and shows a raw markdown textarea in a monospace-styled control', async () => {
     render(KnowledgeContentBlock, {
       props: {
         blockId: 'block-3',
@@ -45,12 +46,13 @@ describe('KnowledgeContentBlock', () => {
 
     const editor = screen.getByRole('textbox', { name: 'Markdown editor' });
     expect(editor.tagName).toBe('TEXTAREA');
+    expect(editor).toHaveClass('markdown-editor');
     expect(editor).toHaveValue('# Title\n\n- item one\n- item two');
     expect(screen.getByRole('button', { name: 'Save changes' })).toHaveAttribute('type', 'button');
     expect(screen.queryByRole('heading', { name: 'Title' })).not.toBeInTheDocument();
   });
 
-  it('saves local markdown draft on Save changes and exits edit mode', async () => {
+  it('Save changes exits edit mode and renders the updated local markdown without API calls', async () => {
     render(KnowledgeContentBlock, {
       props: {
         blockId: 'block-4',
