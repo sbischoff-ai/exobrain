@@ -1,11 +1,5 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import { Streamdown } from 'svelte-streamdown';
-  import StreamdownCode from 'svelte-streamdown/code';
-  import StreamdownMath from 'svelte-streamdown/math';
-  import StreamdownMermaid from 'svelte-streamdown/mermaid';
-  import gruvboxDarkMedium from '@shikijs/themes/gruvbox-dark-medium';
-
   import type {
     KnowledgeCategoryPageListItem,
     KnowledgePageCategoryBreadcrumbItem,
@@ -14,6 +8,7 @@
   import { formatTimestamp } from '$lib/utils/datetime';
   import Breadcrumbs from './Breadcrumbs.svelte';
   import PageCard from './PageCard.svelte';
+  import KnowledgeContentBlock from './KnowledgeContentBlock.svelte';
 
   export let page: KnowledgePageDetail | null = null;
   export let breadcrumbs: KnowledgePageCategoryBreadcrumbItem[] = [];
@@ -26,33 +21,6 @@
     openPage: { pageId: string };
   }>();
 
-  const streamdownTheme = {
-    h1: { base: 'exo-md-heading' },
-    h2: { base: 'exo-md-heading' },
-    h3: { base: 'exo-md-heading' },
-    h4: { base: 'exo-md-heading' },
-    h5: { base: 'exo-md-heading' },
-    h6: { base: 'exo-md-heading' },
-    table: { base: 'exo-md-table-wrap', table: 'exo-md-table' },
-    link: { base: 'exo-md-link' },
-    blockquote: { base: 'exo-md-blockquote' },
-    hr: { base: 'exo-md-hr' },
-    th: { base: 'exo-md-th' },
-    td: { base: 'exo-md-td' },
-    li: { checkbox: 'exo-md-task-checkbox' },
-    codespan: { base: 'exo-md-inline-code' },
-    code: {
-      container: 'exo-md-code-wrap',
-      pre: 'exo-md-code-pre',
-      base: 'exo-md-code',
-      buttons: 'exo-md-control-group',
-      language: 'exo-md-code-language'
-    },
-    components: {
-      button: 'exo-md-control-button',
-      popover: 'exo-md-control-popover'
-    }
-  };
 
   $: linkedPages =
     page?.links.map((link) => ({
@@ -104,15 +72,7 @@
 
       {#if contentBlocks.length > 0}
         {#each contentBlocks as block (block.block_id)}
-          <div class="assistant-markdown markdown-body content-block">
-            <Streamdown
-              content={block.markdown}
-              theme={streamdownTheme}
-              shikiTheme="gruvbox-dark-medium"
-              shikiThemes={{ 'gruvbox-dark-medium': gruvboxDarkMedium }}
-              components={{ code: StreamdownCode, math: StreamdownMath, mermaid: StreamdownMermaid }}
-            />
-          </div>
+          <KnowledgeContentBlock blockId={block.block_id} markdown={block.markdown} />
         {/each}
       {:else}
         <p class="empty">No content available for this page.</p>
@@ -159,10 +119,6 @@
     font-size: 0.85rem;
   }
 
-  .markdown-body {
-    color: var(--text);
-    line-height: 1.5;
-  }
 
   .linked-pages {
     display: flex;
