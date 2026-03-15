@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createEventDispatcher } from 'svelte';
   import { Streamdown } from 'svelte-streamdown';
   import StreamdownCode from 'svelte-streamdown/code';
   import StreamdownMath from 'svelte-streamdown/math';
@@ -7,12 +8,25 @@
 
   export let blockId: string;
   export let markdown: string;
+  export let isSaving = false;
+
+  const dispatch = createEventDispatcher<{
+    saveRequested: { blockId: string; markdownContent: string };
+  }>();
 
   let isEditing = false;
   let draftMarkdown = markdown;
 
+  $: if (!isEditing) {
+    draftMarkdown = markdown;
+  }
+
   function saveChanges(): void {
     isEditing = false;
+    dispatch('saveRequested', {
+      blockId,
+      markdownContent: draftMarkdown
+    });
   }
 
   const streamdownTheme = {
@@ -45,7 +59,13 @@
 </script>
 
 <div class="assistant-markdown markdown-body content-block" data-block-id={blockId}>
-  <button class="edit-block-button" type="button" aria-label="Edit block" on:click={() => (isEditing = true)}>
+  <button
+    class="edit-block-button"
+    type="button"
+    aria-label="Edit block"
+    disabled={isSaving}
+    on:click={() => (isEditing = true)}
+  >
     <svg viewBox="0 0 24 24" role="img" aria-hidden="true" focusable="false">
       <path d="M3 17.25V21h3.75L17.8 9.94l-3.75-3.75L3 17.25Zm17.71-10.04a1.004 1.004 0 0 0 0-1.42l-2.5-2.5a1.004 1.004 0 0 0-1.42 0l-1.96 1.96 3.75 3.75 2.13-1.79Z" />
     </svg>
@@ -57,12 +77,13 @@
         aria-label="Markdown editor"
         bind:value={draftMarkdown}
         spellcheck="false"
+        disabled={isSaving}
       ></textarea>
-      <button class="save-changes-button" type="button" on:click={saveChanges}>Save changes</button>
+      <button class="save-changes-button" type="button" disabled={isSaving} on:click={saveChanges}>Save changes</button>
     </div>
   {:else}
     <Streamdown
-      content={draftMarkdown}
+      content={markdown}
       theme={streamdownTheme}
       shikiTheme="gruvbox-dark-medium"
       shikiThemes={{ 'gruvbox-dark-medium': gruvboxDarkMedium }}
@@ -94,6 +115,11 @@
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.2s ease;
+  }
+
+  .edit-block-button:disabled {
+    opacity: 0.45;
+    pointer-events: none;
   }
 
   .edit-block-button svg {
@@ -147,5 +173,10 @@
     color: inherit;
     font: inherit;
     cursor: pointer;
+  }
+
+  .save-changes-button:disabled {
+    opacity: 0.6;
+    cursor: wait;
   }
 </style>

@@ -273,6 +273,42 @@ describe('knowledgeService', () => {
     expect(response.properties).toEqual({});
   });
 
+
+  it('patches page content blocks using markdown_content contract field', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          page_id: 'entity-1',
+          updated_block_ids: ['b1'],
+          updated_block_count: 1,
+          status: 'updated'
+        }),
+        { status: 200 }
+      )
+    );
+
+    const response = await knowledgeService.patchPageContentBlocks('entity/with/slash', [
+      {
+        block_id: 'b1',
+        markdown_content: '# Updated'
+      }
+    ]);
+
+    expect(fetchSpy).toHaveBeenCalledWith('/api/knowledge/page/entity%2Fwith%2Fslash', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content_blocks: [{ block_id: 'b1', markdown_content: '# Updated' }]
+      })
+    });
+    expect(response).toEqual({
+      page_id: 'entity-1',
+      updated_block_ids: ['b1'],
+      updated_block_count: 1,
+      status: 'updated'
+    });
+  });
+
   it('posts enqueue request without journal_reference when omitted', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ job_id: 'job-1' }), { status: 200 })

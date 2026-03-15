@@ -7,18 +7,20 @@ import KnowledgeExplorerViewEventHarness from './KnowledgeExplorerViewEventHarne
 const serviceMocks = vi.hoisted(() => ({
   getCategoryTree: vi.fn(),
   getCategoryPages: vi.fn(),
-  getPage: vi.fn()
+  getPage: vi.fn(),
+  patchPageContentBlocks: vi.fn()
 }));
 
 vi.mock('$lib/services/knowledgeService', () => ({
   knowledgeService: {
     getCategoryTree: serviceMocks.getCategoryTree,
     getCategoryPages: serviceMocks.getCategoryPages,
-    getPage: serviceMocks.getPage
+    getPage: serviceMocks.getPage,
+    patchPageContentBlocks: serviceMocks.patchPageContentBlocks
   }
 }));
 
-const { getCategoryTree, getCategoryPages, getPage } = serviceMocks;
+const { getCategoryTree, getCategoryPages, getPage, patchPageContentBlocks } = serviceMocks;
 
 describe('KnowledgeExplorerView', () => {
   beforeEach(() => {
@@ -363,5 +365,104 @@ describe('KnowledgeExplorerView', () => {
       expect(within(breadcrumbs).getByRole('button', { name: 'Child' })).toBeInTheDocument();
     });
   });
+
+
+
+  it('saves edited page blocks through patch endpoint and updates rendered markdown on success', async () => {
+    getCategoryTree.mockResolvedValue({ categories: [] });
+    getPage.mockResolvedValue({
+      id: 'page-1',
+      title: 'Page Title',
+      category_id: null,
+      summary: null,
+      properties: {},
+      content_blocks: [{ block_id: 'blk-1', markdown: '# Original\n\nInitial body' }],
+      created_at: '2026-01-02T03:04:05Z',
+      updated_at: '2026-01-03T04:05:06Z',
+      links: [],
+      category_breadcrumb: { path: [] }
+    });
+    patchPageContentBlocks.mockResolvedValue({
+      page_id: 'page-1',
+      updated_block_ids: ['blk-1'],
+      updated_block_count: 1,
+      status: 'updated'
+    });
+
+    render(KnowledgeExplorerView, {
+      props: {
+        explorerRoute: { type: 'page', id: 'page-1' },
+        expandedCategories: {}
+      }
+    });
+
+    await screen.findByRole('heading', { name: 'Original' });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Edit block' }));
+    const editor = screen.getByRole('textbox', { name: 'Markdown editor' });
+    await fireEvent.input(editor, { target: { value: '# Updated\n\nEdited body' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => {
+      expect(patchPageContentBlocks).toHaveBeenCalledWith('page-1', [
+        { block_id: 'blk-1', markdown_content: '# Updated\n\nEdited body' }
+      ]);
+      expect(screen.getByRole('status')).toHaveTextContent('Block content saved successfully.');
+      expect(screen.getByRole('heading', { name: 'Updated' })).toBeInTheDocument();
+      expect(screen.getByText('Edited body')).toBeInTheDocument();
+    });
+  });
+
+  it('keeps original block content and reports error when block patch fails', async () => {
+    getCategoryTree.mockResolvedValue({ categories: [] });
+    getPage.mockResolvedValue({
+      id: 'page-1',
+      title: 'Page Title',
+      category_id: null,
+      summary: null,
+      properties: {},
+      content_blocks: [{ block_id: 'blk-1', markdown: '# Original\n\nInitial body' }],
+      created_at: '2026-01-02T03:04:05Z',
+      updated_at: '2026-01-03T04:05:06Z',
+      links: [],
+      category_breadcrumb: { path: [] }
+    });
+
+    let rejectPatch: ((reason?: unknown) => void) | undefined;
+    patchPageContentBlocks.mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectPatch = reject;
+        })
+    );
+
+    render(KnowledgeExplorerView, {
+      props: {
+        explorerRoute: { type: 'page', id: 'page-1' },
+        expandedCategories: {}
+      }
+    });
+
+    await screen.findByRole('heading', { name: 'Original' });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Edit block' }));
+    const editor = screen.getByRole('textbox', { name: 'Markdown editor' });
+    await fireEvent.input(editor, { target: { value: '# Updated\n\nEdited body' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(screen.getByRole('button', { name: 'Edit block' })).toBeDisabled();
+
+    rejectPatch?.(new Error('patch failed'));
+
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'Could not save block content. Your last saved content was restored.'
+      );
+      expect(screen.getByRole('heading', { name: 'Original' })).toBeInTheDocument();
+      expect(screen.getByText('Initial body')).toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: 'Updated' })).not.toBeInTheDocument();
+    });
+  });
+
 
 });

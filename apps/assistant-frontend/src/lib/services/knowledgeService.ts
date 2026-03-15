@@ -6,6 +6,7 @@ import type {
   KnowledgePageContentBlock,
   KnowledgePageDetail,
   KnowledgePageLink,
+  KnowledgePagePatchResponse,
   KnowledgeUpdateDoneEvent,
   KnowledgeUpdateResponse,
   KnowledgeUpdateStatusEvent,
@@ -15,6 +16,13 @@ import { apiClient } from '$lib/services/apiClient';
 
 interface EnqueueUpdateRequest {
   journal_reference?: string;
+}
+
+interface PatchPageContentBlocksRequest {
+  content_blocks: Array<{
+    block_id: string;
+    markdown_content: string;
+  }>;
 }
 
 interface BackendKnowledgeCategoryTreeResponse {
@@ -279,6 +287,21 @@ export const knowledgeService = {
   async getPage(pageId: string): Promise<KnowledgePageDetail> {
     const response = await apiClient<BackendKnowledgePageDetailResponse>(`/api/knowledge/page/${encodeURIComponent(pageId)}`);
     return normalizePageDetail(response);
+  },
+
+  patchPageContentBlocks(
+    pageId: string,
+    contentBlocks: Array<{ block_id: string; markdown_content: string }>
+  ): Promise<KnowledgePagePatchResponse> {
+    const payload: PatchPageContentBlocksRequest = {
+      content_blocks: contentBlocks
+    };
+
+    return apiClient<KnowledgePagePatchResponse>(`/api/knowledge/page/${encodeURIComponent(pageId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
   },
 
   enqueueUpdate(journalReference?: string): Promise<KnowledgeUpdateResponse> {
